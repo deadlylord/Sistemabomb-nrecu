@@ -36,7 +36,7 @@ const navItems = [
 ];
 
 const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode }) => {
-  const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-colors duration-300 rounded-md flex items-center space-x-1.5";
+  const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-md flex items-center space-x-1.5";
   const activeButtonClasses = "bg-accent text-white shadow-accent";
   const inactiveButtonClasses = "bg-white dark:bg-secondary text-gray-500 dark:text-text-dark hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-text-light";
 
@@ -130,12 +130,11 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
                  <button
                     key={view}
                     onClick={() => setCurrentView(view)}
-                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses}`}
+                    className={`group ${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses}`}
                     aria-label={label}
                 >
                     <Icon className="w-5 h-5" />
-                    <span className="sm:hidden">{label.split(' ')[0]}</span>
-                    <span className="hidden sm:inline">{label}</span>
+                    <span className="hidden group-hover:inline sm:inline whitespace-nowrap">{label}</span>
                 </button>
               ))}
            </nav>
