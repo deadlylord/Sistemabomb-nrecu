@@ -1,0 +1,522 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
+import ProductGrid from './ProductGrid';
+import CartPanel from './CartPanel';
+// FIX: Changed to a named import to resolve module loading issues.
+import { InventoryVerificationModal } from './InventoryVerificationModal';
+import DailySalesReportModal from './DailySalesReportModal';
+import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
+import CreateIncidentModal from './CreateIncidentModal';
+import EditProductImageModal from './EditProductImageModal';
+import { formatCOP } from '../constants';
+import EditProductModal from './EditProductModal';
+
+interface PosViewProps {
+  inventory: Product[];
+  categories: Category[];
+  sellers: Seller[];
+  stores: Store[];
+  sales: Sale[];
+  purchases: Purchase[];
+  layaways: Layaway[];
+  allCustomers: Customer[];
+  activeCart: CartItem[];
+  heldCarts: HeldCart[];
+  onAddToCart: (product: Product) => void;
+  onUpdateCartQuantity: (productId: string, newQuantity: number) => void;
+  onUpdateCartItemPrice: (productId: string, newPrice: number) => void;
+  onRemoveFromCart: (productId: string) => void;
+  onClearCart: () => void;
+  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => void;
+  onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
+  onResumeSale: (heldCartId: string) => void;
+  onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
+  onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>) => void;
+  dailyNotes: DailyNote[];
+  onAddDailyNote: (content: string, seller: string) => void;
+  onNavigate: (view: View) => void;
+  currentStore: Store | undefined;
+  incidents: Incident[];
+  onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
+  currentUser: Seller;
+  roles: Role[];
+  nextInvoiceNumber: number;
+  onUpdateProduct: (updatedProduct: Product, imageFile?: File) => Promise<void>;
+  verifiedProducts: Set<string>;
+  onToggleProductVerification: (productId: string) => void;
+  onClearVerifications: () => void;
+}
+
+const PosView: React.FC<PosViewProps> = (props) => {
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
+  const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
+  const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
+  const [editingProductDetails, setEditingProductDetails] = useState<Product | null>(null);
+  // FIX: Corrected constructor call for Date object to resolve constructability error.
+  const [saleDate, setSaleDate] = useState(new Date());
+  const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
+  const [isCartPulsing, setIsCartPulsing] = useState(false);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
+
+  const { onClearVerifications } = props;
+
+  useEffect(() => {
+    // Cleanup function that runs when the component unmounts
+    return () => {
+      onClearVerifications();
+    };
+  }, [onClearVerifications]);
+
+  const adminRole = useMemo(() => props.roles.find(r => r.name === 'Administrator'), [props.roles]);
+  const isAdmin = useMemo(() => props.currentUser.roleId === adminRole?.id, [props.currentUser, adminRole]);
+  
+  const handleClearTransaction = () => {
+    props.onClearCart();
+    setCustomerInfo(null);
+  };
+
+  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
+    props.onProcessSale(saleData, saleDate);
+    setCustomerInfo(null);
+  };
+
+  const handleHoldSaleTransaction = (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => {
+    props.onHoldSale(data);
+    setCustomerInfo(null);
+  };
+
+  const handleCreateLayawayTransaction = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
+    props.onCreateLayaway(customerName, customerPhone, invoiceNumber, seller, initialPayment, saleDate, isPreOrder, description);
+    setCustomerInfo(null);
+  };
+
+  const handleResumeSaleTransaction = (heldCart: HeldCart) => {
+    if (heldCart.customerName && heldCart.customerPhone) {
+        setCustomerInfo({ name: heldCart.customerName, phone: heldCart.customerPhone });
+    } else {
+        setCustomerInfo(null);
+    }
+    props.onResumeSale(heldCart.id);
+  };
+
+  const newArrivalsInventory = useMemo(() => {
+      const sortedPurchases = [...props.purchases].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const uniqueProductIds = Array.from(new Set(sortedPurchases.map(p => p.productId)));
+      const recentProductIds = uniqueProductIds.slice(0, 24); // Show the last 24 new products
+
+      return recentProductIds.map(id => 
+          props.inventory.find(p => p.id === id)
+      ).filter((p): p is Product => !!p && p.stock > 0 && !p.isDisabled);
+  }, [props.purchases, props.inventory]);
+
+  const categoriesWithStock = useMemo(() => {
+      const NOVEDADES_CATEGORY_ID = 'novedades';
+      const novedadesCategory: Category = { id: NOVEDADES_CATEGORY_ID, name: '✨ Novedades' };
+  
+      const stockedCategoryIds = new Set(
+          props.inventory.filter(p => p.stock > 0 && !p.isDisabled).map(p => p.categoryId)
+      );
+      const regularCategories = props.categories.filter(cat => stockedCategoryIds.has(cat.id));
+      
+      if (newArrivalsInventory.length > 0) {
+          return [novedadesCategory, ...regularCategories];
+      }
+      return regularCategories;
+  
+    }, [props.inventory, props.categories, newArrivalsInventory]);
+
+  const totalItems = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.quantity, 0), [props.activeCart]);
+  const totalPrice = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0), [props.activeCart]);
+
+  const handleClearCartWithClose = () => {
+    handleClearTransaction();
+    setIsMobileCartOpen(false);
+  };
+
+  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
+      handleProcessSaleTransaction(saleData, saleDate);
+      setIsMobileCartOpen(false);
+  };
+
+  const handleHoldSaleWithClose = (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => {
+      handleHoldSaleTransaction(data);
+      setIsMobileCartOpen(false);
+  };
+  
+  const handleResumeSaleWithClose = (heldCart: HeldCart) => {
+    handleResumeSaleTransaction(heldCart);
+    setIsMobileCartOpen(true); // Open the cart to show the resumed sale
+  };
+
+  const handleCreateLayawayWithClose = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
+      handleCreateLayawayTransaction(customerName, customerPhone, invoiceNumber, seller, initialPayment, saleDate, isPreOrder, description);
+      setIsMobileCartOpen(false);
+  };
+
+  const handleAddToCartWithAnimation = (product: Product) => {
+    props.onAddToCart(product);
+    setJustAddedProductId(product.id);
+    setIsCartPulsing(true);
+    setSearchTerm(''); // Clear search term on add
+
+    setTimeout(() => {
+      setJustAddedProductId(null);
+      setIsCartPulsing(false);
+    }, 700);
+  };
+
+  const pendingPreOrders = useMemo(() => {
+    return props.layaways.filter(l => l.status === 'pre-order');
+  }, [props.layaways]);
+
+  // FIX: Corrected filtering logic for pending incidents to use specific pending statuses instead of the non-existent 'PENDING' status.
+  const { pendingApprovals, activeWarranties } = useMemo(() => {
+      const approvals = props.incidents.filter(i => 
+        i.status === IncidentStatus.DAÑADO_REPORTADO || 
+        i.status === IncidentStatus.CAMBIO_SOLICITADO
+      );
+      const warranties = props.incidents.filter(i => i.status === IncidentStatus.WARRANTY_ACTIVE);
+      return { pendingApprovals: approvals, activeWarranties: warranties };
+  }, [props.incidents]);
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const dateString = e.target.value; // "YYYY-MM-DD" from the input
+    if (dateString) {
+      // Get the current time components
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const seconds = now.getSeconds();
+
+      // The dateString is treated as local timezone by default when parsed like this
+      const [year, month, day] = dateString.split('-').map(Number);
+      
+      // Create a new Date object with the selected date and current time
+      const newSaleDate = new Date(year, month - 1, day, hours, minutes, seconds);
+      
+      setSaleDate(newSaleDate);
+    } else {
+      // If the date input is cleared, reset to the current date and time
+      setSaleDate(new Date());
+    }
+  };
+
+  const toYYYYMMDD = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const filteredInventory = useMemo(() => {
+      const NOVEDADES_CATEGORY_ID = 'novedades';
+      const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
+  
+      if (selectedCategoryId === NOVEDADES_CATEGORY_ID) {
+          return newArrivalsInventory.filter(p => {
+              const matchesSearch = lowerCaseSearchTerm
+                  ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                  : true;
+              return matchesSearch;
+          });
+      }
+  
+      return props.inventory
+        .filter(p => {
+          if (p.isDisabled) return false;
+          const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
+          const matchesSearch = lowerCaseSearchTerm
+            ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+              (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+            : true;
+          return matchesCategory && matchesSearch;
+        })
+        .sort((a, b) => {
+          if (a.stock > 0 && b.stock <= 0) return -1;
+          if (a.stock <= 0 && b.stock > 0) return 1;
+          return a.name.localeCompare(b.name);
+        });
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory]);
+
+  const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
+  const activeButtonClasses = "bg-accent text-white shadow-accent";
+  const inactiveButtonClasses = "bg-white dark:bg-secondary text-gray-500 dark:text-text-dark hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-text-light";
+  
+  const CartAndActionsContent = ({ isMobile = false }) => (
+    <div className="space-y-3">
+        {(pendingApprovals.length > 0 || activeWarranties.length > 0 || pendingPreOrders.length > 0) && (
+            <div className="space-y-2">
+                {(pendingApprovals.length > 0 || activeWarranties.length > 0) && (
+                    <div className="bg-orange-100 dark:bg-orange-900/70 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-2 rounded-lg" role="alert">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                                <div className="text-xs">
+                                    {pendingApprovals.length > 0 && <p><strong>{pendingApprovals.length}</strong> aprobación(es) pendiente(s).</p>}
+                                    {activeWarranties.length > 0 && <p><strong>{activeWarranties.length}</strong> garantía(s) activa(s).</p>}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => props.onNavigate(View.INCIDENTS)}
+                                className="bg-orange-500 text-white font-bold py-1 px-2 text-xs rounded-md hover:bg-orange-600 flex-shrink-0"
+                            >
+                                Ver
+                            </button>
+                        </div>
+                    </div>
+                )}
+                {pendingPreOrders.length > 0 && (
+                  <div className="bg-yellow-100 dark:bg-yellow-900/70 border border-yellow-500/50 text-yellow-700 dark:text-yellow-300 p-2 rounded-lg" role="alert">
+                      <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                              <TruckIcon className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                              <p className="text-xs"><strong>{pendingPreOrders.length}</strong> encargo(s) por recibir.</p>
+                          </div>
+                          <button
+                              onClick={() => props.onNavigate(View.LAYAWAY)}
+                              className="bg-yellow-500 text-white font-bold py-1 px-2 text-xs rounded-md hover:bg-yellow-600 flex-shrink-0"
+                          >
+                              Ver
+                          </button>
+                      </div>
+                  </div>
+                )}
+            </div>
+        )}
+        {props.heldCarts.length > 0 && (
+          <div className="bg-white dark:bg-secondary p-3 rounded-xl shadow-lg">
+              <h3 className="text-base font-bold text-accent mb-2">Ventas en Espera</h3>
+              <div className="flex flex-wrap gap-2">
+                  {props.heldCarts.map((cart, index) => {
+                      const identifier = cart.sellerName || `Venta ${index + 1}`;
+                      return (
+                          <button 
+                              key={cart.id} 
+                              onClick={() => isMobile ? handleResumeSaleWithClose(cart) : handleResumeSaleTransaction(cart)}
+                              className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light px-3 py-1.5 text-sm rounded-md hover:bg-accent hover:text-white dark:hover:text-white transition-colors"
+                              title={cart.customerName ? `Cliente: ${cart.customerName}`: ''}
+                          >
+                              Retomar {identifier} ({cart.items.length} items)
+                          </button>
+                      )
+                  })}
+              </div>
+          </div>
+        )}
+        <div className="bg-white dark:bg-secondary p-2 rounded-xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div className="flex items-center gap-2">
+                <label htmlFor="saleDate" className="text-xs font-medium text-gray-500 dark:text-text-dark whitespace-nowrap">Fecha:</label>
+                <input
+                    type="date"
+                    id="saleDate"
+                    value={toYYYYMMDD(saleDate)}
+                    onChange={handleDateChange}
+                    className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full py-1 px-3 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                    aria-label="Fecha de Venta"
+                    disabled={!isAdmin}
+                />
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                <a href={props.currentStore?.addiLink} target="_blank" rel="noopener noreferrer" className="bg-green-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-green-600">Addi</a>
+                <a href={props.currentStore?.sistecreditoLink} target="_blank" rel="noopener noreferrer" className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-purple-600">Sistecredito</a>
+                <button onClick={() => setIsIncidentModalOpen(true)} className="bg-orange-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-orange-600"><AlertTriangleIcon className="w-4 h-4"/><span className="hidden sm:inline">Novedad</span></button>
+                <button onClick={() => setIsVerificationModalOpen(true)} className="bg-blue-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-blue-600"><ClipboardListIcon className="w-4 h-4" /><span className="hidden sm:inline">Verificar</span></button>
+                <button onClick={() => setIsSalesReportModalOpen(true)} className="bg-teal-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-teal-600"><ChartBarIcon className="w-4 h-4" /><span className="hidden sm:inline">Reporte</span></button>
+            </div>
+        </div>
+        <CartPanel
+            cartItems={props.activeCart}
+            sellers={props.sellers}
+            customers={props.allCustomers}
+            onUpdateQuantity={props.onUpdateCartQuantity}
+            onUpdateCartItemPrice={props.onUpdateCartItemPrice}
+            onRemoveFromCart={props.onRemoveFromCart}
+            onClearCart={isMobile ? handleClearCartWithClose : handleClearTransaction}
+            onProcessSale={isMobile ? handleProcessSaleWithClose : handleProcessSaleTransaction}
+            onHoldSale={isMobile ? handleHoldSaleWithClose : handleHoldSaleTransaction}
+            onCreateLayaway={isMobile ? handleCreateLayawayWithClose : handleCreateLayawayTransaction}
+            saleDate={saleDate}
+            nextInvoiceNumber={props.nextInvoiceNumber}
+            isCartPulsing={isCartPulsing}
+            initialCustomerInfo={customerInfo}
+        />
+    </div>
+  );
+
+  return (
+    <div 
+        className="p-4 h-full bg-gray-100 dark:bg-primary"
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Column: Products */}
+        <div className="lg:col-span-7 xl:col-span-8 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
+            <div className="bg-white dark:bg-secondary p-3 rounded-xl shadow-lg flex flex-col h-full">
+                <div className="flex-shrink-0">
+                    <div className="space-y-3 mb-3">
+                        <div className="relative w-full">
+                            <input 
+                                type="text"
+                                placeholder="Buscar por nombre o proveedor..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full py-2 px-4 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                            />
+                            <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400">
+                                <SearchIcon />
+                            </div>
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                                    aria-label="Limpiar búsqueda"
+                                >
+                                    <CrossIcon className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-semibold text-gray-500 dark:text-text-dark mr-2">Categorías:</span>
+                            <button
+                                onClick={() => setSelectedCategoryId(null)}
+                                className={`${commonButtonClasses} ${selectedCategoryId === null ? activeButtonClasses : inactiveButtonClasses}`}
+                            >
+                                Todos
+                            </button>
+                            {categoriesWithStock.map(cat => (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => setSelectedCategoryId(cat.id)}
+                                    className={`${commonButtonClasses} ${selectedCategoryId === cat.id ? activeButtonClasses : inactiveButtonClasses}`}
+                                >
+                                    {cat.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-grow overflow-y-auto pr-2 -mr-3">
+                    <ProductGrid 
+                        products={filteredInventory} 
+                        onAddToCart={handleAddToCartWithAnimation} 
+                        onEditImage={setEditingProductImage}
+                        onEditProduct={setEditingProductDetails}
+                        isAdmin={isAdmin}
+                        justAddedProductId={justAddedProductId}
+                        verifiedProducts={props.verifiedProducts}
+                        onToggleProductVerification={props.onToggleProductVerification}
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* Right Column: Actions & Cart (Desktop) */}
+        <div className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
+             <div className="h-full overflow-y-auto pr-2 space-y-3 -mr-2">
+                <CartAndActionsContent isMobile={false} />
+            </div>
+        </div>
+      </div>
+
+      {/* Mobile Floating Cart Bar */}
+      {totalItems > 0 && (
+        <div 
+            onClick={() => setIsMobileCartOpen(true)}
+            className="lg:hidden fixed bottom-0 left-0 right-0 bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-40 cursor-pointer"
+        >
+            <div className="container mx-auto flex justify-between items-center text-white">
+                <div className="flex items-center space-x-2">
+                    <ShoppingCartIcon className="w-6 h-6" />
+                    <span className="font-bold text-base">{totalItems} {totalItems === 1 ? 'producto' : 'productos'}</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                    <span className="font-extrabold text-lg">{formatCOP(totalPrice)}</span>
+                    <span className="font-bold text-base">Ver Carrito →</span>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Mobile Fullscreen Cart Modal */}
+      {isMobileCartOpen && (
+        <div className="lg:hidden fixed inset-0 bg-white/80 dark:bg-primary/90 backdrop-blur-md z-50 flex flex-col animate-slide-up">
+            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-bold text-accent">Tu Carrito</h2>
+                <button 
+                    onClick={() => setIsMobileCartOpen(false)}
+                    className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                >
+                    <CrossIcon />
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto">
+                <div className="p-4">
+                    <CartAndActionsContent isMobile={true} />
+                </div>
+            </div>
+        </div>
+      )}
+      
+      {isVerificationModalOpen && (
+          <InventoryVerificationModal
+              isOpen={isVerificationModalOpen}
+              onClose={() => setIsVerificationModalOpen(false)}
+              inventory={props.inventory}
+              categories={props.categories}
+              sellers={props.sellers}
+              onSaveStockTake={props.onSaveStockTake}
+          />
+      )}
+      {isSalesReportModalOpen && (
+          <DailySalesReportModal
+              isOpen={isSalesReportModalOpen}
+              onClose={() => setIsSalesReportModalOpen(false)}
+              sales={props.sales}
+              layaways={props.layaways}
+              sellers={props.sellers}
+              dailyNotes={props.dailyNotes}
+              incidents={props.incidents}
+              onAddDailyNote={props.onAddDailyNote}
+              saleDate={saleDate}
+              isAdmin={isAdmin}
+          />
+      )}
+      {isIncidentModalOpen && (
+        <CreateIncidentModal
+            isOpen={isIncidentModalOpen}
+            onClose={() => setIsIncidentModalOpen(false)}
+            inventory={props.inventory}
+            sales={props.sales}
+            stores={props.stores}
+            currentUser={props.currentUser}
+            roles={props.roles}
+            onCreateIncident={props.onCreateIncident}
+            customers={props.allCustomers}
+        />
+      )}
+      {editingProductImage && (
+        <EditProductImageModal 
+            isOpen={!!editingProductImage}
+            onClose={() => setEditingProductImage(null)}
+            product={editingProductImage}
+            onUpdateProduct={props.onUpdateProduct}
+        />
+      )}
+      {editingProductDetails && (
+        <EditProductModal 
+            isOpen={!!editingProductDetails}
+            onClose={() => setEditingProductDetails(null)}
+            product={editingProductDetails}
+            categories={props.categories}
+            onUpdateProduct={props.onUpdateProduct}
+        />
+      )}
+    </div>
+  );
+};
+
+export default PosView;

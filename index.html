@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Facturación Street/ Bombón</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icon.svg">
+  <meta name="theme-color" content="#ff007f">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'primary': '#1a1a1a',
+            'secondary': '#2a2a2a',
+            'accent': 'rgb(var(--color-accent) / <alpha-value>)',
+            'accent-hover': 'rgb(var(--color-accent-hover) / <alpha-value>)',
+            'text-light': '#f0f0f0',
+            'text-dark': '#a0a0a0',
+          },
+          boxShadow: {
+            'accent': '0 0 15px rgb(var(--color-accent) / 0.5)',
+          },
+           animation: {
+            blob: 'blob 7s infinite',
+          },
+          keyframes: {
+            blob: {
+              '0%': { transform: 'translate(0px, 0px) scale(1)' },
+              '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+              '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+              '100%': { transform: 'translate(0px, 0px) scale(1)' },
+            },
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --color-accent: 255 0 127;
+      --color-accent-hover: 230 0 115;
+    }
+    @keyframes pulse-accent {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 transparent;
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 15px rgb(var(--color-accent) / 0.7);
+      }
+    }
+    .animate-pulse-accent {
+      animation: pulse-accent 0.7s ease-out;
+    }
+    @keyframes flash-bg-light {
+      50% { background-color: rgb(var(--color-accent) / 0.1); }
+    }
+    @keyframes flash-bg-dark {
+      50% { background-color: rgb(var(--color-accent) / 0.2); }
+    }
+    .animate-flash-bg {
+      animation: flash-bg-light 0.7s ease-in-out;
+    }
+    .dark .animate-flash-bg {
+      animation-name: flash-bg-dark;
+    }
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.3s ease-out forwards;
+    }
+    @keyframes fade-in-out {
+      0% {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      10%, 90% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+    }
+    .animate-fade-in-out {
+      animation: fade-in-out 3s ease-in-out forwards;
+    }
+    @keyframes slide-up {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .animate-slide-up {
+      animation: slide-up 0.3s ease-out forwards;
+    }
+    .animation-delay-2000 {
+      animation-delay: -2s;
+    }
+    .animation-delay-4000 {
+      animation-delay: -4s;
+    }
+    @media print {
+      @page {
+        size: 58mm auto;
+        margin: 0mm;
+      }
+      
+      html, body {
+        width: 58mm;
+        height: fit-content !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        overflow: hidden !important;
+      }
+
+      /* Hide everything on screen by default */
+      body * {
+        visibility: hidden;
+      }
+      
+      /* Make ONLY the printable content and its children visible */
+      #receipt-to-print, #receipt-to-print * {
+        visibility: visible;
+      }
+
+      /* Aggressively reset all parent containers of the receipt */
+      /* This prevents any residual styling (like flex centering) from affecting the print layout */
+      #root, #root > div, #receipt-modal-container, #receipt-modal-container > div {
+        all: unset !important;
+        display: block !important; /* required for visibility to work */
+      }
+      
+      /* Position the printable content absolutely at the top-left of the page */
+      #receipt-to-print {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%; /* Fit to body which is now 58mm */
+        margin: 0;
+        padding: 2mm;
+        box-sizing: border-box;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 10pt;
+        color: #000 !important;
+        background-color: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      /* Reset styles for elements inside the receipt */
+      #receipt-to-print h1, #receipt-to-print p, #receipt-to-print table, #receipt-to-print td, #receipt-to-print th, #receipt-to-print div {
+        font-size: 10pt !important;
+        margin: 0;
+        padding: 0;
+        color: #000 !important;
+        font-weight: normal !important;
+      }
+      #receipt-to-print h1 {
+        font-size: 12pt !important;
+        font-weight: bold !important;
+        text-align: center;
+        margin-bottom: 5px !important;
+      }
+      #receipt-to-print .text-center { text-align: center !important; }
+      #receipt-to-print .whitespace-pre-wrap { white-space: pre-wrap !important; }
+      #receipt-to-print div[class*="mb-"] { margin-bottom: 5px !important; }
+      #receipt-to-print div[class*="mt-"] { margin-top: 5px !important; }
+      #receipt-to-print table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-top: 5px !important;
+        margin-bottom: 5px !important;
+      }
+      #receipt-to-print th, #receipt-to-print td {
+        padding: 1px 0 !important;
+        vertical-align: top;
+      }
+      #receipt-to-print thead {
+        border-top: 1px dashed #000 !important;
+        border-bottom: 1px dashed #000 !important;
+      }
+      #receipt-to-print tbody {
+        border-bottom: 1px dashed #000 !important;
+      }
+      #receipt-to-print th.text-left, #receipt-to-print td.text-left { text-align: left !important; }
+      #receipt-to-print th.text-right, #receipt-to-print td.text-right { text-align: right !important; }
+      #receipt-to-print th.text-center, #receipt-to-print td.text-center { text-align: center !important; }
+      #receipt-to-print strong, #receipt-to-print [class*="font-bold"] { font-weight: bold !important; }
+      #receipt-to-print img { max-width: 80% !important; margin: 0 auto 5px auto !important; display: block !important; }
+      #receipt-to-print .divide-y > :not([hidden]) ~ :not([hidden]) {
+        border-top-width: 1px !important;
+        border-color: #000 !important;
+        border-style: dashed !important;
+      }
+      #receipt-to-print .border-b-2, #receipt-to-print .border-t-2 {
+        border-width: 1px !important;
+        border-color: #000 !important;
+        border-style: dashed !important;
+      }
+      #receipt-to-print .pt-2 { padding-top: 4px !important; }
+      #receipt-to-print .pb-1 { padding-bottom: 2px !important; }
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+    "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.2.1/",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "vite": "https://aistudiocdn.com/vite@^7.1.9",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4",
+    "url": "https://aistudiocdn.com/url@^0.11.4"
+  }
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 dark:bg-primary dark:text-text-light font-sans transition-colors duration-300">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      const registerServiceWorker = () => {
+        const swUrl = new URL('/sw.js', window.location.origin);
+        navigator.serviceWorker.register(swUrl).then(registration => {
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        }, err => {
+          console.log('ServiceWorker registration failed: ', err);
+        });
+      };
+
+      const tryRegister = () => {
+        // This is the definitive fix. By using setTimeout with 0ms, we push the registration
+        // to the very end of the browser's event queue. This ensures that every other script,
+        // including React's rendering and hydration, has fully completed. It's the most
+        // robust way to break subtle race conditions in complex environments.
+        setTimeout(() => {
+            registerServiceWorker();
+        }, 0);
+      };
+      
+      // We still wait for the 'load' event to be absolutely sure the page is ready,
+      // and then we use the setTimeout trick to guarantee a stable state.
+      if (document.readyState === 'complete') {
+        tryRegister();
+      } else {
+        window.addEventListener('load', tryRegister);
+      }
+    }
+  </script>
+</body>
+</html>
