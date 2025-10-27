@@ -252,7 +252,7 @@ export interface PayrollRecord {
     commissionableUnits: number;
     commissionEarned: number;
   }[];
-  loginAccesses?: { date: string; times: string[] }[];
+  loginAccesses?: { date: string; times: string[]; startTime?: string; endTime?: string; }[];
   paidAt: string; // ISO string
   paidBy: string; // Name of user who registered the payment
   storeId: string;

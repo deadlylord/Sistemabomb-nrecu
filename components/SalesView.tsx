@@ -190,10 +190,10 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
 
     return (
       <div className="flex flex-wrap gap-1 justify-start">
-        {/* @FIX: Explicitly cast the 'methods' array to 'any[]' to resolve a type inference issue where array elements were being treated as 'unknown', causing a type error. */}
+        {/* @FIX: The `methods` array elements were being inferred as `unknown`. Explicitly casting `method` to a string resolves the type error for the key and content. */}
         {(methods as any[]).map(method => (
-          <span key={method} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
-            {method}
+          <span key={String(method)} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
+            {String(method)}
           </span>
         ))}
       </div>

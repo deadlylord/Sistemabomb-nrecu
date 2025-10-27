@@ -43,7 +43,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
 
-  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; checked: boolean }[]>([]);
+  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; startTime?: string; endTime?: string; checked: boolean }[]>([]);
   const [deductions, setDeductions] = useState<{ reason: string; amount: number }[]>([]);
   const [newDeduction, setNewDeduction] = useState({ reason: '', amount: '' });
 
@@ -86,7 +86,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
     const startFilterDate = new Date(startDate + 'T00:00:00');
     const endFilterDate = new Date(endDate + 'T23:59:59');
 
-    const loginsByDay = new Map<string, string[]>();
+    // 1. Get all logins for the period and group by day
+    const loginsByDay = new Map<string, LoginRecord[]>();
     loginHistory
       .filter(record => {
         const recordDate = new Date(record.date);
@@ -94,13 +95,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
       })
       .forEach(record => {
         const dateStr = new Date(record.date).toISOString().split('T')[0];
-        const timeStr = new Date(record.date).toLocaleTimeString('es-CO');
         if (!loginsByDay.has(dateStr)) {
           loginsByDay.set(dateStr, []);
         }
-        loginsByDay.get(dateStr)!.push(timeStr);
+        loginsByDay.get(dateStr)!.push(record);
       });
 
+    // 2. Get all sales for the period
     const salesByDay = new Map<string, number>();
     sales.filter(sale => {
       const saleDate = new Date(sale.createdAt);
@@ -111,13 +112,31 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
       salesByDay.set(dateStr, (salesByDay.get(dateStr) || 0) + saleUnits);
     });
 
-    const combinedDays = Array.from(loginsByDay.keys())
-      .map(dateStr => ({
-        date: dateStr,
-        unitsSold: salesByDay.get(dateStr) || 0,
-        logins: loginsByDay.get(dateStr) || [],
-        checked: true
-      }))
+    // 3. Combine unique dates from both logins and sales
+    const allDates = new Set<string>([...loginsByDay.keys(), ...salesByDay.keys()]);
+
+    // 4. Create the final list of days
+    const combinedDays = Array.from(allDates)
+      .map(dateStr => {
+        const dayLogins = loginsByDay.get(dateStr) || [];
+        let startTime, endTime;
+
+        if (dayLogins.length > 0) {
+          dayLogins.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          const timeFormat: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+          startTime = new Date(dayLogins[0].date).toLocaleTimeString('es-CO', timeFormat);
+          endTime = new Date(dayLogins[dayLogins.length - 1].date).toLocaleTimeString('es-CO', timeFormat);
+        }
+
+        return {
+          date: dateStr,
+          unitsSold: salesByDay.get(dateStr) || 0,
+          logins: dayLogins.map(l => new Date(l.date).toLocaleTimeString('es-CO')),
+          startTime,
+          endTime,
+          checked: dayLogins.length > 0
+        };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
       
     setLoginDays(combinedDays);
@@ -198,7 +217,12 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
       const finalTotal = result.totalToPay - totalDeductions;
       if (window.confirm(`¿Confirmas el registro del pago de ${formatCOP(finalTotal)} para ${result.sellerName}?`)) {
         const checkedLoginDays = loginDays.filter(day => day.checked);
-        const loginAccesses = checkedLoginDays.map(day => ({ date: day.date, times: day.logins }));
+        const loginAccesses = checkedLoginDays.map(day => ({ 
+            date: day.date, 
+            times: day.logins,
+            startTime: day.startTime,
+            endTime: day.endTime,
+        }));
 
         onSavePayroll({
           ...result,
@@ -279,6 +303,17 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
                     <input type="checkbox" checked={day.checked} onChange={() => handleToggleDay(day.date)} className="h-4 w-4 rounded text-accent focus:ring-accent"/>
                   </div>
                   <span className="text-xs text-gray-500 dark:text-text-dark mt-1">{day.unitsSold} uds vendidas</span>
+                  {day.startTime ? (
+                    <span className="text-xs text-blue-400 mt-1 font-mono">
+                        {day.startTime === day.endTime ? day.startTime : `${day.startTime} - ${day.endTime}`}
+                    </span>
+                  ) : (
+                    day.unitsSold > 0 && (
+                        <span className="text-xs text-yellow-500 mt-1" title="Se registraron ventas este día, pero no un inicio de sesión.">
+                            (Sin login)
+                        </span>
+                    )
+                  )}
                 </label>
               ))}
             </div>
@@ -353,7 +388,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
                                 {totalDeductions > 0 && <div className="flex justify-between text-red-500"><span>Descuentos:</span> <span>-{formatCOP(totalDeductions)}</span></div>}
                                 <div className="flex justify-between font-bold text-base pt-2 border-t border-dashed"><span>Total Pagado:</span> <span>{formatCOP(record.totalToPay)}</span></div>
                                 {record.loginAccesses && record.loginAccesses.length > 0 && (
-                                  <div className="pt-2 border-t"><p className="text-xs font-semibold">Días pagados:</p><p className="text-xs text-gray-500">{record.loginAccesses.map(l => new Date(l.date+'T00:00:00').toLocaleDateString('es-CO', {day: '2-digit', month: '2-digit'})).join(', ')}</p></div>
+                                  <div className="pt-2 border-t"><p className="text-xs font-semibold">Días pagados:</p><p className="text-xs text-gray-500">{record.loginAccesses.map(l => {
+                                      const dateStr = new Date(l.date+'T00:00:00').toLocaleDateString('es-CO', {day: '2-digit', month: '2-digit'});
+                                      if (l.startTime) {
+                                          const timeStr = l.startTime === l.endTime ? l.startTime : `${l.startTime} - ${l.endTime}`;
+                                          return `${dateStr} (${timeStr})`;
+                                      }
+                                      return dateStr;
+                                  }).join(', ')}</p></div>
                                 )}
                              </div>
                         </div>
