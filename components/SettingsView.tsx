@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { Store, Seller, Role, Product } from '../types';
-import { CheckIcon } from './Icons';
+import { Store, Seller, Role, Product, Category } from '../types';
+import { CheckIcon, DownloadIcon } from './Icons';
 // FIX: Updated the import path for 'compressImage' from '../constants' to '../services/storageService' to resolve module not found error.
 import { compressImage } from '../services/storageService';
 import { db } from '../firebase';
@@ -8,6 +9,7 @@ import { db } from '../firebase';
 interface SettingsViewProps {
   stores: Store[];
   allInventory: Product[];
+  categories: Category[];
   onSave: (updatedStore: Store) => void;
   onResetStoreData: (storeId: string) => void;
   currentUser: Seller;
@@ -19,7 +21,7 @@ interface SettingsViewProps {
   onReactivateAllProducts: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory, categories, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
 
@@ -119,6 +121,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     } else {
       alert("Por favor, selecciona una tienda para reiniciar.");
     }
+  };
+
+  const handleExportConsolidatedProducts = () => {
+    // 1. De-duplicate products by name
+    const uniqueProducts = new Map<string, Product>();
+    allInventory.forEach(product => {
+      const key = product.name.toLowerCase().trim();
+      if (!uniqueProducts.has(key)) {
+        uniqueProducts.set(key, product);
+      }
+    });
+    const productsToExport = Array.from(uniqueProducts.values()).sort((a, b) => a.name.localeCompare(b.name));
+    
+    // 2. Get category map
+    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+
+    // 3. Create CSV content
+    const headers = ['Nombre', 'Costo', 'Proveedor', 'Categoría'];
+    const csvRows = [headers.join(',')];
+
+    productsToExport.forEach(product => {
+        const categoryName = categoryMap.get(product.categoryId) || 'Sin Categoría';
+        const row = [
+            `"${product.name.replace(/"/g, '""')}"`,
+            product.cost,
+            `"${(product.supplier || '').replace(/"/g, '""')}"`,
+            // FIX: Explicitly cast categoryName to a string to prevent a 'replace does not exist on type unknown' error, ensuring type safety.
+            `"${String(categoryName).replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+
+    // 4. Trigger download
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel compatibility
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const fileName = `consolidado_productos_compras_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
   
   if (!localSettings) {
@@ -336,6 +383,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             </button>
           </div>
         </form>
+
+        {isAdmin && (
+          <div className="mt-8 pt-6 border-t-2 border-dashed border-gray-400/50">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-text-light mb-4">Exportar Datos</h3>
+            <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                <h4 className="font-bold text-gray-700 dark:text-text-light">Consolidado de Productos para Compras</h4>
+                <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
+                    Descarga un archivo de texto (CSV) con una lista de todos los productos únicos de todas las tiendas, ideal para realizar pedidos a proveedores. Incluye nombre, costo, proveedor y categoría.
+                </p>
+                <button onClick={handleExportConsolidatedProducts} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                    <DownloadIcon />
+                    <span>Descargar Consolidado</span>
+                </button>
+            </div>
+          </div>
+        )}
 
         {isAdmin && (
             <div className="mt-8 pt-6 border-t-2 border-dashed border-red-500/50">
