@@ -47,7 +47,9 @@ interface PriceVariationItem {
   seller: string;
   soldPrice: number;
   currentPrice: number;
-  variation: number;
+  variation: number; // per unit variation
+  quantity: number;
+  totalVariation: number;
   status: 'markup' | 'discount' | 'normal';
   paymentMethods: (PaymentMethod | string)[];
 }
@@ -84,6 +86,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [salesCategoryFilter, setSalesCategoryFilter] = useState('');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+
+  // Price Variation Filter State
+  const [priceVariationSellerFilter, setPriceVariationSellerFilter] = useState('');
 
   
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
@@ -396,7 +401,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       return detailedReportData.totalsByMethod['Recaudo Sistecredito'] || 0;
   }, [detailedReportData.totalsByMethod]);
 
-  const priceVariationReport = useMemo(() => {
+  const priceVariationReportData = useMemo(() => {
     const reportItems: PriceVariationItem[] = [];
 
     sales.forEach(sale => {
@@ -413,6 +418,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 if (!productInInventory) return;
 
                 const variation = item.price - productInInventory.price;
+                const totalVariation = variation * item.quantity;
                 let status: 'markup' | 'discount' | 'normal';
                 if (variation > 0) {
                     status = 'markup';
@@ -431,6 +437,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     soldPrice: item.price,
                     currentPrice: productInInventory.price,
                     variation: variation,
+                    quantity: item.quantity,
+                    totalVariation: totalVariation,
                     status: status,
                     paymentMethods: paymentMethods,
                 });
@@ -438,8 +446,33 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         }
     });
 
-    return reportItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [sales, inventory, isWithinRange]);
+    const filteredItems = reportItems.filter(item => {
+        return priceVariationSellerFilter ? item.seller === priceVariationSellerFilter : true;
+    });
+
+    const summary = {
+        totalMarkup: 0,
+        totalDiscount: 0, // will be negative
+    };
+
+    filteredItems.forEach(item => {
+        if (item.totalVariation > 0) {
+            summary.totalMarkup += item.totalVariation;
+        } else if (item.totalVariation < 0) {
+            summary.totalDiscount += item.totalVariation;
+        }
+    });
+    
+    const sortedItems = filteredItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    return {
+        items: sortedItems,
+        summary: {
+            ...summary,
+            netDifference: summary.totalMarkup + summary.totalDiscount
+        }
+    };
+}, [sales, inventory, isWithinRange, priceVariationSellerFilter]);
 
   const categoryReport = useMemo(() => {
     const salesInRange = sales.filter(s => isWithinRange(s.createdAt));
@@ -940,6 +973,31 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
         {isPriceAnalysisVisible && (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-text-light">Resultados del Periodo</h3>
+                    <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="w-full sm:w-auto sm:max-w-xs bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
+                        <option value="">Todos los vendedores</option>
+                        {sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}
+                    </select>
+                </div>
+
+                <div className="my-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div className="bg-green-100 dark:bg-green-900/50 p-3 rounded-md">
+                        <p className="font-bold text-green-800 dark:text-green-300">Total Sobreprecio</p>
+                        <p className="text-xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p>
+                    </div>
+                    <div className="bg-yellow-100 dark:bg-yellow-900/50 p-3 rounded-md">
+                        <p className="font-bold text-yellow-800 dark:text-yellow-300">Total Descuento</p>
+                        <p className="text-xl font-extrabold text-yellow-600 dark:text-yellow-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
+                    </div>
+                    <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-md">
+                        <p className="font-bold text-blue-800 dark:text-blue-300">Diferencia Neta</p>
+                        <p className={`text-xl font-extrabold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-500'}`}>
+                            {formatCOP(priceVariationReportData.summary.netDifference)}
+                        </p>
+                    </div>
+                </div>
+
                 <div className="overflow-x-auto max-h-[500px]">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
@@ -948,48 +1006,40 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <th className="p-2 font-semibold">Factura #</th>
                                 <th className="p-2 font-semibold">Producto</th>
                                 <th className="p-2 font-semibold">Vendedor</th>
-                                <th className="p-2 font-semibold">Medio de Pago</th>
-                                <th className="p-2 font-semibold text-right">Precio Venta</th>
-                                <th className="p-2 font-semibold text-right">Precio Actual</th>
-                                <th className="p-2 font-semibold text-right">Variación</th>
+                                <th className="p-2 font-semibold text-center">Cant.</th>
+                                <th className="p-2 font-semibold text-right">P. Venta</th>
+                                <th className="p-2 font-semibold text-right">P. Actual</th>
+                                <th className="p-2 font-semibold text-right">Var. Total</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {priceVariationReport.map(item => {
+                            {priceVariationReportData.items.map(item => {
                                 let rowClass = 'hover:bg-gray-50 dark:hover:bg-gray-800/50';
                                 let variationClass = 'font-bold';
                                 if (item.status === 'markup') {
-                                    rowClass = 'bg-green-100 dark:bg-green-900/50 hover:bg-green-200 dark:hover:bg-green-900/70';
+                                    rowClass = 'bg-green-100/50 dark:bg-green-900/30 hover:bg-green-200/50 dark:hover:bg-green-900/50';
                                     variationClass += ' text-green-600 dark:text-green-400';
                                 } else if (item.status === 'discount') {
-                                    rowClass = 'bg-yellow-100 dark:bg-yellow-900/50 hover:bg-yellow-200 dark:hover:bg-yellow-900/70';
+                                    rowClass = 'bg-yellow-100/50 dark:bg-yellow-900/30 hover:bg-yellow-200/50 dark:hover:bg-yellow-900/50';
                                     variationClass += ' text-yellow-600 dark:text-yellow-400';
                                 }
 
                                 return (
                                     <tr key={item.id} className={rowClass}>
-                                        <td className="p-2 whitespace-nowrap">{new Date(item.date).toLocaleString()}</td>
+                                        <td className="p-2 whitespace-nowrap">{new Date(item.date).toLocaleDateString()}</td>
                                         <td className="p-2 font-mono">#{item.invoiceNumber}</td>
                                         <td className="p-2 font-semibold">{item.productName}</td>
                                         <td className="p-2">{item.seller}</td>
-                                        <td className="p-2">
-                                            <div className="flex flex-wrap gap-1">
-                                                {item.paymentMethods.map(method => (
-                                                <span key={method} className="px-1.5 py-0.5 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
-                                                    {method}
-                                                </span>
-                                                ))}
-                                            </div>
-                                        </td>
+                                        <td className="p-2 text-center font-bold">{item.quantity}</td>
                                         <td className="p-2 text-right">{formatCOP(item.soldPrice)}</td>
                                         <td className="p-2 text-right">{formatCOP(item.currentPrice)}</td>
                                         <td className={`p-2 text-right ${variationClass}`}>
-                                            {item.variation > 0 ? '+' : ''}{formatCOP(item.variation)}
+                                            {item.totalVariation > 0 ? '+' : ''}{formatCOP(item.totalVariation)}
                                         </td>
                                     </tr>
                                 );
                             })}
-                            {priceVariationReport.length === 0 && (
+                            {priceVariationReportData.items.length === 0 && (
                                 <tr><td colSpan={8} className="p-4 text-center text-gray-500">No hay variaciones de precio para mostrar en el periodo seleccionado.</td></tr>
                             )}
                         </tbody>
