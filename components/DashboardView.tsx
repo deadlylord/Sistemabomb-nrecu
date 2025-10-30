@@ -89,6 +89,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   // Price Variation Filter State
   const [priceVariationSellerFilter, setPriceVariationSellerFilter] = useState('');
+  const [priceVariationPaymentMethodFilter, setPriceVariationPaymentMethodFilter] = useState('');
 
   
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
@@ -447,7 +448,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
 
     const filteredItems = reportItems.filter(item => {
-        return priceVariationSellerFilter ? item.seller === priceVariationSellerFilter : true;
+        const sellerMatch = priceVariationSellerFilter ? item.seller === priceVariationSellerFilter : true;
+        const paymentMethodMatch = priceVariationPaymentMethodFilter
+            ? item.paymentMethods.includes(priceVariationPaymentMethodFilter as PaymentMethod)
+            : true;
+        return sellerMatch && paymentMethodMatch;
     });
 
     const summary = {
@@ -472,7 +477,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             netDifference: summary.totalMarkup + summary.totalDiscount
         }
     };
-}, [sales, inventory, isWithinRange, priceVariationSellerFilter]);
+}, [sales, inventory, isWithinRange, priceVariationSellerFilter, priceVariationPaymentMethodFilter]);
 
   const categoryReport = useMemo(() => {
     const salesInRange = sales.filter(s => isWithinRange(s.createdAt));
@@ -975,10 +980,16 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-text-light">Resultados del Periodo</h3>
-                    <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="w-full sm:w-auto sm:max-w-xs bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
-                        <option value="">Todos los vendedores</option>
-                        {sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}
-                    </select>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="w-full sm:w-auto sm:max-w-xs bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
+                            <option value="">Todos los vendedores</option>
+                            {sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}
+                        </select>
+                        <select value={priceVariationPaymentMethodFilter} onChange={e => setPriceVariationPaymentMethodFilter(e.target.value)} className="w-full sm:w-auto sm:max-w-xs bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
+                            <option value="">Todos los Medios de Pago</option>
+                            {Object.values(PaymentMethod).map(method => (<option key={method} value={method}>{method}</option>))}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="my-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
@@ -1006,6 +1017,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <th className="p-2 font-semibold">Factura #</th>
                                 <th className="p-2 font-semibold">Producto</th>
                                 <th className="p-2 font-semibold">Vendedor</th>
+                                <th className="p-2 font-semibold">Medio de Pago</th>
                                 <th className="p-2 font-semibold text-center">Cant.</th>
                                 <th className="p-2 font-semibold text-right">P. Venta</th>
                                 <th className="p-2 font-semibold text-right">P. Actual</th>
@@ -1030,6 +1042,15 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         <td className="p-2 font-mono">#{item.invoiceNumber}</td>
                                         <td className="p-2 font-semibold">{item.productName}</td>
                                         <td className="p-2">{item.seller}</td>
+                                        <td className="p-2">
+                                            <div className="flex flex-wrap gap-1">
+                                                {item.paymentMethods.map(method => (
+                                                    <span key={method} className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-text-dark whitespace-nowrap">
+                                                        {method}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </td>
                                         <td className="p-2 text-center font-bold">{item.quantity}</td>
                                         <td className="p-2 text-right">{formatCOP(item.soldPrice)}</td>
                                         <td className="p-2 text-right">{formatCOP(item.currentPrice)}</td>
@@ -1040,7 +1061,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 );
                             })}
                             {priceVariationReportData.items.length === 0 && (
-                                <tr><td colSpan={8} className="p-4 text-center text-gray-500">No hay variaciones de precio para mostrar en el periodo seleccionado.</td></tr>
+                                <tr><td colSpan={9} className="p-4 text-center text-gray-500">No hay variaciones de precio para mostrar en el periodo seleccionado.</td></tr>
                             )}
                         </tbody>
                     </table>

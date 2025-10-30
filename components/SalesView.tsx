@@ -180,9 +180,10 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
   const renderPaymentMethods = (sale: Sale) => {
     // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
     const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
-    const methods = paymentsArray && paymentsArray.length > 0
+    // @FIX: The `methods` array was being inferred as `unknown[]` due to Object.values. Explicitly casting to `string[]` ensures type safety for React keys and content.
+    const methods: string[] = (paymentsArray && paymentsArray.length > 0
       ? [...new Set(paymentsArray.map(p => p.method))]
-      : (sale.paymentMethod ? [sale.paymentMethod] : []);
+      : (sale.paymentMethod ? [sale.paymentMethod] : []));
 
     if (methods.length === 0) {
       return <span className="text-gray-500 dark:text-text-dark text-xs">N/A</span>;
@@ -190,8 +191,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
 
     return (
       <div className="flex flex-wrap gap-1 justify-start">
-        {/* FIX: The `methods` array elements were being inferred as `unknown`. Explicitly casting to `string[]` resolves the type error for the key and content. */}
-        {(methods as string[]).map(method => (
+        {methods.map(method => (
           <span key={method} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
             {method}
           </span>
