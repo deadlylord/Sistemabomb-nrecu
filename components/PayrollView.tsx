@@ -78,6 +78,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
     }
   };
 
+  const toLocalDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleLoadDays = () => {
     if (!selectedSeller || !startDate || !endDate) {
       alert('Por favor, selecciona un vendedor y un periodo.');
@@ -94,7 +101,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
         return record.sellerName === selectedSeller && recordDate >= startFilterDate && recordDate <= endFilterDate;
       })
       .forEach(record => {
-        const dateStr = new Date(record.date).toISOString().split('T')[0];
+        const dateStr = toLocalDateString(new Date(record.date));
         if (!loginsByDay.has(dateStr)) {
           loginsByDay.set(dateStr, []);
         }
@@ -107,7 +114,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
       const saleDate = new Date(sale.createdAt);
       return sale.seller === selectedSeller && saleDate >= startFilterDate && saleDate <= endFilterDate;
     }).forEach(sale => {
-      const dateStr = new Date(sale.createdAt).toISOString().split('T')[0];
+      const dateStr = toLocalDateString(new Date(sale.createdAt));
       const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
       salesByDay.set(dateStr, (salesByDay.get(dateStr) || 0) + saleUnits);
     });
