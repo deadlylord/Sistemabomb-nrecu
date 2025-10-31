@@ -235,7 +235,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
                 className="w-full bg-white dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
               >
                 <option value="">Todos los vendedores</option>
-                {sellers.map(seller => (
+                {sellers.filter(s => !s.isDisabled).map(seller => (
                   <option key={seller.id} value={seller.name}>{seller.name}</option>
                 ))}
               </select>

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, Seller, StockTake } from '../types';
 import { CheckIcon, CrossIcon } from './Icons';
@@ -91,7 +92,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
             <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Vendedor (Obligatorio)</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {sellers.map(seller => (
+                {sellers.filter(seller => !seller.isDisabled).map(seller => (
                     <button
                     key={seller.id}
                     onClick={() => setSelectedSeller(seller.name)}

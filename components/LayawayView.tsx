@@ -187,7 +187,7 @@ const LayawayCard: React.FC<{
                             required
                         >
                             <option value="" disabled>Selecciona un vendedor</option>
-                            {sellers.map(seller => <option key={seller.id} value={seller.name}>{seller.name}</option>)}
+                            {sellers.filter(seller => !seller.isDisabled).map(seller => <option key={seller.id} value={seller.name}>{seller.name}</option>)}
                         </select>
                     </div>
                     <div>
