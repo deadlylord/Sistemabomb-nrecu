@@ -17,7 +17,8 @@ import {
   addDoc,
   DocumentReference,
   Query,
-  WriteBatch
+  WriteBatch,
+  arrayUnion
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment } from './types';
@@ -1235,6 +1236,38 @@ const App: React.FC = () => {
     await addDoc(collection(db, 'dailyNotes'), newNote);
   };
   
+  const handleDeleteStockTake = async (stockTakeId: string) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar este registro de conteo permanentemente? Esta acción no se puede deshacer.')) {
+      try {
+        await deleteDoc(doc(db, 'stockTakes', stockTakeId));
+        alert('Registro de conteo eliminado.');
+      } catch (error) {
+        console.error("Error deleting stock take:", error);
+        alert("No se pudo eliminar el registro de conteo.");
+      }
+    }
+  };
+
+  const handleAddNoteToStockTake = async (stockTakeId: string, noteContent: string) => {
+    if (!currentUser) return;
+
+    const stockTakeRef = doc(db, 'stockTakes', stockTakeId);
+    const newNote = {
+      content: noteContent,
+      author: currentUser.name,
+      date: new Date().toISOString()
+    };
+    
+    try {
+      await updateDoc(stockTakeRef, {
+        notes: arrayUnion(newNote)
+      });
+    } catch (error) {
+      console.error("Error adding note to stock take:", error);
+      alert("No se pudo agregar la nota.");
+    }
+  };
+  
   const handleAddProduct = async (
     newProductData: Omit<Product, 'id' | 'sku' | 'storeId' | 'imageUrl'>,
     selectedStoreIds: string[],
@@ -2204,7 +2237,7 @@ const App: React.FC = () => {
         {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
         {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} />}
-        {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} />}
+        {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={handleDeleteStockTake} onAddNoteToStockTake={handleAddNoteToStockTake} currentUser={currentUser} roles={roles} />}
         {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} onSave={handleSaveStoreSettings} onResetStoreData={handleResetStoreData} currentUser={currentUser} roles={roles} onRecompressAllProductImages={handleRecompressAllImages} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={handleGenerateTestData} onReactivateAllProducts={handleReactivateAllProducts} categories={categories} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}

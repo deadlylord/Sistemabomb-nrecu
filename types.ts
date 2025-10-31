@@ -129,6 +129,11 @@ export interface StockTake {
     difference: number;
   }[];
   storeId: string;
+  notes?: {
+    content: string;
+    author: string;
+    date: string; // ISO string
+  }[];
 }
 
 export enum View {

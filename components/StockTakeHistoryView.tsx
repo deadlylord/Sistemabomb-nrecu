@@ -1,19 +1,28 @@
 
 
 import React, { useState, useMemo } from 'react';
-import { StockTake, Seller } from '../types';
+import { StockTake, Seller, Role } from '../types';
 import { formatCOP } from '../constants';
+import { TrashIcon, PlusCircleIcon } from './Icons';
 
 interface StockTakeHistoryViewProps {
   stockTakes: StockTake[];
   sellers: Seller[];
+  onDeleteStockTake: (stockTakeId: string) => void;
+  onAddNoteToStockTake: (stockTakeId: string, note: string) => void;
+  currentUser: Seller;
+  roles: Role[];
 }
 
-const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes, sellers }) => {
+const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes, sellers, onDeleteStockTake, onAddNoteToStockTake, currentUser, roles }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sellerFilter, setSellerFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [newNote, setNewNote] = useState('');
+
+  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
+  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
 
   const filteredStockTakes = useMemo(() => {
     return [...stockTakes].filter(st => {
@@ -29,6 +38,12 @@ const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes,
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [stockTakes, sellerFilter, startDate, endDate]);
 
+  const handleAddNote = (stockTakeId: string) => {
+    if (newNote.trim()) {
+      onAddNoteToStockTake(stockTakeId, newNote.trim());
+      setNewNote('');
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -82,7 +97,8 @@ const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes,
                   </div>
 
                   {expandedId === st.id && (
-                    <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-700 overflow-x-auto">
+                    <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-700">
+                      <div className="overflow-x-auto mb-4">
                         <table className="w-full text-left">
                             <thead className="bg-gray-200 dark:bg-gray-700">
                                 <tr>
@@ -105,6 +121,53 @@ const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes,
                                 ))}
                             </tbody>
                         </table>
+                      </div>
+
+                       <div className="mt-4">
+                        <h4 className="font-bold text-accent mb-2">Notas</h4>
+                        <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-2">
+                          {(st.notes && st.notes.length > 0) ? (
+                            [...st.notes].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((note, index) => (
+                              <div key={index} className="bg-gray-200 dark:bg-gray-700 p-2 rounded-md text-sm">
+                                <p className="text-gray-800 dark:text-text-light whitespace-pre-wrap">{note.content}</p>
+                                <p className="text-xs text-gray-500 dark:text-text-dark mt-1">
+                                  - {note.author} el {new Date(note.date).toLocaleString()}
+                                </p>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500 dark:text-text-dark">No hay notas para este conteo.</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <textarea
+                            value={newNote}
+                            onChange={(e) => setNewNote(e.target.value)}
+                            placeholder="Añadir una nota..."
+                            rows={2}
+                            className="w-full bg-white dark:bg-gray-900 p-2 rounded-md border border-gray-300 dark:border-gray-600 text-sm"
+                          />
+                          <button
+                            onClick={() => handleAddNote(st.id)}
+                            disabled={!newNote.trim()}
+                            className="bg-accent text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover disabled:bg-gray-500"
+                          >
+                            <PlusCircleIcon />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isAdmin && (
+                        <div className="mt-6 flex justify-end">
+                          <button
+                            onClick={() => onDeleteStockTake(st.id)}
+                            className="flex items-center space-x-2 px-4 py-2 bg-red-500/10 text-red-500 rounded-md font-medium hover:bg-red-500/20 transition-colors"
+                          >
+                            <TrashIcon />
+                            <span>Eliminar Conteo</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
