@@ -57,6 +57,99 @@ interface PriceVariationItem {
 
 type UnifiedSaleTransaction = (Sale & { transactionType: 'sale' }) | (Layaway & { transactionType: 'layaway', layawayStatus: Layaway['status'] });
 
+const SalesHistoryChart: React.FC<{ data: { label: string; total: number }[], viewMode: 'daily' | 'monthly' | 'all-months' }> = ({ data, viewMode }) => {
+  const maxValue = useMemo(() => Math.max(...data.map(d => d.total), 0), [data]);
+  const safeMaxValue = maxValue === 0 ? 100000 : maxValue * 1.1; // Add 10% padding
+
+  const formatCompactCOP = (value: number): string => {
+    if (value >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1).replace('.0', '')}M`;
+    }
+    if (value >= 1_000) {
+      return `${Math.round(value / 1_000)}k`;
+    }
+    return value.toString();
+  };
+
+  const formatLabel = (label: string) => {
+    if (viewMode === 'daily') {
+      return new Date(label + 'T12:00:00Z').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+    }
+    const [year, month] = label.split('-');
+    return new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('es-CO', { month: 'short', year: '2-digit' });
+  };
+  
+  const yAxisLabels = useMemo(() => {
+    const labels = [];
+    for (let i = 0; i <= 4; i++) {
+        labels.push(safeMaxValue * (i / 4));
+    }
+    return labels.reverse();
+  }, [safeMaxValue]);
+
+  if (data.length === 0) {
+    return <div className="h-96 flex items-center justify-center text-gray-500 dark:text-text-dark">No hay datos de ventas para mostrar en este periodo.</div>;
+  }
+
+  return (
+    <div className="h-96 w-full pt-4 pr-4">
+      <div className="h-full w-full flex">
+        {/* Y-Axis Labels */}
+        <div className="h-full flex flex-col justify-between text-xs text-gray-500 dark:text-text-dark pr-2 shrink-0">
+          {yAxisLabels.map((label, i) => (
+            <div key={i} className={i === yAxisLabels.length - 1 ? "pb-6" : "-translate-y-1/2"}>
+              {formatCOP(label).replace('$', '').replace(/\s/g, '').replace(',00', '')}
+            </div>
+          ))}
+        </div>
+
+        {/* Chart Bars Area */}
+        <div className="flex-grow w-full pl-4 border-l border-gray-200 dark:border-gray-700">
+          <div className="relative h-full w-full">
+            {/* Grid Lines */}
+            {yAxisLabels.map((_, i) => (
+                <div key={i} className="absolute w-full border-t border-gray-200 dark:border-gray-700/50 border-dashed" style={{ bottom: `${(i / (yAxisLabels.length -1)) * 100}%` }}></div>
+            ))}
+            
+            {/* Bars */}
+            <div className="absolute inset-0 flex items-end justify-around gap-2 px-2 pb-6">
+                {data.map((d) => (
+                    <div key={d.label} className="relative flex h-full w-full flex-col items-center justify-end group">
+                        
+                        {/* Tooltip on hover */}
+                        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
+                            <p className="font-bold">{formatLabel(d.label)}</p>
+                            <p>{formatCOP(d.total)}</p>
+                        </div>
+                        
+                        {/* Value on top of bar */}
+                        <div className="text-xs font-bold text-gray-700 dark:text-text-dark mb-1 transition-opacity duration-300">
+                           {d.total > 0 ? formatCompactCOP(d.total) : ''}
+                        </div>
+                        
+                        {/* The bar */}
+                        <div
+                            className="w-full rounded-t-md bg-accent/70 transition-all duration-300 group-hover:bg-accent"
+                            style={{ height: `${(d.total / safeMaxValue) * 100}%` }}
+                        ></div>
+                    </div>
+                ))}
+            </div>
+             {/* X-axis labels (separate layer to prevent overflow issues) */}
+            <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">
+                {data.map((d) => (
+                    <div key={d.label} className="w-full text-center text-[10px] text-gray-500 dark:text-text-dark">
+                        {formatLabel(d.label)}
+                    </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const toYYYYMMDD = (date: Date) => {
     const year = date.getFullYear();
@@ -92,6 +185,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [priceVariationSellerFilter, setPriceVariationSellerFilter] = useState('');
   const [priceVariationPaymentMethodFilter, setPriceVariationPaymentMethodFilter] = useState('');
 
+  // Sales Chart State
+  const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -627,6 +722,37 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       };
     // --- END: Sales History Section Logic ---
 
+    // --- Chart Data Logic ---
+    const salesChartData = useMemo(() => {
+        const transactions = [
+            ...sales.map(s => ({ date: s.createdAt, amount: s.totalAmount })),
+            ...layaways.filter(l => l.status !== 'pre-order').map(l => ({ date: l.createdAt, amount: l.totalAmount }))
+        ];
+
+        const dataToProcess = chartViewMode === 'all-months' 
+            ? transactions
+            : transactions.filter(t => isWithinRange(t.date));
+
+        const groupedData: { [key: string]: number } = {};
+
+        dataToProcess.forEach(transaction => {
+            const date = new Date(transaction.date);
+            let key: string;
+
+            if (chartViewMode === 'daily') {
+                key = date.toISOString().split('T')[0]; // YYYY-MM-DD
+            } else { // 'monthly' or 'all-months'
+                key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`; // YYYY-MM
+            }
+            
+            groupedData[key] = (groupedData[key] || 0) + transaction.amount;
+        });
+
+        return Object.entries(groupedData)
+            .map(([label, total]) => ({ label, total }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, [sales, layaways, chartViewMode, isWithinRange]);
+
   // --- Start of Admin-only General Dashboard Logic ---
   
   const handleShareCurrentStore = async () => {
@@ -1077,6 +1203,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     )) : <p className="text-center text-gray-500 dark:text-text-dark">No hay datos de ventas para este periodo.</p>}
                 </div>
             </div>
+        </div>
+
+        <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-accent">Análisis de Ventas a lo Largo del Tiempo</h2>
+            <div className="flex items-center gap-2 mt-2 sm:mt-0">
+              <button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button>
+              <button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button>
+              <button onClick={() => setChartViewMode('all-months')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'all-months' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Todos los Meses</button>
+            </div>
+          </div>
+          <SalesHistoryChart data={salesChartData} viewMode={chartViewMode} />
         </div>
 
 
