@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Seller, Sale, LoginRecord, PayrollRecord } from '../types';
+import { Seller, Sale, LoginRecord, PayrollRecord, Layaway } from '../types';
 import { formatCOP } from '../constants';
 import { SearchIcon, CrossIcon, TrashIcon } from './Icons';
 
 interface PayrollViewProps {
   sellers: Seller[];
   sales: Sale[];
+  layaways: Layaway[];
   loginHistory: LoginRecord[];
   payrollHistory: PayrollRecord[];
   onSavePayroll: (payrollData: Omit<PayrollRecord, 'id' | 'paidAt' | 'paidBy' | 'storeId'>) => void;
@@ -32,7 +33,7 @@ interface DailyBreakdown {
   commissionEarned: number;
 }
 
-const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory, payrollHistory, onSavePayroll, currentUser }) => {
+const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, currentUser }) => {
   const [selectedSeller, setSelectedSeller] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -108,19 +109,30 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
         loginsByDay.get(dateStr)!.push(record);
       });
 
-    // 2. Get all sales for the period
-    const salesByDay = new Map<string, number>();
+    const salesAndLayawaysByDay = new Map<string, number>();
+
+    // Direct sales
     sales.filter(sale => {
-      const saleDate = new Date(sale.createdAt);
-      return sale.seller === selectedSeller && saleDate >= startFilterDate && saleDate <= endFilterDate;
+        const saleDate = new Date(sale.createdAt);
+        return !sale.layawayId && sale.seller === selectedSeller && saleDate >= startFilterDate && saleDate <= endFilterDate;
     }).forEach(sale => {
-      const dateStr = toLocalDateString(new Date(sale.createdAt));
-      const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
-      salesByDay.set(dateStr, (salesByDay.get(dateStr) || 0) + saleUnits);
+        const dateStr = toLocalDateString(new Date(sale.createdAt));
+        const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + saleUnits);
+    });
+
+    // New active layaways
+    layaways.filter(layaway => {
+        const layawayDate = new Date(layaway.createdAt);
+        return layaway.status === 'active' && layaway.seller === selectedSeller && layawayDate >= startFilterDate && layawayDate <= endFilterDate;
+    }).forEach(layaway => {
+        const dateStr = toLocalDateString(new Date(layaway.createdAt));
+        const layawayUnits = layaway.items.reduce((sum, item) => sum + item.quantity, 0);
+        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + layawayUnits);
     });
 
     // 3. Combine unique dates from both logins and sales
-    const allDates = new Set<string>([...loginsByDay.keys(), ...salesByDay.keys()]);
+    const allDates = new Set<string>([...loginsByDay.keys(), ...salesAndLayawaysByDay.keys()]);
 
     // 4. Create the final list of days
     const combinedDays = Array.from(allDates)
@@ -137,7 +149,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, loginHistory,
 
         return {
           date: dateStr,
-          unitsSold: salesByDay.get(dateStr) || 0,
+          unitsSold: salesAndLayawaysByDay.get(dateStr) || 0,
           logins: dayLogins.map(l => new Date(l.date).toLocaleTimeString('es-CO')),
           startTime,
           endTime,

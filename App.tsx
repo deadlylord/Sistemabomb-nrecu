@@ -94,6 +94,7 @@ const App: React.FC = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
   
   // States for UI and session management
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
@@ -114,6 +115,7 @@ const App: React.FC = () => {
   const [isGlobalMode, setIsGlobalMode] = useState<boolean>(false);
   const [globalInventoryForSearch, setGlobalInventoryForSearch] = useState<Product[]>([]);
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
 
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
@@ -150,6 +152,12 @@ const App: React.FC = () => {
     if (!currentUser) return [];
     const userRole = roles.find(role => role.id === currentUser.roleId);
     return userRole ? userRole.permissions : [];
+  }, [currentUser, roles]);
+
+  const isAdmin = useMemo(() => {
+      if (!currentUser || !roles.length) return false;
+      const adminRole = roles.find(r => r.name === 'Administrator');
+      return currentUser.roleId === adminRole?.id;
   }, [currentUser, roles]);
   
   const fetchOnceFromFirestore = useCallback(<T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
@@ -232,17 +240,22 @@ const App: React.FC = () => {
       attachFirestoreListener(query(collection(db, 'categories')), setCategories),
       attachFirestoreListener(query(collection(db, 'inventoryTransfers')), setInventoryTransfers)
     ];
+    
+    if (isAdmin) {
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'sales')), setAllSales));
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'inventory')), setGlobalInventoryForSearch));
+    }
 
     return () => {
       console.log("Cleaning up post-login global listeners.");
       unsubscribers.forEach(unsub => unsub());
     }
-  }, [currentUser, isAppReady, isAuthReady]);
+  }, [currentUser, isAppReady, isAuthReady, isAdmin]);
   
   // Effect for managing global search mode data
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
-        if (globalInventoryForSearch.length > 0) {
+        if (globalInventoryForSearch.length > 0 && !isAdmin) { // Admins always have it loaded
             setGlobalInventoryForSearch([]); // Clear if mode is turned off
         }
         return;
@@ -256,7 +269,7 @@ const App: React.FC = () => {
         console.log("Cleaning up global inventory listener.");
         unsubscribe();
     };
-  }, [isGlobalMode, isAppReady, currentUser]);
+  }, [isGlobalMode, isAppReady, currentUser, isAdmin]);
   
   // LAZY LOADING EFFECT: On-demand data loading based on current view and store
   useEffect(() => {
@@ -337,6 +350,7 @@ const App: React.FC = () => {
             fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
             fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             attach(storeSpecificQuery('sales'), setSales);
+            attach(storeSpecificQuery('layaways'), setLayaways);
             break;
 
         case View.SETTINGS:
@@ -2228,7 +2242,7 @@ const App: React.FC = () => {
         onToggleGlobalMode={handleToggleGlobalMode}
       />
       <main className="flex-grow overflow-y-auto">
-        {currentView === View.DASHBOARD && <DashboardView sales={sales} layaways={layaways} inventory={inventory} allLayaways={layaways} allIncidents={incidents} currentStore={currentStore} stores={stores} currentUser={currentUser!} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} categories={categories} sellers={sellers} dailyNotes={dailyNotes} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} />}
+        {currentView === View.DASHBOARD && <DashboardView onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} allLayaways={layaways} allIncidents={incidents} currentStore={currentStore} stores={stores} currentUser={currentUser!} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} categories={categories} sellers={sellers} dailyNotes={dailyNotes} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} />}
         {currentView === View.POS && <PosView inventory={inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId!} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={handleReactivateInconsistentProducts} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={handleInventoryTransfer} onResetBalances={handleResetBalances} />}
@@ -2238,7 +2252,7 @@ const App: React.FC = () => {
         {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={handleDeleteStockTake} onAddNoteToStockTake={handleAddNoteToStockTake} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
+        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} onSave={handleSaveStoreSettings} onResetStoreData={handleResetStoreData} currentUser={currentUser} roles={roles} onRecompressAllProductImages={handleRecompressAllImages} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={handleGenerateTestData} onReactivateAllProducts={handleReactivateAllProducts} categories={categories} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
@@ -2256,6 +2270,7 @@ const App: React.FC = () => {
       {showRecaudoReceipt && lastRecaudo && (
         <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />
       )}
+      {isAdmin && <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={globalInventoryForSearch} stores={stores} categories={categories} />}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -13,6 +13,7 @@ interface DashboardViewProps {
   roles: Role[];
   onSwitchStore: (storeId: string) => void;
   onNavigate: (view: View) => void;
+  onOpenReports: () => void;
   // Current store data
   sales: Sale[];
   layaways: Layaway[];
@@ -66,7 +67,7 @@ const toYYYYMMDD = (date: Date) => {
 
 const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
-    stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate,
+    stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale
   } = props;
   
@@ -755,6 +756,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center">
              <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2>
+                {isAdmin && (
+                  <button onClick={(e) => { e.stopPropagation(); onOpenReports(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Generar análisis de ventas con IA">
+                      <SparklesIcon className="w-6 h-6 text-accent" />
+                  </button>
+                )}
                  <button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen de ${currentStore?.name || 'Tienda Actual'}`}>
                     <ShareIcon className="w-5 h-5" />
                 </button>
@@ -968,6 +974,72 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         </React.Fragment>);})}</tbody>
                     </table></div>
                 )}
+            </div>
+        )}
+      </div>
+
+       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+        <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-accent">Análisis de Variación de Precios</h2>
+            <ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} />
+        </div>
+        {isPriceAnalysisVisible && (
+            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-green-100 dark:bg-green-900/50 p-4 rounded-lg text-center">
+                        <p className="text-sm font-semibold text-green-800 dark:text-green-300">Cobros por Encima del Precio</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p>
+                    </div>
+                    <div className="bg-red-100 dark:bg-red-900/50 p-4 rounded-lg text-center">
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-300">Descuentos Aplicados</p>
+                        <p className="text-2xl font-bold text-red-500">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
+                    </div>
+                    <div className="bg-blue-100 dark:bg-blue-900/50 p-4 rounded-lg text-center">
+                        <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Diferencia Neta</p>
+                        <p className={`text-2xl font-bold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-500'}`}>{formatCOP(priceVariationReportData.summary.netDifference)}</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 mb-4">
+                    <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
+                        <option value="">Todos los Vendedores</option>
+                        {sellers.map(seller => <option key={seller.id} value={seller.name}>{seller.name}</option>)}
+                    </select>
+                    <select value={priceVariationPaymentMethodFilter} onChange={e => setPriceVariationPaymentMethodFilter(e.target.value)} className="bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
+                        <option value="">Todos los Métodos de Pago</option>
+                        {Object.values(PaymentMethod).map(method => <option key={method} value={method}>{method}</option>)}
+                    </select>
+                </div>
+
+                <div className="overflow-x-auto max-h-[500px]">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                            <tr>
+                                <th className="p-2 font-semibold">Fecha</th>
+                                <th className="p-2 font-semibold">Producto</th>
+                                <th className="p-2 font-semibold text-right">Precio Venta</th>
+                                <th className="p-2 font-semibold text-right">Precio Actual</th>
+                                <th className="p-2 font-semibold text-right">Variación</th>
+                                <th className="p-2 font-semibold text-center">Cant.</th>
+                                <th className="p-2 font-semibold text-right">Variación Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {priceVariationReportData.items.map(item => (
+                                <tr key={item.id} className={`${item.status === 'markup' ? 'bg-green-500/5' : item.status === 'discount' ? 'bg-red-500/5' : ''}`}>
+                                    <td className="p-2 whitespace-nowrap">{new Date(item.date).toLocaleDateString()}</td>
+                                    <td className="p-2 font-semibold">{item.productName}</td>
+                                    <td className="p-2 text-right">{formatCOP(item.soldPrice)}</td>
+                                    <td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td>
+                                    <td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>{formatCOP(item.variation)}</td>
+                                    <td className="p-2 text-center">{item.quantity}</td>
+                                    <td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>{formatCOP(item.totalVariation)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {priceVariationReportData.items.length === 0 && <p className="text-center text-gray-500 py-4">No hay variaciones de precio para mostrar.</p>}
+                </div>
             </div>
         )}
       </div>
