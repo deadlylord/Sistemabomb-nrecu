@@ -113,29 +113,29 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
 
   return (
     <>
-      <div className={`bg-white dark:bg-secondary p-4 rounded-xl shadow-lg ${isCartPulsing ? 'animate-flash-bg' : ''}`}>
-        <div className="flex justify-between items-center border-b-2 border-accent/30 pb-2 mb-3">
+      <div className={`bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-4 rounded-xl shadow-lg ${isCartPulsing ? 'animate-flash-bg' : ''}`}>
+        <div className="flex justify-between items-center border-b-2 dark:border-accent/30 border-accent/20 pb-2 mb-3">
           <div>
             <h2 className="text-xl font-bold text-accent">Carrito</h2>
-            <span className="text-sm font-mono text-gray-500 dark:text-text-dark">Factura #{nextInvoiceNumber}</span>
+            <span className="text-sm font-mono text-slate-500 dark:text-slate-400">Factura #{nextInvoiceNumber}</span>
           </div>
           {cartItems.length > 0 && (
-            <button onClick={onClearCart} className="text-sm text-gray-500 dark:text-text-dark hover:text-red-500 transition-colors">
+            <button onClick={onClearCart} className="text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 transition-colors">
               Vaciar Carrito
             </button>
           )}
         </div>
 
         {cartItems.length === 0 ? (
-          <p className="text-gray-500 dark:text-text-dark text-center py-8">Tu carrito está vacío.</p>
+          <p className="text-slate-500 dark:text-slate-400 text-center py-8">Tu carrito está vacío.</p>
         ) : (
           <>
             <div className="space-y-3">
               {cartItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 p-2 rounded-lg">
+                <div key={item.id} className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/80 p-2 rounded-lg">
                   <div className="flex-1 mr-2">
-                    <p className="font-bold text-sm text-gray-800 dark:text-text-light truncate w-full">{item.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-text-dark truncate w-full">{item.supplier || 'N/A'}</p>
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate w-full">{item.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-full">{item.supplier || 'N/A'}</p>
                     {editingItemId === item.id ? (
                         <input
                             type="number"
@@ -144,7 +144,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                             onChange={(e) => setEditedPrice(e.target.value)}
                             onBlur={() => handlePriceBlur(item.id)}
                             onKeyDown={(e) => handlePriceKeyDown(e, item.id)}
-                            className="w-24 bg-gray-200 dark:bg-gray-700 text-accent text-sm p-1 rounded outline-none ring-2 ring-accent"
+                            className="w-24 bg-slate-200 dark:bg-slate-700 text-accent text-sm p-1 rounded outline-none ring-2 ring-accent"
                             autoFocus
                         />
                     ) : (
@@ -154,24 +154,24 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                     )}
                   </div>
                   <div className="flex items-center space-x-1.5">
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="p-1 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-accent text-gray-800 dark:text-text-light hover:text-white"><MinusIcon /></button>
+                    <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-accent text-slate-800 dark:text-slate-200 hover:text-white"><MinusIcon /></button>
                     <span className="w-6 text-center font-bold text-sm">{item.quantity}</span>
-                    <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="p-1 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-accent text-gray-800 dark:text-text-light hover:text-white"><PlusIcon /></button>
+                    <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-accent text-slate-800 dark:text-slate-200 hover:text-white"><PlusIcon /></button>
                   </div>
-                  <button onClick={() => onRemoveFromCart(item.id)} className="ml-2 text-gray-500 dark:text-text-dark hover:text-red-500">
+                  <button onClick={() => onRemoveFromCart(item.id)} className="ml-2 text-slate-500 dark:text-slate-400 hover:text-red-500">
                     <TrashIcon />
                   </button>
                 </div>
               ))}
             </div>
 
-            <div id="cart-total-display" className="mt-4 border-t-2 border-accent/30 pt-3">
+            <div id="cart-total-display" className="mt-4 border-t-2 dark:border-accent/30 border-accent/20 pt-3">
               <div className="mb-2">
                   <label htmlFor="change-toggle" className="flex items-center justify-end cursor-pointer">
-                      <span className="mr-3 text-sm font-medium text-gray-600 dark:text-text-dark">Calcular Devolución</span>
+                      <span className="mr-3 text-sm font-medium text-slate-600 dark:text-slate-400">Calcular Devolución</span>
                       <div className="relative">
                           <input type="checkbox" id="change-toggle" className="sr-only" checked={showChangeCalculator} onChange={() => setShowChangeCalculator(!showChangeCalculator)} />
-                          <div className="block bg-gray-200 dark:bg-gray-700 w-12 h-6 rounded-full"></div>
+                          <div className="block bg-slate-200 dark:bg-slate-700 w-12 h-6 rounded-full"></div>
                           <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${showChangeCalculator ? 'translate-x-6 bg-accent' : ''}`}></div>
                       </div>
                   </label>
@@ -179,13 +179,13 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
 
               {showChangeCalculator && (
                   <div className="mb-3">
-                      <label htmlFor="receivedAmount" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Valor Recibido</label>
+                      <label htmlFor="receivedAmount" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Valor Recibido</label>
                       <input
                           type="number"
                           id="receivedAmount"
                           value={receivedAmount}
                           onChange={e => setReceivedAmount(e.target.value)}
-                          className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 text-right font-bold text-lg focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                          className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 text-right font-bold text-lg focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                           placeholder="0"
                           min="0"
                           step="1000"
@@ -194,7 +194,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
               )}
 
               <div className="flex justify-between items-center text-2xl font-bold mb-3">
-                <span className="text-gray-800 dark:text-text-light">Total:</span>
+                <span className="text-slate-800 dark:text-slate-200">Total:</span>
                 <span className="text-accent">{formatCOP(totalPrice)}</span>
               </div>
 
@@ -213,11 +213,11 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                   Procesar Venta
                 </button>
                 <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => onHoldSale()} className="w-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                    <button onClick={() => onHoldSale()} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <PauseIcon />
                         <span>En Espera</span>
                     </button>
-                    <button onClick={() => handleLayawayClick(false)} className="w-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                    <button onClick={() => handleLayawayClick(false)} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <TagIcon />
                         <span>Crear Abono</span>
                     </button>
@@ -246,11 +246,11 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
 
       {isLayawayModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <div className="bg-white dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border dark:border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-sm">
                 <h3 className="text-xl font-bold text-accent mb-4">
                   {isPreOrder ? 'Crear Abono por Traer (Encargo)' : 'Crear Abono'}
                 </h3>
-                <p className="text-gray-500 dark:text-text-dark mb-4">
+                <p className="text-slate-500 dark:text-slate-400 mb-4">
                   {isPreOrder
                     ? 'El stock NO se descontará hasta que marques el producto como recibido.'
                     : 'Ingresa los datos para asociarlos a este abono.'}
@@ -258,7 +258,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                 <div className="space-y-4">
                   {isPreOrder && (
                       <div>
-                          <label htmlFor="layawayDescription" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">
+                          <label htmlFor="layawayDescription" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">
                               Descripción del Pedido (Talla, color, etc.)
                           </label>
                           <textarea
@@ -266,55 +266,55 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                               value={layawayDescription}
                               onChange={e => setLayawayDescription(e.target.value)}
                               rows={2}
-                              className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                               placeholder="Detalles específicos del encargo..."
                           />
                       </div>
                   )}
                   <div>
-                    <label htmlFor="customerPhone" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Celular del Cliente</label>
+                    <label htmlFor="customerPhone" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Celular del Cliente</label>
                     <input
                         type="tel"
                         id="customerPhone"
                         value={customerPhone}
                         onChange={handleLayawayPhoneChange}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         placeholder="Celular (10 dígitos)"
                         required
                         maxLength={10}
                     />
                   </div>
                   <div>
-                    <label htmlFor="customerName" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Nombre del Cliente</label>
+                    <label htmlFor="customerName" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Nombre del Cliente</label>
                     <input
                         type="text"
                         id="customerName"
                         value={customerName}
                         onChange={e => setCustomerName(toTitleCase(e.target.value))}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         placeholder="Ej: Ana Pérez"
                         required
                     />
                   </div>
                   <div>
-                    <label htmlFor="invoiceNumber" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Número de Factura</label>
+                    <label htmlFor="invoiceNumber" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Número de Factura</label>
                     <input
                         type="text"
                         id="invoiceNumber"
                         value={invoiceNumber}
                         onChange={e => setInvoiceNumber(e.target.value)}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         placeholder="Ej: F-00123"
                         required
                     />
                   </div>
                   <div>
-                    <label htmlFor="layawaySeller" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Vendedor (Obligatorio)</label>
+                    <label htmlFor="layawaySeller" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Vendedor (Obligatorio)</label>
                     <select
                         id="layawaySeller"
                         value={layawaySeller}
                         onChange={e => setLayawaySeller(e.target.value)}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         required
                     >
                         <option value="" disabled>Selecciona un vendedor</option>
@@ -324,13 +324,13 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="initialAmount" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Abono Inicial (Obligatorio)</label>
+                    <label htmlFor="initialAmount" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Abono Inicial (Obligatorio)</label>
                     <input
                         type="number"
                         id="initialAmount"
                         value={initialAmount}
                         onChange={e => setInitialAmount(e.target.value)}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         placeholder="0"
                         min="0"
                         step="1000"
@@ -338,12 +338,12 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                     />
                   </div>
                   <div>
-                    <label htmlFor="paymentMethod" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Método de Pago</label>
+                    <label htmlFor="paymentMethod" className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Método de Pago</label>
                     <select
                         id="paymentMethod"
                         value={paymentMethod}
                         onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-                        className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         required
                     >
                         <option value="" disabled>Selecciona un método</option>
@@ -354,7 +354,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end space-x-3">
-                    <button type="button" onClick={() => setIsLayawayModalOpen(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                    <button type="button" onClick={() => setIsLayawayModalOpen(false)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancelar</button>
                     <button onClick={handleLayawayConfirm} className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">Confirmar</button>
                 </div>
             </div>

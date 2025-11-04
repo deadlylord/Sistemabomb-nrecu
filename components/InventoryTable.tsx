@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Product, Category } from '../types';
 import { EditIcon, HistoryIcon, TrashIcon, PowerIcon, PackageIcon } from './Icons';
@@ -37,7 +38,7 @@ const SortableHeader: React.FC<{
     <th className={`p-0 ${className}`}>
       <button 
         onClick={() => requestSort(columnKey!)} 
-        className="w-full h-full p-3 text-sm font-semibold tracking-wide flex items-center justify-start hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        className="w-full h-full p-3 text-sm font-semibold tracking-wide flex items-center justify-start hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
       >
         {title} 
         {isSorted && <span className="ml-1 text-xs">{directionIcon}</span>}
@@ -90,7 +91,7 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
             tooltip = `¡Urgente! Venta muy lenta o nula en los últimos 30 días.`;
             break;
         case 'Nuevo':
-            pillClasses += ' bg-gray-500/20 text-gray-400';
+            pillClasses += ' bg-slate-500/20 text-slate-400';
             tooltip = 'Producto nuevo, sin suficientes datos de venta.';
             break;
         default: // 'Sin Datos'
@@ -106,7 +107,7 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
 };
 
 
-const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, onUpdateProduct, onDeleteProduct, onShowHistory, requestSort, sortConfig, isAdmin }) => {
+export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, onUpdateProduct, onDeleteProduct, onShowHistory, requestSort, sortConfig, isAdmin }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const handleToggleDisabled = (product: Product) => {
@@ -127,10 +128,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, 
   
   return (
     <>
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-100 dark:bg-gray-800">
+            <thead className="bg-slate-100 dark:bg-slate-800">
               <tr>
                 <SortableHeader columnKey="name" title="Producto" requestSort={requestSort} sortConfig={sortConfig} />
                 <th className="p-3 text-sm font-semibold tracking-wide hidden sm:table-cell text-left">SKU</th>
@@ -142,28 +143,28 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, 
                 <th className="p-3 text-sm font-semibold tracking-wide text-center">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {inventory.map(product => {
                 return (
-                  <tr key={product.id} className={`transition-colors ${product.isDisabled ? 'bg-red-50 dark:bg-red-900/20 opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                  <tr key={product.id} className={`transition-colors ${product.isDisabled ? 'bg-red-500/10 dark:bg-red-900/20 opacity-60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
                     <td className="p-3">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-md hidden sm:flex items-center justify-center flex-shrink-0 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                        <div className="w-10 h-10 rounded-md hidden sm:flex items-center justify-center flex-shrink-0 bg-slate-200 dark:bg-slate-700 overflow-hidden">
                           {product.imageUrl ? (
                               <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover rounded-md" />
                           ) : (
-                              <PackageIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                              <PackageIcon className="w-6 h-6 text-slate-400 dark:text-slate-500" />
                           )}
                         </div>
                         <div>
                           <span className="font-bold">{product.name}</span>
-                          {product.isDisabled && <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-500/20 text-gray-400">Deshabilitado</span>}
+                          {product.isDisabled && <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-500/20 text-slate-400">Deshabilitado</span>}
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 text-sm text-gray-500 dark:text-text-dark hidden sm:table-cell">{product.sku}</td>
-                    <td className="p-3 text-sm text-gray-500 dark:text-text-dark">{product.supplier || 'N/A'}</td>
-                    <td className="p-3 text-sm text-gray-500 dark:text-text-dark">
+                    <td className="p-3 text-sm text-slate-500 dark:text-slate-400 hidden sm:table-cell">{product.sku}</td>
+                    <td className="p-3 text-sm text-slate-500 dark:text-slate-400">{product.supplier || 'N/A'}</td>
+                    <td className="p-3 text-sm text-slate-500 dark:text-slate-400">
                       <span className="px-2 py-1 text-xs font-semibold rounded-full bg-accent/20 text-accent">
                         {getCategoryName(product.categoryId)}
                       </span>
@@ -178,36 +179,23 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, 
                         <button onClick={() => handleToggleDisabled(product)} className={`p-2 rounded-full transition-colors ${!product.isDisabled ? 'text-red-500 hover:text-red-400 hover:bg-red-500/10' : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'}`} title={product.isDisabled ? 'Habilitar Producto' : 'Deshabilitar Producto'}>
                               <PowerIcon className="w-5 h-5" />
                           </button>
-                        <button onClick={() => setEditingProduct(product)} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors" title="Editar Producto">
+                        <button onClick={() => setEditingProduct(product)} className="text-slate-500 dark:text-slate-400 hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors" title="Editar Producto">
                           <EditIcon className="w-5 h-5" />
                         </button>
-                        <button onClick={() => onShowHistory(product)} className="text-gray-500 dark:text-text-dark hover:text-blue-500 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title="Ver Historial">
-                          <HistoryIcon className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => onDeleteProduct(product.id)} className="text-gray-500 dark:text-text-dark hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors" title="Eliminar Producto">
-                              <TrashIcon className="w-5 h-5" />
-                          </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+                        <button onClick--- End of file contents
           </table>
         </div>
       </div>
+
       {editingProduct && (
         <EditProductModal
-          // FIX: Added isOpen prop to align with the component's updated interface.
-          isOpen={!!editingProduct}
-          product={editingProduct}
-          categories={categories}
-          onUpdateProduct={onUpdateProduct}
-          onClose={() => setEditingProduct(null)}
+            isOpen={!!editingProduct}
+            onClose={() => setEditingProduct(null)}
+            product={editingProduct}
+            categories={categories}
+            onUpdateProduct={onUpdateProduct}
         />
       )}
     </>
   );
 };
-
-export default InventoryTable;

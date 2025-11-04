@@ -41,7 +41,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
     <div
       onClick={handleCardClick}
       onKeyPress={handleKeyPress}
-      className={`relative group/card bg-gray-50 dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${product.stock > 0 ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
+      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${product.stock > 0 ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
       aria-label={`${product.stock > 0 ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
       role="button"
       tabIndex={product.stock > 0 ? 0 : -1}
@@ -51,8 +51,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
         {product.imageUrl ? (
           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
-          <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center relative">
-            <PackageIcon className="w-1/2 h-1/2 text-gray-400 dark:text-gray-500" />
+          <div className="w-full h-full bg-slate-200 dark:bg-slate-800/50 flex items-center justify-center relative">
+            <PackageIcon className="w-1/2 h-1/2 text-slate-400 dark:text-slate-600" />
           </div>
         )}
         <div className="absolute top-1.5 left-1.5 z-20 flex space-x-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity">
@@ -97,11 +97,11 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
 
       {/* Details */}
       <div className="p-2 flex-shrink-0">
-        <h3 className="font-bold text-sm text-gray-800 dark:text-text-light truncate" title={product.name}>{product.name}</h3>
+        <h3 className="font-bold text-sm text-slate-800 dark:text-text-light truncate" title={product.name}>{product.name}</h3>
         <div className="flex justify-between items-baseline mt-1">
-          <p className="text-xs text-gray-500 dark:text-text-dark truncate">{product.supplier || 'Sin proveedor'}</p>
+          <p className="text-xs text-slate-500 dark:text-text-dark truncate">{product.supplier || 'Sin proveedor'}</p>
           <div className="flex items-baseline gap-2">
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? 'bg-gray-500 text-white' : 'bg-red-600 text-white'}`}>
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
                 Stock: {product.stock}
             </span>
             <p className="text-accent font-semibold text-base">{formatCOP(product.price)}</p>

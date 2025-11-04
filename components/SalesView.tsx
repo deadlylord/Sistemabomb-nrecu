@@ -182,9 +182,9 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
     // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
     const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean) as Payment[];
     // @FIX: The `methods` array was being inferred as `unknown[]` due to Object.values. Explicitly casting to `string[]` ensures type safety for React keys and content.
-    const methods: string[] = (paymentsArray && paymentsArray.length > 0
+    const methods = (paymentsArray && paymentsArray.length > 0
       ? [...new Set(paymentsArray.map(p => p.method))]
-      : (sale.paymentMethod ? [sale.paymentMethod] : []));
+      : (sale.paymentMethod ? [sale.paymentMethod] : [])) as string[];
 
     if (methods.length === 0) {
       return <span className="text-gray-500 dark:text-text-dark text-xs">N/A</span>;

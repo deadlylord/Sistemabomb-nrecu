@@ -21,22 +21,22 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
   };
 
   return (
-    <div className="bg-secondary/50 backdrop-blur-xl p-8 rounded-3xl shadow-accent w-full max-w-sm text-center animate-fade-in">
+    <div className="bg-white/10 dark:bg-slate-900/50 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl shadow-black/20 w-full max-w-sm text-center animate-fade-in border border-white/20 dark:border-slate-800">
       <div className="mx-auto mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-accent/20">
         <LockKeyholeIcon className="h-10 w-10 text-accent" />
       </div>
-      <h1 className="text-3xl font-bold text-text-light mb-2">Facturación Street/ <span className="text-accent">Bombón</span></h1>
-      <p className="text-text-dark mb-8">Ingresa para continuar</p>
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-text-light mb-2">Facturación Street/ <span className="text-accent">Bombón</span></h1>
+      <p className="text-slate-500 dark:text-text-dark mb-8">Ingresa para continuar</p>
       
       <form onSubmit={handleSubmit} className="space-y-6 text-left">
         <div className="relative">
-          <MailIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-dark" />
+          <MailIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-text-dark" />
           <input
             id="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full bg-primary border border-secondary rounded-xl p-4 pl-12 text-text-light placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
+            className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Usuario"
             required
             disabled={!isAppReady}
@@ -45,13 +45,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         </div>
 
         <div className="relative">
-          <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-dark" />
+          <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-text-dark" />
           <input
             id="password"
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-primary border border-secondary rounded-xl p-4 pl-12 text-text-light placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
+            className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="&bull;&bull;&bull;&bull;&bull;&bull;"
             required
             disabled={!isAppReady}
@@ -60,7 +60,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-dark cursor-pointer"
+            className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-text-dark cursor-pointer"
             aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
             <EyeIcon />
@@ -70,7 +70,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         <button
           type="submit"
           disabled={!isAppReady}
-          className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-colors duration-300 hover:bg-accent-hover disabled:bg-gray-600 disabled:cursor-not-allowed"
+          className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-all duration-300 hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/40 disabled:bg-slate-500 disabled:cursor-not-allowed"
         >
           {isAppReady ? 'Ingresar' : 'Cargando...'}
         </button>

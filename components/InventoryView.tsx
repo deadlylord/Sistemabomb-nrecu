@@ -3,7 +3,8 @@
 import React, { useState, useMemo } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import AddProductForm from './AddProductForm';
-import InventoryTable from './InventoryTable';
+// FIX: Changed from default to named import to match the exported component.
+import { InventoryTable } from './InventoryTable';
 import CategoryManager from './CategoryManager';
 import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon } from './Icons';
 import ProductHistoryModal from './ProductHistoryModal';
@@ -349,18 +350,18 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     <>
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-3 bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+            <div className="lg:col-span-3 bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg">
                 <h3 className="text-xl font-bold text-accent mb-3">Historial de Costo de Inventario (Últimos 30 días)</h3>
                 <InventoryCostChart data={inventoryCostHistory} />
             </div>
-            <div className="lg:col-span-2 bg-white dark:bg-secondary p-6 rounded-xl shadow-lg flex flex-col">
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg flex flex-col">
                 <h3 className="text-xl font-bold text-accent mb-3">Resumen por Categoría</h3>
                 <div className="flex-grow space-y-2 overflow-y-auto pr-2">
                   {categorySummary.map((summary, index) => (
-                    <div key={summary.id} className={`flex justify-between items-center p-3 rounded-lg ${index % 2 === 0 ? 'bg-gray-100 dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                    <div key={summary.id} className={`flex justify-between items-center p-3 rounded-lg ${index % 2 === 0 ? 'bg-slate-100 dark:bg-slate-800/80' : 'bg-slate-50 dark:bg-slate-800/40'}`}>
                       <div>
-                          <p className="font-bold text-gray-800 dark:text-text-light truncate">{summary.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-text-dark">{summary.productCount} Productos</p>
+                          <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{summary.name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{summary.productCount} Productos</p>
                       </div>
                       <p className="text-lg font-extrabold text-accent">{summary.totalStock} <span className="text-sm font-normal">unidades</span></p>
                     </div>
@@ -390,7 +391,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
           </div>
         </div>
 
-        <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg">
+        <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-4 rounded-xl shadow-lg">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
             <h2 className="text-2xl font-bold text-accent">Inventario Actual</h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -436,15 +437,15 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                   placeholder="Buscar por nombre o proveedor..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                 />
-                <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400">
+                <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-slate-400">
                   <SearchIcon />
                 </div>
                 {searchTerm && (
                     <button
                         onClick={() => setSearchTerm('')}
-                        className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                        className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-slate-500 hover:text-slate-800 dark:hover:text-white"
                         aria-label="Limpiar búsqueda"
                     >
                         <CrossIcon className="w-5 h-5" />
@@ -454,7 +455,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             <select 
               value={filterCategoryId}
               onChange={e => setFilterCategoryId(e.target.value)}
-              className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
             >
               <option value="">Todas las categorías</option>
               {categories.map(cat => (
@@ -468,7 +469,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                   type="checkbox"
                   checked={hideZeroStock}
                   onChange={(e) => setHideZeroStock(e.target.checked)}
-                  className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent"
+                  className="h-5 w-5 rounded border-slate-300 text-accent focus:ring-accent"
               />
               <span className="text-sm">Ocultar productos con cero unidades</span>
             </label>
@@ -482,7 +483,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                           setShowOnlyDisabled(false);
                       }
                   }}
-                  className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent"
+                  className="h-5 w-5 rounded border-slate-300 text-accent focus:ring-accent"
               />
               <span className="text-sm">Incluir productos descontinuados</span>
             </label>
@@ -497,7 +498,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                           onShowDisabledProductsChange(true);
                       }
                   }}
-                  className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent"
+                  className="h-5 w-5 rounded border-slate-300 text-accent focus:ring-accent"
               />
               <span className="text-sm">Mostrar solo descontinuados</span>
             </label>

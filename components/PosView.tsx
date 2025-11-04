@@ -244,8 +244,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
   }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
-  const activeButtonClasses = "bg-accent text-white shadow-accent";
-  const inactiveButtonClasses = "bg-white dark:bg-secondary text-gray-500 dark:text-text-dark hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-text-light";
+  const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
+  const inactiveButtonClasses = "bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
   
   const CartAndActionsContent = ({ isMobile = false }) => (
     <div className="space-y-3">
@@ -289,7 +289,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             </div>
         )}
         {props.heldCarts.length > 0 && (
-          <div className="bg-white dark:bg-secondary p-3 rounded-xl shadow-lg">
+          <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-3 rounded-xl shadow-lg">
               <h3 className="text-base font-bold text-accent mb-2">Ventas en Espera</h3>
               <div className="flex flex-wrap gap-2">
                   {props.heldCarts.map((cart, index) => {
@@ -298,7 +298,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                           <button 
                               key={cart.id} 
                               onClick={() => isMobile ? handleResumeSaleWithClose(cart) : handleResumeSaleTransaction(cart)}
-                              className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light px-3 py-1.5 text-sm rounded-md hover:bg-accent hover:text-white dark:hover:text-white transition-colors"
+                              className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 px-3 py-1.5 text-sm rounded-md hover:bg-accent hover:text-white dark:hover:text-white transition-colors"
                               title={cart.customerName ? `Cliente: ${cart.customerName}`: ''}
                           >
                               Retomar {identifier} ({cart.items.length} items)
@@ -308,15 +308,15 @@ const PosView: React.FC<PosViewProps> = (props) => {
               </div>
           </div>
         )}
-        <div className="bg-white dark:bg-secondary p-2 rounded-xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-2 rounded-xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-2">
             <div className="flex items-center gap-2">
-                <label htmlFor="saleDate" className="text-xs font-medium text-gray-500 dark:text-text-dark whitespace-nowrap">Fecha:</label>
+                <label htmlFor="saleDate" className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Fecha:</label>
                 <input
                     type="date"
                     id="saleDate"
                     value={toYYYYMMDD(saleDate)}
                     onChange={handleDateChange}
-                    className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full py-1 px-3 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full py-1 px-3 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none disabled:opacity-70 disabled:cursor-not-allowed"
                     aria-label="Fecha de Venta"
                     disabled={!isAdmin}
                 />
@@ -350,12 +350,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
   return (
     <div 
-        className="p-4 h-full bg-gray-100 dark:bg-primary"
+        className="p-4 h-full"
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Products */}
         <div className="lg:col-span-7 xl:col-span-8 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
-            <div className="bg-white dark:bg-secondary p-3 rounded-xl shadow-lg flex flex-col h-full">
+            <div className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-lg flex flex-col h-full">
                 <div className="flex-shrink-0">
                     <div className="space-y-3 mb-3">
                         <div className="relative w-full">
@@ -364,15 +364,15 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 placeholder="Buscar por nombre o proveedor..."
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
-                                className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full py-2 px-4 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full py-2 px-4 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                             />
-                            <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400">
+                            <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-slate-400">
                                 <SearchIcon />
                             </div>
                             {searchTerm && (
                                 <button
                                     onClick={() => setSearchTerm('')}
-                                    className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                                    className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-slate-500 hover:text-slate-800 dark:hover:text-white"
                                     aria-label="Limpiar búsqueda"
                                 >
                                     <CrossIcon className="w-5 h-5" />
@@ -380,7 +380,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                             )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-semibold text-gray-500 dark:text-text-dark mr-2">Categorías:</span>
+                            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 mr-2">Categorías:</span>
                             <button
                                 onClick={() => setSelectedCategoryId(null)}
                                 className={`${commonButtonClasses} ${selectedCategoryId === null ? activeButtonClasses : inactiveButtonClasses}`}
@@ -443,12 +443,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
       {/* Mobile Fullscreen Cart Modal */}
       {isMobileCartOpen && (
-        <div className="lg:hidden fixed inset-0 bg-white/80 dark:bg-primary/90 backdrop-blur-md z-50 flex flex-col animate-slide-up">
-            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="lg:hidden fixed inset-0 bg-white/80 dark:bg-slate-950/90 backdrop-blur-md z-50 flex flex-col animate-slide-up">
+            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800">
                 <h2 className="text-xl font-bold text-accent">Tu Carrito</h2>
                 <button 
                     onClick={() => setIsMobileCartOpen(false)}
-                    className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                    className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
                 >
                     <CrossIcon />
                 </button>

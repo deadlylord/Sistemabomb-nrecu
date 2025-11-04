@@ -36,9 +36,9 @@ const navItems = [
 ];
 
 const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode }) => {
-  const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-md flex items-center space-x-1.5";
-  const activeButtonClasses = "bg-accent text-white shadow-accent";
-  const inactiveButtonClasses = "bg-white dark:bg-secondary text-gray-500 dark:text-text-dark hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-text-light";
+  const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-lg flex items-center space-x-1.5";
+  const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
+  const inactiveButtonClasses = "bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
 
   const availableNavItems = navItems.filter(item => userPermissions.includes(item.view));
   
@@ -46,11 +46,11 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
   const isAdmin = currentUser.roleId === adminRole?.id;
 
   return (
-    <header className="bg-white dark:bg-secondary p-2 shadow-md sticky top-0 z-50">
+    <header className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 p-2 sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-3">
             <div className="text-center sm:text-left">
-              <h1 className="text-md sm:text-lg font-bold text-gray-900 dark:text-white leading-tight">
+              <h1 className="text-md sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
                 Facturación Street/ <span className="text-accent">Bombón</span>
               </h1>
                <div className="mt-1 flex items-center gap-4">
@@ -63,7 +63,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
                       aria-label="Cambiar de tienda"
                     >
                       {stores.map(store => (
-                        <option key={store.id} value={store.id} className="bg-white dark:bg-secondary text-gray-800 dark:text-text-light font-normal text-base">
+                        <option key={store.id} value={store.id} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-normal text-base">
                           {store.name}
                         </option>
                       ))}
@@ -77,7 +77,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
                 )}
                 {isAdmin && (
                     <label htmlFor="globalModeToggle" className="flex items-center cursor-pointer">
-                        <span className="text-sm font-medium text-gray-500 dark:text-text-dark mr-2">Búsqueda Global</span>
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Búsqueda Global</span>
                         <div className="relative">
                             <input
                                 type="checkbox"
@@ -86,19 +86,19 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
                                 checked={isGlobalMode}
                                 onChange={onToggleGlobalMode}
                             />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${isGlobalMode ? 'bg-yellow-400' : 'bg-gray-200 dark:bg-gray-700'}`}></div>
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${isGlobalMode ? 'bg-yellow-400' : 'bg-slate-200 dark:bg-slate-700'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isGlobalMode ? 'translate-x-4' : ''}`}></div>
                         </div>
                     </label>
                 )}
               </div>
             </div>
-            <div className="hidden lg:flex items-center space-x-2 flex-wrap">
+            <div className="hidden lg:flex items-center space-x-2 flex-wrap bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl">
               {availableNavItems.map(({ view, label, icon: Icon }) => (
                  <button
                     key={view}
                     onClick={() => setCurrentView(view)}
-                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses}`}
+                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
                     aria-label={label}
                 >
                     <Icon className="w-4 h-4" />
@@ -110,27 +110,27 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
 
         <div className="flex items-center space-x-2 sm:space-x-3">
            <div className="text-right">
-                <p className="font-bold text-sm text-gray-800 dark:text-white">{currentUser.name}</p>
+                <p className="font-bold text-sm text-slate-800 dark:text-white">{currentUser.name}</p>
                 <button onClick={onLogout} className="text-xs text-accent hover:underline">
                   Cerrar Sesión
                 </button>
            </div>
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-full text-gray-500 dark:text-text-dark hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             aria-label="Toggle theme"
           >
-            {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-400" /> : <MoonIcon className="w-5 h-5 text-gray-700" />}
+            {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-400" /> : <MoonIcon className="w-5 h-5 text-slate-700" />}
           </button>
         </div>
       </div>
        <div className="lg:hidden container mx-auto mt-2 overflow-x-auto pb-2">
-           <nav className="flex items-center space-x-1 sm:space-x-2">
+           <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl">
             {availableNavItems.map(({ view, label, icon: Icon }) => (
                  <button
                     key={view}
                     onClick={() => setCurrentView(view)}
-                    className={`group ${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses}`}
+                    className={`group ${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
                     aria-label={label}
                 >
                     <Icon className="w-5 h-5" />
