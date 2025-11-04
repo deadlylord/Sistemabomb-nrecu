@@ -1837,7 +1837,8 @@ const App: React.FC = () => {
         for (const itemId of allItemIds) {
             const originalQty = originalItemsMap.get(itemId) || 0;
             const updatedQty = updatedItemsMap.get(itemId) || 0;
-            const stockChange = originalQty - updatedQty;
+            // FIX: Explicitly cast quantities to Number before performing subtraction to prevent arithmetic operation errors when types are inferred incorrectly from Firestore data structures.
+            const stockChange = Number(originalQty) - Number(updatedQty);
 
             if (stockChange !== 0) {
                 const product = inventory.find(p => p.id === itemId);
@@ -2200,10 +2201,10 @@ const App: React.FC = () => {
 
   if (!isAppReady) {
       return (
-          <div className="flex justify-center items-center h-screen bg-slate-100 dark:bg-slate-950">
+          <div className="flex justify-center items-center h-screen bg-primary">
               <div className="text-center">
                   <div className="animate-pulse text-4xl font-bold text-accent">Cargando...</div>
-                  <p className="text-slate-500 dark:text-slate-400 mt-2">Inicializando la base de datos.</p>
+                  <p className="text-text-dark mt-2">Inicializando la base de datos.</p>
               </div>
           </div>
       );
@@ -2216,7 +2217,7 @@ const App: React.FC = () => {
 
     return (
       <div 
-        className="flex justify-center items-center h-screen bg-slate-100 dark:bg-slate-950 bg-cover bg-center transition-all duration-500"
+        className="flex justify-center items-center h-screen bg-primary bg-cover bg-center transition-all duration-500"
         style={backgroundStyle}
       >
         <LoginView onLogin={handleLogin} isAppReady={isAppReady} />

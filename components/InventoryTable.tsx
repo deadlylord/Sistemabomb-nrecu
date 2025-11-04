@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Product, Category } from '../types';
 import { EditIcon, HistoryIcon, TrashIcon, PowerIcon, PackageIcon } from './Icons';
@@ -182,7 +183,20 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
                         <button onClick={() => setEditingProduct(product)} className="text-slate-500 dark:text-slate-400 hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors" title="Editar Producto">
                           <EditIcon className="w-5 h-5" />
                         </button>
-                        <button onClick--- End of file contents
+                        <button onClick={() => onShowHistory(product)} className="text-slate-500 dark:text-slate-400 hover:text-blue-500 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title="Ver Historial">
+                          <HistoryIcon className="w-5 h-5" />
+                        </button>
+                        {isAdmin && (
+                          <button onClick={() => onDeleteProduct(product.id)} className="text-slate-500 dark:text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors" title="Eliminar Producto">
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
         </div>
       </div>
@@ -199,3 +213,5 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
     </>
   );
 };
+
+export default InventoryTable;

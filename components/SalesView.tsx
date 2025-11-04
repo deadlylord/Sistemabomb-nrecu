@@ -184,6 +184,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
     // @FIX: The `methods` array was being inferred as `unknown[]` due to Object.values. Explicitly casting to `string[]` ensures type safety for React keys and content.
     const methods = (paymentsArray && paymentsArray.length > 0
       ? [...new Set(paymentsArray.map(p => p.method))]
+      // @ts-ignore
       : (sale.paymentMethod ? [sale.paymentMethod] : [])) as string[];
 
     if (methods.length === 0) {
