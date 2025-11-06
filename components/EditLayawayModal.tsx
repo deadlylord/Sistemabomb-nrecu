@@ -79,6 +79,14 @@ const EditLayawayModal: React.FC<EditLayawayModalProps> = ({ isOpen, onClose, la
     if (remainingAmount > 0) { setAmountInput(remainingAmount.toFixed(0)); } else { setAmountInput(''); }
   }, [remainingAmount]);
 
+  useEffect(() => {
+    if (paidAmount >= totalAmount && totalAmount > 0 && status === 'active') {
+        setStatus('completed');
+    } else if (paidAmount < totalAmount && status === 'completed') {
+        setStatus('active');
+    }
+  }, [paidAmount, totalAmount, status]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'customerName') { setFormData(prev => ({ ...prev, [name]: toTitleCase(value) })); }

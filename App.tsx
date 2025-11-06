@@ -95,6 +95,8 @@ const App: React.FC = () => {
   const [roles, setRoles] = useState<Role[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [allSales, setAllSales] = useState<Sale[]>([]);
+  const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
+  const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
   
   // States for UI and session management
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
@@ -235,15 +237,17 @@ const App: React.FC = () => {
 
     console.log("User logged in. Loading post-login global data...");
     
+    // Base listeners for all users
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
       attachFirestoreListener(query(collection(db, 'categories')), setCategories),
       attachFirestoreListener(query(collection(db, 'inventoryTransfers')), setInventoryTransfers)
     ];
     
+    // Additional global listeners for Admins needed for Dashboard banners
     if (isAdmin) {
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'sales')), setAllSales));
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'inventory')), setGlobalInventoryForSearch));
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'layaways')), setAllLayaways));
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'incidents')), setAllIncidents));
     }
 
     return () => {
@@ -251,6 +255,31 @@ const App: React.FC = () => {
       unsubscribers.forEach(unsub => unsub());
     }
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
+  
+  // On-demand data loading for AI Reports Modal
+  useEffect(() => {
+    // Only trigger if the modal is opened by an admin
+    if (isReportsModalOpen && isAdmin) {
+      // Check if data is already loaded to prevent re-fetching
+      if (allSales.length === 0) {
+        console.log("Reports modal opened. Fetching all sales data...");
+        const salesQuery = query(collection(db, 'sales'));
+        getDocs(salesQuery).then(snapshot => {
+          const list: Sale[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Sale));
+          setAllSales(list);
+        }).catch(error => console.error("Error fetching all sales for report:", error));
+      }
+      
+      if (globalInventoryForSearch.length === 0) {
+          console.log("Reports modal opened. Fetching all inventory data...");
+          const inventoryQuery = query(collection(db, 'inventory'));
+          getDocs(inventoryQuery).then(snapshot => {
+              const list: Product[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Product));
+              setGlobalInventoryForSearch(list);
+          }).catch(error => console.error("Error fetching all inventory for report:", error));
+      }
+    }
+  }, [isReportsModalOpen, isAdmin, allSales, globalInventoryForSearch]); // Dependencies ensure this runs only when needed
   
   // Effect for managing global search mode data
   useEffect(() => {
@@ -1079,19 +1108,28 @@ const App: React.FC = () => {
   const handleAddPaymentToLayaway = async (layawayId: string, amount: number, method: PaymentMethod, seller: string) => {
     const layaway = layaways.find(l => l.id === layawayId);
     if (!layaway) return;
-
+  
     const newPayment: Payment = {
       date: new Date().toISOString(),
       amount,
       method,
       seller,
     };
-
+  
     const layawayRef = doc(db, 'layaways', layawayId);
-    await updateDoc(layawayRef, {
-      payments: [...layaway.payments, newPayment],
+    
+    const newPaidAmount = layaway.paidAmount + amount;
+  
+    const updateData: any = {
+      payments: arrayUnion(newPayment),
       paidAmount: increment(amount),
-    });
+    };
+  
+    if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && layaway.status === 'active') {
+      updateData.status = 'completed';
+    }
+  
+    await updateDoc(layawayRef, updateData);
   };
 
   const handleFulfillPreOrder = async (layawayId: string) => {
@@ -1835,8 +1873,8 @@ const App: React.FC = () => {
         const allItemIds = new Set([...originalItemsMap.keys(), ...updatedItemsMap.keys()]);
 
         for (const itemId of allItemIds) {
-            const originalQty = originalItemsMap.get(itemId) || 0;
-            const updatedQty = updatedItemsMap.get(itemId) || 0;
+            const originalQty: number = originalItemsMap.get(itemId) || 0;
+            const updatedQty: number = updatedItemsMap.get(itemId) || 0;
             // FIX: Explicitly cast quantities to Number before performing subtraction to prevent arithmetic operation errors when types are inferred incorrectly from Firestore data structures.
             const stockChange = Number(originalQty) - Number(updatedQty);
 
@@ -2243,7 +2281,7 @@ const App: React.FC = () => {
         onToggleGlobalMode={handleToggleGlobalMode}
       />
       <main className="flex-grow overflow-y-auto">
-        {currentView === View.DASHBOARD && <DashboardView onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} allLayaways={layaways} allIncidents={incidents} currentStore={currentStore} stores={stores} currentUser={currentUser!} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} categories={categories} sellers={sellers} dailyNotes={dailyNotes} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} />}
+        {currentView === View.DASHBOARD && <DashboardView onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} allLayaways={allLayaways} allIncidents={allIncidents} currentStore={currentStore} stores={stores} currentUser={currentUser!} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} categories={categories} sellers={sellers} dailyNotes={dailyNotes} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} />}
         {currentView === View.POS && <PosView inventory={inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId!} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={handleReactivateInconsistentProducts} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={handleInventoryTransfer} onResetBalances={handleResetBalances} />}
