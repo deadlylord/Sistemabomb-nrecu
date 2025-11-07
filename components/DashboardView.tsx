@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
@@ -398,7 +399,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         seller: payment.seller,
                         paymentMethod: payment.method,
                         // FIX: Explicitly cast `payment` to `Payment` to ensure `amount` is a number.
-// @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
+                        // @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
                         amount: Number((payment as Payment).amount),
                     });
                 }
@@ -421,7 +422,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     seller: payment.seller,
                     paymentMethod: payment.method,
                     // FIX: Explicitly cast `payment` to `Payment` to ensure `amount` is a number.
-// @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
+                    // @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
                     amount: Number((payment as Payment).amount),
                 });
             }
@@ -470,7 +471,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const rate = COMMISSION_RATES[p.paymentMethod as PaymentMethod];
         if (rate) {
           // FIX: Ensure `p.amount` is treated as a number in calculations to prevent type errors.
-          commissionsByMethod[p.paymentMethod] = (commissionsByMethod[p.paymentMethod] || 0) + (p.amount * rate);
+          commissionsByMethod[p.paymentMethod] = (commissionsByMethod[p.paymentMethod] || 0) + (Number(p.amount) * rate);
         }
     });
 
@@ -684,12 +685,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     
         let totalCommission = 0;
         if (transaction.payments && transaction.payments.length > 0) {
-          transaction.payments.forEach(payment => {
+          for (const payment of transaction.payments) {
             const rate = COMMISSION_RATES[payment.method as PaymentMethod];
             if (rate) {
               totalCommission += payment.amount * rate;
             }
-          });
+          }
         } else if ('paymentMethod' in transaction && transaction.paymentMethod) { // Legacy support for single payment method on Sales
           const rate = COMMISSION_RATES[transaction.paymentMethod as PaymentMethod];
           if (rate) {
@@ -761,7 +762,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const paymentBreakdownText = Object.entries(detailedReportData.totalsByMethod)
         .map(([method, total]) => {
             if (method === 'Recaudo Sistecredito') return null; // Don't include this in the main breakdown
-// @FIX: The value from Object.entries could be unknown. Explicitly cast to Number to ensure type safety.
+            // @FIX: The value from Object.entries could be unknown. Explicitly cast to Number to ensure type safety.
             const commission = detailedReportData.commissionsByMethod[method];
             let line = ` • *${method}:* ${formatCOP(Number(total) || 0)}`;
             if (commission > 0) {

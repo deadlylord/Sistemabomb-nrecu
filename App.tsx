@@ -2212,6 +2212,41 @@ const App: React.FC = () => {
         alert("No se agregaron nuevos clientes. Es posible que todos los números de celular ya existan en esta tienda.");
     }
   };
+  
+  const handleUpdateCustomer = async (customerId: string, newName: string, newPhone: string) => {
+    if (!currentStoreId) {
+        alert("No hay una tienda seleccionada.");
+        return;
+    }
+
+    try {
+        const phoneQuery = query(
+            collection(db, 'customers'),
+            where('storeId', '==', currentStoreId),
+            where('phone', '==', newPhone)
+        );
+        const phoneSnapshot = await getDocs(phoneQuery);
+        const existingCustomer = phoneSnapshot.docs.find(doc => doc.id !== customerId);
+
+        if (existingCustomer) {
+            alert(`El número de celular '${newPhone}' ya está registrado para otro cliente: ${existingCustomer.data().name}.`);
+            return;
+        }
+
+        const customerRef = doc(db, 'customers', customerId);
+        await updateDoc(customerRef, {
+            name: newName,
+            phone: newPhone,
+        });
+
+        alert("Cliente actualizado exitosamente.");
+
+    } catch (error) {
+        console.error("Error updating customer:", error);
+        alert("Hubo un error al actualizar el cliente.");
+    }
+  };
+
 
   const handleSavePayroll = async (payrollData: Omit<PayrollRecord, 'id' | 'paidAt' | 'paidBy' | 'storeId'>) => {
     if (!currentUser || !currentStoreId) return;
@@ -2289,7 +2324,7 @@ const App: React.FC = () => {
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} stores={stores} currentStoreId={currentStoreId!} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} />}
         {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
         {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} />}
-        {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} />}
+        {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={handleDeleteStockTake} onAddNoteToStockTake={handleAddNoteToStockTake} currentUser={currentUser} roles={roles} />}
         {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} onSave={handleSaveStoreSettings} onResetStoreData={handleResetStoreData} currentUser={currentUser} roles={roles} onRecompressAllProductImages={handleRecompressAllImages} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={handleGenerateTestData} onReactivateAllProducts={handleReactivateAllProducts} categories={categories} />}

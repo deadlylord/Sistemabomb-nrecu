@@ -192,10 +192,10 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
 
     return (
       <div className="flex flex-wrap gap-1 justify-start">
+        {/* FIX: Removed redundant 'as string' cast as `methods` is now explicitly typed as string[]. */}
         {methods.map(method => (
-          // FIX: An `unknown` type from Object.values was causing an error when used as a key. Casting `method` to a string resolves this.
-          <span key={method as string} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
-            {method as string}
+          <span key={method} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
+            {method}
           </span>
         ))}
       </div>
