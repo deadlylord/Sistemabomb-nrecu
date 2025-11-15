@@ -181,7 +181,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
   const renderPaymentMethods = (sale: Sale) => {
     // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
     const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean) as Payment[];
-    // @FIX: The `methods` array was being inferred as `unknown[]`. Explicitly casting to `string[]` ensures type safety for React keys and content.
+    // FIX: Explicitly type `methods` as `string[]` to ensure type safety. `Object.values` can infer `unknown[]`, causing errors when `method` is used as a key.
     const methods: string[] = (paymentsArray && paymentsArray.length > 0
       ? [...new Set(paymentsArray.map(p => p.method))]
       : (sale.paymentMethod ? [sale.paymentMethod] : []));
@@ -192,7 +192,6 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
 
     return (
       <div className="flex flex-wrap gap-1 justify-start">
-        {/* FIX: Removed redundant 'as string' cast as `methods` is now explicitly typed as string[]. */}
         {methods.map(method => (
           <span key={method} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
             {method}

@@ -313,9 +313,9 @@ const CustomersView: React.FC<CustomersViewProps> = ({ sales, layaways, allCusto
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
+                {/* FIX: Add children prop to SortableHeader components */}
                 <thead className="bg-gray-100 dark:bg-gray-800">
                   <tr>
-                    {/* FIX: Add children prop to SortableHeader components */}
                     <SortableHeader columnKey="name" className="text-left">Nombre</SortableHeader>
                     <SortableHeader columnKey="phone" className="text-left">Celular</SortableHeader>
                     <SortableHeader columnKey="totalSpent" className="text-right">Total Comprado</SortableHeader>

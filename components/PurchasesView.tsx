@@ -40,6 +40,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [categoryFilter, setCategoryFilter] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // New state for supplier suggestions
+  const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+  const [highlightedSupplierIndex, setHighlightedSupplierIndex] = useState(-1);
+
   useEffect(() => {
     setStoreData(stores.reduce((acc, store) => {
       acc[store.id] = { selected: store.id === currentStoreId, quantity: '', cost: '', price: '' };
@@ -57,7 +61,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   }, [successMessage]);
   
   const searchSource = useMemo(() => allInventoryForSearch && allInventoryForSearch.length > 0 ? allInventoryForSearch : inventory, [allInventoryForSearch, inventory]);
-
 
   const resetForm = () => {
     setProductSearch('');
@@ -90,6 +93,54 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   useEffect(() => {
     setHighlightedIndex(-1);
   }, [suggestedProducts]);
+
+  // Supplier suggestions logic
+  const uniqueSuppliers = useMemo(() => {
+    const suppliers = new Set<string>();
+    searchSource.forEach(product => {
+      if (product.supplier && product.supplier.trim()) {
+        suppliers.add(product.supplier.trim());
+      }
+    });
+    return Array.from(suppliers).sort((a, b) => a.localeCompare(b));
+  }, [searchSource]);
+
+  const suggestedSuppliers = useMemo(() => {
+    if (!supplier.trim()) {
+      return [];
+    }
+    const lowerCaseSearch = supplier.toLowerCase();
+    return uniqueSuppliers.filter(s => s.toLowerCase().includes(lowerCaseSearch));
+  }, [supplier, uniqueSuppliers]);
+
+  useEffect(() => {
+    setHighlightedSupplierIndex(-1);
+  }, [suggestedSuppliers]);
+
+  const handleSupplierKeyDown = (e: React.KeyboardEvent) => {
+    if (showSupplierSuggestions && suggestedSuppliers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedSupplierIndex(prev => (prev + 1) % suggestedSuppliers.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedSupplierIndex(prev => (prev - 1 + suggestedSuppliers.length) % suggestedSuppliers.length);
+      } else if (e.key === 'Enter') {
+        if (highlightedSupplierIndex >= 0) {
+          e.preventDefault();
+          handleSupplierSelect(suggestedSuppliers[highlightedSupplierIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        setShowSupplierSuggestions(false);
+      }
+    }
+  };
+
+  const handleSupplierSelect = (selectedSupplier: string) => {
+    setSupplier(selectedSupplier);
+    setShowSupplierSuggestions(false);
+  };
+  // End of supplier suggestions logic
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showSuggestions && suggestedProducts.length > 0) {
@@ -259,13 +310,23 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
           p.supplier.toLowerCase().includes(lowerCaseSearchTerm)
           : true;
 
-      // FIX: Explicitly cast product to its type to help the compiler resolve 'categoryId'.
       const product = productMap.get(p.productId) as Product | undefined;
       const matchesCategory = categoryFilter ? (product && product.categoryId === categoryFilter) : true;
 
       return matchesStartDate && matchesEndDate && matchesSearch && matchesCategory;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [purchases, startDate, endDate, historySearchTerm, categoryFilter, inventory]);
+
+  const totals = useMemo(() => {
+    return filteredPurchases.reduce(
+      (acc, purchase) => {
+        acc.totalQuantity += purchase.quantity;
+        acc.totalCostValue += purchase.totalCost;
+        return acc;
+      },
+      { totalQuantity: 0, totalCostValue: 0 }
+    );
+  }, [filteredPurchases]);
 
   const productExists = useMemo(() => searchSource.some(p => p.name.toLowerCase() === productSearch.toLowerCase()), [searchSource, productSearch]);
 
@@ -317,9 +378,37 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 </ul>
               )}
             </div>
-             <div>
+             <div className="relative">
               <label htmlFor="supplier" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Proveedor</label>
-              <input type="text" id="supplier" value={supplier} onChange={e => setSupplier(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" placeholder="Nombre del proveedor" />
+              <input 
+                type="text" 
+                id="supplier" 
+                value={supplier} 
+                onChange={e => {
+                  setSupplier(e.target.value);
+                  setShowSupplierSuggestions(true);
+                }}
+                onFocus={() => setShowSupplierSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSupplierSuggestions(false), 200)}
+                onKeyDown={handleSupplierKeyDown}
+                className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" 
+                placeholder="Nombre del proveedor"
+                autoComplete="off"
+              />
+              {showSupplierSuggestions && suggestedSuppliers.length > 0 && (
+                <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {suggestedSuppliers.map((s, index) => (
+                    <li 
+                      key={s}
+                      className={`p-2 cursor-pointer text-sm ${index === highlightedSupplierIndex ? 'bg-accent/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                      onMouseDown={() => handleSupplierSelect(s)}
+                      onMouseEnter={() => setHighlightedSupplierIndex(index)}
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           
@@ -454,6 +543,15 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                           </tr>
                       ))}
                   </tbody>
+                   <tfoot>
+                    <tr className="bg-gray-200 dark:bg-gray-900 font-bold">
+                      <td colSpan={3} className="p-3 text-right text-sm">Totales:</td>
+                      <td className="p-3 text-center text-sm">{totals.totalQuantity}</td>
+                      <td className="p-3"></td>
+                      <td className="p-3 text-right text-accent text-base">{formatCOP(totals.totalCostValue)}</td>
+                      <td className="p-3"></td>
+                    </tr>
+                  </tfoot>
               </table>
           </div>
         </div>
