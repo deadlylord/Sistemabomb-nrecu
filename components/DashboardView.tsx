@@ -58,7 +58,7 @@ interface PriceVariationItem {
 
 type UnifiedSaleTransaction = (Sale & { transactionType: 'sale' }) | (Layaway & { transactionType: 'layaway', layawayStatus: Layaway['status'] });
 
-const SalesHistoryChart: React.FC<{ data: { label: string; total: number }[], viewMode: 'daily' | 'monthly' | 'all-months' }> = ({ data, viewMode }) => {
+const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partialTotal: number }[], viewMode: 'daily' | 'monthly' | 'all-months' }> = ({ data, viewMode }) => {
   const maxValue = useMemo(() => Math.max(...data.map(d => d.total), 0), [data]);
   const safeMaxValue = maxValue === 0 ? 100000 : maxValue * 1.1; // Add 10% padding
 
@@ -93,7 +93,19 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number }[], vi
   }
 
   return (
-    <div className="h-96 w-full pt-4 pr-4">
+    <div className="h-96 w-full pt-4 pr-4 relative">
+      {/* Legend */}
+      <div className="absolute top-0 right-0 flex gap-4 text-xs">
+        <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-accent rounded-sm"></div>
+            <span className="text-gray-600 dark:text-gray-400">Total Mes</span>
+        </div>
+        <div className="flex items-center gap-1">
+            <div className="w-3 h-0 border-t-2 border-dotted border-gray-500 dark:border-gray-300"></div>
+            <span className="text-gray-600 dark:text-gray-400">A la fecha actual</span>
+        </div>
+      </div>
+
       <div className="h-full w-full flex">
         {/* Y-Axis Labels */}
         <div className="h-full flex flex-col justify-between text-xs text-gray-500 dark:text-text-dark pr-2 shrink-0">
@@ -114,27 +126,46 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number }[], vi
             
             {/* Bars */}
             <div className="absolute inset-0 flex items-end justify-around gap-2 px-2 pb-6">
-                {data.map((d) => (
+                {data.map((d) => {
+                    const barHeight = (d.total / safeMaxValue) * 100;
+                    const partialHeight = (d.partialTotal / safeMaxValue) * 100;
+
+                    return (
                     <div key={d.label} className="relative flex h-full w-full flex-col items-center justify-end group">
                         
                         {/* Tooltip on hover */}
-                        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 whitespace-nowrap">
+                        <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap shadow-lg">
                             <p className="font-bold">{formatLabel(d.label)}</p>
-                            <p>{formatCOP(d.total)}</p>
+                            <p>Total: {formatCOP(d.total)}</p>
+                            {viewMode !== 'daily' && (
+                                <p className="text-gray-300 text-[10px]">A la fecha: {formatCOP(d.partialTotal)}</p>
+                            )}
                         </div>
                         
                         {/* Value on top of bar */}
-                        <div className="text-xs font-bold text-gray-700 dark:text-text-dark mb-1 transition-opacity duration-300">
+                        <div className="text-xs font-bold text-gray-700 dark:text-text-dark mb-1 transition-opacity duration-300 z-20">
                            {d.total > 0 ? formatCompactCOP(d.total) : ''}
                         </div>
                         
-                        {/* The bar */}
-                        <div
-                            className="w-full rounded-t-md bg-accent/70 transition-all duration-300 group-hover:bg-accent"
-                            style={{ height: `${(d.total / safeMaxValue) * 100}%` }}
-                        ></div>
+                        {/* The bar container */}
+                        <div className="relative w-full flex items-end h-full">
+                             {/* Main Bar */}
+                            <div
+                                className="w-full rounded-t-md bg-accent/70 transition-all duration-300 group-hover:bg-accent absolute bottom-0 left-0"
+                                style={{ height: `${barHeight}%` }}
+                            ></div>
+                            
+                            {/* Partial Progress Line (Guide) */}
+                            {viewMode !== 'daily' && d.partialTotal > 0 && (
+                                <div 
+                                    className="absolute w-full border-t-2 border-dotted border-gray-600 dark:border-white z-10 pointer-events-none"
+                                    style={{ bottom: `${partialHeight}%`, height: '0px' }}
+                                ></div>
+                            )}
+                        </div>
+
                     </div>
-                ))}
+                )})}
             </div>
              {/* X-axis labels (separate layer to prevent overflow issues) */}
             <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">
@@ -189,6 +220,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   // Sales Chart State
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   
+  // AI Insights Interaction State
+  const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
+
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
   
@@ -204,6 +238,83 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const pendingPreOrdersAcrossStores = useMemo(() => {
     return allLayaways.filter(l => l.status === 'pre-order');
   }, [allLayaways]);
+
+  // AI Insights Logic (Local Calculation)
+  const aiInsights = useMemo(() => {
+    if (!sales || !inventory) return null;
+
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const periodLabel = `${thirtyDaysAgo.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${today.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
+
+    // 1. Calculate Velocity per Product
+    const productSalesMap = new Map<string, number>();
+    sales.forEach(sale => {
+      const saleDate = new Date(sale.createdAt);
+      if (saleDate >= thirtyDaysAgo) {
+        (sale.items || []).forEach(item => {
+          if (item) {
+            productSalesMap.set(item.id, (productSalesMap.get(item.id) || 0) + item.quantity);
+          }
+        });
+      }
+    });
+
+    const insights = {
+      period: periodLabel,
+      trending: [] as { id: string, name: string, quantity: number, context: string }[],
+      restock: [] as { id: string, name: string, stock: number, velocity: number, daysLeft: number }[],
+      stagnant: [] as { id: string, name: string, stock: number, value: number }[]
+    };
+
+    inventory.forEach(p => {
+      if (p.isDisabled) return;
+      const soldQty = productSalesMap.get(p.id) || 0;
+      
+      // Trending: Sold > 3 units in last 30 days
+      if (soldQty >= 3) {
+        const percentageOfTotal = sales.length > 0 ? ((soldQty / sales.length) * 100).toFixed(1) : '0';
+        insights.trending.push({ 
+            id: p.id, 
+            name: p.name, 
+            quantity: soldQty,
+            context: `Este producto ha tenido un desempeño sobresaliente. Ha movido ${soldQty} unidades en el último mes.`
+        });
+      }
+
+      // Restock Needed: Low stock (< 3) but selling well (> 1 recently)
+      if (p.stock <= 3 && soldQty >= 2) {
+        const velocityPerDay = soldQty / 30;
+        const daysLeft = velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99;
+        insights.restock.push({ 
+            id: p.id, 
+            name: p.name, 
+            stock: p.stock, 
+            velocity: soldQty,
+            daysLeft
+        });
+      }
+
+      // Stagnant: High stock (> 8) but 0 sales
+      if (p.stock >= 8 && soldQty === 0) {
+        insights.stagnant.push({ 
+            id: p.id, 
+            name: p.name, 
+            stock: p.stock,
+            value: p.stock * p.cost
+        });
+      }
+    });
+
+    // Sort
+    insights.trending.sort((a, b) => b.quantity - a.quantity);
+    insights.restock.sort((a, b) => a.daysLeft - b.daysLeft);
+    insights.stagnant.sort((a, b) => b.stock - a.stock);
+
+    return insights;
+  }, [sales, inventory]);
 
   const setDateRange = (start: Date, end: Date) => {
     setStartDate(toYYYYMMDD(start));
@@ -730,11 +841,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             ...layaways.filter(l => l.status !== 'pre-order').map(l => ({ date: l.createdAt, amount: l.totalAmount }))
         ];
 
+        const currentDayOfMonth = new Date().getDate();
+
+        // Determine which data set to process based on view mode
         const dataToProcess = chartViewMode === 'all-months' 
             ? transactions
             : transactions.filter(t => isWithinRange(t.date));
 
-        const groupedData: { [key: string]: number } = {};
+        const groupedData: { [key: string]: { total: number, progress: number } } = {};
 
         dataToProcess.forEach(transaction => {
             const date = new Date(transaction.date);
@@ -746,11 +860,21 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`; // YYYY-MM
             }
             
-            groupedData[key] = (groupedData[key] || 0) + transaction.amount;
+            if (!groupedData[key]) {
+                groupedData[key] = { total: 0, progress: 0 };
+            }
+
+            groupedData[key].total += transaction.amount;
+
+            // Calculate accumulated sales up to current day of month for comparison
+            // Only applicable for monthly aggregations (all-months or monthly)
+            if (chartViewMode !== 'daily' && date.getDate() <= currentDayOfMonth) {
+                groupedData[key].progress += transaction.amount;
+            }
         });
 
         return Object.entries(groupedData)
-            .map(([label, total]) => ({ label, total }))
+            .map(([label, { total, progress }]) => ({ label, total, partialTotal: progress }))
             .sort((a, b) => a.label.localeCompare(b.label));
     }, [sales, layaways, chartViewMode, isWithinRange]);
 
@@ -848,35 +972,175 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
       </div>
 
-      <div className="space-y-4">
-        {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
-          <div className="bg-orange-100 dark:bg-orange-900/50 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-3 rounded-lg shadow-sm" role="alert">
-              <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                      <AlertTriangleIcon className="w-6 h-6 text-orange-500 flex-shrink-0" />
-                      <div>
-                          <p className="font-bold">Novedades Pendientes</p>
-                          <p className="text-sm">Hay <strong>{pendingIncidentsAcrossStores.length}</strong> novedad(es) que requieren tu aprobación.</p>
-                      </div>
-                  </div>
-                  <button onClick={() => onNavigate(View.INCIDENTS)} className="bg-orange-500 text-white font-bold py-1 px-3 text-sm rounded-md hover:bg-orange-600 transition-colors flex-shrink-0">Gestionar</button>
-              </div>
-          </div>
-        )}
-        {pendingPreOrdersAcrossStores.length > 0 && (
-            <div className="bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-500/50 text-yellow-700 dark:text-yellow-300 p-3 rounded-lg shadow-sm" role="alert">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <TruckIcon className="w-6 h-6 text-yellow-500 flex-shrink-0" />
-                        <div>
-                            <p className="font-bold">Abonos por Recibir (Encargos)</p>
-                            <p className="text-sm">Hay <strong>{pendingPreOrdersAcrossStores.length}</strong> encargo(s) pendiente(s) de recibir.</p>
-                        </div>
+      {/* Notifications and AI Insights Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Notifications (25%) */}
+        <div className="lg:col-span-3 space-y-3">
+            {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
+            <div className="bg-orange-100 dark:bg-orange-900/50 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                        <p className="font-bold text-sm">Novedades</p>
                     </div>
-                    <button onClick={() => onNavigate(View.LAYAWAY)} className="bg-yellow-500 text-white font-bold py-1 px-3 text-sm rounded-md hover:bg-yellow-600 transition-colors flex-shrink-0">Gestionar</button>
+                    <p className="text-xs"><strong>{pendingIncidentsAcrossStores.length}</strong> por aprobar.</p>
+                    <button onClick={() => onNavigate(View.INCIDENTS)} className="w-full bg-orange-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-orange-600 transition-colors text-center">Gestionar</button>
                 </div>
             </div>
-        )}
+            )}
+            {pendingPreOrdersAcrossStores.length > 0 && (
+                <div className="bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-500/50 text-yellow-700 dark:text-yellow-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <TruckIcon className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                            <p className="font-bold text-sm">Abonos</p>
+                        </div>
+                        <p className="text-xs"><strong>{pendingPreOrdersAcrossStores.length}</strong> encargos.</p>
+                        <button onClick={() => onNavigate(View.LAYAWAY)} className="w-full bg-yellow-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-yellow-600 transition-colors text-center">Gestionar</button>
+                    </div>
+                </div>
+            )}
+            {!isAdmin && pendingIncidentsAcrossStores.length === 0 && pendingPreOrdersAcrossStores.length === 0 && (
+                 <div className="h-full flex items-center justify-center p-6 bg-white dark:bg-secondary rounded-lg border border-gray-200 dark:border-gray-700 border-dashed">
+                    <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Sin notificaciones.</p>
+                </div>
+            )}
+        </div>
+
+        {/* Right Column: AI Insights Widget (75%) */}
+        <div className="lg:col-span-9">
+             <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
+                 {/* Decorative Gradient Border */}
+                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
+                 
+                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                     <div className="flex items-center gap-2">
+                         <SparklesIcon className="w-5 h-5 text-accent" />
+                         <div>
+                            <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Insights</h3>
+                            {aiInsights && <p className="text-xs text-gray-500 dark:text-gray-400">Analizando: {aiInsights.period}</p>}
+                         </div>
+                     </div>
+                     <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span>
+                 </div>
+
+                 <div className="flex-grow p-4 flex flex-col md:flex-row gap-4 min-h-[180px]">
+                    {/* Left: Insight List */}
+                    <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[200px] pr-1">
+                    {aiInsights ? (
+                        <>
+                             {aiInsights.restock.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="font-bold text-red-600 dark:text-red-400 text-xs uppercase tracking-wide">⚠️ Reabastecer</p>
+                                    {aiInsights.restock.slice(0, 2).map((item) => (
+                                        <button 
+                                            key={item.id}
+                                            onClick={() => setActiveInsightId(item.id)}
+                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                        >
+                                            <span className="truncate font-medium">{item.name}</span>
+                                            <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                             )}
+                             {aiInsights.trending.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="font-bold text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">🔥 Tendencia</p>
+                                    {aiInsights.trending.slice(0, 3).map((item) => (
+                                        <button 
+                                            key={item.id}
+                                            onClick={() => setActiveInsightId(item.id)}
+                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                        >
+                                            <span className="truncate font-medium">{item.name}</span>
+                                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
+                                        </button>
+                                    ))}
+                                </div>
+                             )}
+                             {aiInsights.stagnant.length > 0 && (
+                                 <div className="space-y-1">
+                                     <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado</p>
+                                     {aiInsights.stagnant.slice(0, 2).map((item) => (
+                                        <button 
+                                            key={item.id}
+                                            onClick={() => setActiveInsightId(item.id)}
+                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                        >
+                                            <span className="truncate font-medium">{item.name}</span>
+                                            <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
+                                        </button>
+                                    ))}
+                                 </div>
+                             )}
+                        </>
+                    ) : (
+                        <div className="flex items-center justify-center h-full">
+                            <p className="text-xs text-gray-400">Cargando análisis...</p>
+                        </div>
+                    )}
+                    </div>
+
+                    {/* Right: Context Panel */}
+                    <div className="md:w-1/2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
+                         {!activeInsightId ? (
+                             <div className="text-center text-gray-400 text-xs">
+                                 <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                 <p>Selecciona un ítem para ver el análisis detallado.</p>
+                             </div>
+                         ) : (
+                             (() => {
+                                 const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
+                                 const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
+                                 const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
+                                 
+                                 if (trendingItem) {
+                                     return (
+                                         <div className="animate-fade-in text-sm">
+                                             <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
+                                             <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
+                                             <div className="bg-white dark:bg-gray-800 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
+                                                 <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
+                                             </div>
+                                         </div>
+                                     );
+                                 }
+                                 if (restockItem) {
+                                     return (
+                                        <div className="animate-fade-in text-sm">
+                                            <h4 className="font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Stock Crítico</h4>
+                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
+                                                Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
+                                                Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
+                                            </p>
+                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
+                                                <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
+                                            </div>
+                                        </div>
+                                     );
+                                 }
+                                 if (stagnantItem) {
+                                     return (
+                                        <div className="animate-fade-in text-sm">
+                                            <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
+                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
+                                                Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
+                                                Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
+                                            </p>
+                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
+                                                <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
+                                            </div>
+                                        </div>
+                                     );
+                                 }
+                                 return null;
+                             })()
+                         )}
+                    </div>
+                 </div>
+             </div>
+        </div>
       </div>
       
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">

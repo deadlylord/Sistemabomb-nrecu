@@ -126,6 +126,8 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
         const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
         for (const item of itemsArray) {
             const categoryId = item.categoryId;
+            // FIX: Explicitly cast categoryName to string to resolve TypeScript error.
+            const categoryName = (categoryMap.get(categoryId) || 'Sin Categoría') as string;
             const existing = summary.get(categoryId);
             
             if (existing) {
@@ -134,7 +136,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
             } else {
                 summary.set(categoryId, {
                     categoryId: categoryId,
-                    categoryName: categoryMap.get(categoryId) || 'Sin Categoría',
+                    categoryName: categoryName,
                     units: item.quantity,
                     total: item.price * item.quantity,
                 });
