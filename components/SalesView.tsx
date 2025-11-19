@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo } from 'react';
 import { Sale, Seller, Product, Role, Category, CartItem, PaymentMethod, Payment } from '../types';
 import { SearchIcon, EditIcon, TrashIcon, ChevronDownIcon, PrintIcon, CrossIcon, ChevronLeftIcon, ChevronRightIcon } from './Icons';
@@ -88,7 +87,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
       const saleDate = new Date(sale.createdAt);
       const lowerCaseSearchTerm = searchTerm.toLowerCase();
       // FIX: Explicitly cast to CartItem[] to handle cases where `sale.items` might be an object from Firebase.
-      const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean) as CartItem[];
+      const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
 
       const matchesSearch =
         sale.invoiceNumber.toString().includes(searchTerm) ||
@@ -124,7 +123,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
     const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
     filteredSales.forEach(sale => {
-        const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean) as CartItem[];
+        const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
         for (const item of itemsArray) {
             const categoryId = item.categoryId;
             const existing = summary.get(categoryId);
@@ -149,7 +148,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
   const calculateSaleProfit = (sale: Sale): number => {
     if (!sale?.items) return 0;
     
-    const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean) as CartItem[];
+    const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
     
     const rawProfit = itemsArray.reduce((profit, item: CartItem) => {
       if (!item || item.cost === undefined) return profit;
@@ -160,10 +159,10 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
     let totalCommission = 0;
     // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
     // @FIX: Switched to a for...of loop to ensure correct type inference for payment objects from Firestore. This resolves an error where 'payment' was treated as 'unknown'.
-    const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean) as Payment[];
+    const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {}) as any[]).filter(Boolean) as Payment[];
     if (paymentsArray && paymentsArray.length > 0) {
       for (const payment of paymentsArray) {
-        const rate = COMMISSION_RATES[payment.method];
+        const rate = COMMISSION_RATES[payment.method as PaymentMethod];
         if (rate) {
           totalCommission += payment.amount * rate;
         }
@@ -180,11 +179,11 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
   
   const renderPaymentMethods = (sale: Sale) => {
     // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
-    const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean) as Payment[];
+    const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {}) as any[]).filter(Boolean) as Payment[];
     // FIX: Explicitly type `methods` as `string[]` to ensure type safety. `Object.values` can infer `unknown[]`, causing errors when `method` is used as a key.
     const methods: string[] = (paymentsArray && paymentsArray.length > 0
-      ? [...new Set(paymentsArray.map(p => p.method))]
-      : (sale.paymentMethod ? [sale.paymentMethod] : []));
+      ? [...new Set(paymentsArray.map((p: Payment) => String(p.method)))]
+      : (sale.paymentMethod ? [String(sale.paymentMethod)] : []));
 
     if (methods.length === 0) {
       return <span className="text-gray-500 dark:text-text-dark text-xs">N/A</span>;
@@ -192,7 +191,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
 
     return (
       <div className="flex flex-wrap gap-1 justify-start">
-        {methods.map(method => (
+        {methods.map((method: string) => (
           <span key={method} className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light whitespace-nowrap">
             {method}
           </span>
@@ -336,9 +335,9 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
                       const profit = calculateSaleProfit(sale);
                       const profitColor = profit >= 0 ? 'text-green-500' : 'text-red-500';
                       const isExpanded = expandedSaleId === sale.id;
-                      const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[];
+                      const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
                       // FIX: Handle cases where sale.payments is an object from Firebase instead of an array.
-                      const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
+                      const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {}) as any[]).filter(Boolean) as Payment[];
                       return (
                           <React.Fragment key={sale.id}>
                             <tr 

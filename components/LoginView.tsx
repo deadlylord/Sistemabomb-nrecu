@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { LockKeyholeIcon, MailIcon, LockIcon, EyeIcon } from './Icons';
+import { MailIcon, LockIcon, EyeIcon } from './Icons';
 
 interface LoginViewProps {
   onLogin: (username: string, password: string) => void;
@@ -22,11 +23,23 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
 
   return (
     <div className="bg-white/10 dark:bg-slate-900/50 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl shadow-black/20 w-full max-w-sm text-center animate-fade-in border border-white/20 dark:border-slate-800">
-      <div className="mx-auto mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-accent/20">
-        <LockKeyholeIcon className="h-10 w-10 text-accent" />
+      <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-white/5 shadow-2xl ring-1 ring-white/10">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" className="h-20 w-20 drop-shadow-lg">
+          <defs>
+            <linearGradient id="bsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#ff007f" stopOpacity="1" />
+              <stop offset="100%" stopColor="#00aaff" stopOpacity="1" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="50" fill="url(#bsGradient)"/>
+          <text x="50" y="65" fontFamily="Arial, Helvetica, sans-serif" fontSize="50" fontWeight="bold" fill="white" textAnchor="middle">BS</text>
+        </svg>
       </div>
-      <h1 className="text-3xl font-bold text-slate-800 dark:text-text-light mb-2">Facturación Street/ <span className="text-accent">Bombón</span></h1>
-      <p className="text-slate-500 dark:text-text-dark mb-8">Ingresa para continuar</p>
+      
+      <h1 className="text-4xl font-serif font-bold text-slate-800 dark:text-text-light mb-2 tracking-wide">
+        Facturación <span className="text-blue-500">Street</span>/<span className="text-accent">Bombón</span>
+      </h1>
+      <p className="text-slate-500 dark:text-text-dark mb-8 font-light">Ingresa para continuar</p>
       
       <form onSubmit={handleSubmit} className="space-y-6 text-left">
         <div className="relative">
@@ -52,7 +65,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
-            placeholder="&bull;&bull;&bull;&bull;&bull;&bull;"
+            placeholder="Contraseña"
             required
             disabled={!isAppReady}
             autoComplete="current-password"

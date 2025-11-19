@@ -253,7 +253,7 @@ const CustomersView: React.FC<CustomersViewProps> = ({ sales, layaways, allCusto
     setSortConfig({ key, direction });
   };
   
-  const SortableHeader = ({ children, columnKey, className }: { children: React.ReactNode, columnKey: keyof EnrichedCustomerData, className?: string }) => {
+  const SortableHeader = ({ children, columnKey, className }: React.PropsWithChildren<{ columnKey: keyof EnrichedCustomerData, className?: string }>) => {
     const isSorted = sortConfig.key === columnKey;
     const directionIcon = isSorted ? (sortConfig.direction === 'ascending' ? ' ▲' : ' ▼') : '';
     return (
