@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState } from 'react';
-import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
+import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, UsersIcon, ChartBarIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, UsersIcon, ChartBarIcon, StoreIcon, InventoryIcon, ContactIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -17,6 +17,7 @@ interface DashboardViewProps {
   onOpenReports: () => void;
   // Current store data
   sales: Sale[];
+  purchases?: Purchase[]; // Added purchases for analysis
   layaways: Layaway[];
   inventory: Product[];
   categories: Category[];
@@ -193,7 +194,7 @@ const toYYYYMMDD = (date: Date) => {
 const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
-    sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale
+    sales, purchases, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale
   } = props;
   
   const today = new Date();
@@ -221,7 +222,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   
   // AI Insights Interaction State
-  const [activeInsightTab, setActiveInsightTab] = useState<'combos' | 'churn' | 'hours' | 'profit' | 'transfer'>('combos');
+  const [activeInsightTab, setActiveInsightTab] = useState<'combos' | 'churn' | 'hours' | 'profit' | 'transfer' | 'cash' | 'restock'>('combos');
+  const [isAIExpanded, setIsAIExpanded] = useState(false);
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -243,6 +245,10 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const aiInsights = useMemo(() => {
     if (!sales || !inventory) return null;
     const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const dayOfMonth = today.getDate();
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const fortyFiveDaysAgo = new Date();
@@ -269,30 +275,58 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         .slice(0, 3)
         .map(([name, count]) => ({ name, count }));
 
-    // 2. Customer Churn (Fuga)
-    const customerSpendMap = new Map<string, { total: number, lastDate: Date, phone: string }>();
+    // 2. Customer Churn (Fuga) - ENHANCED
+    const customerSpendMap = new Map<string, { total: number, count: number, lastDate: Date, phone: string, methods: string[] }>();
     sales.forEach(sale => {
         if (!sale.customerName || sale.customerName === 'Cliente Mostrador') return;
         const existing = customerSpendMap.get(sale.customerName);
         const saleDate = new Date(sale.createdAt);
+        
+        // Extract payment methods
+        const saleMethods: string[] = [];
+        if (sale.payments && sale.payments.length > 0) {
+            sale.payments.forEach(p => saleMethods.push(p.method));
+        } else if (sale.paymentMethod) {
+            saleMethods.push(sale.paymentMethod);
+        }
+
         if (existing) {
             existing.total += sale.totalAmount;
+            existing.count += 1;
+            existing.methods.push(...saleMethods);
             if (saleDate > existing.lastDate) existing.lastDate = saleDate;
         } else {
-            customerSpendMap.set(sale.customerName, { total: sale.totalAmount, lastDate: saleDate, phone: sale.customerPhone });
+            customerSpendMap.set(sale.customerName, { 
+                total: sale.totalAmount, 
+                count: 1,
+                lastDate: saleDate, 
+                phone: sale.customerPhone,
+                methods: [...saleMethods]
+            });
         }
     });
     
     const churnRisks = Array.from(customerSpendMap.entries())
-        .filter(([_, data]) => data.total > 200000 && data.lastDate < fortyFiveDaysAgo) // High value (>200k) + No purchase in 45 days
+        .filter(([_, data]) => data.total > 150000 && data.lastDate < fortyFiveDaysAgo) // Lower threshold to find more churn
         .sort((a, b) => b[1].total - a[1].total)
         .slice(0, 3)
-        .map(([name, data]) => ({ 
-            name, 
-            daysSince: Math.floor((today.getTime() - data.lastDate.getTime()) / (1000 * 3600 * 24)),
-            totalSpent: data.total,
-            phone: data.phone
-        }));
+        .map(([name, data]) => {
+            // Calculate preferred payment method
+            const methodCounts = data.methods.reduce((acc, curr) => {
+                acc[curr] = (acc[curr] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>);
+            const preferredMethod = Object.keys(methodCounts).reduce((a, b) => methodCounts[a] > methodCounts[b] ? a : b, 'Desconocido');
+
+            return { 
+                name, 
+                daysSince: Math.floor((today.getTime() - data.lastDate.getTime()) / (1000 * 3600 * 24)),
+                totalSpent: data.total,
+                purchaseCount: data.count,
+                preferredMethod,
+                phone: data.phone
+            };
+        });
 
     // 3. Golden Hours (Heatmap)
     const hourCounts = new Array(24).fill(0);
@@ -322,25 +356,80 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const performanceArray = Array.from(productPerformance.values());
     const stars = performanceArray.filter(p => p.sold > 5 && p.profit > 100000).sort((a, b) => b.profit - a.profit).slice(0, 3);
     
-    // 5. Transfer Opportunities (Local Stagnation)
-    // Items with Stock > 5 AND 0 Sales in last 30 days (locally)
+    // 5. Transfer Opportunities (Local Stagnation) - ENHANCED
+    // Now renamed to "Stagnant" in UI, but keeps logic. 
+    // Needs: Last Purchase Date (From Purchases), Qty Bought, Last Sale Date (From Sales)
     const stagnantIds = new Set(
-        inventory.filter(p => p.stock >= 5 && !p.isDisabled).map(p => p.id)
+        inventory.filter(p => p.stock >= 3 && !p.isDisabled).map(p => p.id) // Lower threshold to 3
     );
     
+    // Remove items sold recently from the stagnant list
     sales.forEach(sale => {
         const saleDate = new Date(sale.createdAt);
         if (saleDate >= thirtyDaysAgo) {
             (sale.items || []).forEach(item => {
-                if (item) stagnantIds.delete(item.id); // Remove if sold recently
+                if (item) stagnantIds.delete(item.id);
             });
         }
     });
+
+    const stagnantProductsRaw = inventory.filter(p => stagnantIds.has(p.id));
     
-    const transferCandidates = inventory
-        .filter(p => stagnantIds.has(p.id))
-        .map(p => ({ id: p.id, name: p.name, stock: p.stock, cost: p.cost * p.stock }))
-        .sort((a, b) => b.cost - a.cost) // Prioritize by capital tied up
+    const transferCandidates = stagnantProductsRaw
+        .map(p => {
+            // Find last purchase info
+            const productPurchases = purchases?.filter(pur => pur.productId === p.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) || [];
+            const lastPurchase = productPurchases[0];
+
+            // Find very last sale (even if old)
+            let lastSaleDate: Date | null = null;
+            // Scan all sales to find the last time this item appeared
+            for (const s of sales) {
+                const hasItem = s.items.some(i => i.id === p.id);
+                if (hasItem) {
+                    const sDate = new Date(s.createdAt);
+                    if (!lastSaleDate || sDate > lastSaleDate) {
+                        lastSaleDate = sDate;
+                    }
+                }
+            }
+
+            return { 
+                id: p.id, 
+                name: p.name, 
+                stock: p.stock, 
+                cost: p.cost * p.stock,
+                lastPurchaseDate: lastPurchase ? new Date(lastPurchase.createdAt) : null,
+                lastPurchaseQty: lastPurchase ? lastPurchase.quantity : 0,
+                lastSaleDate: lastSaleDate
+            };
+        })
+        .sort((a, b) => b.cost - a.cost) // Prioritize high value stuck capital
+        .slice(0, 5);
+        
+    // 6. Cash Flow Prediction (Based on PAYMENTS, not invoice totals, to match Payment Report)
+    // Collect all payments from Sales and Layaways that fall within the current month
+    const allPaymentsInPeriod = [
+        ...sales.flatMap(s => (s.payments || []).map(p => ({...p, date: new Date(p.date)}))),
+        ...layaways.flatMap(l => (l.payments || []).map(p => ({...p, date: new Date(p.date)})))
+    ].filter(p => p.date >= startOfMonth && p.date <= today);
+
+    const totalRevenueThisMonth = allPaymentsInPeriod.reduce((sum, p) => sum + p.amount, 0);
+    const dailyAverageRevenue = dayOfMonth > 0 ? totalRevenueThisMonth / dayOfMonth : 0;
+    const projectedRevenue = dailyAverageRevenue * daysInMonth;
+    
+    // 7. Low Stock / Restock
+    const lowStockItems = inventory
+        .filter(p => p.stock <= 5 && !p.isDisabled)
+        .map(p => {
+             // Use performance data to prioritize high velocity items
+             const perf = productPerformance.get(p.id);
+             return {
+                 ...p,
+                 velocityScore: perf ? perf.sold : 0
+             };
+        })
+        .sort((a, b) => b.velocityScore - a.velocityScore) // Sort by most sold first
         .slice(0, 5);
 
     return {
@@ -349,9 +438,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         churn: churnRisks,
         hours: { peak: peakHourRange, data: hourCounts },
         profit: { stars },
-        transfers: transferCandidates
+        transfers: transferCandidates,
+        cashFlow: { current: totalRevenueThisMonth, projected: projectedRevenue, dailyAvg: dailyAverageRevenue },
+        restock: lowStockItems
     };
-  }, [sales, inventory]);
+  }, [sales, inventory, layaways, purchases]);
 
   const setDateRange = (start: Date, end: Date) => {
     setStartDate(toYYYYMMDD(start));
@@ -963,14 +1054,23 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       }
   };
   
-  const handleGoToPos = (storeId: string) => {
-    onSwitchStore(storeId);
-    onNavigate(View.POS);
+  const scrollToSection = (id: string) => {
+    if (id === 'payment-report' && !isPaymentsReportVisible) setIsPaymentsReportVisible(true);
+    if (id === 'sales-history' && !isSalesHistoryVisible) setIsSalesHistoryVisible(true);
+    if (id === 'price-analysis' && !isPriceAnalysisVisible) setIsPriceAnalysisVisible(true);
+
+    // Need a small timeout to allow React to render the opened section before scrolling
+    setTimeout(() => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, 100);
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      {/* Date Filters at the top */}
+      {/* Date Filters and Notifications Container */}
       <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
             <div className="flex items-center gap-2 flex-wrap">
@@ -979,6 +1079,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 <button onClick={setYesterday} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Ayer</button>
                 <button onClick={setLast7Days} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Últimos 7 días</button>
                 <button onClick={setThisMonth} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Este Mes</button>
+                
+                <span className="text-sm font-semibold text-gray-400 dark:text-gray-600 mx-2 hidden sm:inline">|</span>
+                
+                <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Pagos</button>
+                <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Historial</button>
+                <button onClick={() => scrollToSection('price-analysis')} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Precios</button>
+                <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Gráficos</button>
             </div>
             
             <div className="flex items-end gap-4 flex-wrap">
@@ -1005,198 +1112,271 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         </button>
                     </div>
                 </div>
+                
+                 {/* Notification Icons Area */}
+                <div className="flex items-center gap-2 border-l pl-4 border-gray-300 dark:border-gray-600 ml-auto sm:ml-0">
+                    {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
+                        <button
+                            onClick={() => onNavigate(View.INCIDENTS)}
+                            className="relative p-2 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
+                            title={`${pendingIncidentsAcrossStores.length} Novedades pendientes`}
+                        >
+                            <AlertTriangleIcon className="w-5 h-5" />
+                            <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                {pendingIncidentsAcrossStores.length}
+                            </span>
+                        </button>
+                    )}
+                    {pendingPreOrdersAcrossStores.length > 0 && (
+                        <button
+                            onClick={() => onNavigate(View.LAYAWAY)}
+                            className="relative p-2 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-800 transition-colors"
+                            title={`${pendingPreOrdersAcrossStores.length} Abonos por entregar`}
+                        >
+                            <TruckIcon className="w-5 h-5" />
+                            <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full animate-pulse">
+                                {pendingPreOrdersAcrossStores.length}
+                            </span>
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
       </div>
 
-      {/* Notifications and Advanced AI Insights Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Notifications (20%) */}
-        <div className="lg:col-span-3 space-y-3">
-            {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
-            <div className="bg-orange-100 dark:bg-orange-900/50 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <AlertTriangleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                        <p className="font-bold text-sm">Novedades</p>
-                    </div>
-                    <p className="text-xs"><strong>{pendingIncidentsAcrossStores.length}</strong> por aprobar.</p>
-                    <button onClick={() => onNavigate(View.INCIDENTS)} className="w-full bg-orange-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-orange-600 transition-colors text-center">Gestionar</button>
-                </div>
-            </div>
-            )}
-            {pendingPreOrdersAcrossStores.length > 0 && (
-                <div className="bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-500/50 text-yellow-700 dark:text-yellow-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <TruckIcon className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-                            <p className="font-bold text-sm">Abonos</p>
-                        </div>
-                        <p className="text-xs"><strong>{pendingPreOrdersAcrossStores.length}</strong> encargos.</p>
-                        <button onClick={() => onNavigate(View.LAYAWAY)} className="w-full bg-yellow-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-yellow-600 transition-colors text-center">Gestionar</button>
-                    </div>
-                </div>
-            )}
-            {!isAdmin && pendingIncidentsAcrossStores.length === 0 && pendingPreOrdersAcrossStores.length === 0 && (
-                 <div className="h-full flex items-center justify-center p-6 bg-white dark:bg-secondary rounded-lg border border-gray-200 dark:border-gray-700 border-dashed">
-                    <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Sin notificaciones.</p>
-                </div>
-            )}
-        </div>
+      {/* Advanced AI Insights Panel (Full Width) */}
+      <div className={`bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-col relative overflow-hidden transition-all duration-500 ${isAIExpanded ? 'h-auto' : 'h-auto'}`}>
+           {/* Decorative Gradient Border */}
+           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
+           
+           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-gray-50/50 dark:bg-gray-800/20">
+               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                   <div className="flex items-center gap-3">
+                       <div className="p-2 bg-accent/10 rounded-full"><SparklesIcon className="w-5 h-5 text-accent" /></div>
+                       <div>
+                          <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Analista Virtual</h3>
+                          {aiInsights && isAIExpanded && <p className="text-xs text-gray-500 dark:text-gray-400">{aiInsights.period}</p>}
+                       </div>
+                   </div>
+                   <button onClick={() => setIsAIExpanded(!isAIExpanded)} className="sm:hidden p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                      <ChevronDownIcon className={`w-5 h-5 transition-transform duration-300 ${isAIExpanded ? 'rotate-180' : ''}`} />
+                   </button>
+               </div>
+               
+               <div className="flex items-center gap-2 w-full sm:w-auto">
+                   <div className={`flex space-x-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg overflow-x-auto max-w-full ${!isAIExpanded ? 'hidden sm:flex' : ''}`}>
+                       <button onClick={() => setActiveInsightTab('combos')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'combos' ? 'bg-white dark:bg-gray-700 text-accent shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🔥 Combos</button>
+                       <button onClick={() => setActiveInsightTab('churn')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'churn' ? 'bg-white dark:bg-gray-700 text-blue-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💔 Fuga</button>
+                       <button onClick={() => setActiveInsightTab('hours')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'hours' ? 'bg-white dark:bg-gray-700 text-yellow-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>⏰ Horarios</button>
+                       <button onClick={() => setActiveInsightTab('profit')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'profit' ? 'bg-white dark:bg-gray-700 text-green-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💎 Estrellas</button>
+                       <button onClick={() => setActiveInsightTab('cash')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'cash' ? 'bg-white dark:bg-gray-700 text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💵 Flujo Caja</button>
+                       <button onClick={() => setActiveInsightTab('restock')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'restock' ? 'bg-white dark:bg-gray-700 text-orange-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>📦 Reponer</button>
+                       <button onClick={() => setActiveInsightTab('transfer')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'transfer' ? 'bg-white dark:bg-gray-700 text-purple-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🚚 Estancados</button>
+                   </div>
+                   <button onClick={() => setIsAIExpanded(!isAIExpanded)} className="hidden sm:block p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                      <ChevronDownIcon className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isAIExpanded ? 'rotate-180' : ''}`} />
+                   </button>
+               </div>
+           </div>
 
-        {/* Right Column: Advanced AI Insights Panel (80%) */}
-        <div className="lg:col-span-9">
-             <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
-                 {/* Decorative Gradient Border */}
-                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
-                 
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-gray-50/50 dark:bg-gray-800/20">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-accent/10 rounded-full"><SparklesIcon className="w-5 h-5 text-accent" /></div>
-                         <div>
-                            <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Analista Virtual</h3>
-                            {aiInsights && <p className="text-xs text-gray-500 dark:text-gray-400">{aiInsights.period}</p>}
-                         </div>
-                     </div>
-                     <div className="flex space-x-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg overflow-x-auto max-w-full">
-                         <button onClick={() => setActiveInsightTab('combos')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'combos' ? 'bg-white dark:bg-gray-700 text-accent shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🔥 Combos</button>
-                         <button onClick={() => setActiveInsightTab('churn')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'churn' ? 'bg-white dark:bg-gray-700 text-blue-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💔 Fuga</button>
-                         <button onClick={() => setActiveInsightTab('hours')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'hours' ? 'bg-white dark:bg-gray-700 text-yellow-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>⏰ Horarios</button>
-                         <button onClick={() => setActiveInsightTab('profit')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'profit' ? 'bg-white dark:bg-gray-700 text-green-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💎 Estrellas</button>
-                         <button onClick={() => setActiveInsightTab('transfer')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'transfer' ? 'bg-white dark:bg-gray-700 text-purple-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🚚 Traslados</button>
-                     </div>
-                 </div>
-
-                 <div className="flex-grow p-4 min-h-[180px] flex flex-col justify-center">
-                    {aiInsights ? (
-                        <div className="animate-fade-in">
-                            {activeInsightTab === 'combos' && (
-                                <div className="flex flex-col md:flex-row gap-6 items-center">
-                                    <div className="flex-1 space-y-2 w-full">
-                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Productos comprados juntos frecuentemente:</p>
-                                        {aiInsights.combos.length > 0 ? aiInsights.combos.map((combo, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
-                                                <span className="text-xs font-bold text-gray-800 dark:text-white truncate">{combo.name}</span>
-                                                <span className="text-xs px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold">{combo.count} veces</span>
-                                            </div>
-                                        )) : <p className="text-xs text-gray-400 italic">No hay suficientes datos de combos aún.</p>}
-                                    </div>
-                                    <div className="md:w-1/3 bg-accent/5 p-3 rounded-lg border border-accent/10">
-                                        <h4 className="text-xs font-bold text-accent mb-1">💡 Estrategia de Venta</h4>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                            Crea una promoción de "Lleva el segundo con 10% de descuento" con estos pares o instrúye a los vendedores para sugerirlos en el probador.
-                                        </p>
-                                    </div>
+           {isAIExpanded && (
+             <div className="flex-grow p-4 flex flex-col justify-center transition-all duration-500">
+                {aiInsights ? (
+                    <div className="animate-fade-in">
+                        {activeInsightTab === 'combos' && (
+                            <div className="flex flex-col md:flex-row gap-6 items-center">
+                                <div className="flex-1 space-y-2 w-full">
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Productos comprados juntos frecuentemente:</p>
+                                    {aiInsights.combos.length > 0 ? aiInsights.combos.map((combo, idx) => (
+                                        <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
+                                            <span className="text-xs font-bold text-gray-800 dark:text-white truncate">{combo.name}</span>
+                                            <span className="text-xs px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold">{combo.count} veces</span>
+                                        </div>
+                                    )) : <p className="text-xs text-gray-400 italic">No hay suficientes datos de combos aún.</p>}
                                 </div>
-                            )}
+                                <div className="md:w-1/3 bg-accent/5 p-3 rounded-lg border border-accent/10">
+                                    <h4 className="text-xs font-bold text-accent mb-1">💡 Estrategia de Venta</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                        Crea una promoción de "Lleva el segundo con 10% de descuento" con estos pares o instrúye a los vendedores para sugerirlos en el probador.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
-                            {activeInsightTab === 'churn' && (
-                                <div className="flex flex-col md:flex-row gap-6 items-center">
-                                     <div className="flex-1 space-y-2 w-full">
-                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Clientes VIP en riesgo (sin compra > 45 días):</p>
-                                        {aiInsights.churn.length > 0 ? aiInsights.churn.map((customer, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/10 rounded border border-red-100 dark:border-red-900/30">
+                        {activeInsightTab === 'churn' && (
+                            <div className="flex flex-col md:flex-row gap-6 items-center">
+                                 <div className="flex-1 space-y-2 w-full">
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Clientes VIP en riesgo (sin compra > 45 días):</p>
+                                    {aiInsights.churn.length > 0 ? aiInsights.churn.map((customer, idx) => (
+                                        <div key={idx} className="flex flex-col p-2 bg-red-50 dark:bg-red-900/10 rounded border border-red-100 dark:border-red-900/30 gap-2">
+                                            <div className="flex justify-between items-start">
                                                 <div>
                                                     <p className="text-xs font-bold text-gray-800 dark:text-white">{customer.name}</p>
-                                                    <p className="text-[10px] text-gray-500">Gastado: {formatCOP(customer.totalSpent)}</p>
+                                                    <p className="text-[10px] text-gray-500">Total: {formatCOP(customer.totalSpent)} en {customer.purchaseCount} compras</p>
                                                 </div>
                                                 <div className="text-right">
-                                                    <span className="text-xs font-bold text-red-500 block">{customer.daysSince} días</span>
+                                                    <span className="text-xs font-bold text-red-500 block">Hace {customer.daysSince} días</span>
                                                     <span className="text-[10px] text-gray-400">{customer.phone}</span>
                                                 </div>
                                             </div>
-                                        )) : <p className="text-xs text-gray-400 italic">¡Excelente! No hay clientes VIP en riesgo de fuga reciente.</p>}
-                                    </div>
-                                    <div className="md:w-1/3 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                                        <h4 className="text-xs font-bold text-blue-500 mb-1">📢 Acción Recomendada</h4>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                            Estos clientes solían comprar mucho. Envíales un mensaje personalizado por WhatsApp con una novedad exclusiva para reactivarlos.
-                                        </p>
-                                    </div>
+                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 pt-1 border-t border-red-200 dark:border-red-800/50">
+                                                <span className="font-semibold">Paga con:</span> {customer.preferredMethod}
+                                            </div>
+                                        </div>
+                                    )) : <p className="text-xs text-gray-400 italic">¡Excelente! No hay clientes VIP en riesgo de fuga reciente.</p>}
                                 </div>
-                            )}
-
-                            {activeInsightTab === 'hours' && (
-                                <div className="flex flex-col items-center text-center p-4">
-                                    <div className="mb-4">
-                                        <span className="text-4xl font-extrabold text-yellow-500 block mb-1">{aiInsights.hours.peak}</span>
-                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Es tu "Hora Dorada" de ventas</span>
-                                    </div>
-                                    <div className="w-full h-16 flex items-end gap-1 justify-center max-w-md">
-                                        {aiInsights.hours.data.map((val, i) => (
-                                            <div key={i} className={`flex-1 rounded-t-sm transition-all ${i >= parseInt(aiInsights.hours.peak) && i <= parseInt(aiInsights.hours.peak) ? 'bg-yellow-400' : 'bg-gray-200 dark:bg-gray-700'}`} style={{ height: `${(val / (Math.max(...aiInsights.hours.data) || 1)) * 100}%` }} title={`${i}:00 - ${val} ventas`}></div>
-                                        ))}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-4 max-w-md">
-                                        Asegúrate de tener el personal completo y la mejor música durante este horario. Evita hacer inventarios o descansos en este pico.
+                                <div className="md:w-1/3 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                                    <h4 className="text-xs font-bold text-blue-500 mb-1">📢 Acción Recomendada</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                        Estos clientes solían comprar mucho. Envíales un mensaje personalizado por WhatsApp (ofreciendo su método de pago favorito) con una novedad exclusiva para reactivarlos.
                                     </p>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {activeInsightTab === 'profit' && (
-                                <div className="space-y-3">
-                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Tus productos "Estrella" (Alto Volumen + Alto Margen):</p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        {aiInsights.profit.stars.length > 0 ? aiInsights.profit.stars.map((p, i) => (
-                                            <div key={i} className="bg-green-50 dark:bg-green-900/10 p-3 rounded-lg border border-green-200 dark:border-green-800 flex flex-col justify-between">
-                                                <div>
-                                                    <p className="font-bold text-xs text-green-700 dark:text-green-400 mb-1">#{i+1} {p.name}</p>
-                                                    <p className="text-[10px] text-gray-500">Ganancia Total: {formatCOP(p.profit)}</p>
-                                                </div>
-                                                <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/50">
-                                                    <p className="text-[10px] font-bold text-gray-600 dark:text-gray-400">Stock: {p.stock}</p>
-                                                </div>
+                        {activeInsightTab === 'hours' && (
+                            <div className="flex flex-col items-center text-center p-4">
+                                <div className="mb-4">
+                                    <span className="text-4xl font-extrabold text-yellow-500 block mb-1">{aiInsights.hours.peak}</span>
+                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Es tu "Hora Dorada" de ventas</span>
+                                </div>
+                                <div className="w-full h-16 flex items-end gap-1 justify-center max-w-md">
+                                    {aiInsights.hours.data.map((val, i) => (
+                                        <div key={i} className={`flex-1 rounded-t-sm transition-all ${i >= parseInt(aiInsights.hours.peak) && i <= parseInt(aiInsights.hours.peak) ? 'bg-yellow-400' : 'bg-gray-200 dark:bg-gray-700'}`} style={{ height: `${(val / (Math.max(...aiInsights.hours.data) || 1)) * 100}%` }} title={`${i}:00 - ${val} ventas`}></div>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-4 max-w-md">
+                                    Asegúrate de tener el personal completo y la mejor música durante este horario. Evita hacer inventarios o descansos en este pico.
+                                </p>
+                            </div>
+                        )}
+
+                        {activeInsightTab === 'profit' && (
+                            <div className="space-y-3">
+                                <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Tus productos "Estrella" (Alto Volumen + Alto Margen):</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {aiInsights.profit.stars.length > 0 ? aiInsights.profit.stars.map((p, i) => (
+                                        <div key={i} className="bg-green-50 dark:bg-green-900/10 p-3 rounded-lg border border-green-200 dark:border-green-800 flex flex-col justify-between">
+                                            <div>
+                                                <p className="font-bold text-xs text-green-700 dark:text-green-400 mb-1">#{i+1} {p.name}</p>
+                                                <p className="text-[10px] text-gray-500">
+                                                    Ganancia Total: {formatCOP(p.profit)}
+                                                    <span className="block text-accent font-semibold">
+                                                        ({p.sold} vendidos este periodo)
+                                                    </span>
+                                                </p>
                                             </div>
-                                        )) : <p className="col-span-3 text-xs text-center text-gray-400">No hay suficientes datos para identificar estrellas claras aún.</p>}
-                                    </div>
-                                    {aiInsights.profit.stars.some(p => p.stock < 5) && (
-                                        <div className="flex items-center gap-2 p-2 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-md font-bold">
-                                            <AlertTriangleIcon className="w-4 h-4" />
-                                            <span>¡Atención! Algunas de tus estrellas tienen stock bajo. Prioriza su reposición.</span>
+                                            <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/50">
+                                                <p className="text-[10px] font-bold text-gray-600 dark:text-gray-400">Stock: {p.stock}</p>
+                                            </div>
                                         </div>
-                                    )}
+                                    )) : <p className="col-span-3 text-xs text-center text-gray-400">No hay suficientes datos para identificar estrellas claras aún.</p>}
                                 </div>
-                            )}
+                                {aiInsights.profit.stars.some(p => p.stock < 5) && (
+                                    <div className="flex items-center gap-2 p-2 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-md font-bold">
+                                        <AlertTriangleIcon className="w-4 h-4" />
+                                        <span>¡Atención! Algunas de tus estrellas tienen stock bajo. Prioriza su reposición.</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {activeInsightTab === 'cash' && (
+                            <div className="flex flex-col md:flex-row gap-6">
+                                <div className="flex-1 space-y-4 w-full">
+                                   <div>
+                                     <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-1">Flujo de Caja Real (Pagos Recibidos - Este Mes):</p>
+                                     <p className="text-2xl font-bold text-gray-800 dark:text-white">{formatCOP(aiInsights.cashFlow.current)}</p>
+                                   </div>
+                                   <div>
+                                     <p className="text-sm font-semibold text-blue-500 mb-1">Proyección Cierre de Mes:</p>
+                                     <p className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">{formatCOP(aiInsights.cashFlow.projected)}</p>
+                                     <p className="text-xs text-gray-500">Basado en un promedio diario de ingresos de {formatCOP(aiInsights.cashFlow.dailyAvg)}</p>
+                                   </div>
+                                </div>
+                                <div className="md:w-1/2 flex flex-col justify-center">
+                                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
+                                        <div className="bg-blue-500 h-4 rounded-full" style={{ width: `${Math.min(100, (aiInsights.cashFlow.current / (aiInsights.cashFlow.projected || 1)) * 100)}%` }}></div>
+                                   </div>
+                                   <div className="flex justify-between text-xs text-gray-500 mt-2">
+                                       <span>Progreso Actual</span>
+                                       <span>Meta Proyectada</span>
+                                   </div>
+                                   <div className="mt-4 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                                        <h4 className="text-xs font-bold text-blue-500 mb-1">📊 Análisis</h4>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                            Si mantienes el ritmo actual de ingresos, cerrarás el mes con aprox. {formatCOP(aiInsights.cashFlow.projected)}. ¡Impulsa los fines de semana para superar esta cifra!
+                                        </p>
+                                   </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {activeInsightTab === 'restock' && (
+                             <div className="space-y-3">
+                                <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Productos con Stock Crítico (Sugerencia de Compra):</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {aiInsights.restock.length > 0 ? aiInsights.restock.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/30">
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-800 dark:text-white truncate">{item.name}</p>
+                                                <p className="text-[10px] text-gray-500">{item.supplier || 'Sin proveedor'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-bold text-orange-600 dark:text-orange-400">{item.stock}</span>
+                                                <span className="text-[10px] text-gray-400 uppercase ml-1">Quedan</span>
+                                                <span className="block text-[10px] text-blue-500 font-bold mt-1">
+                                                    Vendidos: {item.velocityScore}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )) : <p className="col-span-3 text-xs text-center text-gray-400 italic">Tu inventario está saludable. No hay alertas críticas de stock bajo en productos de alta rotación.</p>}
+                                </div>
+                            </div>
+                        )}
 
-                            {activeInsightTab === 'transfer' && (
-                                <div className="flex flex-col md:flex-row gap-6">
-                                    <div className="flex-1 space-y-2 w-full">
-                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Estancados locales (Stock alto, 0 ventas recientes):</p>
-                                        {aiInsights.transfers.length > 0 ? aiInsights.transfers.map((item, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/10 rounded border border-purple-100 dark:border-purple-900/30">
-                                                <div>
-                                                    <p className="text-xs font-bold text-gray-800 dark:text-white">{item.name}</p>
-                                                    <p className="text-[10px] text-gray-500">Capital quieto: {formatCOP(item.cost)}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="text-xs font-bold text-purple-500 block">{item.stock} uds</span>
+                        {activeInsightTab === 'transfer' && (
+                            <div className="flex flex-col md:flex-row gap-6">
+                                <div className="flex-1 space-y-2 w-full">
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Estancados (Stock alto, sin ventas recientes):</p>
+                                    {aiInsights.transfers.length > 0 ? aiInsights.transfers.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/10 rounded border border-purple-100 dark:border-purple-900/30">
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-gray-800 dark:text-white">{item.name}</p>
+                                                <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-500 mt-1">
+                                                    <span>Última Compra: <strong>{item.lastPurchaseDate ? item.lastPurchaseDate.toLocaleDateString() : 'N/A'}</strong> (+{item.lastPurchaseQty})</span>
+                                                    <span>Última Venta: <strong>{item.lastSaleDate ? item.lastSaleDate.toLocaleDateString() : 'Nunca'}</strong></span>
                                                 </div>
                                             </div>
-                                        )) : <p className="text-xs text-gray-400 italic">Tu inventario está rotando bien, no hay candidatos urgentes para traslado.</p>}
-                                    </div>
-                                     <div className="md:w-1/3 bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-900/30 flex flex-col justify-center">
-                                        <h4 className="text-xs font-bold text-purple-500 mb-1">🔄 Oportunidad de Rotación</h4>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mb-3">
-                                            Estos productos no se están moviendo en esta tienda. Muévelos a otra sucursal para darles una segunda oportunidad de venta y liberar espacio.
-                                        </p>
-                                        <button onClick={() => onNavigate(View.INVENTORY_TRANSFER)} className="w-full bg-purple-500 text-white py-1.5 rounded-md text-xs font-bold hover:bg-purple-600 transition-colors">
-                                            Iniciar Traslado
-                                        </button>
-                                    </div>
+                                            <div className="text-right pl-2">
+                                                <span className="text-xs font-bold text-purple-500 block">{item.stock} uds</span>
+                                                <span className="text-[10px] text-gray-400">Quietos</span>
+                                            </div>
+                                        </div>
+                                    )) : <p className="text-xs text-gray-400 italic">Tu inventario está rotando bien, no hay candidatos urgentes para traslado.</p>}
                                 </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-full">
-                            <p className="text-xs text-gray-400">Cargando motor de análisis...</p>
-                        </div>
-                    )}
-                 </div>
+                                 <div className="md:w-1/3 bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-900/30 flex flex-col justify-center">
+                                    <h4 className="text-xs font-bold text-purple-500 mb-1">🔄 Oportunidad de Rotación</h4>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mb-3">
+                                        Estos productos no se están moviendo en esta tienda. Muévelos a otra sucursal para darles una segunda oportunidad de venta y liberar espacio.
+                                    </p>
+                                    <button onClick={() => onNavigate(View.INVENTORY_TRANSFER)} className="w-full bg-purple-500 text-white py-1.5 rounded-md text-xs font-bold hover:bg-purple-600 transition-colors">
+                                        Iniciar Traslado
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full py-8">
+                        <p className="text-xs text-gray-400">Cargando motor de análisis...</p>
+                    </div>
+                )}
              </div>
-        </div>
-      </div>
+           )}
+       </div>
       
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div id="payment-report" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center">
              <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2>
@@ -1364,7 +1544,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center">
             <h2 className="text-2xl font-bold text-accent">Historial y Gestión de Ventas</h2>
             <ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} />
@@ -1390,7 +1570,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             const profit = calculateSaleProfit(transaction);
                             const profitColor = profit >= 0 ? 'text-green-500' : 'text-red-500';
                             const isExpanded = expandedSaleId === transaction.id;
-                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
+                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
                             return (<React.Fragment key={transaction.id}>
                                 <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
                                 <td className="p-3 font-mono text-accent"><div className="flex items-center space-x-2"><ChevronDownIcon className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{ (transaction.layawayId || transaction.transactionType === 'layaway') && (<span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/80 text-white">ABONO</span>)}</div></td>
@@ -1422,7 +1602,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+       <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
         <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center">
             <h2 className="text-2xl font-bold text-accent">Análisis de Variación de Precios</h2>
             <ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} />
@@ -1523,7 +1703,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             </div>
         </div>
 
-        <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+        <div id="sales-chart" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-accent">Análisis de Ventas a lo Largo del Tiempo</h2>
             <div className="flex items-center gap-2 mt-2 sm:mt-0">
