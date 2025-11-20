@@ -1,6 +1,5 @@
 
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
@@ -41,10 +40,10 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
       // FIX: Robustly handle `sale.items` and `sale.payments` which might be an object from Firebase
       // instead of an array. This ensures the items list appears correctly when editing a sale.
-      const itemsArray = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean) as CartItem[];
+      const itemsArray = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean);
       setItems(itemsArray.map(item => ({ ...item })));
 
-      const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean) as Payment[];
+      const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean);
       setPayments(paymentsArray.map(p => ({ ...p })));
       
       const saleDate = new Date(sale.createdAt);

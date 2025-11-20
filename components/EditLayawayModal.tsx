@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Layaway, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
@@ -42,10 +41,10 @@ const EditLayawayModal: React.FC<EditLayawayModalProps> = ({ isOpen, onClose, la
       });
       setStatus(layaway.status);
       
-      const itemsArray = (Array.isArray(layaway.items) ? layaway.items : Object.values(layaway.items || {})).filter(Boolean) as CartItem[];
+      const itemsArray = (Array.isArray(layaway.items) ? layaway.items : Object.values(layaway.items || {})).filter(Boolean);
       setItems(itemsArray.map(item => ({ ...item })));
 
-      const paymentsArray = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})).filter(Boolean) as Payment[];
+      const paymentsArray = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})).filter(Boolean);
       setPayments(paymentsArray.map(p => ({ ...p })));
       
       const layawayDate = new Date(layaway.createdAt);

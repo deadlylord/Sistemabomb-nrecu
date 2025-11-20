@@ -27,6 +27,7 @@ import PosView from './components/PosView';
 import InventoryView from './components/InventoryView';
 import { InventoryTransferView } from './components/InventoryTransferView';
 import { LayawayView } from './components/LayawayView';
+import SalesView from './components/SalesView';
 import PurchasesView from './components/PurchasesView';
 import SellersView from './components/SellersView';
 import StoresView from './components/StoresView';
@@ -41,7 +42,7 @@ import ReportsModal from './components/ReportsView';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES } from './constants';
 import ReceiptModal from './components/ReceiptModal';
 import RecaudoReceiptModal from './components/RecaudoReceiptModal';
-import { DashboardView } from './components/DashboardView';
+import DashboardView from './components/DashboardView';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from './services/storageService';
 
 const hexToRgb = (hex: string) => {
@@ -55,6 +56,14 @@ const hexToRgb = (hex: string) => {
     : null;
 };
 
+/**
+ * Attaches a real-time Firestore listener to a query.
+ * It efficiently updates the component's state by mapping the snapshot docs.
+ *
+ * @param query The Firestore query to listen to.
+ * @param setter The React state setter function to update the component's state.
+ * @returns A cleanup function that detaches the listener when the component unmounts.
+ */
 const attachFirestoreListener = <T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
   const unsubscribe = onSnapshot(query, snapshot => {
     const list: T[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as T));
@@ -67,6 +76,7 @@ const attachFirestoreListener = <T extends { id: string }>(query: Query, setter:
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
+  // States for data specific to the current store
   const [inventory, setInventory] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -79,6 +89,7 @@ const App: React.FC = () => {
   const [payrollHistory, setPayrollHistory] = useState<PayrollRecord[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   
+  // States for global (non-store-specific) data
   const [categories, setCategories] = useState<Category[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -87,9 +98,10 @@ const App: React.FC = () => {
   const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
   
+  // States for UI and session management
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
-  const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]);
+  const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]); // This might stay global for admins
   const [currentUser, setCurrentUser] = useState<Seller | null>(null);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(localStorage.getItem('currentStoreId'));
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'dark');
@@ -125,7 +137,7 @@ const App: React.FC = () => {
   
   const currentStore = useMemo(() => {
     const store = stores.find(s => s.id === currentStoreId);
-    if (store) {
+    if (store) { // Always apply color, even in global mode, to show which store is the primary context
       const rgb = hexToRgb(store.accentColor);
       if (rgb) {
         document.documentElement.style.setProperty('--color-accent', `${rgb.r} ${rgb.g} ${rgb.b}`);
@@ -201,8 +213,11 @@ const App: React.FC = () => {
     loadInitialData();
   }, [isAuthReady]);
 
+  // Pre-login data loading (essentials for login screen)
   useEffect(() => {
     if (!isAppReady || !isAuthReady || currentUser) return;
+
+    console.log("App is ready, loading pre-login data (sellers, stores, and roles)...");
 
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
@@ -211,32 +226,43 @@ const App: React.FC = () => {
     ];
 
     return () => {
+      console.log("Cleaning up pre-login listeners.");
       unsubscribers.forEach(unsub => unsub());
     }
   }, [isAppReady, isAuthReady, currentUser]);
 
+  // Post-login data loading (global data that doesn't depend on store)
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
+
+    console.log("User logged in. Loading post-login global data...");
     
+    // Base listeners for all users
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
       attachFirestoreListener(query(collection(db, 'categories')), setCategories),
       attachFirestoreListener(query(collection(db, 'inventoryTransfers')), setInventoryTransfers)
     ];
     
+    // Additional global listeners for Admins needed for Dashboard banners
     if (isAdmin) {
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'layaways')), setAllLayaways));
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'incidents')), setAllIncidents));
     }
 
     return () => {
+      console.log("Cleaning up post-login global listeners.");
       unsubscribers.forEach(unsub => unsub());
     }
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
   
+  // On-demand data loading for AI Reports Modal
   useEffect(() => {
+    // Only trigger if the modal is opened by an admin
     if (isReportsModalOpen && isAdmin) {
+      // Check if data is already loaded to prevent re-fetching
       if (allSales.length === 0) {
+        console.log("Reports modal opened. Fetching all sales data...");
         const salesQuery = query(collection(db, 'sales'));
         getDocs(salesQuery).then(snapshot => {
           const list: Sale[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Sale));
@@ -245,6 +271,7 @@ const App: React.FC = () => {
       }
       
       if (globalInventoryForSearch.length === 0) {
+          console.log("Reports modal opened. Fetching all inventory data...");
           const inventoryQuery = query(collection(db, 'inventory'));
           getDocs(inventoryQuery).then(snapshot => {
               const list: Product[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Product));
@@ -252,29 +279,34 @@ const App: React.FC = () => {
           }).catch(error => console.error("Error fetching all inventory for report:", error));
       }
     }
-  }, [isReportsModalOpen, isAdmin, allSales, globalInventoryForSearch]); 
+  }, [isReportsModalOpen, isAdmin, allSales, globalInventoryForSearch]); // Dependencies ensure this runs only when needed
   
+  // Effect for managing global search mode data
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
-        if (globalInventoryForSearch.length > 0 && !isAdmin) { 
-            setGlobalInventoryForSearch([]); 
+        if (globalInventoryForSearch.length > 0 && !isAdmin) { // Admins always have it loaded
+            setGlobalInventoryForSearch([]); // Clear if mode is turned off
         }
         return;
     }
 
+    console.log("Global mode enabled, fetching all inventory for search...");
     const inventoryQuery = query(collection(db, 'inventory'));
     const unsubscribe = attachFirestoreListener(inventoryQuery, setGlobalInventoryForSearch);
 
     return () => {
+        console.log("Cleaning up global inventory listener.");
         unsubscribe();
     };
   }, [isGlobalMode, isAppReady, currentUser, isAdmin]);
   
+  // LAZY LOADING EFFECT: On-demand data loading based on current view and store
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentStoreId || !currentUser || userPermissions.length === 0) {
-        return; 
+        return; // Exit if app is not ready for store-specific data
     }
 
+    console.log(`Attaching listeners for view: ${currentView} in store ${currentStoreId}`);
     const unsubscribers: (() => void)[] = [];
     const attach = <T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
         unsubscribers.push(attachFirestoreListener(query, setter));
@@ -283,10 +315,12 @@ const App: React.FC = () => {
         fetchOnceFromFirestore(query, setter);
     };
 
+    // Reset data states to prevent flashing stale data from a previous view
     setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
     setDailyNotes([]); setLoginHistory([]); setIncidents([]); setProductHistory([]);
     setPayrollHistory([]); setCustomers([]); setHeldCarts([]);
 
+    // Define base queries for the current store
     const storeSpecificQuery = (collectionName: string) => query(collection(db, collectionName), where('storeId', '==', currentStoreId));
     const storeInventoryQuery = storeSpecificQuery('inventory');
 
@@ -358,15 +392,20 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('customers'), setCustomers);
             break;
+        
+        // Views like SELLERS, STORES, ROLE_MANAGER use global data already loaded, no extra listeners needed here.
     }
 
     return () => {
+        console.log(`Cleaning up listeners for view: ${currentView} in store ${currentStoreId}.`);
         unsubscribers.forEach(unsub => unsub());
     };
 
 }, [isAppReady, isAuthReady, currentStoreId, currentView, currentUser, roles, userPermissions, fetchOnceFromFirestore]);
 
   useEffect(() => {
+    // This effect runs a one-time migration to update accent colors in Firebase.
+    // It checks for a flag `accentColorsUpdated` to prevent running on every load.
     if (!isAppReady || stores.length === 0) return;
 
     const runColorMigration = async () => {
@@ -396,7 +435,9 @@ const App: React.FC = () => {
 
       if (needsUpdate) {
         try {
+          console.log("Running one-time accent color migration...");
           await batch.commit();
+          console.log("Accent color migration successful.");
         } catch (error) {
           console.error("Failed to run accent color migration:", error);
         }
@@ -435,8 +476,10 @@ const App: React.FC = () => {
     };
   };
 
+  // FIX: Modified function to accept an optional batch. If a batch is provided, it uses it and does not commit. If not, it creates and commits its own. Also re-throws errors for the caller to handle.
   const handleInventoryTransfer = async (data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }, existingBatch?: WriteBatch) => {
     if (!currentUser) return;
+    // Use existing batch or create a new one
     const batch = existingBatch || writeBatch(db);
   
     try {
@@ -485,12 +528,14 @@ const App: React.FC = () => {
       const inLog = createProductHistoryLog(toProduct, sellerName, ProductChangeType.TRANSFER_IN, `+${quantity} desde ${getStoreName(fromStoreId)} (antes: ${toProduct.stock})`);
       batch.set(doc(db, 'productHistory', inLog.id), inLog);
   
+      // Only commit if we created the batch here
       if (!existingBatch) {
         await batch.commit();
         alert('Traslado realizado con éxito.');
       }
     } catch (error: any) {
       console.error("Error durante el traslado de inventario:", error);
+      // Re-throw to allow caller to handle transaction failure
       throw error;
     }
   };
@@ -713,6 +758,9 @@ const App: React.FC = () => {
             const { fromStoreId, toStoreId, productId: transferProductId, quantity } = incident;
             if (!fromStoreId || !toStoreId || !transferProductId || !quantity) throw new Error('Datos de traslado incompletos.');
             
+            // FIX: This call was incorrect, passing two arguments to a function expecting one.
+            // The handleInventoryTransfer function has been updated to accept an optional batch,
+            // allowing this to be part of a larger atomic operation.
             await handleInventoryTransfer({ fromStoreId, toStoreId, productId: transferProductId, quantity, sellerName: incident.sellerName }, batch);
             break;
           default: 
@@ -753,6 +801,8 @@ const App: React.FC = () => {
 
                 const returnLog = createProductHistoryLog(productToReturn, currentUser.name, ProductChangeType.DAMAGED_RETURNED, `+1 por resolución de daño (antes: ${productToReturn.stock}). Novedad resuelta.`);
                 batch.set(doc(db, 'productHistory', returnLog.id), returnLog);
+            } else {
+                console.warn(`Could not find product with ID ${productId} to return to stock.`);
             }
         }
     }
@@ -760,6 +810,8 @@ const App: React.FC = () => {
     if (newStatus) {
       batch.update(incidentRef, { status: newStatus, resolutionDate: new Date().toISOString() });
       await batch.commit();
+    } else {
+      console.warn(`handleResolveIncident called for unhandled or non-resolvable incident status: ${incident.status}`);
     }
   };
 
@@ -801,6 +853,7 @@ const App: React.FC = () => {
     localStorage.removeItem('currentStoreId');
     setIsGlobalMode(false);
     
+    // Reset store-specific data to empty arrays
     setInventory([]);
     setSales([]);
     setPurchases([]);
@@ -813,12 +866,16 @@ const App: React.FC = () => {
     setPayrollHistory([]);
     setCustomers([]);
     
+    // Reset global data that's loaded post-login
     setCategories([]);
     setInventoryTransfers([]);
   
+    // Reset UI state
     setActiveCart([]);
     setHeldCarts([]);
     setVerifiedProducts(new Set());
+  
+    // On a normal logout, sellers, stores, and roles are kept for the login screen.
   };
   
   const handleSwitchStore = (storeId: string) => {
@@ -830,6 +887,7 @@ const App: React.FC = () => {
     const newMode = !isGlobalMode;
     setIsGlobalMode(newMode);
     if (!newMode && currentUser) {
+      // When turning off, ensure we are back on the user's default store
       setCurrentStoreId(currentUser.storeId);
     }
   };
@@ -957,7 +1015,7 @@ const App: React.FC = () => {
     }
     
     const newHeldCartData: { [key: string]: any } = {
-        items: activeCart.map(item => ({...item})), 
+        items: activeCart.map(item => ({...item})), // Clean the items
         storeId: currentStoreId,
     };
     
@@ -1082,6 +1140,7 @@ const App: React.FC = () => {
     const batch = writeBatch(db);
     const layawayRef = doc(db, 'layaways', layawayId);
 
+    // Deduct stock
     for (const item of layaway.items) {
       const product = inventory.find(p => p.id === item.id);
       if (product) {
@@ -1122,6 +1181,7 @@ const App: React.FC = () => {
     const batch = writeBatch(db);
     const layawayRef = doc(db, 'layaways', layawayId);
 
+    // Return stock to inventory if it was an active layaway
     if (layaway.status === 'active') {
         for (const item of layaway.items) {
             const product = inventory.find(p => p.id === item.id);
@@ -1153,7 +1213,9 @@ const App: React.FC = () => {
     const allItemIds = new Set([...originalItems.keys(), ...updatedItems.keys()]);
     
     try {
+        // Scenarios for stock adjustment based on STATUS change
         if (originalLayaway.status !== 'pre-order' && updatedLayaway.status === 'pre-order') {
+            // Became a pre-order, return all original items to stock
             originalItems.forEach((quantity, productId) => {
                 const product = inventory.find(p => p.id === productId);
                 if (product) {
@@ -1167,6 +1229,7 @@ const App: React.FC = () => {
                 }
             });
         } else if (originalLayaway.status === 'pre-order' && updatedLayaway.status !== 'pre-order') {
+            // No longer a pre-order, deduct new items from stock
             for (const [productId, quantity] of updatedItems.entries()) {
                 const product = inventory.find(p => p.id === productId);
                 if (product) {
@@ -1176,10 +1239,11 @@ const App: React.FC = () => {
                 }
             }
         } else if (originalLayaway.status !== 'pre-order' && updatedLayaway.status !== 'pre-order') {
+            // Neither was/is a pre-order, calculate delta of items
             for (const productId of allItemIds) {
                 const originalQty = originalItems.get(productId) || 0;
                 const updatedQty = updatedItems.get(productId) || 0;
-                const diff = originalQty - updatedQty; 
+                const diff = originalQty - updatedQty; // positive if items returned, negative if items added
                 if (diff !== 0) {
                     const product = inventory.find(p => p.id === productId);
                     if (product) {
@@ -1331,6 +1395,7 @@ const App: React.FC = () => {
     let newImageUrl: string | null = null;
   
     try {
+      // If a disabled product receives stock (e.g. from manual edit), re-enable it automatically.
       const originalProduct = inventory.find(p => p.id === updatedProductData.id);
       if (originalProduct && originalProduct.isDisabled && finalProductData.stock > 0) {
           finalProductData.isDisabled = false;
@@ -1343,8 +1408,10 @@ const App: React.FC = () => {
         finalProductData.imageUrl = newImageUrl;
       }
   
+      // Update the main product in the batch
       batch.set(mainProductRef, finalProductData, { merge: true });
   
+      // If a new image was uploaded and the name hasn't changed, sync the image
       if (newImageUrl && originalProduct && originalProduct.name === updatedProductData.name) {
         const allMatchingProductsQuery = query(collection(db, 'inventory'), where('name', '==', updatedProductData.name));
         const allMatchingSnapshot = await getDocs(allMatchingProductsQuery);
@@ -1355,6 +1422,7 @@ const App: React.FC = () => {
         });
       }
   
+      // History log for stock change
       if (originalProduct && originalProduct.stock !== updatedProductData.stock) {
         const stockChange = updatedProductData.stock - originalProduct.stock;
         const sign = stockChange > 0 ? '+' : '';
@@ -1466,6 +1534,7 @@ const App: React.FC = () => {
       }
   };
 
+// @FIX: Renamed function to resolve redeclaration error. This function is for SettingsView.
   const handleSaveStoreSettings = async (updatedStore: Store) => {
     const storeRef = doc(db, 'stores', updatedStore.id);
     await setDoc(storeRef, updatedStore, { merge: true });
@@ -1485,9 +1554,11 @@ const App: React.FC = () => {
       const collectionsToDelete = ['sales', 'purchases', 'layaways', 'stockTakes', 'dailyNotes', 'loginHistory', 'incidents', 'productHistory', 'payrollHistory', 'customers', 'heldCarts'];
       const batch = writeBatch(db);
 
+      // Delete inventory for the store
       const inventorySnapshot = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', storeId)));
       inventorySnapshot.docs.forEach(doc => batch.delete(doc.ref));
 
+      // Delete other collections
       for (const collectionName of collectionsToDelete) {
         const snapshot = await getDocs(query(collection(db, collectionName), where('storeId', '==', storeId)));
         snapshot.docs.forEach(doc => batch.delete(doc.ref));
@@ -1695,6 +1766,7 @@ const App: React.FC = () => {
         await batch.commit();
     } catch (error: any) {
         console.error("Error en la compra multi-tienda:", error);
+        // Alert is now removed, error is thrown to be handled by the calling component
         throw error;
     }
   };
@@ -1803,6 +1875,7 @@ const App: React.FC = () => {
         for (const itemId of allItemIds) {
             const originalQty: number = originalItemsMap.get(itemId) || 0;
             const updatedQty: number = updatedItemsMap.get(itemId) || 0;
+            // FIX: Explicitly cast quantities to Number before performing subtraction to prevent arithmetic operation errors when types are inferred incorrectly from Firestore data structures.
             const stockChange = Number(originalQty) - Number(updatedQty);
 
             if (stockChange !== 0) {
@@ -1815,7 +1888,7 @@ const App: React.FC = () => {
                     
                     const updatePayload: { [key: string]: any } = { stock: increment(stockChange) };
 
-                    if (stockChange > 0 && product.isDisabled) {
+                    if (stockChange > 0 && product.isDisabled) { // stock is being returned
                         updatePayload.isDisabled = false;
                     }
 
@@ -1854,6 +1927,7 @@ const App: React.FC = () => {
 
         const batch = writeBatch(db);
 
+        // Restore stock for each item in the sale
         const itemsArray = (Array.isArray(saleToDelete.items) ? saleToDelete.items : Object.values(saleToDelete.items || {})).filter(Boolean) as CartItem[];
         for (const item of itemsArray) {
             if (item && item.id) {
@@ -1865,8 +1939,10 @@ const App: React.FC = () => {
                     updatePayload.isDisabled = false;
                 }
 
+                // Use FieldValue.increment to handle concurrent updates safely
                 batch.update(productRef, updatePayload);
 
+                // Create a history log for the stock return
                 if (productForLog) {
                     const historyLog = createProductHistoryLog(
                         productForLog,
@@ -1879,9 +1955,11 @@ const App: React.FC = () => {
             }
         }
 
+        // Delete the sale document
         const saleRef = doc(db, 'sales', saleId);
         batch.delete(saleRef);
 
+        // Commit the batch
         await batch.commit();
         alert('Venta eliminada exitosamente y stock restaurado.');
 
@@ -1930,6 +2008,7 @@ const App: React.FC = () => {
       return;
     }
     
+    // Note: This check is limited to the sales history loaded for the current store.
     const hasSales = sales.some(s => s.items.some(i => i && i.id === productId));
     
     if (hasSales) {
@@ -2009,6 +2088,7 @@ const App: React.FC = () => {
     }
 
     try {
+        // Perform dependency checks across key collections to ensure data integrity.
         const dependencyChecks = [
             { collection: 'sales', field: 'seller', label: 'ventas' },
             { collection: 'layaways', field: 'seller', label: 'abonos' },
@@ -2258,29 +2338,13 @@ const App: React.FC = () => {
             onClose={() => {
                 setShowReceiptModal(false);
                 setSaleForReceipt(null);
-            }}
+            }} 
         />
       )}
       {showRecaudoReceipt && lastRecaudo && (
-          <RecaudoReceiptModal
-              incident={lastRecaudo}
-              store={currentStore || null}
-              onClose={() => {
-                  setShowRecaudoReceipt(false);
-                  setLastRecaudo(null);
-              }}
-          />
+        <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />
       )}
-      {isReportsModalOpen && (
-          <ReportsModal
-              isOpen={isReportsModalOpen}
-              onClose={() => setIsReportsModalOpen(false)}
-              allSales={allSales}
-              allInventory={isGlobalMode ? globalInventoryForSearch : inventory}
-              stores={stores}
-              categories={categories}
-          />
-      )}
+      {isAdmin && <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={globalInventoryForSearch} stores={stores} categories={categories} />}
     </div>
   );
 };
