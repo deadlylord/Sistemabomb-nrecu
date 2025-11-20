@@ -222,7 +222,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   
   // AI Insights Interaction State
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
-  const [isAIExpanded, setIsAIExpanded] = useState(true);
+  const [isAIExpanded, setIsAIExpanded] = useState(false);
+  const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast'>('insights');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -303,7 +304,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         insights.stagnant.push({ 
             id: p.id, 
             name: p.name, 
-            stock: p.stock,
+            stock: p.stock, 
             value: p.stock * p.cost
         });
       }
@@ -435,7 +436,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
         
-        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller };
+        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue };
     }, [sales, layaways, inventory, isWithinRange]);
   
   const cashBreakdown = useMemo(() => {
@@ -751,6 +752,67 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             .slice(0, 10);
     }, [sales, layaways, inventory, isWithinRange]);
     
+    // --- Forecast Logic ---
+    const forecastAnalysis = useMemo(() => {
+        const now = new Date();
+        const currentDay = now.getDate();
+        const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const daysRemaining = totalDaysInMonth - currentDay;
+        const monthProgress = (currentDay / totalDaysInMonth) * 100;
+
+        // Calculate total sales for the CURRENT MONTH (independent of date picker filters)
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        
+        const salesThisMonth = sales.filter(s => {
+            const d = new Date(s.createdAt);
+            return d >= startOfMonth && d <= endOfMonth && !s.layawayId;
+        }).reduce((sum, s) => sum + s.totalAmount, 0);
+        
+        const layawaysThisMonth = layaways.filter(l => {
+             const d = new Date(l.createdAt);
+             return l.status !== 'pre-order' && d >= startOfMonth && d <= endOfMonth;
+        }).reduce((sum, l) => sum + l.paidAmount, 0); // Approximate using paidAmount for cash flow
+        
+        const currentMonthTotal = salesThisMonth + layawaysThisMonth;
+        
+        // Simple Projection: (Current / DaysPassed) * TotalDays
+        const dailyAverage = currentDay > 0 ? currentMonthTotal / currentDay : 0;
+        const projectedTotal = dailyAverage * totalDaysInMonth;
+
+        // Strategies based on time of month
+        let strategies: { title: string, desc: string, type: 'marketing' | 'sales' | 'admin' }[] = [];
+
+        if (currentDay <= 10) {
+            strategies = [
+                { title: "Impulso Inicial", desc: "Contacta a los 5 mejores clientes del mes pasado para mostrar novedades.", type: "marketing" },
+                { title: "Exhibición", desc: "Rota los maniquíes y vitrina para dar sensación de novedad total.", type: "sales" },
+                { title: "Metas Claras", desc: "Asegúrate que cada vendedor conozca su meta diaria para este mes.", type: "admin" }
+            ];
+        } else if (currentDay <= 20) {
+            strategies = [
+                { title: "Movimiento de Stock", desc: "Identifica los 3 productos menos vendidos y ármalos en outfits atractivos.", type: "sales" },
+                { title: "Activación de Clientes", desc: "Envía mensajes de 'Te extrañamos' a clientes que no han venido en 2 meses.", type: "marketing" },
+                { title: "Revisión de Inventario", desc: "Haz un conteo rápido de las categorías más vendidas para evitar quiebres.", type: "admin" }
+            ];
+        } else {
+            strategies = [
+                { title: "Cierre de Mes", desc: "Enfócate en cerrar los abonos pendientes para sumar al flujo de caja.", type: "sales" },
+                { title: "Liquidación Express", desc: "Si la meta está lejos, considera una promo flash de fin de semana.", type: "marketing" },
+                { title: "Pre-Venta", desc: "Ofrece apartar prendas de la próxima colección para asegurar ventas futuras.", type: "sales" }
+            ];
+        }
+
+        return {
+            currentTotal: currentMonthTotal,
+            projectedTotal,
+            dailyAverage,
+            monthProgress,
+            daysRemaining,
+            strategies
+        };
+    }, [sales, layaways]);
+
     // --- START: Sales History Section Logic ---
     const managedSales = useMemo(() => {
         const allTransactions: UnifiedSaleTransaction[] = [
@@ -1019,7 +1081,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                  >
                      <div className="flex items-center gap-2">
                          <SparklesIcon className="w-4 h-4 text-accent" />
-                         <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI <span className="hidden sm:inline text-gray-400 font-normal">- Insights</span></h3>
+                         <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI <span className="hidden sm:inline text-gray-400 font-normal">- Asistente Inteligente</span></h3>
                      </div>
                      <div className="flex items-center gap-3">
                         {aiInsights && !isAIExpanded && (
@@ -1035,119 +1097,192 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                  </div>
 
                  {isAIExpanded && (
-                 <div className="flex-grow p-3 flex flex-col md:flex-row gap-3 min-h-[120px] border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-                    {/* Left: Insight List */}
-                    <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[150px] pr-1">
-                    {aiInsights ? (
-                        <>
-                             {aiInsights.restock.length > 0 && (
-                                <div className="space-y-1">
-                                    <p className="font-bold text-red-600 dark:text-red-400 text-xs uppercase tracking-wide">⚠️ Reabastecer</p>
-                                    {aiInsights.restock.slice(0, 2).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                             )}
-                             {aiInsights.trending.length > 0 && (
-                                <div className="space-y-1">
-                                    <p className="font-bold text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">🔥 Tendencia</p>
-                                    {aiInsights.trending.slice(0, 3).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
-                                        </button>
-                                    ))}
-                                </div>
-                             )}
-                             {aiInsights.stagnant.length > 0 && (
-                                 <div className="space-y-1">
-                                     <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado</p>
-                                     {aiInsights.stagnant.slice(0, 2).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
-                                        </button>
-                                    ))}
-                                 </div>
-                             )}
-                        </>
-                    ) : (
-                        <div className="flex items-center justify-center h-full">
-                            <p className="text-xs text-gray-400">Cargando análisis...</p>
-                        </div>
-                    )}
+                 <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
+                    {/* Tabs Navigation */}
+                    <div className="flex border-b border-gray-200 dark:border-gray-700">
+                        <button
+                            onClick={() => setActiveAITab('insights')}
+                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <PackageIcon className="w-3 h-3" />
+                            Inventario & Insights
+                        </button>
+                        <button
+                            onClick={() => setActiveAITab('forecast')}
+                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <ChartBarIcon className="w-3 h-3" />
+                            Proyección de Cierre
+                        </button>
                     </div>
 
-                    {/* Right: Context Panel */}
-                    <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
-                         {!activeInsightId ? (
-                             <div className="text-center text-gray-400 text-xs">
-                                 <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                                 <p>Selecciona un ítem para ver el análisis detallado.</p>
-                             </div>
-                         ) : (
-                             (() => {
-                                 const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
-                                 const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
-                                 const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
-                                 
-                                 if (trendingItem) {
-                                     return (
-                                         <div className="animate-fade-in text-sm">
-                                             <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
-                                             <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
-                                             <div className="bg-green-50 dark:bg-green-900/10 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
-                                                 <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
-                                             </div>
-                                         </div>
-                                     );
-                                 }
-                                 if (restockItem) {
-                                     return (
-                                        <div className="animate-fade-in text-sm">
-                                            <h4 className="font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Stock Crítico</h4>
-                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
-                                                Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
-                                            </p>
-                                            <div className="bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
-                                                <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
+                    <div className="p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
+                    
+                    {activeAITab === 'insights' ? (
+                        <>
+                            {/* Left: Insight List */}
+                            <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[150px] pr-1">
+                            {aiInsights ? (
+                                <>
+                                    {aiInsights.restock.length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="font-bold text-red-600 dark:text-red-400 text-xs uppercase tracking-wide">⚠️ Reabastecer</p>
+                                            {aiInsights.restock.slice(0, 2).map((item) => (
+                                                <button 
+                                                    key={item.id}
+                                                    onClick={() => setActiveInsightId(item.id)}
+                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="truncate font-medium">{item.name}</span>
+                                                    <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {aiInsights.trending.length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="font-bold text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">🔥 Tendencia</p>
+                                            {aiInsights.trending.slice(0, 3).map((item) => (
+                                                <button 
+                                                    key={item.id}
+                                                    onClick={() => setActiveInsightId(item.id)}
+                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="truncate font-medium">{item.name}</span>
+                                                    <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {aiInsights.stagnant.length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado</p>
+                                            {aiInsights.stagnant.slice(0, 2).map((item) => (
+                                                <button 
+                                                    key={item.id}
+                                                    onClick={() => setActiveInsightId(item.id)}
+                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="truncate font-medium">{item.name}</span>
+                                                    <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="flex items-center justify-center h-full">
+                                    <p className="text-xs text-gray-400">Cargando análisis...</p>
+                                </div>
+                            )}
+                            </div>
+
+                            {/* Right: Context Panel */}
+                            <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
+                                {!activeInsightId ? (
+                                    <div className="text-center text-gray-400 text-xs">
+                                        <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                        <p>Selecciona un ítem para ver el análisis detallado.</p>
+                                    </div>
+                                ) : (
+                                    (() => {
+                                        const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
+                                        const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
+                                        const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
+                                        
+                                        if (trendingItem) {
+                                            return (
+                                                <div className="animate-fade-in text-sm">
+                                                    <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
+                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
+                                                    <div className="bg-green-50 dark:bg-green-900/10 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
+                                                        <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        if (restockItem) {
+                                            return (
+                                                <div className="animate-fade-in text-sm">
+                                                    <h4 className="font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Stock Crítico</h4>
+                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
+                                                        Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
+                                                        Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
+                                                    </p>
+                                                    <div className="bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
+                                                        <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        if (stagnantItem) {
+                                            return (
+                                                <div className="animate-fade-in text-sm">
+                                                    <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
+                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
+                                                        Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
+                                                        Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
+                                                    </p>
+                                                    <div className="bg-gray-50 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
+                                                        <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        // Forecast Tab Content
+                        <div className="w-full flex flex-col md:flex-row gap-4 animate-fade-in">
+                            {/* Left: Stats & Progress */}
+                            <div className="md:w-1/2 space-y-3">
+                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                                    <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Proyección de Cierre</h4>
+                                    <p className="text-2xl font-extrabold text-accent">{formatCOP(forecastAnalysis.projectedTotal)}</p>
+                                    <div className="mt-2 text-xs text-gray-500 flex justify-between">
+                                        <span>Actual: {formatCOP(forecastAnalysis.currentTotal)}</span>
+                                        <span>Prom. Diario: {formatCOP(forecastAnalysis.dailyAverage)}</span>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                        <span>Progreso del Mes</span>
+                                        <span>{Math.round(forecastAnalysis.monthProgress)}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                                        <div 
+                                            className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" 
+                                            style={{ width: `${forecastAnalysis.monthProgress}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-[10px] text-right text-gray-400">Faltan {forecastAnalysis.daysRemaining} días</p>
+                                </div>
+                            </div>
+
+                            {/* Right: AI Strategies */}
+                            <div className="md:w-1/2 space-y-2">
+                                <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                                    <SparklesIcon className="w-4 h-4 text-yellow-500" />
+                                    Estrategias Recomendadas
+                                </h4>
+                                <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                                    {forecastAnalysis.strategies.map((strat, idx) => (
+                                        <div key={idx} className="bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex gap-3 items-start group hover:border-accent/30 transition-colors">
+                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : strat.type === 'sales' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-800 dark:text-gray-200 group-hover:text-accent transition-colors">{strat.title}</p>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">{strat.desc}</p>
                                             </div>
                                         </div>
-                                     );
-                                 }
-                                 if (stagnantItem) {
-                                     return (
-                                        <div className="animate-fade-in text-sm">
-                                            <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
-                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
-                                                Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
-                                            </p>
-                                            <div className="bg-gray-50 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
-                                                <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
-                                            </div>
-                                        </div>
-                                     );
-                                 }
-                                 return null;
-                             })()
-                         )}
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
                     </div>
                  </div>
                  )}
