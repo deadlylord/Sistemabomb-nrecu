@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -925,6 +925,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           console.error('Error al compartir:', error); 
       }
   };
+
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
   
   const handleGoToPos = (storeId: string) => {
     onSwitchStore(storeId);
@@ -933,82 +940,74 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      {/* Date Filters at the top */}
-      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
+      {/* Top Control Panel: Filters, Quick Nav, and Notifications */}
+      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Left Side: Date Filters & Anchors */}
             <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-gray-500 dark:text-text-dark mr-2">Filtros Rápidos:</span>
-                <button onClick={setToday} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Hoy</button>
-                <button onClick={setYesterday} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Ayer</button>
-                <button onClick={setLast7Days} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Últimos 7 días</button>
-                <button onClick={setThisMonth} className="px-3 py-1 text-sm bg-accent/20 text-accent rounded-full hover:bg-accent/30 transition-colors">Este Mes</button>
+                {/* Date Presets */}
+                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                    <button onClick={setToday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Hoy</button>
+                    <button onClick={setYesterday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Ayer</button>
+                    <button onClick={setLast7Days} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">7 Días</button>
+                    <button onClick={setThisMonth} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Mes</button>
+                </div>
+
+                {/* Quick Navigation Anchors */}
+                <div className="flex items-center gap-1 bg-accent/10 p-1 rounded-lg">
+                    <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><DollarIcon className="w-3 h-3"/> Pagos</button>
+                    <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
+                    <button onClick={() => scrollToSection('price-variation')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><TagIcon className="w-3 h-3"/> Precios</button>
+                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
+                </div>
             </div>
             
-            <div className="flex items-end gap-4 flex-wrap">
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-text-dark mb-1">Ver un rango</label>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handlePreviousDay}
-                            className="p-2 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            aria-label="Día anterior"
-                        >
-                            <ChevronLeftIcon className="w-5 h-5" />
-                        </button>
-                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-md border border-gray-300 dark:border-gray-700 h-10"/>
-                        <span className="text-gray-500">a</span>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-md border border-gray-300 dark:border-gray-700 h-10"/>
-                        <button
-                            onClick={handleNextDay}
-                            disabled={isNextDayDisabled}
-                            className="p-2 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            aria-label="Día siguiente"
-                        >
-                            <ChevronRightIcon className="w-5 h-5" />
-                        </button>
-                    </div>
+            {/* Right Side: Date Picker & Notifications */}
+            <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                    <button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button>
+                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/>
+                    <span className="text-gray-400">-</span>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/>
+                    <button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button>
+                </div>
+                
+                {/* Notification Icons */}
+                <div className="flex items-center gap-2 border-l pl-4 border-gray-200 dark:border-gray-700">
+                    {/* Incidents Notification */}
+                    <button 
+                        onClick={() => onNavigate(View.INCIDENTS)}
+                        className="relative p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        title="Novedades Pendientes"
+                    >
+                        <AlertTriangleIcon className="w-5 h-5" />
+                        {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
+                            <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
+                                {pendingIncidentsAcrossStores.length}
+                            </span>
+                        )}
+                    </button>
+
+                    {/* Layaways Notification */}
+                    <button 
+                        onClick={() => onNavigate(View.LAYAWAY)}
+                        className="relative p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        title="Abonos por Entregar"
+                    >
+                        <TruckIcon className="w-5 h-5" />
+                        {pendingPreOrdersAcrossStores.length > 0 && (
+                             <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
+                                {pendingPreOrdersAcrossStores.length}
+                            </span>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>
       </div>
 
-      {/* Notifications and AI Insights Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Notifications (25%) */}
-        <div className="lg:col-span-3 space-y-3">
-            {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
-            <div className="bg-orange-100 dark:bg-orange-900/50 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <AlertTriangleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                        <p className="font-bold text-sm">Novedades</p>
-                    </div>
-                    <p className="text-xs"><strong>{pendingIncidentsAcrossStores.length}</strong> por aprobar.</p>
-                    <button onClick={() => onNavigate(View.INCIDENTS)} className="w-full bg-orange-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-orange-600 transition-colors text-center">Gestionar</button>
-                </div>
-            </div>
-            )}
-            {pendingPreOrdersAcrossStores.length > 0 && (
-                <div className="bg-yellow-100 dark:bg-yellow-900/50 border border-yellow-500/50 text-yellow-700 dark:text-yellow-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <TruckIcon className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-                            <p className="font-bold text-sm">Abonos</p>
-                        </div>
-                        <p className="text-xs"><strong>{pendingPreOrdersAcrossStores.length}</strong> encargos.</p>
-                        <button onClick={() => onNavigate(View.LAYAWAY)} className="w-full bg-yellow-500 text-white font-bold py-1.5 px-2 text-xs rounded-md hover:bg-yellow-600 transition-colors text-center">Gestionar</button>
-                    </div>
-                </div>
-            )}
-            {!isAdmin && pendingIncidentsAcrossStores.length === 0 && pendingPreOrdersAcrossStores.length === 0 && (
-                 <div className="h-full flex items-center justify-center p-6 bg-white dark:bg-secondary rounded-lg border border-gray-200 dark:border-gray-700 border-dashed">
-                    <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Sin notificaciones.</p>
-                </div>
-            )}
-        </div>
-
-        {/* Right Column: AI Insights Widget (75%) */}
-        <div className="lg:col-span-9">
+      {/* AI Insights Widget (Full Width) */}
+      <div className="w-full">
              <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
                  {/* Decorative Gradient Border */}
                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
@@ -1140,10 +1139,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     </div>
                  </div>
              </div>
-        </div>
       </div>
       
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div id="payment-report" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center">
              <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2>
@@ -1311,7 +1309,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center">
             <h2 className="text-2xl font-bold text-accent">Historial y Gestión de Ventas</h2>
             <ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} />
@@ -1337,7 +1335,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             const profit = calculateSaleProfit(transaction);
                             const profitColor = profit >= 0 ? 'text-green-500' : 'text-red-500';
                             const isExpanded = expandedSaleId === transaction.id;
-                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
+                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
                             return (<React.Fragment key={transaction.id}>
                                 <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
                                 <td className="p-3 font-mono text-accent"><div className="flex items-center space-x-2"><ChevronDownIcon className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{ (transaction.layawayId || transaction.transactionType === 'layaway') && (<span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/80 text-white">ABONO</span>)}</div></td>
@@ -1369,7 +1367,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+       <div id="price-variation" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
         <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center">
             <h2 className="text-2xl font-bold text-accent">Análisis de Variación de Precios</h2>
             <ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} />
@@ -1470,7 +1468,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             </div>
         </div>
 
-        <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
+        <div id="sales-chart" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-accent">Análisis de Ventas a lo Largo del Tiempo</h2>
             <div className="flex items-center gap-2 mt-2 sm:mt-0">
