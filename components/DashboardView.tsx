@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, UsersIcon, ChartBarIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -221,7 +221,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   
   // AI Insights Interaction State
-  const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
+  const [activeInsightTab, setActiveInsightTab] = useState<'combos' | 'churn' | 'hours' | 'profit' | 'transfer'>('combos');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -239,81 +239,118 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return allLayaways.filter(l => l.status === 'pre-order');
   }, [allLayaways]);
 
-  // AI Insights Logic (Local Calculation)
+  // --- ADVANCED AI ENGINE (Client-Side) ---
   const aiInsights = useMemo(() => {
     if (!sales || !inventory) return null;
-
     const today = new Date();
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const fortyFiveDaysAgo = new Date();
+    fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
     
     const periodLabel = `${thirtyDaysAgo.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${today.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
 
-    // 1. Calculate Velocity per Product
-    const productSalesMap = new Map<string, number>();
+    // 1. Combos & Cross-Selling
+    const combosMap = new Map<string, number>();
+    const salesWithMultipleItems = sales.filter(s => (s.items || []).length > 1);
+    
+    salesWithMultipleItems.forEach(sale => {
+        const items = sale.items || [];
+        for (let i = 0; i < items.length; i++) {
+            for (let j = i + 1; j < items.length; j++) {
+                // Create a key for the pair (sorted to ensure A-B is same as B-A)
+                const pair = [items[i].name, items[j].name].sort().join(' + ');
+                combosMap.set(pair, (combosMap.get(pair) || 0) + 1);
+            }
+        }
+    });
+    const topCombos = Array.from(combosMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name, count]) => ({ name, count }));
+
+    // 2. Customer Churn (Fuga)
+    const customerSpendMap = new Map<string, { total: number, lastDate: Date, phone: string }>();
     sales.forEach(sale => {
-      const saleDate = new Date(sale.createdAt);
-      if (saleDate >= thirtyDaysAgo) {
+        if (!sale.customerName || sale.customerName === 'Cliente Mostrador') return;
+        const existing = customerSpendMap.get(sale.customerName);
+        const saleDate = new Date(sale.createdAt);
+        if (existing) {
+            existing.total += sale.totalAmount;
+            if (saleDate > existing.lastDate) existing.lastDate = saleDate;
+        } else {
+            customerSpendMap.set(sale.customerName, { total: sale.totalAmount, lastDate: saleDate, phone: sale.customerPhone });
+        }
+    });
+    
+    const churnRisks = Array.from(customerSpendMap.entries())
+        .filter(([_, data]) => data.total > 200000 && data.lastDate < fortyFiveDaysAgo) // High value (>200k) + No purchase in 45 days
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 3)
+        .map(([name, data]) => ({ 
+            name, 
+            daysSince: Math.floor((today.getTime() - data.lastDate.getTime()) / (1000 * 3600 * 24)),
+            totalSpent: data.total,
+            phone: data.phone
+        }));
+
+    // 3. Golden Hours (Heatmap)
+    const hourCounts = new Array(24).fill(0);
+    sales.forEach(sale => {
+        const hour = new Date(sale.createdAt).getHours();
+        hourCounts[hour]++;
+    });
+    const peakHourIndex = hourCounts.indexOf(Math.max(...hourCounts));
+    const peakHourRange = `${peakHourIndex}:00 - ${peakHourIndex + 1}:00`;
+
+    // 4. Profitability (Stars vs Dogs)
+    const productPerformance = new Map<string, { sold: number, profit: number, name: string, stock: number }>();
+    sales.forEach(sale => {
         (sale.items || []).forEach(item => {
-          if (item) {
-            productSalesMap.set(item.id, (productSalesMap.get(item.id) || 0) + item.quantity);
-          }
+            if (!item) return;
+            const existing = productPerformance.get(item.id);
+            const profit = (item.price - item.cost) * item.quantity;
+            if (existing) {
+                existing.sold += item.quantity;
+                existing.profit += profit;
+            } else {
+                productPerformance.set(item.id, { sold: item.quantity, profit, name: item.name, stock: inventory.find(p => p.id === item.id)?.stock || 0 });
+            }
         });
-      }
     });
+    
+    const performanceArray = Array.from(productPerformance.values());
+    const stars = performanceArray.filter(p => p.sold > 5 && p.profit > 100000).sort((a, b) => b.profit - a.profit).slice(0, 3);
+    
+    // 5. Transfer Opportunities (Local Stagnation)
+    // Items with Stock > 5 AND 0 Sales in last 30 days (locally)
+    const stagnantIds = new Set(
+        inventory.filter(p => p.stock >= 5 && !p.isDisabled).map(p => p.id)
+    );
+    
+    sales.forEach(sale => {
+        const saleDate = new Date(sale.createdAt);
+        if (saleDate >= thirtyDaysAgo) {
+            (sale.items || []).forEach(item => {
+                if (item) stagnantIds.delete(item.id); // Remove if sold recently
+            });
+        }
+    });
+    
+    const transferCandidates = inventory
+        .filter(p => stagnantIds.has(p.id))
+        .map(p => ({ id: p.id, name: p.name, stock: p.stock, cost: p.cost * p.stock }))
+        .sort((a, b) => b.cost - a.cost) // Prioritize by capital tied up
+        .slice(0, 5);
 
-    const insights = {
-      period: periodLabel,
-      trending: [] as { id: string, name: string, quantity: number, context: string }[],
-      restock: [] as { id: string, name: string, stock: number, velocity: number, daysLeft: number }[],
-      stagnant: [] as { id: string, name: string, stock: number, value: number }[]
+    return {
+        period: periodLabel,
+        combos: topCombos,
+        churn: churnRisks,
+        hours: { peak: peakHourRange, data: hourCounts },
+        profit: { stars },
+        transfers: transferCandidates
     };
-
-    inventory.forEach(p => {
-      if (p.isDisabled) return;
-      const soldQty = productSalesMap.get(p.id) || 0;
-      
-      // Trending: Sold > 3 units in last 30 days
-      if (soldQty >= 3) {
-        const percentageOfTotal = sales.length > 0 ? ((soldQty / sales.length) * 100).toFixed(1) : '0';
-        insights.trending.push({ 
-            id: p.id, 
-            name: p.name, 
-            quantity: soldQty,
-            context: `Este producto ha tenido un desempeño sobresaliente. Ha movido ${soldQty} unidades en el último mes.`
-        });
-      }
-
-      // Restock Needed: Low stock (< 3) but selling well (> 1 recently)
-      if (p.stock <= 3 && soldQty >= 2) {
-        const velocityPerDay = soldQty / 30;
-        const daysLeft = velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99;
-        insights.restock.push({ 
-            id: p.id, 
-            name: p.name, 
-            stock: p.stock, 
-            velocity: soldQty,
-            daysLeft
-        });
-      }
-
-      // Stagnant: High stock (> 8) but 0 sales
-      if (p.stock >= 8 && soldQty === 0) {
-        insights.stagnant.push({ 
-            id: p.id, 
-            name: p.name, 
-            stock: p.stock,
-            value: p.stock * p.cost
-        });
-      }
-    });
-
-    // Sort
-    insights.trending.sort((a, b) => b.quantity - a.quantity);
-    insights.restock.sort((a, b) => a.daysLeft - b.daysLeft);
-    insights.stagnant.sort((a, b) => b.stock - a.stock);
-
-    return insights;
   }, [sales, inventory]);
 
   const setDateRange = (start: Date, end: Date) => {
@@ -972,9 +1009,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
       </div>
 
-      {/* Notifications and AI Insights Grid */}
+      {/* Notifications and Advanced AI Insights Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Notifications (25%) */}
+        {/* Left Column: Notifications (20%) */}
         <div className="lg:col-span-3 space-y-3">
             {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
             <div className="bg-orange-100 dark:bg-orange-900/50 border border-orange-500/50 text-orange-700 dark:text-orange-300 p-3 rounded-lg shadow-sm transition-all hover:shadow-md" role="alert">
@@ -1007,137 +1044,153 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             )}
         </div>
 
-        {/* Right Column: AI Insights Widget (75%) */}
+        {/* Right Column: Advanced AI Insights Panel (80%) */}
         <div className="lg:col-span-9">
              <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
                  {/* Decorative Gradient Border */}
                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
                  
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                     <div className="flex items-center gap-2">
-                         <SparklesIcon className="w-5 h-5 text-accent" />
+                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-gray-50/50 dark:bg-gray-800/20">
+                     <div className="flex items-center gap-3">
+                         <div className="p-2 bg-accent/10 rounded-full"><SparklesIcon className="w-5 h-5 text-accent" /></div>
                          <div>
-                            <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Insights</h3>
-                            {aiInsights && <p className="text-xs text-gray-500 dark:text-gray-400">Analizando: {aiInsights.period}</p>}
+                            <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Analista Virtual</h3>
+                            {aiInsights && <p className="text-xs text-gray-500 dark:text-gray-400">{aiInsights.period}</p>}
                          </div>
                      </div>
-                     <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span>
+                     <div className="flex space-x-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg overflow-x-auto max-w-full">
+                         <button onClick={() => setActiveInsightTab('combos')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'combos' ? 'bg-white dark:bg-gray-700 text-accent shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🔥 Combos</button>
+                         <button onClick={() => setActiveInsightTab('churn')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'churn' ? 'bg-white dark:bg-gray-700 text-blue-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💔 Fuga</button>
+                         <button onClick={() => setActiveInsightTab('hours')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'hours' ? 'bg-white dark:bg-gray-700 text-yellow-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>⏰ Horarios</button>
+                         <button onClick={() => setActiveInsightTab('profit')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'profit' ? 'bg-white dark:bg-gray-700 text-green-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>💎 Estrellas</button>
+                         <button onClick={() => setActiveInsightTab('transfer')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap ${activeInsightTab === 'transfer' ? 'bg-white dark:bg-gray-700 text-purple-500 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>🚚 Traslados</button>
+                     </div>
                  </div>
 
-                 <div className="flex-grow p-4 flex flex-col md:flex-row gap-4 min-h-[180px]">
-                    {/* Left: Insight List */}
-                    <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[200px] pr-1">
+                 <div className="flex-grow p-4 min-h-[180px] flex flex-col justify-center">
                     {aiInsights ? (
-                        <>
-                             {aiInsights.restock.length > 0 && (
-                                <div className="space-y-1">
-                                    <p className="font-bold text-red-600 dark:text-red-400 text-xs uppercase tracking-wide">⚠️ Reabastecer</p>
-                                    {aiInsights.restock.slice(0, 2).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
-                                        </button>
-                                    ))}
+                        <div className="animate-fade-in">
+                            {activeInsightTab === 'combos' && (
+                                <div className="flex flex-col md:flex-row gap-6 items-center">
+                                    <div className="flex-1 space-y-2 w-full">
+                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Productos comprados juntos frecuentemente:</p>
+                                        {aiInsights.combos.length > 0 ? aiInsights.combos.map((combo, idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
+                                                <span className="text-xs font-bold text-gray-800 dark:text-white truncate">{combo.name}</span>
+                                                <span className="text-xs px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold">{combo.count} veces</span>
+                                            </div>
+                                        )) : <p className="text-xs text-gray-400 italic">No hay suficientes datos de combos aún.</p>}
+                                    </div>
+                                    <div className="md:w-1/3 bg-accent/5 p-3 rounded-lg border border-accent/10">
+                                        <h4 className="text-xs font-bold text-accent mb-1">💡 Estrategia de Venta</h4>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                            Crea una promoción de "Lleva el segundo con 10% de descuento" con estos pares o instrúye a los vendedores para sugerirlos en el probador.
+                                        </p>
+                                    </div>
                                 </div>
-                             )}
-                             {aiInsights.trending.length > 0 && (
-                                <div className="space-y-1">
-                                    <p className="font-bold text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">🔥 Tendencia</p>
-                                    {aiInsights.trending.slice(0, 3).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
-                                        </button>
-                                    ))}
+                            )}
+
+                            {activeInsightTab === 'churn' && (
+                                <div className="flex flex-col md:flex-row gap-6 items-center">
+                                     <div className="flex-1 space-y-2 w-full">
+                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Clientes VIP en riesgo (sin compra > 45 días):</p>
+                                        {aiInsights.churn.length > 0 ? aiInsights.churn.map((customer, idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/10 rounded border border-red-100 dark:border-red-900/30">
+                                                <div>
+                                                    <p className="text-xs font-bold text-gray-800 dark:text-white">{customer.name}</p>
+                                                    <p className="text-[10px] text-gray-500">Gastado: {formatCOP(customer.totalSpent)}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-xs font-bold text-red-500 block">{customer.daysSince} días</span>
+                                                    <span className="text-[10px] text-gray-400">{customer.phone}</span>
+                                                </div>
+                                            </div>
+                                        )) : <p className="text-xs text-gray-400 italic">¡Excelente! No hay clientes VIP en riesgo de fuga reciente.</p>}
+                                    </div>
+                                    <div className="md:w-1/3 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                                        <h4 className="text-xs font-bold text-blue-500 mb-1">📢 Acción Recomendada</h4>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                                            Estos clientes solían comprar mucho. Envíales un mensaje personalizado por WhatsApp con una novedad exclusiva para reactivarlos.
+                                        </p>
+                                    </div>
                                 </div>
-                             )}
-                             {aiInsights.stagnant.length > 0 && (
-                                 <div className="space-y-1">
-                                     <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado</p>
-                                     {aiInsights.stagnant.slice(0, 2).map((item) => (
-                                        <button 
-                                            key={item.id}
-                                            onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                        >
-                                            <span className="truncate font-medium">{item.name}</span>
-                                            <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
+                            )}
+
+                            {activeInsightTab === 'hours' && (
+                                <div className="flex flex-col items-center text-center p-4">
+                                    <div className="mb-4">
+                                        <span className="text-4xl font-extrabold text-yellow-500 block mb-1">{aiInsights.hours.peak}</span>
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Es tu "Hora Dorada" de ventas</span>
+                                    </div>
+                                    <div className="w-full h-16 flex items-end gap-1 justify-center max-w-md">
+                                        {aiInsights.hours.data.map((val, i) => (
+                                            <div key={i} className={`flex-1 rounded-t-sm transition-all ${i >= parseInt(aiInsights.hours.peak) && i <= parseInt(aiInsights.hours.peak) ? 'bg-yellow-400' : 'bg-gray-200 dark:bg-gray-700'}`} style={{ height: `${(val / (Math.max(...aiInsights.hours.data) || 1)) * 100}%` }} title={`${i}:00 - ${val} ventas`}></div>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-4 max-w-md">
+                                        Asegúrate de tener el personal completo y la mejor música durante este horario. Evita hacer inventarios o descansos en este pico.
+                                    </p>
+                                </div>
+                            )}
+
+                            {activeInsightTab === 'profit' && (
+                                <div className="space-y-3">
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Tus productos "Estrella" (Alto Volumen + Alto Margen):</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {aiInsights.profit.stars.length > 0 ? aiInsights.profit.stars.map((p, i) => (
+                                            <div key={i} className="bg-green-50 dark:bg-green-900/10 p-3 rounded-lg border border-green-200 dark:border-green-800 flex flex-col justify-between">
+                                                <div>
+                                                    <p className="font-bold text-xs text-green-700 dark:text-green-400 mb-1">#{i+1} {p.name}</p>
+                                                    <p className="text-[10px] text-gray-500">Ganancia Total: {formatCOP(p.profit)}</p>
+                                                </div>
+                                                <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800/50">
+                                                    <p className="text-[10px] font-bold text-gray-600 dark:text-gray-400">Stock: {p.stock}</p>
+                                                </div>
+                                            </div>
+                                        )) : <p className="col-span-3 text-xs text-center text-gray-400">No hay suficientes datos para identificar estrellas claras aún.</p>}
+                                    </div>
+                                    {aiInsights.profit.stars.some(p => p.stock < 5) && (
+                                        <div className="flex items-center gap-2 p-2 bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-md font-bold">
+                                            <AlertTriangleIcon className="w-4 h-4" />
+                                            <span>¡Atención! Algunas de tus estrellas tienen stock bajo. Prioriza su reposición.</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeInsightTab === 'transfer' && (
+                                <div className="flex flex-col md:flex-row gap-6">
+                                    <div className="flex-1 space-y-2 w-full">
+                                        <p className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-2">Estancados locales (Stock alto, 0 ventas recientes):</p>
+                                        {aiInsights.transfers.length > 0 ? aiInsights.transfers.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-900/10 rounded border border-purple-100 dark:border-purple-900/30">
+                                                <div>
+                                                    <p className="text-xs font-bold text-gray-800 dark:text-white">{item.name}</p>
+                                                    <p className="text-[10px] text-gray-500">Capital quieto: {formatCOP(item.cost)}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-xs font-bold text-purple-500 block">{item.stock} uds</span>
+                                                </div>
+                                            </div>
+                                        )) : <p className="text-xs text-gray-400 italic">Tu inventario está rotando bien, no hay candidatos urgentes para traslado.</p>}
+                                    </div>
+                                     <div className="md:w-1/3 bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-900/30 flex flex-col justify-center">
+                                        <h4 className="text-xs font-bold text-purple-500 mb-1">🔄 Oportunidad de Rotación</h4>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mb-3">
+                                            Estos productos no se están moviendo en esta tienda. Muévelos a otra sucursal para darles una segunda oportunidad de venta y liberar espacio.
+                                        </p>
+                                        <button onClick={() => onNavigate(View.INVENTORY_TRANSFER)} className="w-full bg-purple-500 text-white py-1.5 rounded-md text-xs font-bold hover:bg-purple-600 transition-colors">
+                                            Iniciar Traslado
                                         </button>
-                                    ))}
-                                 </div>
-                             )}
-                        </>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <div className="flex items-center justify-center h-full">
-                            <p className="text-xs text-gray-400">Cargando análisis...</p>
+                            <p className="text-xs text-gray-400">Cargando motor de análisis...</p>
                         </div>
                     )}
-                    </div>
-
-                    {/* Right: Context Panel */}
-                    <div className="md:w-1/2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
-                         {!activeInsightId ? (
-                             <div className="text-center text-gray-400 text-xs">
-                                 <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                                 <p>Selecciona un ítem para ver el análisis detallado.</p>
-                             </div>
-                         ) : (
-                             (() => {
-                                 const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
-                                 const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
-                                 const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
-                                 
-                                 if (trendingItem) {
-                                     return (
-                                         <div className="animate-fade-in text-sm">
-                                             <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
-                                             <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
-                                             <div className="bg-white dark:bg-gray-800 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
-                                                 <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
-                                             </div>
-                                         </div>
-                                     );
-                                 }
-                                 if (restockItem) {
-                                     return (
-                                        <div className="animate-fade-in text-sm">
-                                            <h4 className="font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Stock Crítico</h4>
-                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
-                                                Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
-                                            </p>
-                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
-                                                <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
-                                            </div>
-                                        </div>
-                                     );
-                                 }
-                                 if (stagnantItem) {
-                                     return (
-                                        <div className="animate-fade-in text-sm">
-                                            <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
-                                            <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
-                                                Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
-                                            </p>
-                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
-                                                <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
-                                            </div>
-                                        </div>
-                                     );
-                                 }
-                                 return null;
-                             })()
-                         )}
-                    </div>
                  </div>
              </div>
         </div>
