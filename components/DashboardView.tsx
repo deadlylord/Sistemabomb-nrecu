@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
@@ -191,7 +190,7 @@ const toYYYYMMDD = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const DashboardView: React.FC<DashboardViewProps> = (props) => {
+export const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, purchases, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale
@@ -1142,7 +1141,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 </div>
             </div>
         </div>
-      </div>
 
       {/* Advanced AI Insights Panel (Full Width) */}
       <div className={`bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex flex-col relative overflow-hidden transition-all duration-500 ${isAIExpanded ? 'h-auto' : 'h-auto'}`}>
@@ -1573,7 +1571,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
                             return (<React.Fragment key={transaction.id}>
                                 <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
-                                <td className="p-3 font-mono text-accent"><div className="flex items-center space-x-2"><ChevronDownIcon className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{ (transaction.layawayId || transaction.transactionType === 'layaway') && (<span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/80 text-white">ABONO</span>)}</div></td>
+                                <td className="p-3 font-mono text-accent"><div className="flex items-center space-x-2"><ChevronDownIcon className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{ (('layawayId' in transaction && transaction.layawayId) || transaction.transactionType === 'layaway') && (<span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/80 text-white">ABONO</span>)}</div></td>
                                 <td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString()}</td>
                                 <td className="p-3"><div>{transaction.customerName}</div><div className="text-xs text-gray-500 dark:text-text-dark">{transaction.customerPhone}</div></td>
                                 <td className="p-3 text-center">{itemsArray.reduce((acc, item) => acc + (item?.quantity || 0), 0)}</td>
@@ -1583,7 +1581,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <td className="p-3">{transaction.seller}</td>
                                 <td className="p-3 text-center"><div className="flex justify-center items-center space-x-1">
                                     <button onClick={(e) => { e.stopPropagation(); if(transaction.transactionType === 'sale') onReprintSale(transaction as Sale); }} disabled={transaction.transactionType !== 'sale'} className="text-gray-500 dark:text-text-dark hover:text-blue-500 p-2 rounded-full hover:bg-blue-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={transaction.transactionType === 'sale' ? 'Reimprimir Factura' : 'No se puede reimprimir un abono desde aquí'}><PrintIcon className="w-5 h-5" /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={transaction.layawayId || transaction.transactionType === 'layaway' ? "Editar desde la pestaña Abonos" : "Editar Venta"} disabled={!!transaction.layawayId || transaction.transactionType === 'layaway'}><EditIcon className="w-5 h-5" /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={('layawayId' in transaction && transaction.layawayId) || transaction.transactionType === 'layaway' ? "Editar desde la pestaña Abonos" : "Editar Venta"} disabled={!!('layawayId' in transaction && transaction.layawayId) || transaction.transactionType === 'layaway'}><EditIcon className="w-5 h-5" /></button>
                                     {isAdmin && (<button onClick={(e) => { e.stopPropagation(); if(transaction.transactionType === 'sale') onDeleteSale(transaction.id); }} disabled={transaction.transactionType !== 'sale'} className="text-gray-500 dark:text-text-dark hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={transaction.transactionType !== 'sale' ? 'Eliminar desde la pestaña Abonos' : 'Eliminar Venta'}><TrashIcon className="w-5 h-5" /></button>)}
                                 </div></td>
                             </tr>
