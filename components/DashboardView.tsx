@@ -977,12 +977,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     {/* Incidents Notification */}
                     <button 
                         onClick={() => onNavigate(View.INCIDENTS)}
-                        className="relative p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        className={`relative p-2 rounded-full transition-colors ${isAdmin && pendingIncidentsAcrossStores.length > 0 ? 'text-red-500 animate-pulse hover:bg-red-50 dark:hover:bg-red-900/20' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                         title="Novedades Pendientes"
                     >
                         <AlertTriangleIcon className="w-5 h-5" />
                         {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
-                            <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
+                            <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full border border-white dark:border-gray-900">
                                 {pendingIncidentsAcrossStores.length}
                             </span>
                         )}
@@ -991,12 +991,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     {/* Layaways Notification */}
                     <button 
                         onClick={() => onNavigate(View.LAYAWAY)}
-                        className="relative p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                        className={`relative p-2 rounded-full transition-colors ${pendingPreOrdersAcrossStores.length > 0 ? 'text-yellow-500 animate-pulse hover:bg-yellow-50 dark:hover:bg-yellow-900/20' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                         title="Abonos por Entregar"
                     >
                         <TruckIcon className="w-5 h-5" />
                         {pendingPreOrdersAcrossStores.length > 0 && (
-                             <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
+                             <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full border border-white dark:border-gray-900">
                                 {pendingPreOrdersAcrossStores.length}
                             </span>
                         )}
@@ -1012,7 +1012,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                  {/* Decorative Gradient Border */}
                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
                  
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                 <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                      <div className="flex items-center gap-2">
                          <SparklesIcon className="w-5 h-5 text-accent" />
                          <div>
@@ -1023,9 +1023,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                      <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span>
                  </div>
 
-                 <div className="flex-grow p-4 flex flex-col md:flex-row gap-4 min-h-[180px]">
+                 <div className="flex-grow p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
                     {/* Left: Insight List */}
-                    <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[200px] pr-1">
+                    <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[150px] pr-1">
                     {aiInsights ? (
                         <>
                              {aiInsights.restock.length > 0 && (
@@ -1035,7 +1035,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         <button 
                                             key={item.id}
                                             onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                         >
                                             <span className="truncate font-medium">{item.name}</span>
                                             <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
@@ -1050,7 +1050,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         <button 
                                             key={item.id}
                                             onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                         >
                                             <span className="truncate font-medium">{item.name}</span>
                                             <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
@@ -1065,7 +1065,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         <button 
                                             key={item.id}
                                             onClick={() => setActiveInsightId(item.id)}
-                                            className={`w-full text-left p-2 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                         >
                                             <span className="truncate font-medium">{item.name}</span>
                                             <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
