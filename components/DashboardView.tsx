@@ -222,6 +222,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   
   // AI Insights Interaction State
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
+  const [isAIExpanded, setIsAIExpanded] = useState(true);
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -1007,23 +1008,34 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       </div>
 
       {/* AI Insights Widget (Full Width) */}
-      <div className="w-full">
-             <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
+      <div className="w-full transition-all duration-300 ease-in-out">
+             <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden relative">
                  {/* Decorative Gradient Border */}
-                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
+                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
                  
-                 <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                 <div 
+                    onClick={() => setIsAIExpanded(!isAIExpanded)}
+                    className="p-2 px-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between items-center"
+                 >
                      <div className="flex items-center gap-2">
-                         <SparklesIcon className="w-5 h-5 text-accent" />
-                         <div>
-                            <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI: Insights</h3>
-                            {aiInsights && <p className="text-xs text-gray-500 dark:text-gray-400">Analizando: {aiInsights.period}</p>}
-                         </div>
+                         <SparklesIcon className="w-4 h-4 text-accent" />
+                         <h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI <span className="hidden sm:inline text-gray-400 font-normal">- Insights</span></h3>
                      </div>
-                     <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span>
+                     <div className="flex items-center gap-3">
+                        {aiInsights && !isAIExpanded && (
+                            <span className="text-[10px] text-gray-400 animate-fade-in">
+                                {aiInsights.period}
+                            </span>
+                        )}
+                         <span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span>
+                         <button className="text-gray-400 hover:text-accent transition-colors">
+                            <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isAIExpanded ? 'rotate-180' : ''}`} />
+                         </button>
+                     </div>
                  </div>
 
-                 <div className="flex-grow p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
+                 {isAIExpanded && (
+                 <div className="flex-grow p-3 flex flex-col md:flex-row gap-3 min-h-[120px] border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
                     {/* Left: Insight List */}
                     <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[150px] pr-1">
                     {aiInsights ? (
@@ -1082,7 +1094,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     </div>
 
                     {/* Right: Context Panel */}
-                    <div className="md:w-1/2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
+                    <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
                          {!activeInsightId ? (
                              <div className="text-center text-gray-400 text-xs">
                                  <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
@@ -1099,7 +1111,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                          <div className="animate-fade-in text-sm">
                                              <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
                                              <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
-                                             <div className="bg-white dark:bg-gray-800 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
+                                             <div className="bg-green-50 dark:bg-green-900/10 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
                                                  <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
                                              </div>
                                          </div>
@@ -1113,7 +1125,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                 Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
                                                 Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
                                             </p>
-                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
+                                            <div className="bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
                                                 <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
                                             </div>
                                         </div>
@@ -1127,7 +1139,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                 Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
                                                 Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
                                             </p>
-                                            <div className="bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
+                                            <div className="bg-gray-50 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
                                                 <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
                                             </div>
                                         </div>
@@ -1138,6 +1150,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                          )}
                     </div>
                  </div>
+                 )}
              </div>
       </div>
       
