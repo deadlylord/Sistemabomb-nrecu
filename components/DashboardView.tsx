@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -223,7 +223,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   // AI Insights Interaction State
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
-  const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast'>('insights');
+  const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients'>('insights');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -268,7 +268,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       period: periodLabel,
       trending: [] as { id: string, name: string, quantity: number, context: string }[],
       restock: [] as { id: string, name: string, stock: number, velocity: number, daysLeft: number }[],
-      stagnant: [] as { id: string, name: string, stock: number, value: number }[]
+      stagnant: [] as { id: string, name: string, stock: number, cost: number, price: number, suggestedPrice: number, discount: number }[],
+      atRisk: [] as { id: string, name: string, stock: number, soldQty: number, cost: number, price: number, suggestedPrice: number, discount: number }[]
     };
 
     inventory.forEach(p => {
@@ -277,7 +278,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       
       // Trending: Sold > 3 units in last 30 days
       if (soldQty >= 3) {
-        const percentageOfTotal = sales.length > 0 ? ((soldQty / sales.length) * 100).toFixed(1) : '0';
         insights.trending.push({ 
             id: p.id, 
             name: p.name, 
@@ -299,21 +299,56 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         });
       }
 
-      // Stagnant: High stock (> 8) but 0 sales
-      if (p.stock >= 8 && soldQty === 0) {
+      // Stagnant: High stock (> 4) but 0 sales
+      if (p.stock >= 5 && soldQty === 0) {
+        // Strategy: Aggressive Discount (~25%) but not below cost
+        const idealDiscount = 0.25; 
+        let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
+        // Ensure we don't go below cost. Floor at Cost.
+        if (suggestedPrice < p.cost) suggestedPrice = p.cost; 
+        
+        const actualDiscount = Math.round(((p.price - suggestedPrice) / p.price) * 100);
+
         insights.stagnant.push({ 
             id: p.id, 
             name: p.name, 
             stock: p.stock, 
-            value: p.stock * p.cost
+            cost: p.cost,
+            price: p.price,
+            suggestedPrice,
+            discount: actualDiscount
         });
+      }
+
+      // At Risk: High stock (> 4) and low sales (1-2 units)
+      if (p.stock >= 5 && soldQty > 0 && soldQty <= 2) {
+         // Strategy: Moderate Discount (~15%)
+         const idealDiscount = 0.15;
+         let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
+         // Ensure we keep some margin above cost (e.g. Cost + 10% minimum if possible)
+         const minPrice = p.cost * 1.1;
+         if (suggestedPrice < minPrice) suggestedPrice = Math.max(minPrice, p.cost); // Fallback to cost if margin is too thin
+
+         const actualDiscount = Math.round(((p.price - suggestedPrice) / p.price) * 100);
+
+         insights.atRisk.push({
+            id: p.id,
+            name: p.name,
+            stock: p.stock,
+            soldQty,
+            cost: p.cost,
+            price: p.price,
+            suggestedPrice,
+            discount: actualDiscount
+         });
       }
     });
 
     // Sort
     insights.trending.sort((a, b) => b.quantity - a.quantity);
     insights.restock.sort((a, b) => a.daysLeft - b.daysLeft);
-    insights.stagnant.sort((a, b) => b.stock - a.stock);
+    insights.stagnant.sort((a, b) => b.stock - a.stock); // Highest stock first
+    insights.atRisk.sort((a, b) => b.stock - a.stock);
 
     return insights;
   }, [sales, inventory]);
@@ -760,24 +795,48 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const daysRemaining = totalDaysInMonth - currentDay;
         const monthProgress = (currentDay / totalDaysInMonth) * 100;
 
-        // Calculate total sales for the CURRENT MONTH (independent of date picker filters)
+        // Define Current Month Boundaries strictly
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         
-        const salesThisMonth = sales.filter(s => {
-            const d = new Date(s.createdAt);
-            return d >= startOfMonth && d <= endOfMonth && !s.layawayId;
-        }).reduce((sum, s) => sum + s.totalAmount, 0);
+        // Calculate TOTAL PAYMENTS received this month (Cash Basis)
+        // This aligns with the "Income" report logic but strictly for current month dates.
         
-        const layawaysThisMonth = layaways.filter(l => {
-             const d = new Date(l.createdAt);
-             return l.status !== 'pre-order' && d >= startOfMonth && d <= endOfMonth;
-        }).reduce((sum, l) => sum + l.paidAmount, 0); // Approximate using paidAmount for cash flow
-        
-        const currentMonthTotal = salesThisMonth + layawaysThisMonth;
+        let totalPaymentsThisMonth = 0;
+
+        // 1. Payments from Sales
+        sales.forEach(sale => {
+            const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
+            if (payments) {
+                payments.forEach(p => {
+                    const paymentDate = new Date(p.date);
+                    if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) {
+                        totalPaymentsThisMonth += Number(p.amount);
+                    }
+                });
+            } else if (sale.paymentMethod && !sale.layawayId) { // Legacy sales without payments array
+                 const saleDate = new Date(sale.createdAt);
+                 if (saleDate >= startOfMonth && saleDate <= endOfMonth) {
+                     totalPaymentsThisMonth += sale.totalAmount;
+                 }
+            }
+        });
+
+        // 2. Payments from Layaways
+        layaways.forEach(layaway => {
+             const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
+             if (payments) {
+                 payments.forEach(p => {
+                     const paymentDate = new Date(p.date);
+                     if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) {
+                         totalPaymentsThisMonth += Number(p.amount);
+                     }
+                 });
+             }
+        });
         
         // Simple Projection: (Current / DaysPassed) * TotalDays
-        const dailyAverage = currentDay > 0 ? currentMonthTotal / currentDay : 0;
+        const dailyAverage = currentDay > 0 ? totalPaymentsThisMonth / currentDay : 0;
         const projectedTotal = dailyAverage * totalDaysInMonth;
 
         // Strategies based on time of month
@@ -804,7 +863,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         }
 
         return {
-            currentTotal: currentMonthTotal,
+            currentTotal: totalPaymentsThisMonth,
             projectedTotal,
             dailyAverage,
             monthProgress,
@@ -812,6 +871,99 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             strategies
         };
     }, [sales, layaways]);
+
+    // --- Customer Churn Analysis Logic ---
+    const churnAnalysis = useMemo(() => {
+        const today = new Date();
+        const customerMap = new Map<string, {
+            name: string;
+            phone: string;
+            lastPurchaseDate: Date;
+            totalSpent: number;
+            purchaseCount: number;
+            paymentMethods: Record<string, number>;
+        }>();
+
+        // Helper to process transactions
+        const processTransaction = (customerName: string, customerPhone: string, date: string, amount: number, payments?: Payment[], paymentMethod?: string) => {
+            if (!customerName || customerName === 'Cliente Mostrador' || !customerPhone || customerPhone.length < 10) return;
+            
+            const key = `${customerName.toLowerCase()}-${customerPhone}`;
+            const existing = customerMap.get(key);
+            const transactionDate = new Date(date);
+
+            // Determine payment methods used in this transaction
+            const methodsUsed: string[] = [];
+            if (payments) {
+                payments.forEach(p => methodsUsed.push(p.method));
+            } else if (paymentMethod) {
+                methodsUsed.push(paymentMethod);
+            }
+
+            if (existing) {
+                existing.lastPurchaseDate = transactionDate > existing.lastPurchaseDate ? transactionDate : existing.lastPurchaseDate;
+                existing.totalSpent += amount;
+                existing.purchaseCount += 1;
+                methodsUsed.forEach(m => {
+                    existing.paymentMethods[m] = (existing.paymentMethods[m] || 0) + 1;
+                });
+            } else {
+                const initialMethods: Record<string, number> = {};
+                methodsUsed.forEach(m => initialMethods[m] = 1);
+                customerMap.set(key, {
+                    name: customerName,
+                    phone: customerPhone,
+                    lastPurchaseDate: transactionDate,
+                    totalSpent: amount,
+                    purchaseCount: 1,
+                    paymentMethods: initialMethods
+                });
+            }
+        };
+
+        // Process Sales
+        sales.forEach(sale => {
+            if (!sale.layawayId) { // Only count direct sales or it might double count with layaways logic depending on how you structure it, but usually layaways are separate
+                 processTransaction(sale.customerName, sale.customerPhone, sale.createdAt, sale.totalAmount, sale.payments, sale.paymentMethod);
+            }
+        });
+
+        // Process Layaways (Completed only to ensure it was a real purchase)
+        layaways.forEach(layaway => {
+            if (layaway.status === 'completed') {
+                processTransaction(layaway.customerName, layaway.customerPhone, layaway.createdAt, layaway.totalAmount, layaway.payments);
+            }
+        });
+
+        const churnedCustomers = Array.from(customerMap.values())
+            .filter(c => {
+                const daysSinceLastPurchase = (today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24);
+                // Criteria: Last purchase > 45 days ago AND has bought at least twice (loyal customer at risk)
+                return daysSinceLastPurchase > 45 && c.purchaseCount > 1;
+            })
+            .map(c => {
+                // Find preferred payment method
+                let preferredMethod = 'Desconocido';
+                let maxCount = 0;
+                Object.entries(c.paymentMethods).forEach(([method, count]) => {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        preferredMethod = method;
+                    }
+                });
+
+                return {
+                    ...c,
+                    daysSince: Math.floor((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)),
+                    preferredMethod
+                };
+            })
+            .sort((a, b) => b.totalSpent - a.totalSpent) // Sort by value (high value customers first)
+            .slice(0, 20); // Top 20 at risk
+
+        return churnedCustomers;
+    }, [sales, layaways]);
+
 
     // --- START: Sales History Section Logic ---
     const managedSales = useMemo(() => {
@@ -1114,6 +1266,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             <ChartBarIcon className="w-3 h-3" />
                             Proyección de Cierre
                         </button>
+                        <button
+                            onClick={() => setActiveAITab('clients')}
+                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        >
+                            <UsersIcon className="w-3 h-3" />
+                            Retención & Fuga
+                        </button>
                     </div>
 
                     <div className="p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
@@ -1154,9 +1313,24 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                             ))}
                                         </div>
                                     )}
+                                    {aiInsights.atRisk.length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="font-bold text-orange-500 dark:text-orange-400 text-xs uppercase tracking-wide">⚠️ En Riesgo (Lento)</p>
+                                            {aiInsights.atRisk.slice(0, 3).map((item) => (
+                                                <button 
+                                                    key={item.id}
+                                                    onClick={() => setActiveInsightId(item.id)}
+                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                                >
+                                                    <span className="truncate font-medium">{item.name}</span>
+                                                    <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                     {aiInsights.stagnant.length > 0 && (
                                         <div className="space-y-1">
-                                            <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado</p>
+                                            <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado (Hueso)</p>
                                             {aiInsights.stagnant.slice(0, 2).map((item) => (
                                                 <button 
                                                     key={item.id}
@@ -1189,6 +1363,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
                                         const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
                                         const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
+                                        const atRiskItem = aiInsights?.atRisk.find(i => i.id === activeInsightId);
                                         
                                         if (trendingItem) {
                                             return (
@@ -1215,16 +1390,42 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                 </div>
                                             );
                                         }
+                                        if (atRiskItem) {
+                                            return (
+                                                <div className="animate-fade-in text-sm">
+                                                    <h4 className="font-bold text-orange-500 dark:text-orange-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Rotación Lenta</h4>
+                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
+                                                        Solo <strong>{atRiskItem.soldQty}</strong> ventas recientes con stock alto ({atRiskItem.stock}).
+                                                    </p>
+                                                    <div className="bg-orange-50 dark:bg-orange-900/10 p-2 rounded border border-orange-100 dark:border-orange-900/30 text-xs space-y-1">
+                                                        <p className="font-bold border-b border-orange-200 dark:border-orange-800 pb-1 mb-1">Estrategia: Descuento Moderado</p>
+                                                        <div className="flex justify-between text-[10px] text-gray-500">
+                                                            <span>Costo: {formatCOP(atRiskItem.cost)}</span>
+                                                            <span>Actual: {formatCOP(atRiskItem.price)}</span>
+                                                        </div>
+                                                        <div className="mt-1 font-bold text-accent">
+                                                            Sugerido: {formatCOP(atRiskItem.suggestedPrice)} <span className="text-orange-600 text-[10px]">(-{atRiskItem.discount}%)</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
                                         if (stagnantItem) {
                                             return (
                                                 <div className="animate-fade-in text-sm">
                                                     <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
                                                     <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                        Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento en 30 días. 
-                                                        Representa <strong>{formatCOP(stagnantItem.value)}</strong> en costo de inventario quieto.
+                                                        Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento.
                                                     </p>
-                                                    <div className="bg-gray-50 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs">
-                                                        <strong>Sugerencia:</strong> Considera una promoción o exhibirlo en una zona más visible.
+                                                    <div className="bg-gray-100 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-600 text-xs space-y-1">
+                                                        <p className="font-bold border-b border-gray-300 dark:border-gray-600 pb-1 mb-1">Estrategia: Liquidación</p>
+                                                        <div className="flex justify-between text-[10px] text-gray-500">
+                                                            <span>Costo: {formatCOP(stagnantItem.cost)}</span>
+                                                            <span>Actual: {formatCOP(stagnantItem.price)}</span>
+                                                        </div>
+                                                        <div className="mt-1 font-bold text-red-500">
+                                                            Sugerido: {formatCOP(stagnantItem.suggestedPrice)} <span className="text-gray-500 text-[10px]">(-{stagnantItem.discount}%)</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1234,7 +1435,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 )}
                             </div>
                         </>
-                    ) : (
+                    ) : activeAITab === 'forecast' ? (
                         // Forecast Tab Content
                         <div className="w-full flex flex-col md:flex-row gap-4 animate-fade-in">
                             {/* Left: Stats & Progress */}
@@ -1243,7 +1444,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Proyección de Cierre</h4>
                                     <p className="text-2xl font-extrabold text-accent">{formatCOP(forecastAnalysis.projectedTotal)}</p>
                                     <div className="mt-2 text-xs text-gray-500 flex justify-between">
-                                        <span>Actual: {formatCOP(forecastAnalysis.currentTotal)}</span>
+                                        <span>Actual (Pagos): {formatCOP(forecastAnalysis.currentTotal)}</span>
                                         <span>Prom. Diario: {formatCOP(forecastAnalysis.dailyAverage)}</span>
                                     </div>
                                 </div>
@@ -1279,6 +1480,46 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        </div>
+                    ) : (
+                        // Client Churn Tab Content
+                        <div className="w-full animate-fade-in">
+                            <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 flex items-center gap-2 mb-3">
+                                <UsersIcon className="w-4 h-4 text-red-500" />
+                                Clientes en Riesgo de Fuga (últimos 45+ días sin compra)
+                            </h4>
+                            <div className="max-h-[200px] overflow-y-auto pr-2">
+                                {churnAnalysis.length > 0 ? (
+                                    churnAnalysis.map((client, index) => (
+                                        <div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border border-l-4 border-gray-100 dark:border-gray-700 border-l-red-500 shadow-sm flex justify-between items-center">
+                                            <div>
+                                                <p className="font-bold text-sm text-gray-800 dark:text-gray-200">{client.name}</p>
+                                                <p className="text-xs text-gray-500">{client.phone}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-gray-600 dark:text-gray-400">
+                                                        {client.purchaseCount} compras
+                                                    </span>
+                                                    <span className="text-[10px] bg-green-50 dark:bg-green-900/20 px-1.5 rounded text-green-600 dark:text-green-400 font-bold">
+                                                        {formatCOP(client.totalSpent)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs font-bold text-red-500">{client.daysSince} días</p>
+                                                <p className="text-[10px] text-gray-400">sin volver</p>
+                                                <p className="text-[10px] text-blue-500 mt-1 font-semibold" title="Medio de pago favorito">
+                                                    Prefiere: {client.preferredMethod}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-32 text-gray-400">
+                                        <SparklesIcon className="w-8 h-8 mb-2 opacity-20" />
+                                        <p className="text-xs">¡Excelente! No se detectan clientes recurrentes en riesgo de fuga reciente.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
