@@ -148,6 +148,7 @@ export enum View {
   CUSTOMERS = 'customers',
   STOCK_TAKE_HISTORY = 'stock_take_history',
   PAYROLL = 'payroll',
+  CHRISTMAS = 'christmas',
   SETTINGS = 'settings',
   INCIDENTS = 'incidents',
   ROLE_MANAGER = 'role_manager',

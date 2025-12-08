@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Seller, Store, Role } from '../types';
-import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon } from './Icons';
+import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon, SparklesIcon } from './Icons';
 
 interface HeaderProps {
   currentView: View;
@@ -30,6 +30,7 @@ const navItems = [
     { view: View.CUSTOMERS, label: 'Clientes', icon: ContactIcon },
     { view: View.INCIDENTS, label: 'Novedades', icon: AlertTriangleIcon },
     { view: View.PAYROLL, label: 'Nómina', icon: DollarIcon },
+    { view: View.CHRISTMAS, label: 'Navidad', icon: SparklesIcon },
     { view: View.STOCK_TAKE_HISTORY, label: 'Historial Conteos', icon: ClipboardListIcon },
     { view: View.ROLE_MANAGER, label: 'Gestionar Roles', icon: ShieldCheckIcon },
     { view: View.SETTINGS, label: 'Ajustes', icon: SettingsIcon },

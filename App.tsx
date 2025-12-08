@@ -43,6 +43,7 @@ import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, I
 import ReceiptModal from './components/ReceiptModal';
 import RecaudoReceiptModal from './components/RecaudoReceiptModal';
 import DashboardView from './components/DashboardView';
+import ChristmasCommissionsView from './components/ChristmasCommissionsView'; // New Import
 import { reuploadImageFromUrl, uploadImageAndGetURL } from './services/storageService';
 
 const hexToRgb = (hex: string) => {
@@ -378,6 +379,12 @@ const App: React.FC = () => {
         case View.PAYROLL:
             fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
             fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
+            attach(storeSpecificQuery('sales'), setSales);
+            attach(storeSpecificQuery('layaways'), setLayaways);
+            break;
+        
+        case View.CHRISTMAS:
+            fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('layaways'), setLayaways);
             break;
@@ -2327,6 +2334,7 @@ const App: React.FC = () => {
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={handleDeleteStockTake} onAddNoteToStockTake={handleAddNoteToStockTake} currentUser={currentUser} roles={roles} />}
         {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
+        {currentView === View.CHRISTMAS && <ChristmasCommissionsView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} onSave={handleSaveStoreSettings} onResetStoreData={handleResetStoreData} currentUser={currentUser} roles={roles} onRecompressAllProductImages={handleRecompressAllImages} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={handleGenerateTestData} onReactivateAllProducts={handleReactivateAllProducts} categories={categories} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}

@@ -105,7 +105,8 @@ export const INITIAL_ROLES: Role[] = [
       View.STORES, 
       View.CUSTOMERS, 
       View.STOCK_TAKE_HISTORY, 
-      View.PAYROLL, 
+      View.PAYROLL,
+      View.CHRISTMAS,
       View.SETTINGS, 
       View.INCIDENTS,
       View.ROLE_MANAGER
