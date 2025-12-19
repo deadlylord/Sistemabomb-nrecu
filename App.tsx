@@ -100,7 +100,7 @@ const App: React.FC = () => {
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
   
   // States for UI and session management
-  const [activeCart, setActiveCart] = useState<CartItem[]>([]);
+  const [activeCart, setactiveCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
   const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]); // This might stay global for admins
   const [currentUser, setCurrentUser] = useState<Seller | null>(null);
@@ -878,7 +878,7 @@ const App: React.FC = () => {
     setInventoryTransfers([]);
   
     // Reset UI state
-    setActiveCart([]);
+    setactiveCart([]);
     setHeldCarts([]);
     setVerifiedProducts(new Set());
   
@@ -900,7 +900,7 @@ const App: React.FC = () => {
   };
 
   const handleAddToCart = (product: Product) => {
-    setActiveCart(prevCart => {
+    setactiveCart(prevCart => {
       const existingItem = prevCart.find(item => item.id === product.id);
       if (existingItem) {
         return prevCart.map(item =>
@@ -912,7 +912,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateCartQuantity = (productId: string, newQuantity: number) => {
-    setActiveCart(prevCart => {
+    setactiveCart(prevCart => {
       if (newQuantity <= 0) {
         return prevCart.filter(item => item.id !== productId);
       }
@@ -923,17 +923,17 @@ const App: React.FC = () => {
   };
 
   const handleUpdateCartItemPrice = (productId: string, newPrice: number) => {
-      setActiveCart(prevCart => prevCart.map(item => 
+      setactiveCart(prevCart => prevCart.map(item => 
           item.id === productId ? { ...item, price: newPrice } : item
       ));
   };
   
   const handleRemoveFromCart = (productId: string) => {
-    setActiveCart(prevCart => prevCart.filter(item => item.id !== productId));
+    setactiveCart(prevCart => prevCart.filter(item => item.id !== productId));
   };
 
   const handleClearCart = () => {
-    setActiveCart([]);
+    setactiveCart([]);
   };
   
   const getNextInvoiceNumber = async (storeId: string): Promise<number> => {
@@ -1037,7 +1037,7 @@ const App: React.FC = () => {
   const handleResumeSale = (heldCartId: string) => {
     const heldCart = heldCarts.find(c => c.id === heldCartId);
     if (heldCart) {
-      setActiveCart(heldCart.items);
+      setactiveCart(heldCart.items);
       deleteDoc(doc(db, 'heldCarts', heldCartId));
     }
   };
@@ -1132,8 +1132,25 @@ const App: React.FC = () => {
       paidAmount: increment(amount),
     };
   
-    if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && layaway.status === 'active') {
+    if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && (layaway.status === 'active' || layaway.status === 'pre-order')) {
       updateData.status = 'completed';
+      
+      // TRIGGER RECEIPT ON COMPLETION
+      const completedLayawayAsSale: Sale = {
+          id: layaway.id,
+          invoiceNumber: parseInt(layaway.invoiceNumber) || 0, // Fallback to 0 if parsing fails
+          customerName: layaway.customerName,
+          customerPhone: layaway.customerPhone,
+          items: layaway.items,
+          totalAmount: layaway.totalAmount,
+          payments: [...layaway.payments, newPayment],
+          seller: seller, // The seller finishing the layaway is recorded on the invoice
+          createdAt: new Date().toISOString(), // Use current time for the invoice receipt
+          storeId: layaway.storeId,
+          layawayId: layaway.id
+      };
+      setSaleForReceipt(completedLayawayAsSale);
+      setShowReceiptModal(true);
     }
   
     await updateDoc(layawayRef, updateData);
@@ -2334,7 +2351,17 @@ const App: React.FC = () => {
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={handleDeleteStockTake} onAddNoteToStockTake={handleAddNoteToStockTake} currentUser={currentUser} roles={roles} />}
         {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
-        {currentView === View.CHRISTMAS && <ChristmasCommissionsView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} />}
+        {currentView === View.CHRISTMAS && (
+          <ChristmasCommissionsView 
+            sellers={sellers} 
+            sales={isAdmin && allSales.length > 0 ? allSales : sales} // Attempt to use global data for admins
+            layaways={isAdmin && allLayaways.length > 0 ? allLayaways : layaways} // Attempt to use global data for admins
+            loginHistory={loginHistory} 
+            roles={roles}
+            inventory={isGlobalMode ? globalInventoryForSearch : inventory} // Pass inventory for price comparison
+            stores={stores} // Pass stores for store ranking
+          />
+        )}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} onSave={handleSaveStoreSettings} onResetStoreData={handleResetStoreData} currentUser={currentUser} roles={roles} onRecompressAllProductImages={handleRecompressAllImages} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={handleGenerateTestData} onReactivateAllProducts={handleReactivateAllProducts} categories={categories} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
