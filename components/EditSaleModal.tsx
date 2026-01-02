@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
@@ -228,12 +227,13 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
           </div>
 
           {/* Combined Middle Section: Items and Payments */}
-          <div className="flex-grow flex flex-col lg:flex-row gap-6 min-h-0 border-t-2 border-gray-200 dark:border-gray-700 py-4">
+          {/* On Mobile: overflow-y-auto on wrapper, normal flow inside. On Desktop: overflow hidden on wrapper, auto on children */}
+          <div className="flex-grow flex flex-col lg:flex-row gap-6 border-t-2 border-gray-200 dark:border-gray-700 py-4 overflow-y-auto lg:overflow-hidden lg:min-h-0">
             
             {/* Left side: Items */}
-            <div className="flex-grow lg:w-3/5 flex flex-col min-h-0">
+            <div className="lg:w-3/5 flex flex-col lg:min-h-0">
               <h3 className="text-lg font-bold mb-2 flex-shrink-0">Artículos</h3>
-              <div className="flex-grow overflow-y-auto space-y-3 pr-2 -mr-2">
+              <div className="lg:flex-grow lg:overflow-y-auto space-y-3 pr-2 -mr-2">
                   {items.map(item => (
                       <div key={item.id} className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
                         <div className="flex-1">
@@ -294,9 +294,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
             </div>
 
             {/* Right side: Payments */}
-            <div className="lg:w-2/5 flex flex-col lg:border-l-2 lg:border-gray-200 lg:dark:border-gray-700 lg:pl-6">
+            <div className="lg:w-2/5 flex flex-col lg:border-l-2 lg:border-gray-200 lg:dark:border-gray-700 lg:pl-6 lg:min-h-0">
               <h3 className="text-lg font-bold mb-2 flex-shrink-0">Pagos</h3>
-              <div className="flex-grow overflow-y-auto space-y-4 pr-2 -mr-2">
+              <div className="lg:flex-grow lg:overflow-y-auto space-y-4 pr-2 -mr-2">
                 <div className="space-y-2">
                     {payments.map((p, index) => (
                         <div key={index} className="flex flex-wrap items-center justify-between gap-2 bg-gray-100 dark:bg-gray-800 p-2 rounded-md">
