@@ -1,5 +1,4 @@
 
-
 export enum ProductChangeType {
   SALE = 'Venta',
   RETURN = 'Devolución (Venta Editada)',
@@ -20,6 +19,25 @@ export enum ProductChangeType {
   PRE_ORDER_FULFILLED = 'Abono Recibido (Pre-orden)',
   INCONSISTENCY_FIX = 'Corrección de Inconsistencia',
   DELETED = 'Producto Eliminado',
+}
+
+export interface AuditAdjustment {
+  productId: string;
+  productName: string;
+  supplier: string;
+  systemStock: number;
+  physicalCount: number;
+}
+
+export interface AuditRecord {
+  id: string;
+  storeId: string;
+  sellerName: string;
+  createdAt: string;
+  status: 'pending' | 'applied';
+  adjustments: AuditAdjustment[];
+  appliedAt?: string;
+  appliedBy?: string;
 }
 
 export interface ProductHistoryLog {

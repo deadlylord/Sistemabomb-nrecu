@@ -1,15 +1,16 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
+import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, AuditRecord, AuditAdjustment } from '../types';
 import ProductGrid from './ProductGrid';
 import CartPanel from './CartPanel';
-// FIX: Changed to a named import to resolve module loading issues.
 import { InventoryVerificationModal } from './InventoryVerificationModal';
 import DailySalesReportModal from './DailySalesReportModal';
-import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
+import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon, CheckIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
 import EditProductImageModal from './EditProductImageModal';
 import { formatCOP } from '../constants';
 import EditProductModal from './EditProductModal';
+import GranularAdjustmentModal from './GranularAdjustmentModal';
 
 interface PosViewProps {
   inventory: Product[];
@@ -32,6 +33,9 @@ interface PosViewProps {
   onResumeSale: (heldCartId: string) => void;
   onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>) => void;
+  onConfirmAdjustments: (adjustments: AuditAdjustment[]) => Promise<void>;
+  onApplyAudit: (auditRecord: AuditRecord) => Promise<void>;
+  auditRecords: AuditRecord[];
   dailyNotes: DailyNote[];
   onAddDailyNote: (content: string, seller: string) => void;
   onNavigate: (view: View) => void;
@@ -45,6 +49,7 @@ interface PosViewProps {
   verifiedProducts: Set<string>;
   onToggleProductVerification: (productId: string) => void;
   onClearVerifications: () => void;
+  onVerifyMultiple: (productIds: string[]) => void;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
@@ -53,27 +58,43 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
+  const [isGranularModalOpen, setIsGranularModalOpen] = useState(false);
+  const [isAuditMode, setIsAuditMode] = useState(false);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [editingProductDetails, setEditingProductDetails] = useState<Product | null>(null);
-  // FIX: Corrected constructor call for Date object to resolve constructability error.
   const [saleDate, setSaleDate] = useState(new Date());
   const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
+  const [pendingAuditToReview, setPendingAuditToReview] = useState<AuditRecord | null>(null);
 
-  const { onClearVerifications } = props;
+  const { onClearVerifications, onVerifyMultiple, auditRecords, isAdmin } = props;
 
   useEffect(() => {
-    // Cleanup function that runs when the component unmounts
     return () => {
       onClearVerifications();
     };
   }, [onClearVerifications]);
 
-  const adminRole = useMemo(() => props.roles.find(r => r.name === 'Administrator'), [props.roles]);
-  const isAdmin = useMemo(() => props.currentUser.roleId === adminRole?.id, [props.currentUser, adminRole]);
-  
+  const lastAppliedAudit = useMemo(() => {
+    return [...auditRecords]
+      .filter(a => a.status === 'applied')
+      .sort((a, b) => new Date(b.appliedAt!).getTime() - new Date(a.appliedAt!).getTime())[0];
+  }, [auditRecords]);
+
+  const pendingAuditCount = useMemo(() => {
+    return auditRecords.filter(a => a.status === 'pending').length;
+  }, [auditRecords]);
+
+  const handleOpenPendingAudit = () => {
+    const pending = auditRecords.find(a => a.status === 'pending');
+    if (pending) {
+        setPendingAuditToReview(pending);
+        setIsGranularModalOpen(true);
+    }
+  };
+
   const handleClearTransaction = () => {
     props.onClearCart();
     setCustomerInfo(null);
@@ -106,7 +127,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const newArrivalsInventory = useMemo(() => {
       const sortedPurchases = [...props.purchases].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       const uniqueProductIds = Array.from(new Set(sortedPurchases.map(p => p.productId)));
-      const recentProductIds = uniqueProductIds.slice(0, 24); // Show the last 24 new products
+      const recentProductIds = uniqueProductIds.slice(0, 24);
 
       return recentProductIds.map(id => 
           props.inventory.find(p => p.id === id)
@@ -149,7 +170,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   
   const handleResumeSaleWithClose = (heldCart: HeldCart) => {
     handleResumeSaleTransaction(heldCart);
-    setIsMobileCartOpen(true); // Open the cart to show the resumed sale
+    setIsMobileCartOpen(true);
   };
 
   const handleCreateLayawayWithClose = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
@@ -161,7 +182,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
     props.onAddToCart(product);
     setJustAddedProductId(product.id);
     setIsCartPulsing(true);
-    setSearchTerm(''); // Clear search term on add
+    setSearchTerm('');
 
     setTimeout(() => {
       setJustAddedProductId(null);
@@ -173,7 +194,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return props.layaways.filter(l => l.status === 'pre-order');
   }, [props.layaways]);
 
-  // FIX: Corrected filtering logic for pending incidents to use specific pending statuses instead of the non-existent 'PENDING' status.
   const { pendingApprovals, activeWarranties } = useMemo(() => {
       const approvals = props.incidents.filter(i => 
         i.status === IncidentStatus.DAÑADO_REPORTADO || 
@@ -184,23 +204,16 @@ const PosView: React.FC<PosViewProps> = (props) => {
   }, [props.incidents]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const dateString = e.target.value; // "YYYY-MM-DD" from the input
+    const dateString = e.target.value;
     if (dateString) {
-      // Get the current time components
       const now = new Date();
       const hours = now.getHours();
       const minutes = now.getMinutes();
       const seconds = now.getSeconds();
-
-      // The dateString is treated as local timezone by default when parsed like this
       const [year, month, day] = dateString.split('-').map(Number);
-      
-      // Create a new Date object with the selected date and current time
       const newSaleDate = new Date(year, month - 1, day, hours, minutes, seconds);
-      
       setSaleDate(newSaleDate);
     } else {
-      // If the date input is cleared, reset to the current date and time
       setSaleDate(new Date());
     }
   };
@@ -242,6 +255,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
           return a.name.localeCompare(b.name);
         });
   }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory]);
+
+  const handleSelectCategoryForAudit = () => {
+    if (!selectedCategoryId) return;
+    const productIds = filteredInventory.map(p => p.id);
+    onVerifyMultiple(productIds);
+  };
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
@@ -329,6 +348,66 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 <button onClick={() => setIsSalesReportModalOpen(true)} className="bg-teal-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-teal-600"><ChartBarIcon className="w-4 h-4" /><span className="hidden sm:inline">Reporte</span></button>
             </div>
         </div>
+        
+        {/* Panel de Auditoría Física */}
+        <div className={`p-3 rounded-xl shadow-lg border-2 transition-all duration-300 ${isAuditMode ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-400' : 'bg-white dark:bg-slate-900/75 border-transparent'}`}>
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <ClipboardListIcon className={`w-5 h-5 ${isAuditMode ? 'text-yellow-600 dark:text-yellow-400' : 'text-accent'}`} />
+                    <h3 className={`font-bold text-sm ${isAuditMode ? 'text-yellow-800 dark:text-yellow-300' : 'text-accent'}`}>Auditoría Física</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isAdmin && pendingAuditCount > 0 && (
+                        <button 
+                            onClick={handleOpenPendingAudit}
+                            className="animate-bounce bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md"
+                        >
+                            {pendingAuditCount} Revisión Pendiente
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => {
+                            setIsAuditMode(!isAuditMode);
+                            if(isAuditMode) props.onClearVerifications();
+                        }}
+                        className={`text-xs font-bold px-3 py-1 rounded-full transition-colors ${isAuditMode ? 'bg-yellow-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}
+                    >
+                        {isAuditMode ? 'Desactivar' : 'Activar Modo Revisión'}
+                    </button>
+                </div>
+            </div>
+            {isAuditMode ? (
+                <div className="space-y-3 animate-fade-in">
+                    {lastAppliedAudit && (
+                        <div className="text-[10px] bg-white/50 dark:bg-black/20 p-2 rounded border border-yellow-200 dark:border-yellow-900/30 text-yellow-800 dark:text-yellow-200">
+                           <p><strong>Última auditoría:</strong> {new Date(lastAppliedAudit.appliedAt!).toLocaleString()} por {lastAppliedAudit.appliedBy}</p>
+                        </div>
+                    )}
+                    <p className="text-[10px] text-yellow-700 dark:text-yellow-400 italic">Marca los productos en el catálogo para registrar discrepancias.</p>
+                    {props.verifiedProducts.size > 0 && (
+                        <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center text-xs font-bold">
+                                <span>{props.verifiedProducts.size} seleccionados</span>
+                                <button onClick={props.onClearVerifications} className="text-red-500 hover:underline">Limpiar</button>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setPendingAuditToReview(null);
+                                    setIsGranularModalOpen(true);
+                                }}
+                                className="w-full bg-yellow-600 text-white font-bold py-2 rounded-lg text-sm hover:bg-yellow-700 flex items-center justify-center gap-2 shadow-md"
+                            >
+                                <CheckIcon className="w-4 h-4" />
+                                {isAdmin ? 'Revisar y Ajustar Unidades' : 'Auditoría Realizada'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <p className="text-[10px] text-gray-400 italic text-center py-1">El modo auditoría te permite reportar diferencias de stock.</p>
+            )}
+        </div>
+
         <CartPanel
             cartItems={props.activeCart}
             sellers={props.sellers}
@@ -349,13 +428,11 @@ const PosView: React.FC<PosViewProps> = (props) => {
   );
 
   return (
-    <div 
-        className="p-4 h-full"
-    >
+    <div className="p-4 h-full">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Products */}
         <div className="lg:col-span-7 xl:col-span-8 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
-            <div className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-lg flex flex-col h-full">
+            <div className={`bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border p-3 rounded-xl shadow-lg flex flex-col h-full transition-colors duration-300 ${isAuditMode ? 'border-yellow-400' : 'border-slate-200 dark:border-slate-800'}`}>
                 <div className="flex-shrink-0">
                     <div className="space-y-3 mb-3">
                         <div className="relative w-full">
@@ -396,6 +473,14 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     {cat.name}
                                 </button>
                             ))}
+                            {isAuditMode && selectedCategoryId && (
+                                <button
+                                    onClick={handleSelectCategoryForAudit}
+                                    className="px-3 py-1.5 text-xs font-bold bg-yellow-500 text-white rounded-full hover:bg-yellow-600 shadow-md transition-colors"
+                                >
+                                    Marcar toda la categoría
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -405,7 +490,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                         onAddToCart={handleAddToCartWithAnimation} 
                         onEditImage={setEditingProductImage}
                         onEditProduct={setEditingProductDetails}
-                        isAdmin={isAdmin}
+                        isAdmin={isAdmin || isAuditMode} // Permitir ver controles de auditoría si el modo está activo
                         justAddedProductId={justAddedProductId}
                         verifiedProducts={props.verifiedProducts}
                         onToggleProductVerification={props.onToggleProductVerification}
@@ -423,7 +508,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       </div>
 
       {/* Mobile Floating Cart Bar */}
-      {totalItems > 0 && (
+      {totalItems > 0 && !isMobileCartOpen && (
         <div 
             onClick={() => setIsMobileCartOpen(true)}
             className="lg:hidden fixed bottom-0 left-0 right-0 bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-40 cursor-pointer"
@@ -513,6 +598,21 @@ const PosView: React.FC<PosViewProps> = (props) => {
             product={editingProductDetails}
             categories={props.categories}
             onUpdateProduct={props.onUpdateProduct}
+        />
+      )}
+      {isGranularModalOpen && (
+        <GranularAdjustmentModal 
+          isOpen={isGranularModalOpen}
+          onClose={() => {
+            setIsGranularModalOpen(false);
+            setPendingAuditToReview(null);
+          }}
+          verifiedProductIds={props.verifiedProducts}
+          inventory={props.inventory}
+          onConfirmAdjustments={props.onConfirmAdjustments}
+          onApplyAudit={props.onApplyAudit}
+          pendingAuditRecord={pendingAuditToReview}
+          isAdmin={isAdmin}
         />
       )}
     </div>

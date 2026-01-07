@@ -17,11 +17,10 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditImage, onEditProduct, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent adding to cart if an admin button or the checkbox was clicked
     if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.verification-checkbox-wrapper')) {
       return;
     }
-    if (product.stock > 0) { // Also prevent adding if out of stock
+    if (product.stock > 0) {
         onAddToCart(product);
     }
   };
@@ -41,7 +40,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
     <div
       onClick={handleCardClick}
       onKeyPress={handleKeyPress}
-      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${product.stock > 0 ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
+      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${product.stock > 0 ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''} ${isVerified ? 'ring-2 ring-yellow-400' : ''}`}
       aria-label={`${product.stock > 0 ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
       role="button"
       tabIndex={product.stock > 0 ? 0 : -1}
@@ -78,17 +77,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
             )}
         </div>
         
+        {/* Visible para Admin o cuando se pasa isAdmin como true desde PosView en modo auditoría */}
         {isAdmin && (
             <div
                 onClick={handleCheckboxClick}
                 className="verification-checkbox-wrapper absolute top-1.5 right-1.5 z-20 h-7 w-7 flex items-center justify-center bg-black/30 rounded-full cursor-pointer backdrop-blur-sm group/check"
-                title="Marcar como verificado físicamente"
+                title="Marcar para revisión física"
             >
                 <input
                     type="checkbox"
                     checked={isVerified}
                     readOnly 
-                    className="pointer-events-none h-4 w-4 rounded-full appearance-none border-2 border-white/70 bg-transparent transition-colors group-hover/check:border-white checked:bg-green-500 checked:border-green-500"
+                    className="pointer-events-none h-4 w-4 rounded-full appearance-none border-2 border-white/70 bg-transparent transition-colors group-hover/check:border-white checked:bg-yellow-400 checked:border-yellow-400"
                 />
             </div>
         )}

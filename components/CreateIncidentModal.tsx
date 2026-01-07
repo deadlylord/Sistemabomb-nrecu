@@ -1,7 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Incident, IncidentType, Product, Seller, Sale, Store, Customer, ExchangedItem, CartItem, PaymentMethod, Role } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon, SearchIcon, CrossIcon } from './Icons';
+import { doc, collection, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface CreateIncidentModalProps {
   isOpen: boolean;

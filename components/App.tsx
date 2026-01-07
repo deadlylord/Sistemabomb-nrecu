@@ -22,7 +22,7 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, AuditRecord, AuditAdjustment } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [productHistory, setProductHistory] = useState<ProductHistoryLog[]>([]);
   const [payrollHistory, setPayrollHistory] = useState<PayrollRecord[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   
   // States for global (non-store-specific) data
   const [categories, setCategories] = useState<Category[]>([]);
@@ -123,6 +124,14 @@ const App: React.FC = () => {
         return newSet;
     });
   };
+
+  const handleVerifyMultiple = useCallback((productIds: string[]) => {
+    setVerifiedProducts(prev => {
+        const newSet = new Set(prev);
+        productIds.forEach(id => newSet.add(id));
+        return newSet;
+    });
+  }, []);
 
   const handleClearVerifications = useCallback(() => {
       setVerifiedProducts(new Set());
@@ -287,7 +296,7 @@ const App: React.FC = () => {
 
     setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
     setDailyNotes([]); setLoginHistory([]); setIncidents([]); setProductHistory([]);
-    setPayrollHistory([]); setCustomers([]); setHeldCarts([]);
+    setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setAuditRecords([]);
 
     const storeSpecificQuery = (collectionName: string) => query(collection(db, collectionName), where('storeId', '==', currentStoreId));
     const storeInventoryQuery = storeSpecificQuery('inventory');
@@ -308,6 +317,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('customers'), setCustomers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             attach(storeSpecificQuery('incidents'), setIncidents);
+            attach(storeSpecificQuery('auditRecords'), setAuditRecords);
             break;
         case View.INVENTORY:
             attach(storeInventoryQuery, setInventory);
@@ -733,25 +743,25 @@ const App: React.FC = () => {
         newIncident.adjustmentAmount = surplusPaid;
         newIncident.paymentMethod = surplusPaymentMethod;
 
-        if (surplusPaymentMethod === PaymentMethod.Efectivo) {
-            const adjustmentRef = doc(collection(db, 'incidents'));
-            newIncident.relatedIncidentId = adjustmentRef.id;
-            const adjustmentIncident: Incident = {
-                id: adjustmentRef.id,
-                type: IncidentType.CASH_ADJUSTMENT,
-                status: IncidentStatus.REGISTRADO,
-                description: `Excedente pagado por cambio de factura #${newIncident.originalSaleInvoiceNumber}`,
-                createdAt: createdAt,
-                sellerName: currentUser.name,
-                storeId: currentStoreId,
-                adjustmentAmount: surplusPaid,
-                adjustmentType: 'income',
-                customerName: newIncident.customerName,
-                customerPhone: newIncident.customerPhone,
-                paymentMethod: surplusPaymentMethod,
-            };
-            batch.set(adjustmentRef, adjustmentIncident);
-        }
+        // Se crea el incidente de ajuste secundario para cualquier método de pago
+        const adjustmentRef = doc(collection(db, 'incidents'));
+        newIncident.relatedIncidentId = adjustmentRef.id;
+        const adjustmentIncident: Incident = {
+            id: adjustmentRef.id,
+            type: IncidentType.CASH_ADJUSTMENT,
+            status: IncidentStatus.REGISTRADO,
+            description: `Excedente pagado (${surplusPaymentMethod}) por cambio de factura #${newIncident.originalSaleInvoiceNumber}`,
+            createdAt: createdAt,
+            sellerName: currentUser.name,
+            storeId: currentStoreId,
+            adjustmentAmount: surplusPaid,
+            adjustmentType: 'income',
+            customerName: newIncident.customerName,
+            customerPhone: newIncident.customerPhone,
+            paymentMethod: surplusPaymentMethod,
+        };
+        const adjustmentRefFinal = doc(db, 'incidents', adjustmentRef.id);
+        batch.set(adjustmentRefFinal, adjustmentIncident);
     }
     
     batch.set(newIncidentRef, newIncident);
@@ -883,16 +893,73 @@ const App: React.FC = () => {
       });
   };
 
+  // Fix: Defined handleAddDailyNote to save notes to Firestore
   const handleAddDailyNote = async (content: string, seller: string) => {
-      if (!currentStoreId) return;
+    if (!currentStoreId) return;
+    try {
       const newRef = doc(collection(db, 'dailyNotes'));
-      await setDoc(newRef, {
-          id: newRef.id,
-          content,
-          seller,
-          createdAt: new Date().toISOString(),
-          storeId: currentStoreId
-      });
+      const newNote: DailyNote = {
+        id: newRef.id,
+        createdAt: new Date().toISOString(),
+        content,
+        seller,
+        storeId: currentStoreId
+      };
+      await setDoc(newRef, newNote);
+    } catch (error) {
+      console.error("Error adding daily note:", error);
+      alert("Error al guardar la nota.");
+    }
+  };
+
+  const handleSaveAuditRecord = async (adjustments: AuditAdjustment[]) => {
+    if (!currentStoreId || !currentUser) return;
+    const newRef = doc(collection(db, 'auditRecords'));
+    const newRecord: AuditRecord = {
+      id: newRef.id,
+      storeId: currentStoreId,
+      sellerName: currentUser.name,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      adjustments,
+    };
+    await setDoc(newRef, newRecord);
+    handleClearVerifications();
+    alert("Auditoría enviada para revisión del administrador.");
+  };
+
+  const handleApplyAuditRecord = async (auditRecord: AuditRecord) => {
+    if (!currentUser || !currentStoreId || !isAdmin) return;
+    
+    const batch = writeBatch(db);
+    const timestamp = new Date().toISOString();
+
+    for (const adj of auditRecord.adjustments) {
+      const productRef = doc(db, 'inventory', adj.productId);
+      const product = inventory.find(p => p.id === adj.productId);
+      
+      if (product) {
+        batch.update(productRef, { stock: adj.physicalCount });
+        
+        const log = createProductHistoryLog(
+          product, 
+          auditRecord.sellerName, 
+          ProductChangeType.MANUAL_EDIT, 
+          `Auditoría Física aplicada por ${currentUser.name}: Stock anterior ${product.stock} -> Stock nuevo ${adj.physicalCount}`
+        );
+        batch.set(doc(db, 'productHistory', log.id), log);
+      }
+    }
+
+    const auditRef = doc(db, 'auditRecords', auditRecord.id);
+    batch.update(auditRef, {
+      status: 'applied',
+      appliedAt: timestamp,
+      appliedBy: currentUser.name
+    });
+
+    await batch.commit();
+    alert("Ajustes de inventario realizados con éxito.");
   };
 
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
@@ -1096,8 +1163,8 @@ const App: React.FC = () => {
             inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers}
             activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice}
             onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway}
-            onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident}
-            currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications}
+            onSaveStockTake={handleSaveStockTake} onConfirmAdjustments={handleSaveAuditRecord} onApplyAudit={handleApplyAuditRecord} auditRecords={auditRecords} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident}
+            currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onVerifyMultiple={handleVerifyMultiple}
         />}
         {currentView === View.INVENTORY && <InventoryView 
             inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''}
