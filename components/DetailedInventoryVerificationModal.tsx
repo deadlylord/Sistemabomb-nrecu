@@ -115,8 +115,19 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   const toggleVerified = (productId: string) => {
     setVerifiedIds(prev => {
       const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+        // Cuando se aplica el check, agregamos el valor del sistema a la casilla física automáticamente
+        const product = products.find(p => p.id === productId);
+        if (product) {
+          setLocalCounts(prevCounts => ({
+            ...prevCounts,
+            [productId]: product.stock.toString()
+          }));
+        }
+      }
       return next;
     });
   };
@@ -201,9 +212,18 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
               placeholder="Buscar por producto o marca..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-accent outline-none"
+              className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none"
             />
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            {searchTerm && (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-accent transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <CrossIcon className="w-4 h-4" />
+                </button>
+            )}
           </div>
           <div className="flex gap-2">
              <button onClick={() => setVerifiedIds(new Set())} className="px-3 py-2 text-xs font-bold bg-slate-200 dark:bg-slate-800 rounded-lg hover:bg-slate-300 transition-colors">Limpiar Checkbox</button>
