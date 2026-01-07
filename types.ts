@@ -61,6 +61,7 @@ export interface Store {
   loginBackgroundUrl?: string | null;
   imageCompressionQuality?: 'high' | 'medium' | 'low';
   accentColorsUpdated?: boolean;
+  hideDetailedVerificationForSellers?: boolean;
 }
 
 export interface InventoryTransfer {

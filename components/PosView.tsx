@@ -447,6 +447,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
           <InventoryVerificationModal
               isOpen={isVerificationModalOpen}
               isAdmin={isAdmin}
+              currentStore={props.currentStore}
               onClose={() => setIsVerificationModalOpen(false)}
               inventory={props.inventory}
               categories={props.categories}

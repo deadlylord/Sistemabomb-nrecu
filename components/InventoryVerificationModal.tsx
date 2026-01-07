@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, Category, Seller, StockTake } from '../types';
+import { Product, Category, Seller, StockTake, Store } from '../types';
 import { CheckIcon, CrossIcon, EyeIcon } from './Icons';
 import DetailedInventoryVerificationModal from './DetailedInventoryVerificationModal';
 
@@ -10,6 +10,7 @@ interface InventoryVerificationModalProps {
   sellers: Seller[];
   isOpen: boolean;
   isAdmin: boolean;
+  currentStore?: Store;
   onClose: () => void;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => void;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>) => Promise<void>;
@@ -22,6 +23,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   sellers,
   isOpen,
   isAdmin,
+  currentStore,
   onClose,
   onSaveStockTake,
   onSaveDetailedDraft,
@@ -106,6 +108,9 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     onClose();
   };
 
+  // Logic to determine if detailed verification (the eye button) should be visible
+  const isDetailedVerificationVisible = isAdmin || !currentStore?.hideDetailedVerificationForSellers;
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
@@ -133,7 +138,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
               <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10">
                 <tr>
                   <th className="p-3 text-sm font-semibold tracking-wide">Categoría</th>
-                  <th className="p-3 text-sm font-semibold tracking-wide text-center">Detalle</th>
+                  {isDetailedVerificationVisible && <th className="p-3 text-sm font-semibold tracking-wide text-center">Detalle</th>}
                   <th className="p-3 text-sm font-semibold tracking-wide text-center">Conteo Físico</th>
                   <th className="p-3 text-sm font-semibold tracking-wide text-center">Estado</th>
                 </tr>
@@ -147,13 +152,14 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                     <tr key={category.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors h-16">
                       <td className="p-2">
                           <p className="font-bold text-sm sm:text-base">{category.name}</p>
-                          <p className="text-[10px] text-slate-500 uppercase">Sistema: {category.totalStock}</p>
                       </td>
+                      {isDetailedVerificationVisible && (
+                        <td className="p-2 text-center">
+                            <button onClick={() => openDetailedVerification(category)} className="p-2 text-accent bg-accent/10 rounded-full hover:bg-accent hover:text-white transition-all shadow-sm" title="Verificar por marca / producto"><EyeIcon className="w-5 h-5" /></button>
+                        </td>
+                      )}
                       <td className="p-2 text-center">
-                          <button onClick={() => openDetailedVerification(category)} className="p-2 text-accent bg-accent/10 rounded-full hover:bg-accent hover:text-white transition-all shadow-sm" title="Verificar por marca / producto"><EyeIcon className="w-5 h-5" /></button>
-                      </td>
-                      <td className="p-2 text-center">
-                        <input type="number" min="0" value={counts[category.id] || ''} onChange={(e) => handleCountChange(category.id, e.target.value)} className="w-20 sm:w-24 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-center font-bold focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
+                        <input type="number" min="0" value={counts[category.id] || ''} onChange={(e) => handleCountChange(category.id, e.target.value)} className="w-20 sm:w-24 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-center font-bold focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
                       </td>
                       <td className="p-2 text-center">
                          <div className="flex justify-center">

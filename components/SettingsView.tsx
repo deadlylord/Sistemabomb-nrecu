@@ -1,9 +1,7 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Store, Seller, Role, Product, Category } from '../types';
 import { CheckIcon, DownloadIcon } from './Icons';
-// FIX: Updated the import path for 'compressImage' from '../constants' to '../services/storageService' to resolve module not found error.
 import { compressImage } from '../services/storageService';
 import { db } from '../firebase';
 
@@ -38,7 +36,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   }, [selectedStoreId, stores]);
 
 
-  // FIX: Broaden the type of the event parameter to include `HTMLSelectElement`.
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     if (!localSettings) return;
     const { name, value, type } = e.target;
@@ -125,7 +122,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   };
 
   const handleExportConsolidatedProducts = () => {
-    // 1. De-duplicate products by name
     const uniqueProducts = new Map<string, Product>();
     allInventory.forEach(product => {
       const key = product.name.toLowerCase().trim();
@@ -134,30 +130,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
       }
     });
     const productsToExport = Array.from(uniqueProducts.values()).sort((a, b) => a.name.localeCompare(b.name));
-    
-    // 2. Get category map
     const categoryMap = new Map(categories.map(c => [c.id, c.name]));
-
-    // 3. Create CSV content
     const headers = ['Nombre', 'Costo', 'Proveedor', 'Categoría'];
     const csvRows = [headers.join(',')];
-
     productsToExport.forEach(product => {
         const categoryName = categoryMap.get(product.categoryId) || 'Sin Categoría';
         const row = [
             `"${product.name.replace(/"/g, '""')}"`,
             product.cost,
             `"${(product.supplier || '').replace(/"/g, '""')}"`,
-            // FIX: Explicitly cast categoryName to a string to prevent a 'replace does not exist on type unknown' error, ensuring type safety.
             `"${String(categoryName).replace(/"/g, '""')}"`
         ];
         csvRows.push(row.join(','));
     });
-
     const csvContent = csvRows.join('\n');
-
-    // 4. Trigger download
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel compatibility
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     const fileName = `consolidado_productos_compras_${new Date().toISOString().split('T')[0]}.csv`;
@@ -202,7 +189,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light">Tiquete de Compra</h3>
-          {/* Logo Upload */}
           <div>
             <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Logo de la Tienda (PNG, JPG, SVG)</label>
             <div className="flex items-center space-x-4">
@@ -221,7 +207,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                   onChange={handleLogoChange}
                   className="hidden"
                 />
-                <label htmlFor="logo-upload" className="cursor-pointer px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover-bg-gray-600 transition-colors">
+                <label htmlFor="logo-upload" className="cursor-pointer px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
                   Cambiar Logo
                 </label>
                 {localSettings.logo && (
@@ -233,7 +219,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             </div>
           </div>
 
-          {/* Text Inputs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Nombre Interno de la Tienda</label>
@@ -330,14 +315,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
               />
             </div>
           </div>
-          <div className="flex items-center space-x-6">
+          <div className="flex flex-wrap gap-4 items-center">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input type="checkbox" name="autoPrint" checked={!!localSettings.autoPrint} onChange={handleSettingsChange} className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent" />
               <span className="text-sm">Imprimir automáticamente</span>
             </label>
             <label className="flex items-center space-x-2 cursor-pointer">
               <input type="checkbox" name="autoSendWhatsApp" checked={!!localSettings.autoSendWhatsApp} onChange={handleSettingsChange} className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent" />
-              <span className="text-sm">Enviar a WhatsApp automáticamente</span>
+              <span className="text-sm">WhatsApp automático</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" name="hideDetailedVerificationForSellers" checked={!!localSettings.hideDetailedVerificationForSellers} onChange={handleSettingsChange} className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent" />
+              <span className="text-sm text-red-500 font-bold">Ocultar lupas de verificación a vendedores</span>
             </label>
           </div>
           
@@ -391,7 +380,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                 <h4 className="font-bold text-gray-700 dark:text-text-light">Consolidado de Productos para Compras</h4>
                 <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
-                    Descarga un archivo de texto (CSV) con una lista de todos los productos únicos de todas las tiendas, ideal para realizar pedidos a proveedores. Incluye nombre, costo, proveedor y categoría.
+                    Descarga un archivo de texto (CSV) con una lista de todos los productos únicos de todas las tiendas.
                 </p>
                 <button onClick={handleExportConsolidatedProducts} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
                     <DownloadIcon />
@@ -408,7 +397,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     <div className="bg-red-500/10 p-4 rounded-lg border border-red-500/30">
                         <h4 className="font-bold text-green-500">Reactivar Productos Descontinuados</h4>
                         <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
-                            Esta acción buscará todos los productos marcados como descontinuados en TODAS las tiendas y los volverá a habilitar. Úsalo para corregir productos que fueron deshabilitados por error.
+                            Habilita todos los productos descontinuados en todas las tiendas.
                         </p>
                         <button onClick={onReactivateAllProducts} className="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Reactivar Todos los Productos</button>
                     </div>
@@ -416,7 +405,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     <div className="bg-red-500/10 p-4 rounded-lg border border-red-500/30">
                         <h4 className="font-bold text-red-500">Optimizar Imágenes de Productos</h4>
                         <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
-                            Esta acción volverá a procesar y subir TODAS las imágenes de los productos de esta tienda con la calidad seleccionada. Esto puede reducir el uso de almacenamiento y mejorar los tiempos de carga, pero es irreversible.
+                            Vuelve a procesar todas las imágenes para ahorrar espacio.
                         </p>
                         <div className="flex items-center gap-4">
                             <select
@@ -436,17 +425,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     </div>
 
                     <div className="bg-red-500/10 p-4 rounded-lg border border-red-500/30">
-                        <h4 className="font-bold text-red-500">Generar Datos de Prueba</h4>
-                        <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
-                            Esto creará 100 productos de prueba en CADA tienda para evaluar el rendimiento. No se puede deshacer fácilmente.
-                        </p>
-                        <button onClick={onGenerateTestData} className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700">Generar Datos</button>
-                    </div>
-
-                    <div className="bg-red-500/10 p-4 rounded-lg border border-red-500/30">
                         <h4 className="font-bold text-red-500">Reiniciar Datos de la Tienda</h4>
                         <p className="text-sm text-gray-600 dark:text-text-dark mt-1 mb-3">
-                            Esta acción eliminará permanentemente TODAS las ventas, inventario, clientes y otros datos asociados a <strong>"{localSettings.name}"</strong>. La tienda y sus ajustes se conservarán, pero los datos transaccionales se borrarán.
+                            Borra permanentemente inventario, ventas y clientes de esta tienda.
                         </p>
                         <button onClick={handleResetClick} className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700">Reiniciar "{localSettings.name}"</button>
                     </div>
