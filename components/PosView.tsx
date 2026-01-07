@@ -3,7 +3,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
 import ProductGrid from './ProductGrid';
 import CartPanel from './CartPanel';
-import { InventoryVerificationModal } from './InventoryVerificationModal';
 import DailySalesReportModal from './DailySalesReportModal';
 import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
@@ -48,12 +47,12 @@ interface PosViewProps {
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
+  onOpenVerification: () => void;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
@@ -314,7 +313,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 <a href={props.currentStore?.addiLink} target="_blank" rel="noopener noreferrer" className="bg-green-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-green-600">Addi</a>
                 <a href={props.currentStore?.sistecreditoLink} target="_blank" rel="noopener noreferrer" className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-purple-600">Sistecredito</a>
                 <button onClick={() => setIsIncidentModalOpen(true)} className="bg-orange-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-orange-600"><AlertTriangleIcon className="w-4 h-4"/><span className="hidden sm:inline">Novedad</span></button>
-                <button onClick={() => setIsVerificationModalOpen(true)} className="bg-blue-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-blue-600"><ClipboardListIcon className="w-4 h-4" /><span className="hidden sm:inline">Verificar</span></button>
+                <button onClick={props.onOpenVerification} className="bg-blue-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-blue-600"><ClipboardListIcon className="w-4 h-4" /><span className="hidden sm:inline">Verificar</span></button>
                 <button onClick={() => setIsSalesReportModalOpen(true)} className="bg-teal-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-teal-600"><ChartBarIcon className="w-4 h-4" /><span className="hidden sm:inline">Reporte</span></button>
             </div>
         </div>
@@ -444,21 +443,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
         </div>
       )}
       
-      {isVerificationModalOpen && (
-          <InventoryVerificationModal
-              isOpen={isVerificationModalOpen}
-              isAdmin={isAdmin}
-              currentStore={props.currentStore}
-              onClose={() => setIsVerificationModalOpen(false)}
-              inventory={props.inventory}
-              categories={props.categories}
-              sellers={props.sellers}
-              onSaveStockTake={props.onSaveStockTake}
-              onSaveDetailedDraft={props.onSaveDetailedDraft}
-              onApplyDetailedVerification={props.onApplyDetailedVerification}
-              onUpdateStoreSettings={props.onUpdateStoreSettings}
-          />
-      )}
       {isSalesReportModalOpen && (
           <DailySalesReportModal
               isOpen={isSalesReportModalOpen}

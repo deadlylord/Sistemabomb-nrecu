@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -27,6 +27,7 @@ interface DashboardViewProps {
   onUpdateSale: (updatedSale: Sale, originalSale: Sale) => void;
   onDeleteSale: (saleId: string) => void;
   onReprintSale: (sale: Sale) => void;
+  onOpenVerification: () => void;
 }
 
 interface UnifiedTransaction {
@@ -193,7 +194,8 @@ const toYYYYMMDD = (date: Date) => {
 const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
-    sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale
+    sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
+    onOpenVerification
   } = props;
   
   const today = new Date();
@@ -1175,6 +1177,15 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <button onClick={() => scrollToSection('price-variation')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><TagIcon className="w-3 h-3"/> Precios</button>
                      <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
+                
+                {/* DIRECT ACCESS: Inventory Verification */}
+                <button 
+                  onClick={onOpenVerification}
+                  className="px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20"
+                >
+                  <ClipboardListIcon className="w-4 h-4" />
+                  <span>Verificar Inventario</span>
+                </button>
             </div>
             
             {/* Right Side: Date Picker & Notifications */}

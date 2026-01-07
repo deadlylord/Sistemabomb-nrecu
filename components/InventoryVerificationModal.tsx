@@ -36,6 +36,15 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const [selectedSeller, setSelectedSeller] = useState('');
   const [cashBase, setCashBase] = useState('');
   const [activeCategoryForDetails, setActiveCategoryForDetails] = useState<Category | null>(null);
+  
+  // Local reactive state for the toggle to ensure immediate UI feedback
+  const [localHideDetailed, setLocalHideDetailed] = useState(!!currentStore?.hideDetailedVerificationForSellers);
+
+  useEffect(() => {
+    if (currentStore) {
+        setLocalHideDetailed(!!currentStore.hideDetailedVerificationForSellers);
+    }
+  }, [currentStore?.hideDetailedVerificationForSellers]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -69,11 +78,23 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   const handleToggleMagnifyingGlasses = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!currentStore || !isAdmin) return;
+      const newValue = e.target.checked;
+      
+      // Update local state first for immediate UI response
+      setLocalHideDetailed(newValue);
+      
       const updatedStore = { 
           ...currentStore, 
-          hideDetailedVerificationForSellers: e.target.checked 
+          hideDetailedVerificationForSellers: newValue 
       };
-      await onUpdateStoreSettings(updatedStore);
+      
+      try {
+          await onUpdateStoreSettings(updatedStore);
+      } catch (error) {
+          console.error("Failed to update store settings:", error);
+          // Rollback local state if DB update fails
+          setLocalHideDetailed(!newValue);
+      }
   };
 
   const handleApplyDetailedCountsFromModal = (catId: string, productCounts: Record<string, string>) => {
@@ -119,7 +140,8 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     onClose();
   };
 
-  const isDetailedVerificationVisible = isAdmin || !currentStore?.hideDetailedVerificationForSellers;
+  // Visibility logic uses local reactive state
+  const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
 
   return (
     <>
@@ -157,7 +179,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                         <input 
                             type="checkbox" 
                             className="sr-only peer" 
-                            checked={!!currentStore?.hideDetailedVerificationForSellers}
+                            checked={localHideDetailed}
                             onChange={handleToggleMagnifyingGlasses}
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
