@@ -39,10 +39,11 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
       // FIX: Robustly handle `sale.items` and `sale.payments` which might be an object from Firebase
       // instead of an array. This ensures the items list appears correctly when editing a sale.
-      const itemsArray = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).filter(Boolean);
+      // FIX: Added explicit type casts to CartItem[] and Payment[] to resolve 'Spread types may only be created from object types' error.
+      const itemsArray = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
       setItems(itemsArray.map(item => ({ ...item })));
 
-      const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})).filter(Boolean);
+      const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {}) as any[]).filter(Boolean) as Payment[];
       setPayments(paymentsArray.map(p => ({ ...p })));
       
       const saleDate = new Date(sale.createdAt);

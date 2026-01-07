@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, Layaway, LoginRecord, Role, Product, Store, PaymentMethod, Payment } from '../types';
 import { formatCOP } from '../constants';
@@ -268,7 +269,8 @@ const ChristmasCommissionsView: React.FC<ChristmasCommissionsViewProps> = ({
 
   // Chart Data: Compare all sellers for the period
   const sellersChartData = useMemo(() => {
-      if (!startDate || !endDate) return [];
+      // FIX: Standardized return value to avoid type mismatch where the component expects an object with 'data' property.
+      if (!startDate || !endDate) return { data: [], maxVal: 1 };
       
       const startFilterDate = new Date(startDate + 'T00:00:00');
       const endFilterDate = new Date(endDate + 'T23:59:59');
@@ -539,6 +541,7 @@ const ChristmasCommissionsView: React.FC<ChristmasCommissionsViewProps> = ({
       </div>
 
       {/* Sellers Comparison Chart */}
+      {/* FIX: Corrected sellersChartData property access by ensuringsellersChartData is always typed correctly via useMemo default value */}
       {startDate && endDate && sellersChartData.data.length > 0 && (
           <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">

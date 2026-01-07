@@ -19,25 +19,17 @@ export enum ProductChangeType {
   PRE_ORDER_FULFILLED = 'Abono Recibido (Pre-orden)',
   INCONSISTENCY_FIX = 'Corrección de Inconsistencia',
   DELETED = 'Producto Eliminado',
+  STOCK_TAKE_APPLIED = 'Conteo Físico Aplicado',
+  DETAILED_VERIFICATION = 'Verificación Detallada Aplicada',
 }
 
-export interface AuditAdjustment {
-  productId: string;
-  productName: string;
-  supplier: string;
-  systemStock: number;
-  physicalCount: number;
-}
-
-export interface AuditRecord {
-  id: string;
+export interface PendingDetailedVerification {
+  id: string; // categoryId_storeId
+  categoryId: string;
   storeId: string;
-  sellerName: string;
-  createdAt: string;
-  status: 'pending' | 'applied';
-  adjustments: AuditAdjustment[];
-  appliedAt?: string;
-  appliedBy?: string;
+  counts: Record<string, number>; // productId -> physicalCount
+  lastUpdatedBy: string;
+  updatedAt: string;
 }
 
 export interface ProductHistoryLog {
@@ -127,7 +119,6 @@ export interface CartItem extends Product {
 export interface HeldCart {
     id: string;
     items: CartItem[];
-    // FIX: Add storeId to HeldCart type definition to match usage in App.tsx.
     storeId: string;
     customerName?: string;
     customerPhone?: string;
@@ -139,6 +130,8 @@ export interface StockTake {
   seller: string;
   createdAt: string; // ISO string
   cashBase?: number;
+  isApplied?: boolean;
+  productCounts?: Record<string, number>;
   verification: {
     categoryId: string;
     categoryName: string;
@@ -212,8 +205,8 @@ export interface Sale {
   customerPhone: string;
   items: CartItem[];
   totalAmount: number;
-  paymentMethod?: PaymentMethod; // Made optional for backward compatibility
-  payments?: Payment[]; // New field for multiple payments
+  paymentMethod?: PaymentMethod;
+  payments?: Payment[];
   seller: string;
   createdAt: string; // ISO string
   storeId: string;
@@ -249,7 +242,6 @@ export interface Customer {
 }
 
 export interface LoginRecord {
-  // FIX: Made 'id' mandatory to satisfy generic constraints in data fetching logic.
   id: string;
   sellerId: string;
   sellerName: string;
@@ -323,21 +315,13 @@ export interface Incident {
   resolutionDate?: string; // ISO string
   sellerName: string;
   storeId: string;
-  
-  // Product-related fields
   productId?: string;
   productName?: string;
-  
-  // Customer-related fields
   customerName?: string;
   customerPhone?: string;
-  
-  // Cash adjustment fields
   adjustmentType?: 'income' | 'expense';
   adjustmentAmount?: number;
   paymentMethod?: PaymentMethod;
-  
-  // Exchange-related fields
   originalSaleId?: string;
   originalSaleInvoiceNumber?: string;
   returnedItems?: ExchangedItem[];
@@ -345,12 +329,8 @@ export interface Incident {
   originalSaleItemsSnapshot?: CartItem[];
   originalSalePaymentsSnapshot?: Payment[];
   relatedIncidentId?: string;
-
-  // Transfer-related fields
   fromStoreId?: string;
   toStoreId?: string;
   quantity?: number;
-
-  // Warranty fields
   deadline?: string;
 }
