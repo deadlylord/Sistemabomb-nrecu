@@ -324,10 +324,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
               <input type="checkbox" name="autoSendWhatsApp" checked={!!localSettings.autoSendWhatsApp} onChange={handleSettingsChange} className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent" />
               <span className="text-sm">WhatsApp automático</span>
             </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input type="checkbox" name="hideDetailedVerificationForSellers" checked={!!localSettings.hideDetailedVerificationForSellers} onChange={handleSettingsChange} className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent" />
-              <span className="text-sm text-red-500 font-bold">Ocultar lupas de verificación a vendedores</span>
-            </label>
           </div>
           
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Apariencia</h3>

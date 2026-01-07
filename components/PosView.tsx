@@ -47,6 +47,7 @@ interface PosViewProps {
   onClearVerifications: () => void;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
+  onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
@@ -455,6 +456,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
               onSaveStockTake={props.onSaveStockTake}
               onSaveDetailedDraft={props.onSaveDetailedDraft}
               onApplyDetailedVerification={props.onApplyDetailedVerification}
+              onUpdateStoreSettings={props.onUpdateStoreSettings}
           />
       )}
       {isSalesReportModalOpen && (

@@ -15,6 +15,7 @@ interface InventoryVerificationModalProps {
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => void;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
+  onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
 }
 
 export const InventoryVerificationModal: React.FC<InventoryVerificationModalProps> = ({
@@ -28,6 +29,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   onSaveStockTake,
   onSaveDetailedDraft,
   onApplyDetailedVerification,
+  onUpdateStoreSettings,
 }) => {
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [detailedCounts, setDetailedCounts] = useState<Record<string, Record<string, string>>>({});
@@ -63,6 +65,15 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   const openDetailedVerification = (category: Category) => {
     setActiveCategoryForDetails(category);
+  };
+
+  const handleToggleMagnifyingGlasses = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!currentStore || !isAdmin) return;
+      const updatedStore = { 
+          ...currentStore, 
+          hideDetailedVerificationForSellers: e.target.checked 
+      };
+      await onUpdateStoreSettings(updatedStore);
   };
 
   const handleApplyDetailedCountsFromModal = (catId: string, productCounts: Record<string, string>) => {
@@ -108,7 +119,6 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     onClose();
   };
 
-  // Logic to determine if detailed verification (the eye button) should be visible
   const isDetailedVerificationVisible = isAdmin || !currentStore?.hideDetailedVerificationForSellers;
 
   return (
@@ -119,20 +129,43 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
               <h2 className="text-2xl font-bold text-accent">Verificación y Apertura de Caja</h2>
               <button onClick={onClose} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon /></button>
           </div>
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Vendedor (Obligatorio)</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {sellers.filter(seller => !seller.isDisabled).map(seller => (
-                      <button key={seller.id} onClick={() => setSelectedSeller(seller.name)} className={`p-3 rounded-lg font-semibold transition-colors text-sm ${selectedSeller === seller.name ? 'bg-accent text-white ring-2 ring-accent-hover' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{seller.name}</button>
-                  ))}
-                </div>
+          
+          <div className="mb-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                      <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Vendedor (Obligatorio)</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {sellers.filter(seller => !seller.isDisabled).map(seller => (
+                          <button key={seller.id} onClick={() => setSelectedSeller(seller.name)} className={`p-3 rounded-lg font-semibold transition-colors text-sm ${selectedSeller === seller.name ? 'bg-accent text-white ring-2 ring-accent-hover' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{seller.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                   <div>
+                      <label htmlFor="cashBase" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Base de Caja (Opcional)</label>
+                       <input type="number" id="cashBase" value={cashBase} onChange={e => setCashBase(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-bold" placeholder="Ej: 100.000" min="0" />
+                   </div>
               </div>
-               <div>
-                  <label htmlFor="cashBase" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Base de Caja (Opcional)</label>
-                   <input type="number" id="cashBase" value={cashBase} onChange={e => setCashBase(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-bold" placeholder="Ej: 100.000" min="0" />
-               </div>
+
+              {/* ADMIN CONTROL: Hide Magnifying Glasses */}
+              {isAdmin && (
+                  <div className="flex items-center justify-between p-3 bg-accent/5 rounded-lg border border-accent/20">
+                      <div className="flex items-center gap-2">
+                          <EyeIcon className="w-5 h-5 text-accent" />
+                          <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Ocultar lupas de verificación a vendedores</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={!!currentStore?.hideDetailedVerificationForSellers}
+                            onChange={handleToggleMagnifyingGlasses}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+                      </label>
+                  </div>
+              )}
           </div>
+
           <div className="flex-grow overflow-y-auto pr-2">
             <table className="w-full text-left">
               <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10">
