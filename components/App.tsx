@@ -22,7 +22,7 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -47,6 +47,7 @@ import DashboardView from './DashboardView';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
 import { InventoryVerificationModal } from './InventoryVerificationModal';
 import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
+import SmartAccountantView from './SmartAccountantView';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -82,6 +83,7 @@ const App: React.FC = () => {
   const [productHistory, setProductHistory] = useState<ProductHistoryLog[]>([]);
   const [payrollHistory, setPayrollHistory] = useState<PayrollRecord[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -270,7 +272,7 @@ const App: React.FC = () => {
 
     setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
     setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
-    setPayrollHistory([]); setCustomers([]); setHeldCarts([]);
+    setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setExpenses([]);
 
     const storeSpecificQuery = (collectionName: string) => query(collection(db, collectionName), where('storeId', '==', currentStoreId));
     const storeInventoryQuery = storeSpecificQuery('inventory');
@@ -330,6 +332,12 @@ const App: React.FC = () => {
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('customers'), setCustomers);
+            break;
+        case View.ACCOUNTING:
+            attach(storeSpecificQuery('sales'), setSales);
+            attach(storeSpecificQuery('layaways'), setLayaways);
+            attach(storeSpecificQuery('expenses'), setExpenses);
+            fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
@@ -809,6 +817,20 @@ const App: React.FC = () => {
   };
   const handleUpdateCustomer = async (id: string, name: string, phone: string) => await updateDoc(doc(db, 'customers', id), { name, phone });
 
+  const handleAddExpense = async (expenseData: Omit<Expense, 'id'>) => {
+      if (!currentStoreId) return;
+      const newRef = doc(collection(db, 'expenses'));
+      await setDoc(newRef, { ...expenseData, id: newRef.id, storeId: currentStoreId });
+  };
+
+  const handleUpdateExpense = async (expense: Expense) => {
+      await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+      if (window.confirm('¿Eliminar este registro de gasto?')) await deleteDoc(doc(db, 'expenses', id));
+  };
+
   const handleLogin = (sellerName: string, passwordAttempt: string) => {
     const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
     if (seller && seller.password.trim() === passwordAttempt.trim()) {
@@ -846,6 +868,7 @@ const App: React.FC = () => {
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
+        {currentView === View.ACCOUNTING && <SmartAccountantView sales={sales} layaways={layaways} expenses={expenses} payrollHistory={payrollHistory} currentStore={currentStore} currentUser={currentUser} onAddExpense={handleAddExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} />}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} onClose={() => setShowReceiptModal(false)} />}

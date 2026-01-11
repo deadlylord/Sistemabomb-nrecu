@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Seller, Store, Role, Incident, IncidentStatus } from '../types';
-import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon, SparklesIcon } from './Icons';
+import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon } from './Icons';
 
 interface HeaderProps {
   currentView: View;
@@ -33,7 +33,7 @@ const navItems = [
     { view: View.CUSTOMERS, label: 'Clientes', icon: ContactIcon },
     { view: View.INCIDENTS, label: 'Novedades', icon: AlertTriangleIcon },
     { view: View.PAYROLL, label: 'Nómina', icon: DollarIcon },
-    { view: View.CHRISTMAS, label: 'Navidad', icon: SparklesIcon },
+    { view: View.ACCOUNTING, label: 'Contabilidad', icon: ChartPieIcon },
     { view: View.STOCK_TAKE_HISTORY, label: 'Historial Conteos', icon: ClipboardListIcon },
     { view: View.ROLE_MANAGER, label: 'Gestionar Roles', icon: ShieldCheckIcon },
     { view: View.SETTINGS, label: 'Ajustes', icon: SettingsIcon },
@@ -44,11 +44,18 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
 
-  const availableNavItems = navItems.filter(item => userPermissions.includes(item.view));
-  
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
 
+  // Filtrado inteligente de navegación
+  const availableNavItems = navItems.filter(item => {
+      // Regla especial: La contabilidad SOLO la ve el admin y se fuerza su visibilidad
+      if (item.view === View.ACCOUNTING) return isAdmin;
+      
+      // Para el resto, verificar los permisos del rol
+      return userPermissions.includes(item.view);
+  });
+  
   const pendingCount = useMemo(() => {
     return incidents.filter(i => 
       [IncidentStatus.DAÑADO_REPORTADO, IncidentStatus.CAMBIO_SOLICITADO, IncidentStatus.TRASLADO_SOLICITADO, IncidentStatus.WARRANTY_ACTIVE].includes(i.status)
@@ -119,7 +126,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
-           {/* Notification Bell - Useful for mobile access to pending incidents briefing */}
+           {/* Notification Bell */}
            {pendingCount > 0 && (
              <button 
                 onClick={onOpenBriefing}

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 // Ensure API_KEY is available in the environment variables
@@ -15,7 +16,6 @@ export const generateDescription = async (productName: string): Promise<string> 
   try {
     const prompt = `Genera una descripción de producto corta y atractiva para un sistema de punto de venta. El producto es: "${productName}". La descripción debe ser de una sola oración, máximo 20 palabras.`;
     
-    // FIX: Updated model to 'gemini-3-flash-preview' for basic text tasks per guidelines.
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
@@ -27,7 +27,6 @@ export const generateDescription = async (productName: string): Promise<string> 
       throw new Error("Received an empty response from the API.");
     }
     
-    // Clean up the response, removing potential markdown or quotes
     return text.trim().replace(/^"|"$/g, '');
     
   } catch (error) {
@@ -42,7 +41,6 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
   }
   
   try {
-    // FIX: Updated model to 'gemini-3-pro-preview' for complex analysis tasks per guidelines.
     const model = 'gemini-3-pro-preview'; 
     
     const prompt = `
@@ -85,4 +83,34 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
     console.error("Error calling Gemini API for sales analysis:", error);
     throw new Error("Failed to generate sales analysis from Gemini API.");
   }
+};
+
+export const analyzeAccountingData = async (accountingData: any): Promise<string> => {
+    try {
+        const prompt = `
+            Eres el Contador Jefe de "Street/Bombón". Analiza estos datos financieros mensuales y dame una auditoría rápida y consejos estratégicos.
+            
+            **Datos Financieros:**
+            ${JSON.stringify(accountingData, null, 2)}
+            
+            **Lo que espero:**
+            1. Un saludo profesional.
+            2. Análisis de Utilidad Neta (¿es saludable?).
+            3. Punto de equilibrio: Calcula cuántas unidades de calzado/ropa promedio se deben vender para cubrir gastos si cada unidad deja un margen promedio del 40%.
+            4. Análisis de Gastos: Identifica si los gastos operativos o nómina son muy altos comparados con ingresos.
+            5. Tres consejos accionables para mejorar la rentabilidad este mes.
+            
+            Usa un tono directo, profesional y motivador. Formato Markdown.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: prompt,
+        });
+
+        return response.text || "No se pudo generar el análisis.";
+    } catch (error) {
+        console.error("Gemini Accounting Error:", error);
+        throw error;
+    }
 };

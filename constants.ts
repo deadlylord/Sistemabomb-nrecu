@@ -1,3 +1,4 @@
+
 import { Product, Category, Seller, Role, View, Store, PaymentMethod } from './types';
 
 export const formatCOP = (amount: number): string => {
@@ -99,17 +100,16 @@ export const INITIAL_ROLES: Role[] = [
       View.INVENTORY, 
       View.INVENTORY_TRANSFER, 
       View.LAYAWAY, 
-      // @FIX: View.SALES does not exist in the enum. Sales view is now part of Dashboard.
       View.PURCHASES, 
       View.SELLERS, 
       View.STORES, 
       View.CUSTOMERS, 
       View.STOCK_TAKE_HISTORY, 
       View.PAYROLL,
-      View.CHRISTMAS,
       View.SETTINGS, 
       View.INCIDENTS,
-      View.ROLE_MANAGER
+      View.ROLE_MANAGER,
+      View.ACCOUNTING
     ],
   },
   {
@@ -119,7 +119,6 @@ export const INITIAL_ROLES: Role[] = [
       View.POS,
       View.LAYAWAY,
       View.CUSTOMERS,
-      // @FIX: View.SALES does not exist. Replaced with View.DASHBOARD to give access to sales history.
       View.DASHBOARD,
       View.STOCK_TAKE_HISTORY,
       View.INCIDENTS,

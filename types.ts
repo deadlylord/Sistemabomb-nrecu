@@ -160,10 +160,10 @@ export enum View {
   CUSTOMERS = 'customers',
   STOCK_TAKE_HISTORY = 'stock_take_history',
   PAYROLL = 'payroll',
-  CHRISTMAS = 'christmas',
   SETTINGS = 'settings',
   INCIDENTS = 'incidents',
   ROLE_MANAGER = 'role_manager',
+  ACCOUNTING = 'accounting',
 }
 
 export enum PaymentMethod {
@@ -260,6 +260,8 @@ export interface PayrollRecord {
   totalUnitsSold: number;
   totalCommissionableUnits: number;
   commissionAmount: number;
+  bonuses?: { reason: string; amount: number; }[];
+  totalBonuses?: number;
   deductions?: { reason: string; amount: number; }[];
   totalDeductions?: number;
   totalToPay: number;
@@ -334,4 +336,16 @@ export interface Incident {
   toStoreId?: string;
   quantity?: number;
   deadline?: string;
+}
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  type: 'fixed' | 'variable';
+  category: 'Rent' | 'Utilities' | 'Marketing' | 'Supplies' | 'Maintenance' | 'Payroll' | 'Other';
+  date: string;
+  storeId: string;
+  registeredBy: string;
+  isRecurring?: boolean;
 }
