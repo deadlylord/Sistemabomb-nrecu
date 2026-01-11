@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, PendingDetailedVerification } from '../types';
 import { SearchIcon, CrossIcon, CheckIcon, PackageIcon, EyeIcon, HistoryIcon } from './Icons';
@@ -57,7 +56,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
             if (Object.keys(localCounts).length === 0) {
               const newCounts: Record<string, string> = {};
               Object.entries(data.counts).forEach(([pid, val]) => {
-                newCounts[pid] = val.toString();
+                // Ensure val is treated as a number before converting to string
+                newCounts[pid] = (val as number).toString();
               });
               setLocalCounts(newCounts);
             }
@@ -142,7 +142,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   const prepareCountsForDB = () => {
     const final: Record<string, number> = {};
     Object.entries(localCounts).forEach(([pid, val]) => {
-      const n = parseInt(val, 10);
+      // Cast 'val' to string to ensure compatibility with parseInt
+      const n = parseInt(val as string, 10);
       if (!isNaN(n)) final[pid] = n;
     });
     return final;
@@ -157,7 +158,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
       onApplyCounts(localCounts);
       onClose();
     } catch (e) {
-      alert("Error al guardar el borrador.");
+      // Safely convert unknown error to string for alert
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSaving(false);
     }
@@ -173,7 +175,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
       onApplyCounts(localCounts);
       onClose();
     } catch (e) {
-      alert("Error al aplicar los ajustes.");
+      // Safely convert unknown error to string for alert
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSaving(false);
     }
@@ -183,8 +186,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   const totalSystem = products.reduce((sum, p) => sum + p.stock, 0);
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 animate-fade-in">
-      <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl w-full max-w-5xl h-[95vh] flex flex-col overflow-hidden border border-accent/20">
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 animate-fade-in" onClick={() => onClose()}>
+      <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl w-full max-w-5xl h-[95vh] flex flex-col overflow-hidden border border-accent/20" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="p-4 border-b dark:border-slate-800 flex justify-between items-center bg-accent/5">
           <div>

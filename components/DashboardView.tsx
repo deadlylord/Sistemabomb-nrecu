@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem } from '../types';
+import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
 import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
@@ -28,6 +28,7 @@ interface DashboardViewProps {
   onDeleteSale: (saleId: string) => void;
   onReprintSale: (sale: Sale) => void;
   onOpenVerification: () => void;
+  purchases: Purchase[];
 }
 
 interface UnifiedTransaction {
@@ -95,7 +96,6 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
 
   return (
     <div className="h-96 w-full pt-4 pr-4 relative">
-      {/* Legend */}
       <div className="absolute top-0 right-0 flex gap-4 text-xs">
         <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-accent rounded-sm"></div>
@@ -108,7 +108,6 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
       </div>
 
       <div className="h-full w-full flex">
-        {/* Y-Axis Labels */}
         <div className="h-full flex flex-col justify-between text-xs text-gray-500 dark:text-text-dark pr-2 shrink-0">
           {yAxisLabels.map((label, i) => (
             <div key={i} className={i === yAxisLabels.length - 1 ? "pb-6" : "-translate-y-1/2"}>
@@ -117,15 +116,12 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
           ))}
         </div>
 
-        {/* Chart Bars Area */}
         <div className="flex-grow w-full pl-4 border-l border-gray-200 dark:border-gray-700">
           <div className="relative h-full w-full">
-            {/* Grid Lines */}
             {yAxisLabels.map((_, i) => (
                 <div key={i} className="absolute w-full border-t border-gray-200 dark:border-gray-700/50 border-dashed" style={{ bottom: `${(i / (yAxisLabels.length -1)) * 100}%` }}></div>
             ))}
             
-            {/* Bars */}
             <div className="absolute inset-0 flex items-end justify-around gap-2 px-2 pb-6">
                 {data.map((d) => {
                     const barHeight = (d.total / safeMaxValue) * 100;
@@ -134,7 +130,6 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
                     return (
                     <div key={d.label} className="relative flex h-full w-full flex-col items-center justify-end group">
                         
-                        {/* Tooltip on hover */}
                         <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap shadow-lg">
                             <p className="font-bold">{formatLabel(d.label)}</p>
                             <p>Total: {formatCOP(d.total)}</p>
@@ -143,20 +138,16 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
                             )}
                         </div>
                         
-                        {/* Value on top of bar */}
                         <div className="text-xs font-bold text-gray-700 dark:text-text-dark mb-1 transition-opacity duration-300 z-20">
                            {d.total > 0 ? formatCompactCOP(d.total) : ''}
                         </div>
                         
-                        {/* The bar container */}
                         <div className="relative w-full flex items-end h-full">
-                             {/* Main Bar */}
                             <div
                                 className="w-full rounded-t-md bg-accent/70 transition-all duration-300 group-hover:bg-accent absolute bottom-0 left-0"
                                 style={{ height: `${barHeight}%` }}
                             ></div>
                             
-                            {/* Partial Progress Line (Guide) */}
                             {viewMode !== 'daily' && d.partialTotal > 0 && (
                                 <div 
                                     className="absolute w-full border-t-2 border-dotted border-gray-600 dark:border-white z-10 pointer-events-none"
@@ -168,7 +159,6 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
                     </div>
                 )})}
             </div>
-             {/* X-axis labels (separate layer to prevent overflow issues) */}
             <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">
                 {data.map((d) => (
                     <div key={d.label} className="w-full text-center text-[10px] text-gray-500 dark:text-text-dark">
@@ -195,7 +185,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
-    onOpenVerification
+    onOpenVerification, purchases
   } = props;
   
   const today = new Date();
@@ -230,44 +220,28 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
   
-  const pendingIncidentsAcrossStores = useMemo(() => {
-      if (!isAdmin) return [];
-      return allIncidents.filter(i => [
-        IncidentStatus.DAÑADO_REPORTADO,
-        IncidentStatus.CAMBIO_SOLICITADO,
-        IncidentStatus.TRASLADO_SOLICITADO
-      ].includes(i.status));
-  }, [allIncidents, isAdmin]);
-
-  const pendingPreOrdersAcrossStores = useMemo(() => {
-    return allLayaways.filter(l => l.status === 'pre-order');
-  }, [allLayaways]);
-
-  // AI Insights Logic (Local Calculation)
   const aiInsights = useMemo(() => {
-    if (!sales || !inventory) return null;
+    if (!sales || !inventory || !purchases) return null;
 
-    const today = new Date();
+    const now = new Date();
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const periodLabel = `${thirtyDaysAgo.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${today.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
+    const periodLabel = `${thirtyDaysAgo.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${now.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
 
-    // 1. Calculate Velocity per Product
-    const productSalesMap = new Map<string, number>();
-    sales.forEach(sale => {
-      const saleDate = new Date(sale.createdAt);
-      if (saleDate >= thirtyDaysAgo) {
-        (sale.items || []).forEach(item => {
-          if (item) {
-            productSalesMap.set(item.id, (productSalesMap.get(item.id) || 0) + item.quantity);
-          }
+    // Helper for velocity calculation
+    const allSoldItems: Record<string, { quantity: number, createdAt: string }[]> = {};
+    [...sales, ...layaways.filter(l => l.status !== 'cancelled')].forEach(t => {
+        (t.items || []).forEach(item => {
+            if (!item) return;
+            if (!allSoldItems[item.id]) allSoldItems[item.id] = [];
+            allSoldItems[item.id].push({ quantity: item.quantity, createdAt: t.createdAt });
         });
-      }
     });
 
     const insights = {
       period: periodLabel,
+      highVelocity: [] as any[], // Integrated high speed sales
       trending: [] as { id: string, name: string, quantity: number, context: string }[],
       restock: [] as { id: string, name: string, stock: number, velocity: number, daysLeft: number }[],
       stagnant: [] as { id: string, name: string, stock: number, cost: number, price: number, suggestedPrice: number, discount: number }[],
@@ -276,84 +250,77 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     inventory.forEach(p => {
       if (p.isDisabled) return;
-      const soldQty = productSalesMap.get(p.id) || 0;
+      const soldQtyInMonth = (allSoldItems[p.id] || [])
+          .filter(s => new Date(s.createdAt) >= thirtyDaysAgo)
+          .reduce((sum, s) => sum + s.quantity, 0);
       
-      // Trending: Sold > 3 units in last 30 days
-      if (soldQty >= 3) {
-        insights.trending.push({ 
-            id: p.id, 
-            name: p.name, 
-            quantity: soldQty,
-            context: `Este producto ha tenido un desempeño sobresaliente. Ha movido ${soldQty} unidades en el último mes.`
-        });
+      // 1. HIGH VELOCITY LOGIC (INTEGRATED)
+      const lastPurchase = [...purchases]
+          .filter(pur => pur.productId === p.id)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+      if (lastPurchase) {
+          const purchaseDate = new Date(lastPurchase.createdAt);
+          const daysElapsed = Math.max(1, Math.ceil((now.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24)));
+          const soldSinceQty = (allSoldItems[p.id] || [])
+              .filter(sale => new Date(sale.createdAt) >= purchaseDate)
+              .reduce((sum, s) => sum + s.quantity, 0);
+
+          if (soldSinceQty > 0) {
+              const unitsPerDay = soldSinceQty / daysElapsed;
+              const percentageOfBatchGone = (soldSinceQty / lastPurchase.quantity) * 100;
+              
+              if ((percentageOfBatchGone >= 60 && daysElapsed <= 7) || (unitsPerDay >= 0.8 && daysElapsed <= 10) || (p.stock === 0 && daysElapsed <= 14)) {
+                  insights.highVelocity.push({
+                      id: p.id,
+                      name: p.name,
+                      soldSinceQty,
+                      daysElapsed,
+                      unitsPerDay,
+                      isSoldOut: p.stock === 0,
+                      urgency: (p.stock === 0 || percentageOfBatchGone > 85) ? 'high' : 'medium',
+                      stockRemaining: p.stock,
+                      percentageOfBatchGone
+                  });
+              }
+          }
       }
 
-      // Restock Needed: Low stock (< 3) but selling well (> 1 recently)
-      if (p.stock <= 3 && soldQty >= 2) {
-        const velocityPerDay = soldQty / 30;
-        const daysLeft = velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99;
-        insights.restock.push({ 
-            id: p.id, 
-            name: p.name, 
-            stock: p.stock, 
-            velocity: soldQty,
-            daysLeft
-        });
+      // 2. Trending
+      if (soldQtyInMonth >= 3) {
+        insights.trending.push({ id: p.id, name: p.name, quantity: soldQtyInMonth, context: `Ventas sólidas: ${soldQtyInMonth} uds en el último mes.` });
       }
 
-      // Stagnant: High stock (> 4) but 0 sales
-      if (p.stock >= 5 && soldQty === 0) {
-        // Strategy: Aggressive Discount (~25%) but not below cost
+      // 3. Restock
+      if (p.stock <= 3 && soldQtyInMonth >= 2) {
+        const velocityPerDay = soldQtyInMonth / 30;
+        insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldQtyInMonth, daysLeft: velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99 });
+      }
+
+      // 4. Stagnant
+      if (p.stock >= 5 && soldQtyInMonth === 0) {
         const idealDiscount = 0.25; 
         let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
-        // Ensure we don't go below cost. Floor at Cost.
         if (suggestedPrice < p.cost) suggestedPrice = p.cost; 
-        
-        const actualDiscount = Math.round(((p.price - suggestedPrice) / p.price) * 100);
-
-        insights.stagnant.push({ 
-            id: p.id, 
-            name: p.name, 
-            stock: p.stock, 
-            cost: p.cost,
-            price: p.price,
-            suggestedPrice,
-            discount: actualDiscount
-        });
+        insights.stagnant.push({ id: p.id, name: p.name, stock: p.stock, cost: p.cost, price: p.price, suggestedPrice, discount: Math.round(((p.price - suggestedPrice) / p.price) * 100) });
       }
 
-      // At Risk: High stock (> 4) and low sales (1-2 units)
-      if (p.stock >= 5 && soldQty > 0 && soldQty <= 2) {
-         // Strategy: Moderate Discount (~15%)
+      // 5. At Risk
+      if (p.stock >= 5 && soldQtyInMonth > 0 && soldQtyInMonth <= 2) {
          const idealDiscount = 0.15;
          let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
-         // Ensure we keep some margin above cost (e.g. Cost + 10% minimum if possible)
          const minPrice = p.cost * 1.1;
-         if (suggestedPrice < minPrice) suggestedPrice = Math.max(minPrice, p.cost); // Fallback to cost if margin is too thin
-
-         const actualDiscount = Math.round(((p.price - suggestedPrice) / p.price) * 100);
-
-         insights.atRisk.push({
-            id: p.id,
-            name: p.name,
-            stock: p.stock,
-            soldQty,
-            cost: p.cost,
-            price: p.price,
-            suggestedPrice,
-            discount: actualDiscount
-         });
+         if (suggestedPrice < minPrice) suggestedPrice = Math.max(minPrice, p.cost);
+         insights.atRisk.push({ id: p.id, name: p.name, stock: p.stock, soldQty: soldQtyInMonth, cost: p.cost, price: p.price, suggestedPrice, discount: Math.round(((p.price - suggestedPrice) / p.price) * 100) });
       }
     });
 
-    // Sort
+    insights.highVelocity.sort((a, b) => b.unitsPerDay - a.unitsPerDay);
     insights.trending.sort((a, b) => b.quantity - a.quantity);
     insights.restock.sort((a, b) => a.daysLeft - b.daysLeft);
-    insights.stagnant.sort((a, b) => b.stock - a.stock); // Highest stock first
-    insights.atRisk.sort((a, b) => b.stock - a.stock);
 
     return insights;
-  }, [sales, inventory]);
+  }, [sales, inventory, purchases, layaways]);
 
   const setDateRange = (start: Date, end: Date) => {
     setStartDate(toYYYYMMDD(start));
@@ -457,7 +424,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         saleCommission += payment.amount * rate;
                     }
                 });
-            } else if (sale.paymentMethod) { // Legacy
+            } else if (sale.paymentMethod) {
                 const rate = COMMISSION_RATES[sale.paymentMethod as PaymentMethod];
                 if (rate) {
                     saleCommission += sale.totalAmount * rate;
@@ -495,7 +462,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const cashIncidents = allIncidents.filter(i =>
         i.storeId === currentStoreId &&
         isWithinRange(i.createdAt) &&
-        (i.type === IncidentType.CASH_ADJUSTMENT || i.type === IncidentType.ADDITIONAL_INCOME) &&
+        (i.type === IncidentType.CASH_ADJUSTMENT || i.type === IncidentType.RECAUDO) &&
         (i.paymentMethod ? i.paymentMethod === PaymentMethod.Efectivo : true) &&
         !i.description.includes('Excedente pagado por cambio')
     );
@@ -534,7 +501,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const currentStoreId = inventory[0]?.storeId;
 
     sales.forEach(sale => {
-        // FIX: Strongly type paymentsArray to ensure payment.amount is a number.
         const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
         if (!sale.layawayId && paymentsArray) {
             paymentsArray.forEach((payment, index) => {
@@ -548,8 +514,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         customer: sale.customerName,
                         seller: payment.seller,
                         paymentMethod: payment.method,
-                        // FIX: Explicitly cast `payment` to `Payment` to ensure `amount` is a number.
-                        // @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
                         amount: Number((payment as Payment).amount),
                     });
                 }
@@ -558,7 +522,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
 
     layaways.forEach(layaway => {
-        // FIX: Strongly type paymentsArray to ensure payment.amount is a number.
         const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
         paymentsArray.forEach((payment, index) => {
             if (payment && isWithinRange(payment.date)) {
@@ -571,8 +534,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     customer: layaway.customerName,
                     seller: payment.seller,
                     paymentMethod: payment.method,
-                    // FIX: Explicitly cast `payment` to `Payment` to ensure `amount` is a number.
-                    // @FIX: The value from Object.values could be unknown. Explicitly cast to Number to ensure type safety for amount calculations.
                     amount: Number((payment as Payment).amount),
                 });
             }
@@ -620,7 +581,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         totalsByMethod[p.paymentMethod] = (totalsByMethod[p.paymentMethod] || 0) + p.amount;
         const rate = COMMISSION_RATES[p.paymentMethod as PaymentMethod];
         if (rate) {
-          // FIX: Ensure `p.amount` is treated as a number in calculations to prevent type errors.
           commissionsByMethod[p.paymentMethod] = (commissionsByMethod[p.paymentMethod] || 0) + (Number(p.amount) * rate);
         }
     });
@@ -704,7 +664,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     const summary = {
         totalMarkup: 0,
-        totalDiscount: 0, // will be negative
+        totalDiscount: 0,
     };
 
     filteredItems.forEach(item => {
@@ -789,7 +749,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             .slice(0, 10);
     }, [sales, layaways, inventory, isWithinRange]);
     
-    // --- Forecast Logic ---
     const forecastAnalysis = useMemo(() => {
         const now = new Date();
         const currentDay = now.getDate();
@@ -797,16 +756,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const daysRemaining = totalDaysInMonth - currentDay;
         const monthProgress = (currentDay / totalDaysInMonth) * 100;
 
-        // Define Current Month Boundaries strictly
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         
-        // Calculate TOTAL PAYMENTS received this month (Cash Basis)
-        // This aligns with the "Income" report logic but strictly for current month dates.
-        
         let totalPaymentsThisMonth = 0;
 
-        // 1. Payments from Sales
         sales.forEach(sale => {
             const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
             if (payments) {
@@ -816,7 +770,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         totalPaymentsThisMonth += Number(p.amount);
                     }
                 });
-            } else if (sale.paymentMethod && !sale.layawayId) { // Legacy sales without payments array
+            } else if (sale.paymentMethod && !sale.layawayId) {
                  const saleDate = new Date(sale.createdAt);
                  if (saleDate >= startOfMonth && saleDate <= endOfMonth) {
                      totalPaymentsThisMonth += sale.totalAmount;
@@ -824,7 +778,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             }
         });
 
-        // 2. Payments from Layaways
         layaways.forEach(layaway => {
              const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
              if (payments) {
@@ -837,11 +790,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
              }
         });
         
-        // Simple Projection: (Current / DaysPassed) * TotalDays
         const dailyAverage = currentDay > 0 ? totalPaymentsThisMonth / currentDay : 0;
         const projectedTotal = dailyAverage * totalDaysInMonth;
 
-        // Strategies based on time of month
         let strategies: { title: string, desc: string, type: 'marketing' | 'sales' | 'admin' }[] = [];
 
         if (currentDay <= 10) {
@@ -874,100 +825,92 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         };
     }, [sales, layaways]);
 
-    // --- Customer Churn Analysis Logic ---
-    const churnAnalysis = useMemo(() => {
-        const today = new Date();
-        const customerMap = new Map<string, {
-            name: string;
-            phone: string;
-            lastPurchaseDate: Date;
-            totalSpent: number;
-            purchaseCount: number;
-            paymentMethods: Record<string, number>;
-        }>();
+  const churnAnalysis = useMemo(() => {
+    const today = new Date();
+    const customerMap = new Map<string, {
+      name: string;
+      phone: string;
+      lastPurchaseDate: Date;
+      totalSpent: number;
+      purchaseCount: number;
+      paymentMethods: Record<string, number>;
+    }>();
 
-        // Helper to process transactions
-        const processTransaction = (customerName: string, customerPhone: string, date: string, amount: number, payments?: Payment[], paymentMethod?: string) => {
-            if (!customerName || customerName === 'Cliente Mostrador' || !customerPhone || customerPhone.length < 10) return;
-            
-            const key = `${customerName.toLowerCase()}-${customerPhone}`;
-            const existing = customerMap.get(key);
-            const transactionDate = new Date(date);
+    const processTransaction = (customerName: string, customerPhone: string, date: string, amount: number, payments?: Payment[], paymentMethod?: string) => {
+      if (!customerName || customerName === 'Cliente Mostrador' || !customerPhone || customerPhone.length < 10) return;
 
-            // Determine payment methods used in this transaction
-            const methodsUsed: string[] = [];
-            if (payments) {
-                payments.forEach(p => methodsUsed.push(p.method));
-            } else if (paymentMethod) {
-                methodsUsed.push(paymentMethod);
-            }
+      const key = `${customerName.toLowerCase()}-${customerPhone}`;
+      const existing = customerMap.get(key);
+      const transactionDate = new Date(date);
 
-            if (existing) {
-                existing.lastPurchaseDate = transactionDate > existing.lastPurchaseDate ? transactionDate : existing.lastPurchaseDate;
-                existing.totalSpent += amount;
-                existing.purchaseCount += 1;
-                methodsUsed.forEach(m => {
-                    existing.paymentMethods[m] = (existing.paymentMethods[m] || 0) + 1;
-                });
-            } else {
-                const initialMethods: Record<string, number> = {};
-                methodsUsed.forEach(m => initialMethods[m] = 1);
-                customerMap.set(key, {
-                    name: customerName,
-                    phone: customerPhone,
-                    lastPurchaseDate: transactionDate,
-                    totalSpent: amount,
-                    purchaseCount: 1,
-                    paymentMethods: initialMethods
-                });
-            }
+      const methodsUsed: string[] = [];
+      if (payments) {
+        payments.forEach(p => methodsUsed.push(p.method));
+      } else if (paymentMethod) {
+        methodsUsed.push(paymentMethod);
+      }
+
+      if (existing) {
+        existing.lastPurchaseDate = transactionDate > existing.lastPurchaseDate ? transactionDate : existing.lastPurchaseDate;
+        existing.totalSpent += amount;
+        existing.purchaseCount += 1;
+        methodsUsed.forEach(m => {
+          existing.paymentMethods[m] = (existing.paymentMethods[m] || 0) + 1;
+        });
+      } else {
+        const initialMethods: Record<string, number> = {};
+        methodsUsed.forEach(m => initialMethods[m] = 1);
+        customerMap.set(key, {
+          name: customerName,
+          phone: customerPhone,
+          lastPurchaseDate: transactionDate,
+          totalSpent: amount,
+          purchaseCount: 1,
+          paymentMethods: initialMethods
+        });
+      }
+    };
+
+    sales.forEach(sale => {
+      if (!sale.layawayId) {
+        processTransaction(sale.customerName, sale.customerPhone, sale.createdAt, sale.totalAmount, sale.payments, sale.paymentMethod);
+      }
+    });
+
+    layaways.forEach(layaway => {
+      if (layaway.status === 'completed') {
+        processTransaction(layaway.customerName, layaway.customerPhone, layaway.createdAt, layaway.totalAmount, layaway.payments);
+      }
+    });
+
+    const churnedCustomers = Array.from(customerMap.values())
+      .filter(c => {
+        const daysSinceLastPurchase = (today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24);
+        return daysSinceLastPurchase > 45 && c.purchaseCount > 1;
+      })
+      .map(c => {
+        let preferredMethod = 'Desconocido';
+        let maxCount = 0;
+        Object.entries(c.paymentMethods).forEach(([method, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            preferredMethod = method;
+          }
+        });
+
+        return {
+          ...c,
+          daysSince: Math.floor((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)),
+          preferredMethod
         };
+      })
+      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .slice(0, 20);
 
-        // Process Sales
-        sales.forEach(sale => {
-            if (!sale.layawayId) { // Only count direct sales or it might double count with layaways logic depending on how you structure it, but usually layaways are separate
-                 processTransaction(sale.customerName, sale.customerPhone, sale.createdAt, sale.totalAmount, sale.payments, sale.paymentMethod);
-            }
-        });
-
-        // Process Layaways (Completed only to ensure it was a real purchase)
-        layaways.forEach(layaway => {
-            if (layaway.status === 'completed') {
-                processTransaction(layaway.customerName, layaway.customerPhone, layaway.createdAt, layaway.totalAmount, layaway.payments);
-            }
-        });
-
-        const churnedCustomers = Array.from(customerMap.values())
-            .filter(c => {
-                const daysSinceLastPurchase = (today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24);
-                // Criteria: Last purchase > 45 days ago AND has bought at least twice (loyal customer at risk)
-                return daysSinceLastPurchase > 45 && c.purchaseCount > 1;
-            })
-            .map(c => {
-                // Find preferred payment method
-                let preferredMethod = 'Desconocido';
-                let maxCount = 0;
-                Object.entries(c.paymentMethods).forEach(([method, count]) => {
-                    if (count > maxCount) {
-                        maxCount = count;
-                        preferredMethod = method;
-                    }
-                });
-
-                return {
-                    ...c,
-                    daysSince: Math.floor((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)),
-                    preferredMethod
-                };
-            })
-            .sort((a, b) => b.totalSpent - a.totalSpent) // Sort by value (high value customers first)
-            .slice(0, 20); // Top 20 at risk
-
-        return churnedCustomers;
-    }, [sales, layaways]);
+    return churnedCustomers;
+  }, [sales, layaways]);
 
 
-    // --- START: Sales History Section Logic ---
     const managedSales = useMemo(() => {
         const allTransactions: UnifiedSaleTransaction[] = [
           ...sales.map(s => ({ ...s, transactionType: 'sale' as const })),
@@ -975,7 +918,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         ];
 
         return allTransactions.filter(transaction => {
-          const saleDate = new Date(transaction.createdAt);
           const lowerCaseSearchTerm = salesSearchTerm.toLowerCase();
           const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
     
@@ -1003,7 +945,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       const calculateSaleProfit = (transaction: UnifiedSaleTransaction): number => {
         if (!transaction?.items) return 0;
         
-        const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
+        const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
         
         const rawProfit = itemsArray.reduce((profit, item: CartItem) => {
           if (!item || item.cost === undefined) return profit;
@@ -1019,7 +961,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
               totalCommission += payment.amount * rate;
             }
           }
-        } else if ('paymentMethod' in transaction && transaction.paymentMethod) { // Legacy support for single payment method on Sales
+        } else if ('paymentMethod' in transaction && transaction.paymentMethod) {
           const rate = COMMISSION_RATES[transaction.paymentMethod as PaymentMethod];
           if (rate) {
             totalCommission += transaction.totalAmount * rate;
@@ -1030,7 +972,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       };
 
       const renderPaymentMethods = (transaction: UnifiedSaleTransaction) => {
-        // @FIX: The `methods` array was being inferred as `unknown[]` due to Object.values. Explicitly casting to `string[]` ensures type safety for React keys and content.
         const methods: string[] = transaction.payments && transaction.payments.length > 0 
           ? [...new Set(transaction.payments.map(p => p.method))]
           : ('paymentMethod' in transaction && transaction.paymentMethod ? [transaction.paymentMethod] : []);
@@ -1049,9 +990,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           </div>
         );
       };
-    // --- END: Sales History Section Logic ---
 
-    // --- Chart Data Logic ---
     const salesChartData = useMemo(() => {
         const transactions = [
             ...sales.map(s => ({ date: s.createdAt, amount: s.totalAmount })),
@@ -1060,7 +999,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
         const currentDayOfMonth = new Date().getDate();
 
-        // Determine which data set to process based on view mode
         const dataToProcess = chartViewMode === 'all-months' 
             ? transactions
             : transactions.filter(t => isWithinRange(t.date));
@@ -1072,9 +1010,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             let key: string;
 
             if (chartViewMode === 'daily') {
-                key = date.toISOString().split('T')[0]; // YYYY-MM-DD
-            } else { // 'monthly' or 'all-months'
-                key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`; // YYYY-MM
+                key = date.toISOString().split('T')[0];
+            } else {
+                key = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
             }
             
             if (!groupedData[key]) {
@@ -1083,8 +1021,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
             groupedData[key].total += transaction.amount;
 
-            // Calculate accumulated sales up to current day of month for comparison
-            // Only applicable for monthly aggregations (all-months or monthly)
             if (chartViewMode !== 'daily' && date.getDate() <= currentDayOfMonth) {
                 groupedData[key].progress += transaction.amount;
             }
@@ -1095,15 +1031,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             .sort((a, b) => a.label.localeCompare(b.label));
     }, [sales, layaways, chartViewMode, isWithinRange]);
 
-  // --- Start of Admin-only General Dashboard Logic ---
-  
   const handleShareCurrentStore = async () => {
     const { totalUnitsSold, totalProfit, averageTicketSize } = metricsForCurrentStore;
     
     const paymentBreakdownText = Object.entries(detailedReportData.totalsByMethod)
         .map(([method, total]) => {
-            if (method === 'Recaudo Sistecredito') return null; // Don't include this in the main breakdown
-            // @FIX: The value from Object.entries could be unknown. Explicitly cast to Number to ensure type safety.
+            if (method === 'Recaudo Sistecredito') return null;
             const commission = detailedReportData.commissionsByMethod[method];
             let line = ` • *${method}:* ${formatCOP(Number(total) || 0)}`;
             if (commission > 0) {
@@ -1150,19 +1083,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     }
   };
   
-  const handleGoToPos = (storeId: string) => {
-    onSwitchStore(storeId);
-    onNavigate(View.POS);
-  };
-
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      {/* Top Control Panel: Filters, Quick Nav, and Notifications */}
-      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg">
+      {/* Top Control Panel: Filters & Smart Access */}
+      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg border border-accent/20">
         <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* Left Side: Date Filters & Anchors */}
             <div className="flex items-center gap-2 flex-wrap">
-                {/* Date Presets */}
                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
                     <button onClick={setToday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Hoy</button>
                     <button onClick={setYesterday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Ayer</button>
@@ -1170,15 +1096,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <button onClick={setThisMonth} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Mes</button>
                 </div>
 
-                {/* Quick Navigation Anchors */}
+                {/* Quick Navigation Anchors - RESTORED */}
                 <div className="flex items-center gap-1 bg-accent/10 p-1 rounded-lg">
                     <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><DollarIcon className="w-3 h-3"/> Pagos</button>
                     <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
-                    <button onClick={() => scrollToSection('price-variation')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><TagIcon className="w-3 h-3"/> Precios</button>
-                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
+                    <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
-                
-                {/* DIRECT ACCESS: Inventory Verification */}
+
                 <button 
                   onClick={onOpenVerification}
                   className="px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20"
@@ -1188,7 +1112,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 </button>
             </div>
             
-            {/* Right Side: Date Picker & Notifications */}
             <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
                     <button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button>
@@ -1197,47 +1120,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/>
                     <button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button>
                 </div>
-                
-                {/* Notification Icons */}
-                <div className="flex items-center gap-2 border-l pl-4 border-gray-200 dark:border-gray-700">
-                    {/* Incidents Notification */}
-                    <button 
-                        onClick={() => onNavigate(View.INCIDENTS)}
-                        className={`relative p-2 rounded-full transition-colors ${isAdmin && pendingIncidentsAcrossStores.length > 0 ? 'text-red-500 animate-pulse hover:bg-red-50 dark:hover:bg-red-900/20' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                        title="Novedades Pendientes"
-                    >
-                        <AlertTriangleIcon className="w-5 h-5" />
-                        {isAdmin && pendingIncidentsAcrossStores.length > 0 && (
-                            <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full border border-white dark:border-gray-900">
-                                {pendingIncidentsAcrossStores.length}
-                            </span>
-                        )}
-                    </button>
-
-                    {/* Layaways Notification */}
-                    <button 
-                        onClick={() => onNavigate(View.LAYAWAY)}
-                        className={`relative p-2 rounded-full transition-colors ${pendingPreOrdersAcrossStores.length > 0 ? 'text-yellow-500 animate-pulse hover:bg-yellow-50 dark:hover:bg-yellow-900/20' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                        title="Abonos por Entregar"
-                    >
-                        <TruckIcon className="w-5 h-5" />
-                        {pendingPreOrdersAcrossStores.length > 0 && (
-                             <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full border border-white dark:border-gray-900">
-                                {pendingPreOrdersAcrossStores.length}
-                            </span>
-                        )}
-                    </button>
-                </div>
             </div>
         </div>
       </div>
 
-      {/* AI Insights Widget (Full Width) */}
+      {/* AI Insights Widget - NOW INCLUDES HIGH VELOCITY SALES */}
       <div className="w-full transition-all duration-300 ease-in-out">
              <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden relative">
-                 {/* Decorative Gradient Border */}
                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
-                 
                  <div 
                     onClick={() => setIsAIExpanded(!isAIExpanded)}
                     className="p-2 px-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between items-center"
@@ -1261,48 +1151,44 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
                  {isAIExpanded && (
                  <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-                    {/* Tabs Navigation */}
                     <div className="flex border-b border-gray-200 dark:border-gray-700">
-                        <button
-                            onClick={() => setActiveAITab('insights')}
-                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                        >
-                            <PackageIcon className="w-3 h-3" />
-                            Inventario & Insights
+                        <button onClick={() => setActiveAITab('insights')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <PackageIcon className="w-3 h-3" /> Inventario & Insights
                         </button>
-                        <button
-                            onClick={() => setActiveAITab('forecast')}
-                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                        >
-                            <ChartBarIcon className="w-3 h-3" />
-                            Proyección de Cierre
+                        <button onClick={() => setActiveAITab('forecast')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <ChartBarIcon className="w-3 h-3" /> Proyección de Cierre
                         </button>
-                        <button
-                            onClick={() => setActiveAITab('clients')}
-                            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                        >
-                            <UsersIcon className="w-3 h-3" />
-                            Retención & Fuga
+                        <button onClick={() => setActiveAITab('clients')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <UsersIcon className="w-3 h-3" /> Retención & Fuga
                         </button>
                     </div>
 
                     <div className="p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
-                    
                     {activeAITab === 'insights' ? (
                         <>
-                            {/* Left: Insight List */}
-                            <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[150px] pr-1">
+                            <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[180px] pr-1">
                             {aiInsights ? (
                                 <>
-                                    {aiInsights.restock.length > 0 && (
+                                    {/* HIGH VELOCITY FIRST */}
+                                    {aiInsights.highVelocity.length > 0 && (
                                         <div className="space-y-1">
-                                            <p className="font-bold text-red-600 dark:text-red-400 text-xs uppercase tracking-wide">⚠️ Reabastecer</p>
+                                            <p className="font-black text-orange-600 dark:text-orange-400 text-[10px] uppercase tracking-widest flex items-center gap-1">
+                                                <SparklesIcon className="w-3 h-3 animate-pulse" /> Venta Relámpago
+                                            </p>
+                                            {aiInsights.highVelocity.map((item) => (
+                                                <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                                                    <span className="truncate font-black">{item.name}</span>
+                                                    <span className="text-[10px] font-bold bg-orange-100 dark:bg-orange-900/40 px-1 rounded">{item.unitsPerDay.toFixed(1)} uds/día</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {aiInsights.restock.length > 0 && (
+                                        <div className="space-y-1 mt-2">
+                                            <p className="font-bold text-red-600 dark:text-red-400 text-[10px] uppercase tracking-wide">⚠️ Reabastecer</p>
                                             {aiInsights.restock.slice(0, 2).map((item) => (
-                                                <button 
-                                                    key={item.id}
-                                                    onClick={() => setActiveInsightId(item.id)}
-                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                                >
+                                                <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                                                     <span className="truncate font-medium">{item.name}</span>
                                                     <span className="text-gray-500 whitespace-nowrap">Quedan: {item.stock}</span>
                                                 </button>
@@ -1310,247 +1196,97 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         </div>
                                     )}
                                     {aiInsights.trending.length > 0 && (
-                                        <div className="space-y-1">
-                                            <p className="font-bold text-green-600 dark:text-green-400 text-xs uppercase tracking-wide">🔥 Tendencia</p>
+                                        <div className="space-y-1 mt-2">
+                                            <p className="font-bold text-green-600 dark:text-green-400 text-[10px] uppercase tracking-wide">🔥 Tendencia</p>
                                             {aiInsights.trending.slice(0, 3).map((item) => (
-                                                <button 
-                                                    key={item.id}
-                                                    onClick={() => setActiveInsightId(item.id)}
-                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                                >
+                                                <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                                                     <span className="truncate font-medium">{item.name}</span>
                                                     <span className="text-gray-500 whitespace-nowrap">{item.quantity} vendidos</span>
                                                 </button>
                                             ))}
                                         </div>
                                     )}
-                                    {aiInsights.atRisk.length > 0 && (
-                                        <div className="space-y-1">
-                                            <p className="font-bold text-orange-500 dark:text-orange-400 text-xs uppercase tracking-wide">⚠️ En Riesgo (Lento)</p>
-                                            {aiInsights.atRisk.slice(0, 3).map((item) => (
-                                                <button 
-                                                    key={item.id}
-                                                    onClick={() => setActiveInsightId(item.id)}
-                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                                >
-                                                    <span className="truncate font-medium">{item.name}</span>
-                                                    <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {aiInsights.stagnant.length > 0 && (
-                                        <div className="space-y-1">
-                                            <p className="font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">💤 Estancado (Hueso)</p>
-                                            {aiInsights.stagnant.slice(0, 2).map((item) => (
-                                                <button 
-                                                    key={item.id}
-                                                    onClick={() => setActiveInsightId(item.id)}
-                                                    className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                                >
-                                                    <span className="truncate font-medium">{item.name}</span>
-                                                    <span className="text-gray-500 whitespace-nowrap">{item.stock} en stock</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
                                 </>
-                            ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <p className="text-xs text-gray-400">Cargando análisis...</p>
-                                </div>
-                            )}
+                            ) : <p className="text-xs text-gray-400">Cargando...</p>}
                             </div>
-
-                            {/* Right: Context Panel */}
-                            <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative">
-                                {!activeInsightId ? (
-                                    <div className="text-center text-gray-400 text-xs">
-                                        <SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                                        <p>Selecciona un ítem para ver el análisis detallado.</p>
-                                    </div>
-                                ) : (
+                            <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative min-h-[150px]">
+                                {!activeInsightId ? <div className="text-center text-gray-400 text-xs"><SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" /><p>Selecciona un ítem.</p></div> : (
                                     (() => {
+                                        const highVelItem = aiInsights?.highVelocity.find(i => i.id === activeInsightId);
                                         const trendingItem = aiInsights?.trending.find(i => i.id === activeInsightId);
                                         const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
-                                        const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
                                         const atRiskItem = aiInsights?.atRisk.find(i => i.id === activeInsightId);
-                                        
-                                        if (trendingItem) {
-                                            return (
-                                                <div className="animate-fade-in text-sm">
-                                                    <h4 className="font-bold text-green-600 dark:text-green-400 mb-1 flex items-center gap-1"><span className="text-lg">🔥</span> Alto Rendimiento</h4>
-                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">{trendingItem.context}</p>
-                                                    <div className="bg-green-50 dark:bg-green-900/10 p-2 rounded border border-green-100 dark:border-green-900/30 text-xs">
-                                                        <strong>Sugerencia:</strong> Asegura disponibilidad o crea combos con este producto.
-                                                    </div>
+                                        const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
+
+                                        if (highVelItem) return (
+                                            <div className="animate-fade-in text-sm">
+                                                <h4 className="font-black text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1">⚡ VENTA RELÁMPAGO</h4>
+                                                <p className="text-gray-700 dark:text-gray-300 text-xs leading-tight mb-2">
+                                                    Este ítem se está moviendo a <span className="font-bold text-accent">{highVelItem.unitsPerDay.toFixed(1)} uds/día</span>.
+                                                    Has vendido el <span className="font-bold">{Math.round(highVelItem.percentageOfBatchGone)}%</span> del último lote en solo {highVelItem.daysElapsed} días.
+                                                </p>
+                                                <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden mb-3">
+                                                    <div className={`h-full ${highVelItem.urgency === 'high' ? 'bg-orange-500' : 'bg-yellow-500'}`} style={{ width: `${highVelItem.percentageOfBatchGone}%` }}></div>
                                                 </div>
-                                            );
-                                        }
-                                        if (restockItem) {
-                                            return (
-                                                <div className="animate-fade-in text-sm">
-                                                    <h4 className="font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Stock Crítico</h4>
-                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                        Vendiendo <strong>{restockItem.velocity}</strong> unidades/mes. 
-                                                        Al ritmo actual, te quedarás sin stock en aproximadamente <strong>{restockItem.daysLeft} días</strong>.
-                                                    </p>
-                                                    <div className="bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30 text-xs">
-                                                        <strong>Sugerencia:</strong> Realizar pedido a proveedor inmediatamente.
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (atRiskItem) {
-                                            return (
-                                                <div className="animate-fade-in text-sm">
-                                                    <h4 className="font-bold text-orange-500 dark:text-orange-400 mb-1 flex items-center gap-1"><span className="text-lg">⚠️</span> Rotación Lenta</h4>
-                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                        Solo <strong>{atRiskItem.soldQty}</strong> ventas recientes con stock alto ({atRiskItem.stock}).
-                                                    </p>
-                                                    <div className="bg-orange-50 dark:bg-orange-900/10 p-2 rounded border border-orange-100 dark:border-orange-900/30 text-xs space-y-1">
-                                                        <p className="font-bold border-b border-orange-200 dark:border-orange-800 pb-1 mb-1">Estrategia: Descuento Moderado</p>
-                                                        <div className="flex justify-between text-[10px] text-gray-500">
-                                                            <span>Costo: {formatCOP(atRiskItem.cost)}</span>
-                                                            <span>Actual: {formatCOP(atRiskItem.price)}</span>
-                                                        </div>
-                                                        <div className="mt-1 font-bold text-accent">
-                                                            Sugerido: {formatCOP(atRiskItem.suggestedPrice)} <span className="text-orange-600 text-[10px]">(-{atRiskItem.discount}%)</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (stagnantItem) {
-                                            return (
-                                                <div className="animate-fade-in text-sm">
-                                                    <h4 className="font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1"><span className="text-lg">💤</span> Capital Estancado</h4>
-                                                    <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs leading-relaxed">
-                                                        Tienes <strong>{stagnantItem.stock}</strong> unidades sin movimiento.
-                                                    </p>
-                                                    <div className="bg-gray-100 dark:bg-gray-700/30 p-2 rounded border border-gray-200 dark:border-gray-700 text-xs space-y-1">
-                                                        <p className="font-bold border-b border-gray-300 dark:border-gray-600 pb-1 mb-1">Estrategia: Liquidación</p>
-                                                        <div className="flex justify-between text-[10px] text-gray-500">
-                                                            <span>Costo: {formatCOP(stagnantItem.cost)}</span>
-                                                            <span>Actual: {formatCOP(stagnantItem.price)}</span>
-                                                        </div>
-                                                        <div className="mt-1 font-bold text-red-500">
-                                                            Sugerido: {formatCOP(stagnantItem.suggestedPrice)} <span className="text-gray-500 text-[10px]">(-{stagnantItem.discount}%)</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
+                                                <button onClick={() => onNavigate(View.PURCHASES)} className="w-full bg-orange-500 text-white text-[10px] font-black uppercase py-1.5 rounded shadow-sm hover:bg-orange-600 transition-colors">Reposición Prioritaria</button>
+                                            </div>
+                                        );
+
+                                        if (trendingItem) return <div className="animate-fade-in text-sm"><h4 className="font-bold text-green-600 dark:text-green-400 mb-1">🔥 Alto Rendimiento</h4><p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">{trendingItem.context}</p></div>;
+                                        if (restockItem) return <div className="animate-fade-in text-sm"><h4 className="font-bold text-red-600 dark:text-red-400 mb-1">⚠️ Stock Crítico</h4><p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">Agotamiento en <strong>{restockItem.daysLeft} días</strong> al ritmo actual.</p></div>;
+                                        if (atRiskItem) return <div className="animate-fade-in text-sm"><h4 className="font-bold text-orange-500 dark:text-orange-400 mb-1">⚠️ Rotación Lenta</h4><p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">Sugerido: <span className="text-accent font-bold">{formatCOP(atRiskItem.suggestedPrice)}</span> (-{atRiskItem.discount}%)</p></div>;
+                                        if (stagnantItem) return <div className="animate-fade-in text-sm"><h4 className="font-bold text-gray-500 mb-1">💤 Capital Estancado</h4><p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">Liquidación: <span className="text-red-500 font-bold">{formatCOP(stagnantItem.suggestedPrice)}</span> (-{stagnantItem.discount}%)</p></div>;
                                         return null;
                                     })()
                                 )}
                             </div>
                         </>
                     ) : activeAITab === 'forecast' ? (
-                        // Forecast Tab Content
                         <div className="w-full flex flex-col md:flex-row gap-4 animate-fade-in">
-                            {/* Left: Stats & Progress */}
                             <div className="md:w-1/2 space-y-3">
                                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Proyección de Cierre</h4>
                                     <p className="text-2xl font-extrabold text-accent">{formatCOP(forecastAnalysis.projectedTotal)}</p>
-                                    <div className="mt-2 text-xs text-gray-500 flex justify-between">
-                                        <span>Actual (Pagos): {formatCOP(forecastAnalysis.currentTotal)}</span>
-                                        <span>Prom. Diario: {formatCOP(forecastAnalysis.dailyAverage)}</span>
-                                    </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                        <span>Progreso del Mes</span>
-                                        <span>{Math.round(forecastAnalysis.monthProgress)}%</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
-                                        <div 
-                                            className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" 
-                                            style={{ width: `${forecastAnalysis.monthProgress}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-[10px] text-right text-gray-400">Faltan {forecastAnalysis.daysRemaining} días</p>
+                                    <div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-300"><span>Progreso del Mes</span><span>{Math.round(forecastAnalysis.monthProgress)}%</span></div>
+                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden"><div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" style={{ width: `${forecastAnalysis.monthProgress}%` }}></div></div>
                                 </div>
                             </div>
-
-                            {/* Right: AI Strategies */}
                             <div className="md:w-1/2 space-y-2">
-                                <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                                    <SparklesIcon className="w-4 h-4 text-yellow-500" />
-                                    Estrategias Recomendadas
-                                </h4>
+                                <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200">Estrategias</h4>
                                 <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
                                     {forecastAnalysis.strategies.map((strat, idx) => (
-                                        <div key={idx} className="bg-white dark:bg-gray-800 p-2.5 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex gap-3 items-start group hover:border-accent/30 transition-colors">
-                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : strat.type === 'sales' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                                            <div>
-                                                <p className="text-xs font-bold text-gray-800 dark:text-gray-200 group-hover:text-accent transition-colors">{strat.title}</p>
-                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">{strat.desc}</p>
-                                            </div>
-                                        </div>
+                                        <div key={idx} className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-100 dark:border-gray-700 flex gap-3 items-start"><div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : 'bg-green-500'}`}></div><div><p className="text-xs font-bold">{strat.title}</p><p className="text-[10px] text-gray-500">{strat.desc}</p></div></div>
                                     ))}
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        // Client Churn Tab Content
                         <div className="w-full animate-fade-in">
-                            <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 flex items-center gap-2 mb-3">
-                                <UsersIcon className="w-4 h-4 text-red-500" />
-                                Clientes en Riesgo de Fuga (últimos 45+ días sin compra)
-                            </h4>
+                            <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-3">Clientes en Riesgo de Fuga</h4>
                             <div className="max-h-[200px] overflow-y-auto pr-2">
-                                {churnAnalysis.length > 0 ? (
-                                    churnAnalysis.map((client, index) => (
-                                        <div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border border-l-4 border-gray-100 dark:border-gray-700 border-l-red-500 shadow-sm flex justify-between items-center">
-                                            <div>
-                                                <p className="font-bold text-sm text-gray-800 dark:text-gray-200">{client.name}</p>
-                                                <p className="text-xs text-gray-500">{client.phone}</p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[10px] bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-gray-600 dark:text-gray-400">
-                                                        {client.purchaseCount} compras
-                                                    </span>
-                                                    <span className="text-[10px] bg-green-50 dark:bg-green-900/20 px-1.5 rounded text-green-600 dark:text-green-400 font-bold">
-                                                        {formatCOP(client.totalSpent)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-bold text-red-500">{client.daysSince} días</p>
-                                                <p className="text-[10px] text-gray-400">sin volver</p>
-                                                <p className="text-[10px] text-blue-500 mt-1 font-semibold" title="Medio de pago favorito">
-                                                    Prefiere: {client.preferredMethod}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-32 text-gray-400">
-                                        <SparklesIcon className="w-8 h-8 mb-2 opacity-20" />
-                                        <p className="text-xs">¡Excelente! No se detectan clientes recurrentes en riesgo de fuga reciente.</p>
+                                {churnAnalysis.length > 0 ? churnAnalysis.map((client, index) => (
+                                    <div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border-l-4 border-l-red-500 flex justify-between items-center">
+                                        <div><p className="font-bold text-sm">{client.name}</p><p className="text-xs text-gray-500">{client.phone}</p></div>
+                                        <div className="text-right"><p className="text-xs font-bold text-red-500">{client.daysSince} días</p><p className="text-[10px] text-gray-400">sin volver</p></div>
                                     </div>
-                                )}
+                                )) : <p className="text-xs text-center text-gray-400">Todo bien por ahora.</p>}
                             </div>
                         </div>
                     )}
-                    
                     </div>
                  </div>
                  )}
              </div>
       </div>
       
+      {/* Main Reports */}
       <div id="payment-report" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center">
              <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2>
-                {isAdmin && (
-                  <button onClick={(e) => { e.stopPropagation(); onOpenReports(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Generar análisis de ventas con IA">
-                      <SparklesIcon className="w-6 h-6 text-accent" />
-                  </button>
-                )}
-                 <button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen de ${currentStore?.name || 'Tienda Actual'}`}>
+                 <button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen`}>
                     <ShareIcon className="w-5 h-5" />
                 </button>
             </div>
@@ -1570,23 +1306,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             </div>
                             <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
                         </div>
-                        {isUnitsSoldExpanded && (
-                            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 animate-fade-in">
-                                <h4 className="font-bold text-sm text-left mb-2 text-gray-700 dark:text-text-dark">Desglose por Vendedora:</h4>
-                                {metricsForCurrentStore.unitsBySeller.length > 0 ? (
-                                    <ul className="space-y-1 text-sm">
-                                        {metricsForCurrentStore.unitsBySeller.map(sellerData => (
-                                            <li key={sellerData.sellerName} className="flex justify-between items-center">
-                                                <span className="text-gray-600 dark:text-text-dark">{sellerData.sellerName}</span>
-                                                <span className="font-bold text-accent">{sellerData.units} uds</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <p className="text-xs text-center text-gray-500 dark:text-text-dark">No hay ventas de unidades en este período.</p>
-                                )}
-                            </div>
-                        )}
                     </div>
                     <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg flex items-center justify-center">
                         <div className="text-center">
@@ -1626,27 +1345,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in">
                                     <div className="flex justify-between"><span>Ventas (incluye excedentes):</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div>
                                     <div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>
-                                    {cashBreakdown.incomeAdjustments.map(adj => (
-                                        <div key={adj.id} className="flex justify-between text-green-500" title={adj.description}>
-                                            <span className="truncate pr-2">{adj.description || 'Ingreso'}</span>
-                                            <span>+{formatCOP(adj.adjustmentAmount || 0)}</span>
-                                        </div>
-                                    ))}
-                                    {cashBreakdown.expenseAdjustments.map(adj => (
-                                        <div key={adj.id} className="flex justify-between text-red-500" title={adj.description}>
-                                            <span className="truncate pr-2">{adj.description || 'Gasto'}</span>
-                                            <span>-{formatCOP(adj.adjustmentAmount || 0)}</span>
-                                        </div>
-                                    ))}
                                 </div>
                             )}
                         </div>
-                        {totalRecaudos > 0 && (
-                            <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-md text-left ring-2 ring-blue-500/50">
-                                <p className="font-bold text-blue-800 dark:text-blue-300">Recaudos (Aparte)</p>
-                                <p className="text-xl font-extrabold text-blue-600 dark:text-blue-400">{formatCOP(totalRecaudos)}</p>
-                            </div>
-                        )}
                         {Object.entries(detailedReportData.totalsByMethod)
                             .filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito')
                             .map(([method, total]) => {
@@ -1655,182 +1356,54 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <button key={method} onClick={() => setPaymentMethodFilter(paymentMethodFilter === method ? null : method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === method ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}>
                                     <p className="font-bold text-gray-800 dark:text-text-light">{method}</p>
                                     <p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p>
-                                    {commission > 0 && (
-                                        <p className="text-xs font-semibold text-red-500 mt-1">-{formatCOP(Number(commission))}</p>
-                                    )}
                                 </button>
                             )})
                         }
                     </div>
                 </div>
-                <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-semibold text-gray-800 dark:text-text-light">
-                            Desglose de Transacciones
-                            {paymentMethodFilter && <span className="text-base font-normal text-gray-500 dark:text-text-dark"> (Filtrado por: {paymentMethodFilter})</span>}
-                        </h3>
-                        {paymentMethodFilter && <button onClick={() => setPaymentMethodFilter(null)} className="flex items-center text-sm text-accent hover:underline"><CrossIcon className="w-4 h-4 mr-1"/>Limpiar Filtro</button>}
-                    </div>
-                    <div className="overflow-x-auto max-h-[500px]">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
-                                <tr>
-                                    <th className="p-2 font-semibold">Fecha</th>
-                                    <th className="p-2 font-semibold">Tipo</th>
-                                    <th className="p-2 font-semibold">Factura #</th>
-                                    <th className="p-2 font-semibold">Cliente</th>
-                                    <th className="p-2 font-semibold">Detalles</th>
-                                    <th className="p-2 font-semibold">Vendedor</th>
-                                    <th className="p-2 font-semibold">Medio de Pago</th>
-                                    <th className="p-2 font-semibold text-right">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                {detailedReportData.filteredTransactions.map(t => (
-                                    <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                        <td className="p-2 whitespace-nowrap">{new Date(t.date).toLocaleString()}</td>
-                                        <td className="p-2"><span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-accent/20 text-accent">{t.type}</span></td>
-                                        <td className="p-2 font-mono">{t.invoiceNumber}</td>
-                                        <td className="p-2">{t.customer}</td>
-                                        <td className="p-2 text-xs max-w-xs truncate" title={t.details}>{t.details}</td>
-                                        <td className="p-2">{t.seller}</td>
-                                        <td className="p-2">{t.paymentMethod}</td>
-                                        <td className="p-2 text-right font-bold text-accent">{formatCOP(t.amount)}</td>
-                                    </tr>
-                                ))}
-                                {detailedReportData.filteredTransactions.length === 0 && (
-                                    <tr><td colSpan={8} className="p-4 text-center text-gray-500">No hay transacciones para mostrar.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
         )}
       </div>
 
+      {/* Historical Sales Table */}
       <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-accent">Historial y Gestión de Ventas</h2>
+            <h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2>
             <ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} />
         </div>
         {isSalesHistoryVisible && (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div className="relative md:col-span-1">
-                    <input type="text" placeholder="Buscar por # Factura, cliente, etc..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
+                  <div className="relative">
+                    <input type="text" placeholder="Factura, cliente, etc..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none" />
                     <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div>
-                    {salesSearchTerm && (<button onClick={() => setSalesSearchTerm('')} className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white" aria-label="Limpiar búsqueda"><CrossIcon className="w-5 h-5" /></button>)}
                   </div>
-                  <select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select>
-                  <select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"><option value="">Todas las categorías</option>{props.categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select>
+                  <select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select>
+                  <select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todas las categorías</option>{props.categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select>
                 </div>
-                {managedSales.length === 0 ? <p className="text-center text-gray-500 dark:text-text-dark py-8">No se encontraron ventas con los filtros aplicados.</p> : (
+                {managedSales.length > 0 ? (
                     <div className="overflow-x-auto"><table className="w-full text-left">
                         <thead className="bg-gray-100 dark:bg-gray-800"><tr>
-                            <th className="p-3 text-sm font-semibold tracking-wide">Factura</th><th className="p-3 text-sm font-semibold tracking-wide">Fecha</th><th className="p-3 text-sm font-semibold tracking-wide">Cliente</th><th className="p-3 text-sm font-semibold tracking-wide text-center">Items</th><th className="p-3 text-sm font-semibold tracking-wide text-right">Total Venta</th><th className="p-3 text-sm font-semibold tracking-wide text-right">Ganancia</th><th className="p-3 text-sm font-semibold tracking-wide">Medio de Pago</th><th className="p-3 text-sm font-semibold tracking-wide">Vendedor</th><th className="p-3 text-sm font-semibold tracking-wide text-center">Acciones</th>
+                            <th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold text-center">Acciones</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {managedSales.map((transaction) => {
                             const profit = calculateSaleProfit(transaction);
-                            const profitColor = profit >= 0 ? 'text-green-500' : 'text-red-500';
                             const isExpanded = expandedSaleId === transaction.id;
-                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
                             return (<React.Fragment key={transaction.id}>
-                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
-                                {/* FIX: Added safe property checks for layawayId in UnifiedSaleTransaction union type */}
-                                <td className="p-3 font-mono text-accent"><div className="flex items-center space-x-2"><ChevronDownIcon className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{ ((transaction.transactionType === 'sale' && transaction.layawayId) || transaction.transactionType === 'layaway') && (<span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-blue-500/80 text-white">ABONO</span>)}</div></td>
-                                <td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString()}</td>
-                                <td className="p-3"><div>{transaction.customerName}</div><div className="text-xs text-gray-500 dark:text-text-dark">{transaction.customerPhone}</div></td>
-                                <td className="p-3 text-center">{itemsArray.reduce((acc, item) => acc + (item?.quantity || 0), 0)}</td>
-                                <td className="p-3 text-right font-semibold text-accent">{formatCOP(transaction.totalAmount)}</td>
-                                <td className={`p-3 text-right font-bold ${profitColor}`}>{formatCOP(profit)}</td>
-                                <td className="p-3">{renderPaymentMethods(transaction)}</td>
-                                <td className="p-3">{transaction.seller}</td>
-                                <td className="p-3 text-center"><div className="flex justify-center items-center space-x-1">
-                                    <button onClick={(e) => { e.stopPropagation(); if(transaction.transactionType === 'sale') onReprintSale(transaction as Sale); }} disabled={transaction.transactionType !== 'sale'} className="text-gray-500 dark:text-text-dark hover:text-blue-500 p-2 rounded-full hover:bg-blue-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={transaction.transactionType === 'sale' ? 'Reimprimir Factura' : 'No se puede reimprimir un abono desde aquí'}><PrintIcon className="w-5 h-5" /></button>
-                                    {/* FIX: Corrected title and disabled props by adding safe checks for layawayId using transactionType guard */}
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={((transaction.transactionType === 'sale' && transaction.layawayId) || transaction.transactionType === 'layaway') ? "Editar desde la pestaña Abonos" : "Editar Venta"} disabled={(transaction.transactionType === 'sale' && !!transaction.layawayId) || transaction.transactionType === 'layaway'}><EditIcon className="w-5 h-5" /></button>
-                                    {isAdmin && (<button onClick={(e) => { e.stopPropagation(); if(transaction.transactionType === 'sale') onDeleteSale(transaction.id); }} disabled={transaction.transactionType !== 'sale'} className="text-gray-500 dark:text-text-dark hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title={transaction.transactionType !== 'sale' ? 'Eliminar desde la pestaña Abonos' : 'Eliminar Venta'}><TrashIcon className="w-5 h-5" /></button>)}
-                                </div></td>
+                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
+                                <td className="p-3 font-mono text-accent">#{transaction.invoiceNumber}</td>
+                                <td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleDateString()}</td>
+                                <td className="p-3">{transaction.customerName}</td>
+                                <td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td>
+                                <td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td>
+                                <td className="p-3 text-center">
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1"><EditIcon /></button>
+                                </td>
                             </tr>
-                            {isExpanded && (<tr className="bg-gray-100/50 dark:bg-gray-800/50"><td colSpan={9} className="p-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><h4 className="font-bold text-accent mb-2">Productos</h4><table className="w-full text-sm"><thead className="border-b dark:border-gray-600"><tr><th className="text-left pb-1 font-semibold">Nombre</th><th className="text-center pb-1 font-semibold">Cant.</th><th className="text-right pb-1 font-semibold">P. Unit</th><th className="text-right pb-1 font-semibold">Subtotal</th></tr></thead><tbody className="divide-y divide-gray-200/50 dark:divide-gray-700/50">{itemsArray.map((item: CartItem, index) => item && (<tr key={index}><td className="py-1">{item.name}</td><td className="text-center py-1">{item.quantity}</td><td className="text-right py-1">{formatCOP(item.price)}</td><td className="text-right py-1 font-semibold">{formatCOP(item.price * item.quantity)}</td></tr>))}</tbody></table></div>
-                                <div><h4 className="font-bold text-accent mb-2">Detalles de Pago</h4><div className="bg-white dark:bg-secondary p-3 rounded-md space-y-2 text-sm">
-                                    {transaction.payments ? transaction.payments.map((p, index) => (<div key={index} className="flex justify-between"><span>{p.method}:</span><span className="font-bold">{formatCOP(p.amount)}</span></div>)) : ('paymentMethod' in transaction && transaction.paymentMethod) ? (<div className="flex justify-between"><span>Método de Pago:</span><span className="font-bold">{transaction.paymentMethod}</span></div>) : null}
-                                    <div className="flex justify-between font-bold pt-2 border-t border-dashed"><span>Total Pagado:</span><span>{formatCOP(transaction.payments ? transaction.payments.reduce((sum,p) => sum + p.amount, 0) : transaction.totalAmount)}</span></div>
-                                    <div className="flex justify-between"><span>Ganancia:</span><span className={`font-bold ${profitColor}`}>{formatCOP(profit)}</span></div>
-                                </div></div>
-                            </div></td></tr>)}
-                        </React.Fragment>);})}</tbody>
+                            </React.Fragment>);})}</tbody>
                     </table></div>
-                )}
-            </div>
-        )}
-      </div>
-
-       <div id="price-variation" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
-        <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-accent">Análisis de Variación de Precios</h2>
-            <ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} />
-        </div>
-        {isPriceAnalysisVisible && (
-            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-green-100 dark:bg-green-900/50 p-4 rounded-lg text-center">
-                        <p className="text-sm font-semibold text-green-800 dark:text-green-300">Cobros por Encima del Precio</p>
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p>
-                    </div>
-                    <div className="bg-red-100 dark:bg-red-900/50 p-4 rounded-lg text-center">
-                        <p className="text-sm font-semibold text-red-800 dark:text-red-300">Descuentos Aplicados</p>
-                        <p className="text-2xl font-bold text-red-500">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
-                    </div>
-                    <div className="bg-blue-100 dark:bg-blue-900/50 p-4 rounded-lg text-center">
-                        <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Diferencia Neta</p>
-                        <p className={`text-2xl font-bold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-500'}`}>{formatCOP(priceVariationReportData.summary.netDifference)}</p>
-                    </div>
-                </div>
-
-                <div className="flex flex-wrap gap-4 mb-4">
-                    <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
-                        <option value="">Todos los Vendedores</option>
-                        {sellers.map(seller => <option key={seller.id} value={seller.name}>{seller.name}</option>)}
-                    </select>
-                    <select value={priceVariationPaymentMethodFilter} onChange={e => setPriceVariationPaymentMethodFilter(e.target.value)} className="bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none">
-                        <option value="">Todos los Métodos de Pago</option>
-                        {Object.values(PaymentMethod).map(method => <option key={method} value={method}>{method}</option>)}
-                    </select>
-                </div>
-
-                <div className="overflow-x-auto max-h-[500px]">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
-                            <tr>
-                                <th className="p-2 font-semibold">Fecha</th>
-                                <th className="p-2 font-semibold">Producto</th>
-                                <th className="p-2 font-semibold text-right">Precio Venta</th>
-                                <th className="p-2 font-semibold text-right">Precio Actual</th>
-                                <th className="p-2 font-semibold text-right">Variación</th>
-                                <th className="p-2 font-semibold text-center">Cant.</th>
-                                <th className="p-2 font-semibold text-right">Variación Total</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {priceVariationReportData.items.map(item => (
-                                <tr key={item.id} className={`${item.status === 'markup' ? 'bg-green-500/5' : item.status === 'discount' ? 'bg-red-500/5' : ''}`}>
-                                    <td className="p-2 whitespace-nowrap">{new Date(item.date).toLocaleDateString()}</td>
-                                    <td className="p-2 font-semibold">{item.productName}</td>
-                                    <td className="p-2 text-right">{formatCOP(item.soldPrice)}</td>
-                                    <td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td>
-                                    <td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>{formatCOP(item.variation)}</td>
-                                    <td className="p-2 text-center">{item.quantity}</td>
-                                    <td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>{formatCOP(item.totalVariation)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {priceVariationReportData.items.length === 0 && <p className="text-center text-gray-500 py-4">No hay variaciones de precio para mostrar.</p>}
-                </div>
+                ) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}
             </div>
         )}
       </div>
@@ -1839,49 +1412,38 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
                 <h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3>
                 <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                    {categoryReport.length > 0 ? categoryReport.map(cat => (
+                    {categoryReport.map(cat => (
                         <div key={cat.categoryId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                            <div>
-                                <p className="font-bold text-gray-800 dark:text-text-light">{cat.categoryName}</p>
-                                <p className="text-xs text-gray-500 dark:text-text-dark">{cat.totalUnits} unidades vendidas</p>
-                            </div>
+                            <div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds</p></div>
                             <p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p>
                         </div>
-                    )) : <p className="text-center text-gray-500 dark:text-text-dark">No hay datos de ventas para este periodo.</p>}
+                    ))}
                 </div>
             </div>
 
             <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold text-accent mb-4">Top 10 Productos Más Vendidos</h3>
+                <h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3>
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
-                    {topProductsReport.length > 0 ? topProductsReport.map((prod, index) => (
+                    {topProductsReport.map((prod, index) => (
                         <div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                                <span className="font-bold text-lg text-gray-400 dark:text-gray-500 w-6 text-center">{index + 1}.</span>
-                                <div>
-                                    <p className="font-bold text-gray-800 dark:text-text-light">{prod.productName}</p>
-                                    <p className="text-xs text-gray-500 dark:text-text-dark">{formatCOP(prod.totalSales)} en ventas</p>
-                                </div>
-                            </div>
-                            <p className="text-lg font-bold text-accent">{prod.totalUnits} <span className="text-sm font-normal">uds</span></p>
+                            <div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div>
+                            <p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p>
                         </div>
-                    )) : <p className="text-center text-gray-500 dark:text-text-dark">No hay datos de ventas para este periodo.</p>}
+                    ))}
                 </div>
             </div>
         </div>
 
         <div id="sales-chart" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-accent">Análisis de Ventas a lo Largo del Tiempo</h2>
-            <div className="flex items-center gap-2 mt-2 sm:mt-0">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-accent">Análisis de Ventas</h2>
+            <div className="flex gap-2">
               <button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button>
               <button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button>
-              <button onClick={() => setChartViewMode('all-months')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'all-months' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Todos los Meses</button>
             </div>
           </div>
           <SalesHistoryChart data={salesChartData} viewMode={chartViewMode} />
         </div>
-
 
         {editingSale && (
             <EditSaleModal

@@ -46,6 +46,7 @@ import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
 import { InventoryVerificationModal } from './InventoryVerificationModal';
+import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -108,6 +109,10 @@ const App: React.FC = () => {
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  
+  // Briefing de novedades
+  const [hasShownBriefing, setHasShownBriefing] = useState(false);
+  const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
 
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
@@ -244,6 +249,14 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [isGlobalMode, isAppReady, currentUser, isAdmin]);
   
+  // Dedicamos un listener exclusivo para incidencias que siempre esté activo tras login
+  useEffect(() => {
+    if (!currentUser || !currentStoreId) return;
+    const q = query(collection(db, 'incidents'), where('storeId', '==', currentStoreId));
+    const unsubscribe = attachFirestoreListener(q, setIncidents);
+    return () => unsubscribe();
+  }, [currentUser, currentStoreId]);
+
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentStoreId || !currentUser || userPermissions.length === 0) return;
 
@@ -256,7 +269,7 @@ const App: React.FC = () => {
     };
 
     setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
-    setDailyNotes([]); setLoginHistory([]); setIncidents([]); setProductHistory([]);
+    setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
     setPayrollHistory([]); setCustomers([]); setHeldCarts([]);
 
     const storeSpecificQuery = (collectionName: string) => query(collection(db, collectionName), where('storeId', '==', currentStoreId));
@@ -266,9 +279,9 @@ const App: React.FC = () => {
         case View.DASHBOARD:
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('layaways'), setLayaways);
-            attach(storeSpecificQuery('incidents'), setAllIncidents); // Changed to All for dashboard global stats if needed, or keep local. For dashboard let's use global if admin
-            attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
             attach(storeInventoryQuery, setInventory);
+            attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
+            attach(storeSpecificQuery('purchases'), setPurchases);
             break;
         case View.POS:
             attach(storeInventoryQuery, setInventory);
@@ -277,7 +290,6 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('customers'), setCustomers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
-            attach(storeSpecificQuery('incidents'), setIncidents);
             break;
         case View.INVENTORY:
             attach(storeInventoryQuery, setInventory);
@@ -316,13 +328,27 @@ const App: React.FC = () => {
             break;
         case View.INCIDENTS:
             attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('incidents'), setIncidents);
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('customers'), setCustomers);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
 }, [isAppReady, isAuthReady, currentStoreId, currentView, currentUser, roles, userPermissions, fetchOnceFromFirestore]);
+
+  // Briefing de novedades y encargos pendientes al iniciar
+  useEffect(() => {
+    if (currentUser && !hasShownBriefing) {
+      const pendingIncidentsCount = incidents.filter(i => 
+        [IncidentStatus.DAÑADO_REPORTADO, IncidentStatus.CAMBIO_SOLICITADO, IncidentStatus.TRASLADO_SOLICITADO, IncidentStatus.WARRANTY_ACTIVE].includes(i.status)
+      ).length;
+
+      const pendingPreOrdersCount = layaways.filter(l => l.status === 'pre-order').length;
+      
+      if (pendingIncidentsCount > 0 || pendingPreOrdersCount > 0) {
+        setIsBriefingModalOpen(true);
+      }
+    }
+  }, [currentUser, incidents, layaways, hasShownBriefing]);
 
   useEffect(() => {
     if (!isAppReady || stores.length === 0) return;
@@ -795,15 +821,15 @@ const App: React.FC = () => {
     } else alert('Usuario o contraseña incorrecta.');
   };
   
-  const handleLogout = () => { setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); };
+  const handleLogout = () => { setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); setHasShownBriefing(false); };
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={setCurrentStoreId} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={setCurrentStoreId} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} />
       <main className="container mx-auto p-4 pb-20 lg:pb-4">
-        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={setCurrentStoreId} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} />}
+        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={setCurrentStoreId} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
@@ -839,6 +865,18 @@ const App: React.FC = () => {
               onUpdateStoreSettings={handleUpdateStore}
           />
       )}
+      
+      {/* Briefing de Novedades - Disponible en móvil y desktop */}
+      <PendingIncidentsBriefingModal 
+        isOpen={isBriefingModalOpen}
+        onClose={() => {
+            setIsBriefingModalOpen(false);
+            setHasShownBriefing(true); // Se marca como mostrado solo cuando el usuario lo cierra
+        }}
+        incidents={incidents}
+        layaways={layaways}
+        onNavigate={setCurrentView}
+      />
     </div>
   );
 };

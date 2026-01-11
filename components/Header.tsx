@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Seller, Store, Role } from '../types';
+
+import React, { useMemo } from 'react';
+import { View, Seller, Store, Role, Incident, IncidentStatus } from '../types';
 import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon, SparklesIcon } from './Icons';
 
 interface HeaderProps {
@@ -16,6 +17,8 @@ interface HeaderProps {
   roles: Role[];
   isGlobalMode: boolean;
   onToggleGlobalMode: () => void;
+  incidents: Incident[];
+  onOpenBriefing: () => void;
 }
 
 const navItems = [
@@ -36,7 +39,7 @@ const navItems = [
     { view: View.SETTINGS, label: 'Ajustes', icon: SettingsIcon },
 ];
 
-const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode }) => {
+const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode, incidents, onOpenBriefing }) => {
   const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-lg flex items-center space-x-1.5";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
@@ -45,6 +48,12 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
   
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
+
+  const pendingCount = useMemo(() => {
+    return incidents.filter(i => 
+      [IncidentStatus.DAÑADO_REPORTADO, IncidentStatus.CAMBIO_SOLICITADO, IncidentStatus.TRASLADO_SOLICITADO, IncidentStatus.WARRANTY_ACTIVE].includes(i.status)
+    ).length;
+  }, [incidents]);
 
   return (
     <header className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 p-2 sticky top-0 z-50">
@@ -77,7 +86,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
                   currentStore && <p className="text-base font-bold text-accent">{currentStore.name}</p>
                 )}
                 {isAdmin && (
-                    <label htmlFor="globalModeToggle" className="flex items-center cursor-pointer">
+                    <label htmlFor="globalModeToggle" className="hidden sm:flex items-center cursor-pointer">
                         <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Búsqueda Global</span>
                         <div className="relative">
                             <input
@@ -110,7 +119,21 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
-           <div className="text-right">
+           {/* Notification Bell - Useful for mobile access to pending incidents briefing */}
+           {pendingCount > 0 && (
+             <button 
+                onClick={onOpenBriefing}
+                className="relative p-2 rounded-full text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 transition-all animate-pulse"
+                title="Ver novedades pendientes"
+             >
+                <AlertTriangleIcon className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
+                    {pendingCount}
+                </span>
+             </button>
+           )}
+
+           <div className="hidden sm:block text-right">
                 <p className="font-bold text-sm text-slate-800 dark:text-white">{currentUser.name}</p>
                 <button onClick={onLogout} className="text-xs text-accent hover:underline">
                   Cerrar Sesión
@@ -123,19 +146,24 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
           >
             {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-400" /> : <MoonIcon className="w-5 h-5 text-slate-700" />}
           </button>
+          <button onClick={onLogout} className="sm:hidden p-2 rounded-full text-red-500 bg-red-500/10" aria-label="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+          </button>
         </div>
       </div>
-       <div className="lg:hidden container mx-auto mt-2 overflow-x-auto pb-2">
-           <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl">
+       <div className="lg:hidden container mx-auto mt-2 overflow-x-auto pb-2 scrollbar-hide">
+           <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl w-max">
             {availableNavItems.map(({ view, label, icon: Icon }) => (
                  <button
                     key={view}
                     onClick={() => setCurrentView(view)}
-                    className={`group ${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
+                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
                     aria-label={label}
                 >
-                    <Icon className="w-5 h-5" />
-                    <span className="hidden group-hover:inline sm:inline whitespace-nowrap">{label}</span>
+                    <Icon className="w-4 h-4" />
+                    <span className="whitespace-nowrap">{label}</span>
                 </button>
               ))}
            </nav>

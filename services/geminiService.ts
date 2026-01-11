@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 // Ensure API_KEY is available in the environment variables
@@ -16,8 +15,9 @@ export const generateDescription = async (productName: string): Promise<string> 
   try {
     const prompt = `Genera una descripción de producto corta y atractiva para un sistema de punto de venta. El producto es: "${productName}". La descripción debe ser de una sola oración, máximo 20 palabras.`;
     
+    // FIX: Updated model to 'gemini-3-flash-preview' for basic text tasks per guidelines.
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: prompt,
     });
     
@@ -42,7 +42,8 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
   }
   
   try {
-    const model = 'gemini-2.5-pro'; // Use a more powerful model for analysis
+    // FIX: Updated model to 'gemini-3-pro-preview' for complex analysis tasks per guidelines.
+    const model = 'gemini-3-pro-preview'; 
     
     const prompt = `
       Eres un experto analista de ventas para una cadena de boutiques de moda llamada "Street/Bombón".
