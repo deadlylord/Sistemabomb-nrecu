@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 
 
@@ -197,6 +197,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
   const [isUnitsSoldExpanded, setIsUnitsSoldExpanded] = useState(false);
   const [isSalesHistoryVisible, setIsSalesHistoryVisible] = useState(true);
+  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   
   // Sales History State
   const [salesSearchTerm, setSalesSearchTerm] = useState('');
@@ -220,18 +221,44 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
   
+  const isWithinRange = useMemo(() => {
+    if (!startDate || !endDate) {
+      return () => true; 
+    }
+    
+    const [startY, startM, startD] = startDate.split('-').map(Number);
+    const start = new Date(startY, startM - 1, startD, 0, 0, 0, 0);
+
+    const [endY, endM, endD] = endDate.split('-').map(Number);
+    const end = new Date(endY, endM - 1, endD, 23, 59, 59, 999);
+    
+    return (dateString: string) => {
+      if (!dateString) return false;
+      const date = new Date(dateString);
+      return date.getTime() >= start.getTime() && date.getTime() <= end.getTime();
+    };
+  }, [startDate, endDate]);
+
   const aiInsights = useMemo(() => {
     if (!sales || !inventory || !purchases) return null;
 
-    const now = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const periodLabel = `${thirtyDaysAgo.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${now.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
+    // Use Dashboard range for consistent analysis
+    const startD = new Date(startDate + 'T00:00:00');
+    const endD = new Date(endDate + 'T23:59:59');
+    const periodLabel = `${startD.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${endD.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
+    const daysInRange = Math.max(1, Math.ceil((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)));
 
-    // Helper for velocity calculation
     const allSoldItems: Record<string, { quantity: number, createdAt: string }[]> = {};
-    [...sales, ...layaways.filter(l => l.status !== 'cancelled')].forEach(t => {
+    const hourCounts: Record<number, number> = {};
+
+    const filteredTransactions = [...sales, ...layaways.filter(l => l.status !== 'cancelled')]
+        .filter(t => isWithinRange(t.createdAt));
+
+    filteredTransactions.forEach(t => {
+        const tDate = new Date(t.createdAt);
+        const hour = tDate.getHours();
+        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+
         (t.items || []).forEach(item => {
             if (!item) return;
             if (!allSoldItems[item.id]) allSoldItems[item.id] = [];
@@ -239,9 +266,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         });
     });
 
+    const sortedHours = Object.entries(hourCounts)
+        .map(([hour, count]) => ({ hour: parseInt(hour), count }))
+        .sort((a, b) => b.count - a.count);
+
+    const peak1 = sortedHours[0];
+    const peak2 = sortedHours[1];
+
     const insights = {
       period: periodLabel,
-      highVelocity: [] as any[], // Integrated high speed sales
+      peakHour1: peak1 ? { range: `${peak1.hour}:00 - ${peak1.hour + 1}:00`, count: peak1.count } : null,
+      peakHour2: peak2 ? { range: `${peak2.hour}:00 - ${peak2.hour + 1}:00`, count: peak2.count } : null,
+      highVelocity: [] as any[], 
       trending: [] as { id: string, name: string, quantity: number, context: string }[],
       restock: [] as { id: string, name: string, stock: number, velocity: number, daysLeft: number }[],
       stagnant: [] as { id: string, name: string, stock: number, cost: number, price: number, suggestedPrice: number, discount: number }[],
@@ -250,68 +286,40 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     inventory.forEach(p => {
       if (p.isDisabled) return;
-      const soldQtyInMonth = (allSoldItems[p.id] || [])
-          .filter(s => new Date(s.createdAt) >= thirtyDaysAgo)
+      const soldInPeriod = (allSoldItems[p.id] || [])
           .reduce((sum, s) => sum + s.quantity, 0);
       
-      // 1. HIGH VELOCITY LOGIC (INTEGRATED)
-      const lastPurchase = [...purchases]
-          .filter(pur => pur.productId === p.id)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-
-      if (lastPurchase) {
-          const purchaseDate = new Date(lastPurchase.createdAt);
-          const daysElapsed = Math.max(1, Math.ceil((now.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24)));
-          const soldSinceQty = (allSoldItems[p.id] || [])
-              .filter(sale => new Date(sale.createdAt) >= purchaseDate)
-              .reduce((sum, s) => sum + s.quantity, 0);
-
-          if (soldSinceQty > 0) {
-              const unitsPerDay = soldSinceQty / daysElapsed;
-              const percentageOfBatchGone = (soldSinceQty / lastPurchase.quantity) * 100;
-              
-              if ((percentageOfBatchGone >= 60 && daysElapsed <= 7) || (unitsPerDay >= 0.8 && daysElapsed <= 10) || (p.stock === 0 && daysElapsed <= 14)) {
-                  insights.highVelocity.push({
-                      id: p.id,
-                      name: p.name,
-                      soldSinceQty,
-                      daysElapsed,
-                      unitsPerDay,
-                      isSoldOut: p.stock === 0,
-                      urgency: (p.stock === 0 || percentageOfBatchGone > 85) ? 'high' : 'medium',
-                      stockRemaining: p.stock,
-                      percentageOfBatchGone
-                  });
-              }
+      if (soldInPeriod >= 3) {
+          const unitsPerDay = soldInPeriod / daysInRange;
+          if (unitsPerDay >= 0.7) {
+              insights.highVelocity.push({
+                  id: p.id,
+                  name: p.name,
+                  soldSinceQty: soldInPeriod,
+                  daysElapsed: daysInRange,
+                  unitsPerDay: unitsPerDay,
+                  isSoldOut: p.stock === 0,
+                  urgency: (p.stock <= 2) ? 'high' : 'medium',
+                  stockRemaining: p.stock,
+                  period: periodLabel
+              });
           }
       }
 
-      // 2. Trending
-      if (soldQtyInMonth >= 3) {
-        insights.trending.push({ id: p.id, name: p.name, quantity: soldQtyInMonth, context: `Ventas sólidas: ${soldQtyInMonth} uds en el último mes.` });
+      if (soldInPeriod >= 5) {
+        insights.trending.push({ id: p.id, name: p.name, quantity: soldInPeriod, context: `Ventas sólidas: ${soldInPeriod} uds en el rango seleccionado.` });
       }
 
-      // 3. Restock
-      if (p.stock <= 3 && soldQtyInMonth >= 2) {
-        const velocityPerDay = soldQtyInMonth / 30;
-        insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldQtyInMonth, daysLeft: velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99 });
+      if (p.stock <= 3 && soldInPeriod >= 2) {
+        const velocityPerDay = soldInPeriod / daysInRange;
+        insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldInPeriod, daysLeft: velocityPerDay > 0 ? Math.floor(p.stock / velocityPerDay) : 99 });
       }
 
-      // 4. Stagnant
-      if (p.stock >= 5 && soldQtyInMonth === 0) {
+      if (daysInRange >= 15 && p.stock >= 5 && soldInPeriod === 0) {
         const idealDiscount = 0.25; 
         let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
         if (suggestedPrice < p.cost) suggestedPrice = p.cost; 
         insights.stagnant.push({ id: p.id, name: p.name, stock: p.stock, cost: p.cost, price: p.price, suggestedPrice, discount: Math.round(((p.price - suggestedPrice) / p.price) * 100) });
-      }
-
-      // 5. At Risk
-      if (p.stock >= 5 && soldQtyInMonth > 0 && soldQtyInMonth <= 2) {
-         const idealDiscount = 0.15;
-         let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
-         const minPrice = p.cost * 1.1;
-         if (suggestedPrice < minPrice) suggestedPrice = Math.max(minPrice, p.cost);
-         insights.atRisk.push({ id: p.id, name: p.name, stock: p.stock, soldQty: soldQtyInMonth, cost: p.cost, price: p.price, suggestedPrice, discount: Math.round(((p.price - suggestedPrice) / p.price) * 100) });
       }
     });
 
@@ -320,7 +328,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     insights.restock.sort((a, b) => a.daysLeft - b.daysLeft);
 
     return insights;
-  }, [sales, inventory, purchases, layaways]);
+  }, [sales, inventory, purchases, layaways, startDate, endDate, isWithinRange]);
 
   const setDateRange = (start: Date, end: Date) => {
     setStartDate(toYYYYMMDD(start));
@@ -366,24 +374,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     currentSelectionEnd.setHours(0, 0, 0, 0);
     return currentSelectionEnd >= today;
   }, [endDate]);
-
-  const isWithinRange = useMemo(() => {
-    if (!startDate || !endDate) {
-      return () => true; 
-    }
-    
-    const [startY, startM, startD] = startDate.split('-').map(Number);
-    const start = new Date(startY, startM - 1, startD, 0, 0, 0, 0);
-
-    const [endY, endM, endD] = endDate.split('-').map(Number);
-    const end = new Date(endY, endM - 1, endD, 23, 59, 59, 999);
-    
-    return (dateString: string) => {
-      if (!dateString) return false;
-      const date = new Date(dateString);
-      return date.getTime() >= start.getTime() && date.getTime() <= end.getTime();
-    };
-  }, [startDate, endDate]);
 
     const metricsForCurrentStore = useMemo(() => {
         const directSalesInRange = sales.filter(s => isWithinRange(s.createdAt) && !s.layawayId);
@@ -691,17 +681,23 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const layawaysInRange = layaways.filter(l => isWithinRange(l.createdAt));
     const allTransactions = [...salesInRange, ...layawaysInRange];
 
-    const categoryData: { [key: string]: { totalSales: number; totalUnits: number } } = {};
+    const categoryData: { [key: string]: { totalSales: number; totalUnits: number, products: Record<string, {name: string, qty: number, revenue: number}> } } = {};
 
     allTransactions.forEach(transaction => {
         ((transaction.items as CartItem[]) || []).forEach(item => {
             if (!item) return;
             const categoryId = item.categoryId;
             if (!categoryData[categoryId]) {
-                categoryData[categoryId] = { totalSales: 0, totalUnits: 0 };
+                categoryData[categoryId] = { totalSales: 0, totalUnits: 0, products: {} };
             }
             categoryData[categoryId].totalSales += item.price * item.quantity;
             categoryData[categoryId].totalUnits += item.quantity;
+            
+            if (!categoryData[categoryId].products[item.id]) {
+                categoryData[categoryId].products[item.id] = { name: item.name, qty: 0, revenue: 0 };
+            }
+            categoryData[categoryId].products[item.id].qty += item.quantity;
+            categoryData[categoryId].products[item.id].revenue += item.price * item.quantity;
         });
     });
 
@@ -712,6 +708,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 categoryId,
                 categoryName: categoryInfo?.name || 'Sin Categoría',
                 ...data,
+                productList: Object.values(data.products).sort((a, b) => b.qty - a.qty)
             };
         })
         .sort((a, b) => b.totalSales - a.totalSales);
@@ -1099,6 +1096,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 {/* Quick Navigation Anchors - RESTORED */}
                 <div className="flex items-center gap-1 bg-accent/10 p-1 rounded-lg">
                     <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><DollarIcon className="w-3 h-3"/> Pagos</button>
+                    <button onClick={() => scrollToSection('price-analysis')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><PriceIcon className="w-3 h-3"/> Precios</button>
                     <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
@@ -1124,7 +1122,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
       </div>
 
-      {/* AI Insights Widget - NOW INCLUDES HIGH VELOCITY SALES */}
+      {/* AI Insights Widget */}
       <div className="w-full transition-all duration-300 ease-in-out">
              <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden relative">
                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
@@ -1223,10 +1221,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                 <h4 className="font-black text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1">⚡ VENTA RELÁMPAGO</h4>
                                                 <p className="text-gray-700 dark:text-gray-300 text-xs leading-tight mb-2">
                                                     Este ítem se está moviendo a <span className="font-bold text-accent">{highVelItem.unitsPerDay.toFixed(1)} uds/día</span>.
-                                                    Has vendido el <span className="font-bold">{Math.round(highVelItem.percentageOfBatchGone)}%</span> del último lote en solo {highVelItem.daysElapsed} días.
+                                                    Ventas totales en el rango: <span className="font-bold">{highVelItem.soldSinceQty}</span> unidades.
                                                 </p>
+                                                <p className="text-[10px] text-gray-400 italic mb-2">Analizado del {highVelItem.period}</p>
                                                 <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden mb-3">
-                                                    <div className={`h-full ${highVelItem.urgency === 'high' ? 'bg-orange-500' : 'bg-yellow-500'}`} style={{ width: `${highVelItem.percentageOfBatchGone}%` }}></div>
+                                                    <div className={`h-full ${highVelItem.urgency === 'high' ? 'bg-orange-500' : 'bg-yellow-500'}`} style={{ width: '100%' }}></div>
                                                 </div>
                                                 <button onClick={() => onNavigate(View.PURCHASES)} className="w-full bg-orange-500 text-white text-[10px] font-black uppercase py-1.5 rounded shadow-sm hover:bg-orange-600 transition-colors">Reposición Prioritaria</button>
                                             </div>
@@ -1247,6 +1246,23 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Proyección de Cierre</h4>
                                     <p className="text-2xl font-extrabold text-accent">{formatCOP(forecastAnalysis.projectedTotal)}</p>
+                                </div>
+                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                                    <h4 className="text-xs font-bold text-purple-500 uppercase mb-1">Franjas de Mayor Demanda</h4>
+                                    <div className="space-y-2 mt-2">
+                                        {aiInsights?.peakHour1 ? (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="font-bold text-gray-800 dark:text-white">1. {aiInsights.peakHour1.range}</span>
+                                                <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold text-xs">{aiInsights.peakHour1.count} vtas</span>
+                                            </div>
+                                        ) : <p className="text-xs text-gray-400">Sin datos de ventas</p>}
+                                        {aiInsights?.peakHour2 && (
+                                            <div className="flex justify-between items-center text-sm opacity-80">
+                                                <span className="font-semibold text-gray-600 dark:text-gray-300 text-xs">2. {aiInsights.peakHour2.range}</span>
+                                                <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-semibold text-[10px]">{aiInsights.peakHour2.count} vtas</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-300"><span>Progreso del Mes</span><span>{Math.round(forecastAnalysis.monthProgress)}%</span></div>
@@ -1365,6 +1381,76 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
+      {/* PRICE ANALYSIS SECTION - RESTORED */}
+      <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+        <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-accent">Análisis de Precios y Diferencias</h2>
+            <ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} />
+        </div>
+        {isPriceAnalysisVisible && (
+            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg border-l-4 border-green-500">
+                        <p className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase">Total Valorización (Markups)</p>
+                        <p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p>
+                    </div>
+                    <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-l-4 border-red-500">
+                        <p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase">Total Descuentos (Discounts)</p>
+                        <p className="text-2xl font-extrabold text-red-600 dark:text-red-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
+                    </div>
+                    <div className={`p-4 rounded-lg border-l-4 ${priceVariationReportData.summary.netDifference >= 0 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'}`}>
+                        <p className="text-sm font-semibold uppercase">Diferencia Neta</p>
+                        <p className={`text-2xl font-extrabold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                            {formatCOP(priceVariationReportData.summary.netDifference)}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md"><option value="">Todos los vendedores</option>{sellers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select>
+                    <select value={priceVariationPaymentMethodFilter} onChange={e => setPriceVariationPaymentMethodFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md"><option value="">Todos los métodos de pago</option>{Object.values(PaymentMethod).map(m => <option key={m} value={m}>{m}</option>)}</select>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-100 dark:bg-gray-800">
+                            <tr>
+                                <th className="p-2 font-semibold">Fecha/Factura</th>
+                                <th className="p-2 font-semibold">Producto</th>
+                                <th className="p-2 font-semibold">Vendedor</th>
+                                <th className="p-2 font-semibold text-right">P. Sistema</th>
+                                <th className="p-2 font-semibold text-right">P. Venta</th>
+                                <th className="p-2 font-semibold text-right">Dif. Unit</th>
+                                <th className="p-2 font-semibold text-right">Dif. Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {priceVariationReportData.items.map(item => (
+                                <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                    <td className="p-2">
+                                        <p className="font-mono text-xs">{new Date(item.date).toLocaleDateString()}</p>
+                                        <p className="text-accent font-bold">#{item.invoiceNumber}</p>
+                                    </td>
+                                    <td className="p-2 font-medium">{item.productName} <span className="text-gray-400">(x{item.quantity})</span></td>
+                                    <td className="p-2">{item.seller}</td>
+                                    <td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td>
+                                    <td className="p-2 text-right font-bold">{formatCOP(item.soldPrice)}</td>
+                                    <td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>
+                                        {item.variation > 0 ? `+${formatCOP(item.variation)}` : formatCOP(item.variation)}
+                                    </td>
+                                    <td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>
+                                        {item.totalVariation > 0 ? `+${formatCOP(item.totalVariation)}` : formatCOP(item.totalVariation)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {priceVariationReportData.items.length === 0 && <p className="text-center py-6 text-gray-500">Sin variaciones registradas.</p>}
+                </div>
+            </div>
+        )}
+      </div>
+
       {/* Historical Sales Table */}
       <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center">
@@ -1375,7 +1461,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div className="relative">
-                    <input type="text" placeholder="Factura, cliente, etc..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none" />
+                    <input type="text" placeholder="Factura, cliente, producto..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
                     <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div>
                   </div>
                   <select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select>
@@ -1384,23 +1470,71 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 {managedSales.length > 0 ? (
                     <div className="overflow-x-auto"><table className="w-full text-left">
                         <thead className="bg-gray-100 dark:bg-gray-800"><tr>
-                            <th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold text-center">Acciones</th>
+                            <th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {managedSales.map((transaction) => {
                             const profit = calculateSaleProfit(transaction);
                             const isExpanded = expandedSaleId === transaction.id;
+                            const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
+
                             return (<React.Fragment key={transaction.id}>
-                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer" onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
-                                <td className="p-3 font-mono text-accent">#{transaction.invoiceNumber}</td>
-                                <td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleDateString()}</td>
-                                <td className="p-3">{transaction.customerName}</td>
+                                <tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}>
+                                <td className="p-3 font-mono text-accent">
+                                    <div className="flex items-center gap-2">
+                                        <ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                        <span>#{transaction.invoiceNumber}</span>
+                                        {transaction.transactionType === 'layaway' && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="p-3 text-sm whitespace-nowrap">
+                                    {new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                                </td>
+                                <td className="p-3">
+                                    <p className="font-medium text-sm">{transaction.customerName}</p>
+                                    <p className="text-[10px] text-gray-500">{transaction.customerPhone}</p>
+                                </td>
                                 <td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td>
                                 <td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td>
+                                <td className="p-3 text-sm font-medium">{transaction.seller}</td>
                                 <td className="p-3 text-center">
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1"><EditIcon /></button>
+                                    <div className="flex items-center justify-center gap-1">
+                                        <button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>
+                                    </div>
                                 </td>
                             </tr>
+                            {isExpanded && (
+                                <tr className="bg-gray-50 dark:bg-gray-800/40">
+                                    <td colSpan={7} className="p-4 pt-0">
+                                        <div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner">
+                                            <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4>
+                                            <div className="space-y-2">
+                                                {itemsArray.map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0">
+                                                        <div>
+                                                            <span className="font-bold text-accent">{item.quantity}x</span> {item.name}
+                                                            <p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="font-semibold">{formatCOP(item.price * item.quantity)}</p>
+                                                            <p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center">
+                                                <p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p>
+                                                <div className="flex gap-2">
+                                                    {renderPaymentMethods(transaction)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
                             </React.Fragment>);})}</tbody>
                     </table></div>
                 ) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}
@@ -1411,11 +1545,35 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
                 <h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3>
-                <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                     {categoryReport.map(cat => (
-                        <div key={cat.categoryId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                            <div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds</p></div>
-                            <p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p>
+                        <div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
+                            <div 
+                                onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)}
+                                className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} />
+                                    <div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div>
+                                </div>
+                                <p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p>
+                            </div>
+                            
+                            {expandedCategoryId === cat.categoryId && (
+                                <div className="p-3 bg-white dark:bg-secondary animate-fade-in">
+                                    <div className="space-y-2">
+                                        {cat.productList.map((prod, pidx) => (
+                                            <div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span>
+                                                    <span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span>
+                                                </div>
+                                                <span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1423,7 +1581,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
             <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
                 <h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3>
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
                     {topProductsReport.map((prod, index) => (
                         <div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                             <div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div>
