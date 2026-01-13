@@ -28,6 +28,7 @@ interface BatchPurchaseItem {
     id: string;
     productId?: string;
     productName: string;
+    imageUrl?: string; // Nuevo campo para miniatura
     categoryId: string;
     isNew: boolean;
     supplier: string;
@@ -143,6 +144,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             id: Math.random().toString(36).substr(2, 9),
             productId: product.id,
             productName: toTitleCase(product.name),
+            imageUrl: product.imageUrl,
             categoryId: product.categoryId,
             isNew: false,
             supplier: globalSupplier || product.supplier || '',
@@ -162,6 +164,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       const newItem: BatchPurchaseItem = {
           id: Math.random().toString(36).substr(2, 9),
           productName: name,
+          imageUrl: '',
           categoryId: '',
           isNew: true,
           supplier: globalSupplier || '',
@@ -332,8 +335,21 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                             {suggestedProducts.map((p) => (
                                 <div key={p.id} className="p-4 flex flex-col sm:flex-row items-center justify-between hover:bg-accent/5 transition-colors gap-4">
                                     <div className="flex items-center gap-4 flex-1">
-                                        <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-700">
-                                            {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" /> : <PackageIcon className="w-8 h-8 text-gray-400" />}
+                                        {/* Miniatura ampliable en el buscador */}
+                                        <div 
+                                            className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-700 flex-shrink-0 cursor-zoom-in relative group/thumb"
+                                            onClick={() => p.imageUrl && setPreviewImage(p.imageUrl)}
+                                        >
+                                            {p.imageUrl ? (
+                                                <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <PackageIcon className="w-8 h-8 text-gray-400" />
+                                            )}
+                                            {p.imageUrl && (
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <SearchIcon className="w-4 h-4 text-white" />
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <p className="font-black text-sm uppercase tracking-tight">{p.name}</p>
@@ -413,21 +429,37 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                           {batchItems.map((item) => (
                               <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-accent/5 transition-colors">
                                   <td className="p-4">
-                                      {item.isNew ? (
-                                          <div className="space-y-2">
-                                              <input type="text" value={item.productName} onChange={e => handleUpdateBatchItem(item.id, { productName: e.target.value })} className="w-full bg-white dark:bg-gray-900 p-2 rounded border-2 border-yellow-500/30 text-sm font-bold" placeholder="Nombre..."/>
-                                              <select value={item.categoryId} onChange={e => handleUpdateBatchItem(item.id, { categoryId: e.target.value })} className="w-full bg-white dark:bg-gray-900 p-2 rounded border text-xs font-bold">
-                                                  <option value="">Categoría...</option>
-                                                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                              </select>
+                                      <div className="flex items-center gap-3">
+                                          {/* Miniatura del producto en el lote */}
+                                          <div 
+                                              className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-900 border dark:border-gray-700 overflow-hidden flex-shrink-0 cursor-zoom-in"
+                                              onClick={() => item.imageUrl && setPreviewImage(item.imageUrl)}
+                                          >
+                                              {item.imageUrl ? (
+                                                  <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                              ) : (
+                                                  <PackageIcon className="w-6 h-6 mx-auto mt-3 text-gray-300" />
+                                              )}
                                           </div>
-                                      ) : (
-                                          <div>
-                                              <p className="font-black text-sm uppercase">{item.productName}</p>
-                                              <p className="text-[10px] text-gray-400 font-bold uppercase">{categories.find(c => c.id === item.categoryId)?.name || 'Sin cat.'}</p>
+                                          
+                                          <div className="flex-grow">
+                                              {item.isNew ? (
+                                                  <div className="space-y-2">
+                                                      <input type="text" value={item.productName} onChange={e => handleUpdateBatchItem(item.id, { productName: e.target.value })} className="w-full bg-white dark:bg-gray-900 p-2 rounded border-2 border-yellow-500/30 text-sm font-bold" placeholder="Nombre..."/>
+                                                      <select value={item.categoryId} onChange={e => handleUpdateBatchItem(item.id, { categoryId: e.target.value })} className="w-full bg-white dark:bg-gray-900 p-2 rounded border text-xs font-bold">
+                                                          <option value="">Categoría...</option>
+                                                          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                      </select>
+                                                  </div>
+                                              ) : (
+                                                  <div>
+                                                      <p className="font-black text-sm uppercase leading-tight">{item.productName}</p>
+                                                      <p className="text-[10px] text-gray-400 font-bold uppercase">{categories.find(c => c.id === item.categoryId)?.name || 'Sin cat.'}</p>
+                                                  </div>
+                                              )}
+                                              <input type="text" value={item.supplier} onChange={e => handleUpdateBatchItem(item.id, { supplier: e.target.value })} className="mt-2 w-full bg-transparent border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase py-1 outline-none" placeholder="Marca/Proveedor..."/>
                                           </div>
-                                      )}
-                                      <input type="text" value={item.supplier} onChange={e => handleUpdateBatchItem(item.id, { supplier: e.target.value })} className="mt-2 w-full bg-transparent border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase py-1 outline-none" placeholder="Marca/Marca..."/>
+                                      </div>
                                   </td>
                                   {activeStoreIds.map(sid => (
                                       <td key={sid} className="p-4 border-l dark:border-gray-700">
