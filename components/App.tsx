@@ -775,6 +775,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteProduct = async (productId: string) => { if (window.confirm('¿Eliminar producto?')) await deleteDoc(doc(db, 'inventory', productId)); };
+  
   const handleBulkAddProducts = async (products: any[], storeId: string) => {
       const batch = writeBatch(db);
       products.forEach(p => {
@@ -785,6 +786,157 @@ const App: React.FC = () => {
       });
       await batch.commit();
   };
+
+  const handleMultiStorePurchase = async (data: {
+    productInfo: { name: string; categoryId: string; };
+    storeEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }>;
+  }) => {
+    if (!currentUser) return;
+    const batch = writeBatch(db);
+    const { productInfo, storeEntries } = data;
+
+    try {
+        for (const [storeId, entry] of Object.entries(storeEntries)) {
+            // Find or Create Product instance in this specific store
+            const q = query(collection(db, 'inventory'), 
+                           where('name', '==', productInfo.name), 
+                           where('storeId', '==', storeId), 
+                           limit(1));
+            const snapshot = await getDocs(q);
+            
+            let productRef;
+            let currentStock = 0;
+            let productId;
+
+            if (!snapshot.empty) {
+                const docSnap = snapshot.docs[0];
+                productRef = docSnap.ref;
+                currentStock = docSnap.data().stock || 0;
+                productId = docSnap.id;
+                batch.update(productRef, {
+                    stock: increment(entry.quantity),
+                    cost: entry.cost,
+                    price: entry.price,
+                    supplier: entry.supplier,
+                    isDisabled: false
+                });
+            } else {
+                const newProductRef = doc(collection(db, 'inventory'));
+                productRef = newProductRef;
+                productId = newProductRef.id;
+                const namePrefix = productInfo.name.substring(0, 3).toUpperCase();
+                const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+                
+                batch.set(newProductRef, {
+                    id: productId,
+                    name: productInfo.name,
+                    categoryId: productInfo.categoryId,
+                    sku,
+                    cost: entry.cost,
+                    price: entry.price,
+                    stock: entry.quantity,
+                    supplier: entry.supplier,
+                    storeId,
+                    imageUrl: '',
+                    isDisabled: false
+                });
+            }
+
+            // Create Purchase record
+            const purchaseRef = doc(collection(db, 'purchases'));
+            batch.set(purchaseRef, {
+                id: purchaseRef.id,
+                productId: productId,
+                productName: productInfo.name,
+                quantity: entry.quantity,
+                cost: entry.cost,
+                totalCost: entry.quantity * entry.cost,
+                supplier: entry.supplier,
+                createdAt: new Date().toISOString(),
+                storeId: storeId
+            });
+
+            // Log history
+            const logRef = doc(collection(db, 'productHistory'));
+            const log = {
+                id: logRef.id,
+                productId,
+                productName: productInfo.name,
+                storeId,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                changeType: ProductChangeType.PURCHASE,
+                details: `Compra de ${entry.quantity} unidades (Antes: ${currentStock})`
+            };
+            batch.set(logRef, log);
+        }
+
+        await batch.commit();
+    } catch (error: any) {
+        console.error("Error al registrar compras multi-tienda:", error);
+        alert(`Error al procesar la compra: ${error.message}`);
+        throw error;
+    }
+  };
+
+  const handleUpdatePurchase = async (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => {
+    if (!currentUser) return;
+    const batch = writeBatch(db);
+    const purchaseRef = doc(db, 'purchases', updatedPurchase.id);
+    const productRef = doc(db, 'inventory', updatedPurchase.productId);
+
+    const qtyDiff = updatedPurchase.quantity - originalQuantity;
+
+    batch.update(purchaseRef, { ...updatedPurchase });
+    batch.update(productRef, {
+        stock: increment(qtyDiff),
+        cost: updatedPurchase.cost,
+        price: newProductPrice,
+        supplier: updatedPurchase.supplier
+    });
+
+    const logRef = doc(collection(db, 'productHistory'));
+    batch.set(logRef, {
+        id: logRef.id,
+        productId: updatedPurchase.productId,
+        productName: updatedPurchase.productName,
+        storeId: updatedPurchase.storeId,
+        changedBy: currentUser.name,
+        timestamp: new Date().toISOString(),
+        changeType: ProductChangeType.PURCHASE_EDIT,
+        details: `Edición de compra. Ajuste stock: ${qtyDiff > 0 ? '+' : ''}${qtyDiff}`
+    });
+
+    await batch.commit();
+  };
+
+  const handleDeletePurchase = async (purchaseId: string) => {
+    const purchase = purchases.find(p => p.id === purchaseId);
+    if (!purchase || !currentUser) return;
+    
+    if (!window.confirm('¿Eliminar compra? El stock se restará del inventario.')) return;
+
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'purchases', purchaseId));
+    batch.update(doc(db, 'inventory', purchase.productId), {
+        stock: increment(-purchase.quantity)
+    });
+
+    const logRef = doc(collection(db, 'productHistory'));
+    batch.set(logRef, {
+        id: logRef.id,
+        productId: purchase.productId,
+        productName: purchase.productName,
+        storeId: purchase.storeId,
+        changedBy: currentUser.name,
+        timestamp: new Date().toISOString(),
+        changeType: ProductChangeType.PURCHASE_DELETE,
+        details: `Compra eliminada. Se restaron ${purchase.quantity} unidades.`
+    });
+
+    await batch.commit();
+  };
+
   const handleAddCategory = async (name: string) => { const newRef = doc(collection(db, 'categories')); await setDoc(newRef, { id: newRef.id, name }); };
   const handleUpdateCategory = async (id: string, name: string) => await updateDoc(doc(db, 'categories', id), { name });
   const handleDeleteCategory = async (id: string) => await deleteDoc(doc(db, 'categories', id));
@@ -856,7 +1008,7 @@ const App: React.FC = () => {
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={async () => {}} onUpdatePurchase={() => {}} onDeletePurchase={() => {}} />}
+        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} />}
         {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
         {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={(id, newName) => {
           const store = stores.find(s => s.id === id);
