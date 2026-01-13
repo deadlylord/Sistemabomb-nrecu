@@ -23,10 +23,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.7.0',
+    date: '2024-05-30',
+    description: 'Estabilidad y Sincronización Multimedia',
+    isCurrent: true,
+    changes: [
+      'Corrección Crítica: Se resolvió el error de carga infinita que impedía entrar a la base de datos al iniciar sesión.',
+      'Sincronización de Imágenes: Las fotos editadas o subidas desde cualquier tienda ahora se actualizan automáticamente en todas las sedes.',
+      'Normalización de Datos: El sistema ahora es más inteligente al detectar productos existentes, ignorando espacios dobles y variaciones de mayúsculas.',
+      'Mejora en Atributos Globales: Al cambiar la descripción o categoría de un producto, el cambio se aplica globalmente en toda la cadena.'
+    ]
+  },
+  {
     version: '2.6.0',
     date: '2024-05-29',
     description: 'Sincronización Inteligente y Experiencia Visual',
-    isCurrent: true,
     changes: [
       'Ampliación de imágenes (Zoom): Ahora puedes ver las fotos de los productos en detalle directamente desde el buscador de ventas y compras.',
       'Sincronización rápida en compras: Nuevos botones para copiar unidades, costos y precios a todas las sedes activas con un solo clic.',

@@ -181,8 +181,6 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    // FIX: Se elimina la dependencia circular !isAppReady.
-    // Solo procedemos si ya estamos autenticados y la aplicación aún no está lista.
     if (!isAuthReady || isAppReady) return;
     
     const loadInitialData = async () => {
@@ -197,7 +195,6 @@ const App: React.FC = () => {
           INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), data); });
           INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
           await batch.commit();
-          console.log("Database initialized with seed data.");
         }
       } catch (error) {
         console.error("Error initializing database:", error);
@@ -767,9 +764,13 @@ const App: React.FC = () => {
 
   // Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
-      const normalizedName = toTitleCase(newProductData.name);
+      const originalInputName = newProductData.name;
+      const normalizedName = toTitleCase(originalInputName);
+      
       // 1. Verificar si el producto ya existe globalmente para reutilizar info
-      const q = query(collection(db, 'inventory'), where('name', '==', normalizedName));
+      // Buscamos tanto por el nombre ingresado como por el normalizado para capturar cualquier sede previa
+      const namesToSearch = Array.from(new Set([originalInputName, normalizedName]));
+      const q = query(collection(db, 'inventory'), where('name', 'in', namesToSearch));
       const snapshot = await getDocs(q);
       
       let imageUrl = '';
@@ -792,9 +793,10 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // 3. Actualizar todas las instancias existentes con la nueva info/foto global
+      // 3. Actualizar todas las instancias existentes con la nueva info/foto global y normalizar sus nombres
       snapshot.docs.forEach(docSnap => {
           batch.update(docSnap.ref, {
+              name: normalizedName,
               imageUrl,
               description: existingDescription,
               categoryId: existingCategoryId
@@ -812,7 +814,10 @@ const App: React.FC = () => {
               // Si ya existe en esta tienda, solo actualizamos el stock relativo al formulario
               const existingDoc = snapshot.docs.find(d => (d.data() as Product).storeId === storeId);
               if (existingDoc) {
-                  batch.update(existingDoc.ref, { stock: increment(newProductData.stock) });
+                  batch.update(existingDoc.ref, { 
+                      stock: increment(newProductData.stock),
+                      name: normalizedName 
+                  });
               }
           } else {
               const newRef = doc(collection(db, 'inventory'));
@@ -832,9 +837,15 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  // Sincronización Global de Productos al Actualizar
+  // Sincronización Global de Productos al Actualizar (Incluyendo FOTOS)
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
-      const normalizedName = toTitleCase(updatedProduct.name);
+      const productRef = doc(db, 'inventory', updatedProduct.id);
+      
+      // 1. Obtener datos actuales del producto desde la DB para saber su nombre actual
+      const currentSnap = await getDoc(productRef);
+      const originalNameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
+      const newNormalizedName = toTitleCase(updatedProduct.name);
+      
       let newImageUrl = updatedProduct.imageUrl;
       if (imageFile) {
         newImageUrl = await uploadImageAndGetURL(imageFile);
@@ -842,26 +853,44 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // Siempre sincronizamos la imagen, descripción y categoría por nombre de producto
-      const q = query(collection(db, 'inventory'), where('name', '==', normalizedName));
+      // 2. Buscamos todas las instancias globales por el nombre anterior o el nuevo para sincronizar
+      const namesToSearch = Array.from(new Set([originalNameInDb, newNormalizedName]));
+      const q = query(collection(db, 'inventory'), where('name', 'in', namesToSearch));
       const snapshot = await getDocs(q);
       
-      snapshot.docs.forEach(docSnap => {
-          const updateData: any = { 
+      if (snapshot.empty) {
+          // Si por alguna razón la búsqueda por nombre falla, al menos actualizamos por ID
+          batch.update(productRef, {
+              name: newNormalizedName,
               imageUrl: newImageUrl,
               description: updatedProduct.description,
-              categoryId: updatedProduct.categoryId
-          };
-          // Solo actualizamos el stock y precio del producto específico que se está editando
-          if (docSnap.id === updatedProduct.id) {
-              updateData.stock = updatedProduct.stock;
-              updateData.price = updatedProduct.price;
-              updateData.cost = updatedProduct.cost;
-              updateData.supplier = updatedProduct.supplier;
-              updateData.isDisabled = updatedProduct.isDisabled;
-          }
-          batch.update(docSnap.ref, updateData);
-      });
+              categoryId: updatedProduct.categoryId,
+              stock: updatedProduct.stock,
+              price: updatedProduct.price,
+              cost: updatedProduct.cost,
+              supplier: updatedProduct.supplier,
+              isDisabled: updatedProduct.isDisabled
+          });
+      } else {
+          snapshot.docs.forEach(docSnap => {
+              const updateData: any = { 
+                  name: newNormalizedName, // Normalizamos el nombre en todas las sedes
+                  imageUrl: newImageUrl,
+                  description: updatedProduct.description,
+                  categoryId: updatedProduct.categoryId
+              };
+              
+              // Los datos de stock y precio solo se actualizan para la tienda actual
+              if (docSnap.id === updatedProduct.id) {
+                  updateData.stock = updatedProduct.stock;
+                  updateData.price = updatedProduct.price;
+                  updateData.cost = updatedProduct.cost;
+                  updateData.supplier = updatedProduct.supplier;
+                  updateData.isDisabled = updatedProduct.isDisabled;
+              }
+              batch.update(docSnap.ref, updateData);
+          });
+      }
       
       await batch.commit();
   };
@@ -891,8 +920,10 @@ const App: React.FC = () => {
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
+            // Buscamos el producto en esta tienda usando búsqueda flexible para evitar duplicados por formato
+            const namesToSearch = Array.from(new Set([productInfo.name, normalizedName]));
             const q = query(collection(db, 'inventory'), 
-                           where('name', '==', normalizedName), 
+                           where('name', 'in', namesToSearch), 
                            where('storeId', '==', storeId), 
                            limit(1));
             const snapshot = await getDocs(q);
@@ -907,6 +938,7 @@ const App: React.FC = () => {
                 currentStock = docSnap.data().stock || 0;
                 productId = docSnap.id;
                 batch.update(productRef, {
+                    name: normalizedName,
                     stock: increment(entry.quantity),
                     cost: entry.cost,
                     price: entry.price,
