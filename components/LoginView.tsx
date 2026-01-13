@@ -1,16 +1,20 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MailIcon, LockIcon, EyeIcon } from './Icons';
+import { APP_VERSIONS } from '../constants';
 
 interface LoginViewProps {
   onLogin: (username: string, password: string) => void;
   isAppReady: boolean;
+  onOpenVersionHistory?: () => void;
 }
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onOpenVersionHistory }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  const currentVersion = useMemo(() => APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0', []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +92,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
           {isAppReady ? 'Ingresar' : 'Cargando...'}
         </button>
       </form>
+      
+      <div className="mt-8 flex justify-center">
+          <button 
+            onClick={onOpenVersionHistory}
+            className="text-[10px] font-black bg-white/10 text-slate-400 hover:text-accent dark:text-text-dark px-3 py-1 rounded-full border border-white/10 transition-all active:scale-95"
+          >
+            Versión v{currentVersion}
+          </button>
+      </div>
     </div>
   );
 };

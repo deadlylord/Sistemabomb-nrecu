@@ -1,6 +1,8 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, Store } from '../types';
 import { PlusCircleIcon, UploadIcon } from './Icons';
+import { toTitleCase } from '../constants';
 
 interface AddProductFormProps {
   onAddProduct: (newProductData: Omit<Product, 'id' | 'sku' | 'storeId' | 'imageUrl'>, selectedStoreIds: string[], imageFile?: File) => void;
@@ -88,7 +90,7 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
   };
 
   const handleProductSelect = (product: Product) => {
-    setProductSearch(product.name);
+    setProductSearch(toTitleCase(product.name));
     setSelectedProduct(product);
     setPrice(product.price.toString());
     setCost(product.cost.toString());
@@ -128,7 +130,7 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const productName = productSearch;
+    const productName = toTitleCase(productSearch);
     
     const productDataForSubmission = {
       name: productName,

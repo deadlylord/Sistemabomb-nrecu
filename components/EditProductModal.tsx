@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Product, Category } from '../types';
 import { CheckIcon, PackageIcon, UploadIcon } from './Icons';
+import { toTitleCase } from '../constants';
 
 interface EditProductModalProps {
   isOpen: boolean;
@@ -70,6 +72,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
         const updatedProduct: Product = {
           ...product,
           ...formData,
+          name: toTitleCase(formData.name),
           price: parseFloat(formData.price),
           cost: parseFloat(formData.cost),
           stock: parseInt(formData.stock, 10),

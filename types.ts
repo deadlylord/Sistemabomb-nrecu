@@ -23,6 +23,14 @@ export enum ProductChangeType {
   DETAILED_VERIFICATION = 'Verificación Detallada Aplicada',
 }
 
+export interface VersionLog {
+  version: string;
+  date: string;
+  description: string;
+  changes: string[];
+  isCurrent?: boolean;
+}
+
 export interface PendingDetailedVerification {
   id: string; // categoryId_storeId
   categoryId: string;

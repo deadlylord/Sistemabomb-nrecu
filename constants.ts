@@ -1,5 +1,5 @@
 
-import { Product, Category, Seller, Role, View, Store, PaymentMethod } from './types';
+import { Product, Category, Seller, Role, View, Store, PaymentMethod, VersionLog } from './types';
 
 export const formatCOP = (amount: number): string => {
   return new Intl.NumberFormat('es-CO', {
@@ -18,6 +18,64 @@ export const toTitleCase = (str: string): string => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 };
+
+export const APP_VERSIONS: VersionLog[] = [
+  {
+    version: '2.5.0',
+    date: '2024-05-28',
+    description: 'Optimización de Compras y Gestión Visual',
+    isCurrent: true,
+    changes: [
+      'Nuevo modo de "Compra por Lotes": Agrega múltiples productos de un mismo proveedor antes de procesar.',
+      'Buscador de productos en Compras ahora incluye miniaturas visuales.',
+      'Lightbox de expansión para fotos de productos en todas las listas.',
+      'Acceso directo a edición de fotos desde el historial de compras.',
+      'Optimización de carga de imágenes para ahorro de datos móviles.'
+    ]
+  },
+  {
+    version: '2.4.0',
+    date: '2024-05-24',
+    description: 'Sistema de Versiones e Interfaz Optimizada',
+    changes: [
+      'Implementación de sistema de historial de versiones (Changelog).',
+      'Optimización del buscador en Compras: Normalización de espacios y priorización de tienda actual.',
+      'Mejora en Novedades: Buscador predictivo para traslados de inventario.',
+      'Corrección de error de sintaxis en resolución de incidencias.',
+      'Mejora visual en badges de estado y notificaciones.'
+    ]
+  },
+  {
+    version: '2.3.0',
+    date: '2024-05-20',
+    description: 'Gestión Avanzada de Novedades',
+    changes: [
+      'Nuevo flujo de aprobación de prendas dañadas.',
+      'Sincronización de stock en cambios de facturas.',
+      'Notificaciones persistentes de tareas pendientes.'
+    ]
+  },
+  {
+    version: '2.2.0',
+    date: '2024-05-15',
+    description: 'Integración Multi-tienda',
+    changes: [
+      'Compras globales: Registro de productos en múltiples sedes simultáneamente.',
+      'Módulo de traslados entre tiendas con historial de saldos.',
+      'Buscador global de inventario para administradores.'
+    ]
+  },
+  {
+    version: '2.1.0',
+    date: '2024-05-01',
+    description: 'Estadísticas e IA',
+    changes: [
+      'Dashboard con gráficos de rendimiento mensual.',
+      'Street AI: Generación de descripciones y análisis de rentabilidad.',
+      'Contador inteligente para gestión de gastos y nómina.'
+    ]
+  }
+];
 
 export const COMMISSION_RATES: { [key in PaymentMethod]?: number } = {
   [PaymentMethod.Addi]: 0.065,

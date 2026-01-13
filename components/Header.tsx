@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, Seller, Store, Role, Incident, IncidentStatus } from '../types';
 import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon } from './Icons';
+import { APP_VERSIONS } from '../constants';
 
 interface HeaderProps {
   currentView: View;
@@ -19,6 +20,7 @@ interface HeaderProps {
   onToggleGlobalMode: () => void;
   incidents: Incident[];
   onOpenBriefing: () => void;
+  onOpenVersionHistory: () => void;
 }
 
 const navItems = [
@@ -39,13 +41,15 @@ const navItems = [
     { view: View.SETTINGS, label: 'Ajustes', icon: SettingsIcon },
 ];
 
-const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode, incidents, onOpenBriefing }) => {
+const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory }) => {
   const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-lg flex items-center space-x-1.5";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
 
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
+
+  const currentVersion = useMemo(() => APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0', []);
 
   // Filtrado inteligente de navegación
   const availableNavItems = navItems.filter(item => {
@@ -67,9 +71,18 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, tog
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-3">
             <div className="text-center sm:text-left">
-              <h1 className="text-md sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                Facturación Street/ <span className="text-accent">Bombón</span>
-              </h1>
+              <div className="flex items-center gap-2">
+                  <h1 className="text-md sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                    Facturación Street/ <span className="text-accent">Bombón</span>
+                  </h1>
+                  <button 
+                    onClick={onOpenVersionHistory}
+                    className="text-[9px] font-black bg-accent/10 text-accent px-1.5 py-0.5 rounded border border-accent/20 hover:bg-accent hover:text-white transition-all active:scale-90"
+                    title="Ver historial de cambios"
+                  >
+                    v{currentVersion}
+                  </button>
+              </div>
                <div className="mt-1 flex items-center gap-4">
                 {isAdmin ? (
                   <div className="relative inline-block">

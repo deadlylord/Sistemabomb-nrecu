@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo } from 'react';
 import { Product, Category, Store } from '../types';
 import { UploadIcon, CheckIcon, CrossIcon } from './Icons';
-import { formatCOP } from '../constants';
+import { formatCOP, toTitleCase } from '../constants';
 
 interface BulkAddProductsModalProps {
   isOpen: boolean;
@@ -150,7 +151,8 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
       const price = parseFloat(priceStr);
       const cost = parseFloat(costStr);
       const stock = parseInt(stockStr, 10);
-      const originalParsedData: ParsedProductData = { name, price, cost, stock, categoryName, supplier };
+      const formattedName = toTitleCase(name);
+      const originalParsedData: ParsedProductData = { name: formattedName, price, cost, stock, categoryName, supplier };
 
       if (!name || !categoryName) {
         generatedPreview.push({ ...rowData, originalData: originalParsedData, parsedData: originalParsedData, status: 'error', message: 'Nombre y Categoría son obligatorios.', userAction: 'skip' });
@@ -189,7 +191,7 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
           const existingCategory = categories.find(c => c.id === existingProductInOtherStore.categoryId);
           const syncedParsedData = {
               ...originalParsedData,
-              name: existingProductInOtherStore.name,
+              name: toTitleCase(existingProductInOtherStore.name),
               categoryName: existingCategory ? existingCategory.name : originalParsedData.categoryName,
               supplier: originalParsedData.supplier || existingProductInOtherStore.supplier, // Prioritize new supplier
               description: existingProductInOtherStore.description,
@@ -268,6 +270,7 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
           const dataToUse = row.userAction === 'create_as_new' ? row.originalData : row.parsedData;
           return {
               ...dataToUse,
+              name: toTitleCase(dataToUse.name),
               description: dataToUse.description || "Descripción pendiente...",
               imageUrl: dataToUse.imageUrl || "",
           }
@@ -363,14 +366,14 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
                                                 <div className="flex gap-1">
                                                     <button onClick={() => handleUserActionChange(row.lineNumber, 'sync_and_create')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'sync_and_create' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Sincronizar y Crear</button>
                                                     <button onClick={() => handleUserActionChange(row.lineNumber, 'create_as_new')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'create_as_new' ? 'bg-yellow-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Crear como Nuevo</button>
-                                                    <button onClick={() => handleUserActionChange(row.lineNumber, 'skip')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'skip' ? 'bg-gray-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Omitir</button>
+                                                    <button onClick={() => handleUserActionChange(row.lineNumber, 'skip')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'skip' ? 'bg-gray-50 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Omitir</button>
                                                 </div>
                                             ) : row.status === 'new' || row.status === 'warning' ? (
                                                 <div className="flex gap-2">
                                                     <button onClick={() => handleUserActionChange(row.lineNumber, 'create_as_new')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'create_as_new' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
                                                         Crear
                                                     </button>
-                                                    <button onClick={() => handleUserActionChange(row.lineNumber, 'skip')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'skip' ? 'bg-gray-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                                                    <button onClick={() => handleUserActionChange(row.lineNumber, 'skip')} className={`w-full text-xs py-1 px-2 rounded ${row.userAction === 'skip' ? 'bg-gray-50 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
                                                         Omitir
                                                     </button>
                                                 </div>
