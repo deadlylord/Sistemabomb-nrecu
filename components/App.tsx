@@ -41,7 +41,7 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES } from '../constants';
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, toTitleCase } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
@@ -181,7 +181,7 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    if (!isAuthReady) return;
+    if (!isAppReady) return;
     const loadInitialData = async () => {
       try {
         const sellersQuery = query(collection(db, 'sellers'), limit(1));
@@ -314,8 +314,6 @@ const App: React.FC = () => {
             break;
         case View.PURCHASES:
             attach(storeInventoryQuery, setInventory);
-            // FIX: Se elimina el filtro de fecha en la consulta de Firestore para evitar el error de índice compuesto.
-            // El filtrado por "Mes Actual" se delega ahora al componente PurchasesView.tsx mediante lógica de cliente.
             attach(storeSpecificQuery('purchases'), setPurchases);
             break;
         case View.CUSTOMERS:
@@ -568,7 +566,7 @@ const App: React.FC = () => {
       if (!fromProductDoc.exists()) throw new Error("Producto no encontrado en la tienda de origen.");
       const fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
       if (fromProduct.stock < quantity) throw new Error("Stock insuficiente.");
-      const toProductQuery = query(collection(db, 'inventory'), where('name', '==', fromProduct.name), where('storeId', '==', toStoreId), limit(1));
+      const toProductQuery = query(collection(db, 'inventory'), where('name', '==', toTitleCase(fromProduct.name)), where('storeId', '==', toStoreId), limit(1));
       const toProductSnapshot = await getDocs(toProductQuery);
       if (toProductSnapshot.empty) throw new Error(`Producto "${fromProduct.name}" debe existir en la tienda de destino antes de hacer el traslado.`);
       const toProductDoc = toProductSnapshot.docs[0];
@@ -765,8 +763,9 @@ const App: React.FC = () => {
 
   // FIX: Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
+      const normalizedName = toTitleCase(newProductData.name);
       // 1. Verificar si el producto ya existe globalmente para reutilizar info
-      const q = query(collection(db, 'inventory'), where('name', '==', newProductData.name));
+      const q = query(collection(db, 'inventory'), where('name', '==', normalizedName));
       const snapshot = await getDocs(q);
       
       let imageUrl = '';
@@ -799,7 +798,7 @@ const App: React.FC = () => {
       });
 
       // 4. Determinar SKU (existente o nuevo prefijo)
-      const namePrefix = newProductData.name.substring(0, 3).toUpperCase();
+      const namePrefix = normalizedName.substring(0, 3).toUpperCase();
       const sku = existingSku || `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
       const existingStoreIds = snapshot.docs.map(d => (d.data() as Product).storeId);
 
@@ -815,6 +814,7 @@ const App: React.FC = () => {
               const newRef = doc(collection(db, 'inventory'));
               batch.set(newRef, { 
                   ...newProductData, 
+                  name: normalizedName,
                   description: existingDescription,
                   categoryId: existingCategoryId,
                   id: newRef.id, 
@@ -830,6 +830,7 @@ const App: React.FC = () => {
 
   // FIX: Sincronización Global de Productos al Actualizar
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
+      const normalizedName = toTitleCase(updatedProduct.name);
       let newImageUrl = updatedProduct.imageUrl;
       if (imageFile) {
         newImageUrl = await uploadImageAndGetURL(imageFile);
@@ -838,7 +839,7 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       
       // Siempre sincronizamos la imagen, descripción y categoría por nombre de producto
-      const q = query(collection(db, 'inventory'), where('name', '==', updatedProduct.name));
+      const q = query(collection(db, 'inventory'), where('name', '==', normalizedName));
       const snapshot = await getDocs(q);
       
       snapshot.docs.forEach(docSnap => {
@@ -868,9 +869,10 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       products.forEach(p => {
           const newRef = doc(collection(db, 'inventory'));
-          const namePrefix = p.name.substring(0, 3).toUpperCase();
+          const normalizedName = toTitleCase(p.name);
+          const namePrefix = normalizedName.substring(0, 3).toUpperCase();
           const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-          batch.set(newRef, { ...p, id: newRef.id, sku, storeId, isDisabled: false });
+          batch.set(newRef, { ...p, name: normalizedName, id: newRef.id, sku, storeId, isDisabled: false });
       });
       await batch.commit();
   };
@@ -882,11 +884,12 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const batch = writeBatch(db);
     const { productInfo, storeEntries } = data;
+    const normalizedName = toTitleCase(productInfo.name);
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
             const q = query(collection(db, 'inventory'), 
-                           where('name', '==', productInfo.name), 
+                           where('name', '==', normalizedName), 
                            where('storeId', '==', storeId), 
                            limit(1));
             const snapshot = await getDocs(q);
@@ -911,12 +914,12 @@ const App: React.FC = () => {
                 const newProductRef = doc(collection(db, 'inventory'));
                 productRef = newProductRef;
                 productId = newProductRef.id;
-                const namePrefix = productInfo.name.substring(0, 3).toUpperCase();
+                const namePrefix = normalizedName.substring(0, 3).toUpperCase();
                 const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
                 
                 batch.set(newProductRef, {
                     id: productId,
-                    name: productInfo.name,
+                    name: normalizedName,
                     categoryId: productInfo.categoryId,
                     sku,
                     cost: entry.cost,
@@ -933,7 +936,7 @@ const App: React.FC = () => {
             batch.set(purchaseRef, {
                 id: purchaseRef.id,
                 productId: productId,
-                productName: productInfo.name,
+                productName: normalizedName,
                 quantity: entry.quantity,
                 cost: entry.cost,
                 totalCost: entry.quantity * entry.cost,
@@ -946,7 +949,7 @@ const App: React.FC = () => {
             const log = {
                 id: logRef.id,
                 productId,
-                productName: productInfo.name,
+                productName: normalizedName,
                 storeId,
                 changedBy: currentUser.name,
                 timestamp: new Date().toISOString(),
