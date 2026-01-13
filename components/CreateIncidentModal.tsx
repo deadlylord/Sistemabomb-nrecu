@@ -44,6 +44,10 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
   const [damagedProductSearch, setDamagedProductSearch] = useState('');
   const [showDamagedSuggestions, setShowDamagedSuggestions] = useState(false);
 
+  // Transfer Product Search
+  const [transferProductSearch, setTransferProductSearch] = useState('');
+  const [showTransferSuggestions, setShowTransferSuggestions] = useState(false);
+
   // Cash Adjustment & Additional Income
   const [adjustmentType, setAdjustmentType] = useState<'income' | 'expense'>('expense');
   const [adjustmentAmount, setAdjustmentAmount] = useState('');
@@ -89,6 +93,16 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     );
   }, [damagedProductSearch, inventory]);
 
+  const suggestedTransferProducts = useMemo(() => {
+    if (!transferProductSearch) return [];
+    const lowerCaseSearch = transferProductSearch.toLowerCase();
+    return inventory.filter(p =>
+      !p.isDisabled &&
+      p.storeId === fromStoreId &&
+      p.name.toLowerCase().includes(lowerCaseSearch)
+    );
+  }, [transferProductSearch, inventory, fromStoreId]);
+
 
   useEffect(() => {
     if (originalSaleInvoiceNumber) {
@@ -111,6 +125,8 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     setProductName('');
     setDamagedProductSearch('');
     setShowDamagedSuggestions(false);
+    setTransferProductSearch('');
+    setShowTransferSuggestions(false);
     setAdjustmentType('expense');
     setAdjustmentAmount('');
     setPaymentMethod('');
@@ -246,6 +262,13 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     setProductId(product.id);
     setDamagedProductSearch(product.name);
     setShowDamagedSuggestions(false);
+  }
+
+  const handleTransferProductSelect = (product: Product) => {
+    setProductId(product.id);
+    setProductName(product.name);
+    setTransferProductSearch(product.name);
+    setShowTransferSuggestions(false);
   }
 
   const addReturnedItem = (item: CartItem) => {
@@ -512,10 +535,51 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
                         {stores.filter(s => s.id !== fromStoreId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                 </div>
-                <select value={productId} onChange={(e) => { const p = inventory.find(i => i.id === e.target.value); if(p) {setProductId(p.id); setProductName(p.name);}}} className="w-full bg-white dark:bg-primary p-2 rounded-md" required>
-                    <option value="" disabled>Selecciona producto a trasladar...</option>
-                    {inventory.filter(p => p.storeId === fromStoreId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <div className="relative">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={transferProductSearch}
+                            onChange={e => {
+                                setTransferProductSearch(e.target.value);
+                                setProductId('');
+                            }}
+                            onFocus={() => setShowTransferSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowTransferSuggestions(false), 200)}
+                            placeholder="Buscar producto a trasladar..."
+                            className="w-full bg-white dark:bg-primary p-2 pl-8 rounded-md"
+                            required={!productId}
+                            autoComplete="off"
+                        />
+                        <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        {transferProductSearch && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setTransferProductSearch('');
+                                    setProductId('');
+                                }}
+                                className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-8 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                                aria-label="Limpiar búsqueda"
+                            >
+                                <CrossIcon className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    {showTransferSuggestions && suggestedTransferProducts.length > 0 && (
+                        <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                            {suggestedTransferProducts.map(p => (
+                                <li
+                                    key={p.id}
+                                    onMouseDown={() => handleTransferProductSelect(p)}
+                                    className="p-2 cursor-pointer text-xs hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    {p.name} (Stock: {p.stock})
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
                 <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Cantidad" className="w-full bg-white dark:bg-primary p-2 rounded-md" required min="1"/>
             </div>
           )}
