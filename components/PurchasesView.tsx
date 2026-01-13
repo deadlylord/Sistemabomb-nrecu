@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon } from './Icons';
+import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon } from './Icons';
 import { formatCOP, toTitleCase } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
@@ -186,6 +186,29 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
               return { ...item, storeEntries: currentEntries };
           }
           return item;
+      }));
+  };
+
+  const handleSyncValueAcrossStores = (itemId: string, field: 'quantity' | 'cost' | 'price', sourceStoreId: string) => {
+      const item = batchItems.find(i => i.id === itemId);
+      if (!item) return;
+      const valueToCopy = item.storeEntries[sourceStoreId]?.[field];
+      if (valueToCopy === undefined) return;
+
+      setBatchItems(prev => prev.map(i => {
+          if (i.id === itemId) {
+              const newEntries = { ...i.storeEntries };
+              activeStoreIds.forEach(sid => {
+                  if (sid !== sourceStoreId) {
+                      newEntries[sid] = {
+                          ...(newEntries[sid] || { quantity: '0', cost: '', price: '' }),
+                          [field]: valueToCopy
+                      };
+                  }
+              });
+              return { ...i, storeEntries: newEntries };
+          }
+          return i;
       }));
   };
 
@@ -461,19 +484,34 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                           </div>
                                       </div>
                                   </td>
-                                  {activeStoreIds.map(sid => (
+                                  {activeStoreIds.map((sid, idx) => (
                                       <td key={sid} className="p-4 border-l dark:border-gray-700">
                                           <div className="grid grid-cols-3 gap-2">
                                               <div className="flex flex-col gap-1">
-                                                  <label className="text-[8px] font-black text-gray-400 uppercase">Cant.</label>
+                                                  <div className="flex justify-between items-center px-1">
+                                                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Cant.</label>
+                                                      {idx === 0 && activeStoreIds.length > 1 && (
+                                                          <button onClick={() => handleSyncValueAcrossStores(item.id, 'quantity', sid)} className="text-accent hover:scale-125 transition-transform" title="Copiar cantidad a todas las tiendas"><CopyIcon className="w-2.5 h-2.5"/></button>
+                                                      )}
+                                                  </div>
                                                   <input type="number" value={item.storeEntries[sid]?.quantity || ''} onChange={e => handleUpdateBatchStoreEntry(item.id, sid, 'quantity', e.target.value)} className="w-full bg-white dark:bg-gray-900 border dark:border-gray-700 rounded p-1.5 text-center font-black text-sm outline-none focus:border-accent" placeholder="0" />
                                               </div>
                                               <div className="flex flex-col gap-1">
-                                                  <label className="text-[8px] font-black text-gray-400 uppercase">Costo</label>
+                                                  <div className="flex justify-between items-center px-1">
+                                                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Costo</label>
+                                                      {idx === 0 && activeStoreIds.length > 1 && (
+                                                          <button onClick={() => handleSyncValueAcrossStores(item.id, 'cost', sid)} className="text-accent hover:scale-125 transition-transform" title="Copiar costo a todas las tiendas"><CopyIcon className="w-2.5 h-2.5"/></button>
+                                                      )}
+                                                  </div>
                                                   <input type="number" value={item.storeEntries[sid]?.cost || ''} onChange={e => handleUpdateBatchStoreEntry(item.id, sid, 'cost', e.target.value)} className="w-full bg-white dark:bg-gray-900 border dark:border-gray-700 rounded p-1.5 text-right font-bold text-xs outline-none focus:border-accent" placeholder="0" />
                                               </div>
                                               <div className="flex flex-col gap-1">
-                                                  <label className="text-[8px] font-black text-gray-400 uppercase">Venta</label>
+                                                  <div className="flex justify-between items-center px-1">
+                                                      <label className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Venta</label>
+                                                      {idx === 0 && activeStoreIds.length > 1 && (
+                                                          <button onClick={() => handleSyncValueAcrossStores(item.id, 'price', sid)} className="text-accent hover:scale-125 transition-transform" title="Copiar precio a todas las tiendas"><CopyIcon className="w-2.5 h-2.5"/></button>
+                                                      )}
+                                                  </div>
                                                   <input type="number" value={item.storeEntries[sid]?.price || ''} onChange={e => handleUpdateBatchStoreEntry(item.id, sid, 'price', e.target.value)} className="w-full bg-white dark:bg-gray-900 border dark:border-gray-700 rounded p-1.5 text-right font-bold text-xs outline-none focus:border-accent" placeholder="0" />
                                               </div>
                                           </div>
