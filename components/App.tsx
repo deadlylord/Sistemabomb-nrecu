@@ -119,7 +119,7 @@ const App: React.FC = () => {
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
 
-  // Optimización de compras (Ahora manejado localmente para evitar errores de índice en Firestore)
+  // Optimización de compras
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
   const handleToggleProductVerification = (productId: string) => {
@@ -181,7 +181,10 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    if (!isAppReady) return;
+    // FIX: Se elimina la dependencia circular !isAppReady.
+    // Solo procedemos si ya estamos autenticados y la aplicación aún no está lista.
+    if (!isAuthReady || isAppReady) return;
+    
     const loadInitialData = async () => {
       try {
         const sellersQuery = query(collection(db, 'sellers'), limit(1));
@@ -194,6 +197,7 @@ const App: React.FC = () => {
           INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), data); });
           INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
           await batch.commit();
+          console.log("Database initialized with seed data.");
         }
       } catch (error) {
         console.error("Error initializing database:", error);
@@ -202,7 +206,7 @@ const App: React.FC = () => {
       }
     };
     loadInitialData();
-  }, [isAuthReady]);
+  }, [isAuthReady, isAppReady]);
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || currentUser) return;
@@ -761,7 +765,7 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
-  // FIX: Sincronización Global de Productos al Agregar
+  // Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
       const normalizedName = toTitleCase(newProductData.name);
       // 1. Verificar si el producto ya existe globalmente para reutilizar info
@@ -828,7 +832,7 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  // FIX: Sincronización Global de Productos al Actualizar
+  // Sincronización Global de Productos al Actualizar
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
       const normalizedName = toTitleCase(updatedProduct.name);
       let newImageUrl = updatedProduct.imageUrl;
@@ -849,7 +853,6 @@ const App: React.FC = () => {
               categoryId: updatedProduct.categoryId
           };
           // Solo actualizamos el stock y precio del producto específico que se está editando
-          // a menos que el usuario esté en un modo de edición masiva (no implementado aún)
           if (docSnap.id === updatedProduct.id) {
               updateData.stock = updatedProduct.stock;
               updateData.price = updatedProduct.price;

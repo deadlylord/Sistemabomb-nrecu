@@ -14,17 +14,30 @@ export const toTitleCase = (str: string): string => {
   if (!str) return '';
   return str
     .toLowerCase()
-    .split(' ')
+    .trim()
+    .split(/\s+/) // Separa por cualquier cantidad de espacios en blanco
+    .filter(word => word.length > 0)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 };
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.6.0',
+    date: '2024-05-29',
+    description: 'Sincronización Inteligente y Experiencia Visual',
+    isCurrent: true,
+    changes: [
+      'Ampliación de imágenes (Zoom): Ahora puedes ver las fotos de los productos en detalle directamente desde el buscador de ventas y compras.',
+      'Sincronización rápida en compras: Nuevos botones para copiar unidades, costos y precios a todas las sedes activas con un solo clic.',
+      'Normalización automática de nombres: El sistema ahora detecta productos existentes sin importar si escribes en mayúsculas o minúsculas, evitando duplicados.',
+      'Mejora en la consistencia de datos global para productos compartidos entre tiendas.'
+    ]
+  },
+  {
     version: '2.5.0',
     date: '2024-05-28',
     description: 'Optimización de Compras y Gestión Visual',
-    isCurrent: true,
     changes: [
       'Nuevo modo de "Compra por Lotes": Agrega múltiples productos de un mismo proveedor antes de procesar.',
       'Buscador de productos en Compras ahora incluye miniaturas visuales.',
@@ -106,7 +119,7 @@ export const INITIAL_STORES: Store[] = [
     id: '2',
     name: "Metro",
     receiptName: "Tienda Metro",
-    logo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiMxYTFhMWEiLz48dGV4dCB4PSI1MCIgeT0iNjgiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI2MCIgZmlsbD0iI2ZmMDA3ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPk08L3RleHQ+PC9zdmc+',
+    logo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiMxYTFhMWEiLz48dGV4dCB4PSI1MCIgeT0iNjgiIGZvbnQtZmFtaWx5PSJBminhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI2MCIgZmlsbD0iI2ZmMDA3ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPk08L3RleHQ+PC9zdmc+',
     contactInfo: 'Contacto Metro: 302 333 4444\nInstagram: @metro.tienda',
     footerText: '¡Gracias por tu compra en Metro!',
     whatsappFooterText: 'Este es tu recibo de Metro. ¡Vuelve pronto!',
@@ -124,7 +137,7 @@ export const INITIAL_STORES: Store[] = [
     id: '3',
     name: "Centro Comercial",
     receiptName: "Bombon Centro Comercial",
-    logo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiMxYTFhMWEiLz48dGV4dCB4PSI1MCIgeT0iNjgiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI1MCIgZmlsbD0iI2ZmMDA3ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPkNDPC90ZXh0Pjwvc3ZnPg==',
+    logo: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiMxYTFhMWEiLz48dGV4dCB4PSI1MCIgeT0iNjgiIGZvbnQtZmFtaWx5PSJBminhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI1MCIgZmlsbD0iI2ZmMDA3ZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPkNDPC90ZXh0Pjwvc3ZnPg==',
     contactInfo: 'Contacto C.C.: 303 555 6666\nInstagram: @bombon.cc',
     footerText: '¡Gracias por tu compra en Bombon C.C.!',
     whatsappFooterText: 'Este es tu recibo de Bombon C.C. ¡No olvides seguirnos!',
