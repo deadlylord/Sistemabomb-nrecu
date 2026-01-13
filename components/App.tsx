@@ -119,6 +119,9 @@ const App: React.FC = () => {
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
 
+  // Optimización de compras (Ahora manejado localmente para evitar errores de índice en Firestore)
+  const [loadFullPurchases, setLoadFullPurchases] = useState(false);
+
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
         const newSet = new Set(prev);
@@ -311,6 +314,8 @@ const App: React.FC = () => {
             break;
         case View.PURCHASES:
             attach(storeInventoryQuery, setInventory);
+            // FIX: Se elimina el filtro de fecha en la consulta de Firestore para evitar el error de índice compuesto.
+            // El filtrado por "Mes Actual" se delega ahora al componente PurchasesView.tsx mediante lógica de cliente.
             attach(storeSpecificQuery('purchases'), setPurchases);
             break;
         case View.CUSTOMERS:
@@ -771,9 +776,22 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
-      let imageUrl = updatedProduct.imageUrl;
-      if (imageFile) imageUrl = await uploadImageAndGetURL(imageFile);
-      await updateDoc(doc(db, 'inventory', updatedProduct.id), { ...updatedProduct, imageUrl });
+      let newImageUrl = updatedProduct.imageUrl;
+      if (imageFile) {
+        newImageUrl = await uploadImageAndGetURL(imageFile);
+      }
+
+      const batch = writeBatch(db);
+      if (imageFile || updatedProduct.imageUrl === '') {
+          const q = query(collection(db, 'inventory'), where('name', '==', updatedProduct.name));
+          const snapshot = await getDocs(q);
+          snapshot.docs.forEach(docSnap => {
+              batch.update(docSnap.ref, { imageUrl: newImageUrl });
+          });
+      }
+      const specificRef = doc(db, 'inventory', updatedProduct.id);
+      batch.update(specificRef, { ...updatedProduct, imageUrl: newImageUrl });
+      await batch.commit();
   };
 
   const handleDeleteProduct = async (productId: string) => { if (window.confirm('¿Eliminar producto?')) await deleteDoc(doc(db, 'inventory', productId)); };
@@ -1007,7 +1025,7 @@ const App: React.FC = () => {
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} />}
+        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
         {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={(id, newName) => {
           const store = stores.find(s => s.id === id);

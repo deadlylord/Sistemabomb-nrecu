@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon } from './Icons';
+import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon } from './Icons';
 import { formatCOP, toTitleCase } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
@@ -19,6 +20,8 @@ interface PurchasesViewProps {
   onUpdatePurchase: (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => void;
   onDeletePurchase: (purchaseId: string) => void;
   onUpdateProduct: (updatedProduct: Product, imageFile?: File) => Promise<void>;
+  onLoadFullHistory?: () => void;
+  isFullHistoryLoaded?: boolean;
 }
 
 interface BatchPurchaseItem {
@@ -31,7 +34,14 @@ interface BatchPurchaseItem {
     storeEntries: Record<string, { quantity: string; cost: string; price: string; }>;
 }
 
-const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct }) => {
+const toYYYYMMDD = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
   const [productSearch, setProductSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeStoreIds, setActiveStoreIds] = useState<string[]>([currentStoreId]);
@@ -40,8 +50,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  
+  // Filtros inicializados al mes actual
+  const [startDate, setStartDate] = useState(toYYYYMMDD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
+  const [endDate, setEndDate] = useState(toYYYYMMDD(new Date()));
+  
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -92,7 +105,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     const existingInBatch = batchItems.find(item => item.productName.toLowerCase() === product.name.toLowerCase());
     
     if (existingInBatch) {
-        // Actualizar el existente
         setBatchItems(prev => prev.map(item => {
             if (item.id === existingInBatch.id) {
                 const newEntries = { ...item.storeEntries };
@@ -115,7 +127,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             return item;
         }));
     } else {
-        // Crear nuevo en el lote
         const defaultEntries: Record<string, { quantity: string; cost: string; price: string; }> = {};
         const storesToAdd = targetStoreId === 'ALL' ? activeStoreIds : [targetStoreId];
         
@@ -139,7 +150,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         };
         setBatchItems(prev => [newItem, ...prev]);
     }
-    // No cerramos el buscador como solicitó el usuario
   };
 
   const handleCreateNewFromSearch = () => {
@@ -178,7 +188,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   const handleRemoveFromBatch = (itemId: string) => setBatchItems(prev => prev.filter(item => item.id !== itemId));
 
-  // @FIX: Added handleUpdateBatchItem to allow updating top-level item properties in the batch
   const handleUpdateBatchItem = (itemId: string, updates: Partial<BatchPurchaseItem>) => {
     setBatchItems(prev => prev.map(item => item.id === itemId ? { ...item, ...updates } : item));
   };
@@ -187,7 +196,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       const totals: Record<string, number> = {};
       activeStoreIds.forEach(sid => totals[sid] = 0);
       batchItems.forEach(item => {
-          // @FIX: Cast entry as any to resolve property access on potentially unknown type from Object.entries
           Object.entries(item.storeEntries).forEach(([sid, entry]) => {
               const data = entry as any;
               if (activeStoreIds.includes(sid)) {
@@ -204,7 +212,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     if (batchItems.length === 0) return;
     for (const item of batchItems) {
         if (!item.categoryId) { alert(`El producto "${item.productName}" no tiene categoría.`); return; }
-        // @FIX: Cast entry as any to access quantity property on unknown type
         const hasQty = Object.entries(item.storeEntries).some(([sid, entry]) => activeStoreIds.includes(sid) && parseInt((entry as any).quantity) > 0);
         if (!hasQty) { alert(`El producto "${item.productName}" no tiene cantidades en las tiendas seleccionadas.`); return; }
     }
@@ -214,7 +221,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     try {
         for (const item of batchItems) {
             const finalStoreEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }> = {};
-            // @FIX: Cast entry as any to access object properties
             Object.entries(item.storeEntries).forEach(([sid, entry]) => {
                 const data = entry as any;
                 if (!activeStoreIds.includes(sid)) return;
@@ -246,14 +252,25 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   const filteredPurchases = useMemo(() => {
     const searchTermNormalized = normalizeText(historySearchTerm);
+    // FIX: Se implementa el filtrado local por "Mes Actual" aquí.
+    const startOfMonthDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
     return purchases.filter(p => {
       const d = new Date(p.createdAt);
+      
+      // Si no se ha solicitado el historial completo, filtramos localmente por el mes actual por defecto
+      if (!isFullHistoryLoaded && d < startOfMonthDate) return false;
+
       const start = startDate ? new Date(startDate + 'T00:00:00') : null;
       const end = endDate ? new Date(endDate + 'T23:59:59') : null;
       const matchesSearch = !searchTermNormalized || normalizeText(p.productName).includes(searchTermNormalized) || normalizeText(p.supplier).includes(searchTermNormalized);
-      return (!start || d >= start) && (!end || d <= end) && matchesSearch;
+      const matchesCategory = !categoryFilter || inventory.find(inv => inv.id === p.productId)?.categoryId === categoryFilter;
+      
+      return (!start || d >= start) && (!end || d <= end) && matchesSearch && matchesCategory;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [purchases, startDate, endDate, historySearchTerm]);
+  }, [purchases, startDate, endDate, historySearchTerm, categoryFilter, inventory, isFullHistoryLoaded]);
+
+  const currentMonthName = new Date().toLocaleString('es-CO', { month: 'long' });
 
   return (
     <div className="max-w-full mx-auto space-y-6">
@@ -450,50 +467,95 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
           </div>
       )}
 
-      {/* HISTORIAL - CONSERVADO SEGÚN SOLICITUD */}
-      <div className="bg-white dark:bg-secondary p-6 rounded-2xl shadow-lg">
-          <h2 className="text-2xl font-black text-gray-800 dark:text-text-light mb-6 border-b dark:border-gray-700 pb-2">Historial de Compras</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="relative">
-                <input type="text" placeholder="Buscar compra..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 focus:ring-2 focus:ring-accent outline-none font-bold" />
+      {/* HISTORIAL DE COMPRAS */}
+      <div className="bg-white dark:bg-secondary p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-800">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b dark:border-gray-700 pb-2">
+            <h2 className="text-2xl font-black text-gray-800 dark:text-text-light flex items-center gap-3">
+                <HistoryIcon className="w-6 h-6 text-accent" />
+                Historial de Compras
+            </h2>
+            {!isFullHistoryLoaded && (
+                <div className="flex items-center gap-3 bg-accent/5 p-2 px-4 rounded-xl border border-accent/10">
+                    <span className="text-xs font-bold text-gray-500">Mostrando solo {currentMonthName}</span>
+                    <button onClick={onLoadFullHistory} className="bg-accent text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-accent/20">
+                        Cargar Historial Completo
+                    </button>
+                </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="relative md:col-span-2">
+                <input type="text" placeholder="Buscar por producto o proveedor..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 focus:ring-2 focus:ring-accent outline-none font-bold" />
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               </div>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold"/>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold"/>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
           </div>
+
           <div className="overflow-x-auto rounded-xl border dark:border-gray-700">
-              <table className="w-full text-left">
+              <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                       <tr>
+                          <th className="p-3 text-[10px] font-black uppercase text-gray-400">Imagen</th>
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400">Fecha</th>
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400">Producto</th>
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400">Tienda</th>
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400 text-center">Cant.</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400 text-right">Costo</th>
-                          <th className="p-3 text-center w-20"></th>
+                          <th className="p-3 text-[10px] font-black uppercase text-gray-400 text-right">Costo Total</th>
+                          <th className="p-3 text-center w-20">Acciones</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-gray-800">
-                      {filteredPurchases.map(p => (
+                      {filteredPurchases.map(p => {
+                          const product = inventory.find(inv => inv.id === p.productId);
+                          return (
                           <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 group">
+                              <td className="p-3">
+                                  <div 
+                                      className="relative w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-900 border dark:border-gray-700 overflow-hidden cursor-zoom-in"
+                                      onClick={() => product?.imageUrl && setPreviewImage(product.imageUrl)}
+                                  >
+                                      {product?.imageUrl ? (
+                                          <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                          <PackageIcon className="w-6 h-6 mx-auto mt-3 text-gray-300" />
+                                      )}
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <SearchIcon className="w-4 h-4 text-white" />
+                                      </div>
+                                  </div>
+                              </td>
                               <td className="p-3 text-xs text-gray-500">{new Date(p.createdAt).toLocaleDateString()}</td>
                               <td className="p-3">
                                   <p className="font-black text-sm uppercase">{p.productName}</p>
-                                  <p className="text-[10px] text-gray-400 uppercase font-bold">{p.supplier}</p>
+                                  <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                          onClick={() => product && setEditingProductImage(product)} 
+                                          className="text-[9px] px-1.5 py-0.5 bg-accent/10 text-accent rounded flex items-center gap-1 font-bold"
+                                      >
+                                          <CameraIcon className="w-2.5 h-2.5" /> Editar Foto Global
+                                      </button>
+                                  </div>
                               </td>
                               <td className="p-3"><span className="px-2 py-1 bg-accent/10 text-accent rounded text-[10px] font-black uppercase">{stores.find(s => s.id === p.storeId)?.name}</span></td>
                               <td className="p-3 text-center font-black">{p.quantity}</td>
                               <td className="p-3 text-right font-black text-accent">{formatCOP(p.totalCost)}</td>
-                              <td className="p-3">
-                                  <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                              <td className="p-3 text-center">
+                                  <div className="flex justify-center items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                       <button onClick={() => setEditingPurchase(p)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4"/></button>
                                       <button onClick={() => onDeletePurchase(p.id)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
                                   </div>
                               </td>
                           </tr>
-                      ))}
+                      )})}
                   </tbody>
               </table>
+              {filteredPurchases.length === 0 && (
+                <div className="p-10 text-center text-gray-400">
+                    No se encontraron compras en el rango seleccionado.
+                </div>
+              )}
           </div>
       </div>
 
@@ -517,8 +579,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       )}
 
       {previewImage && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
-            <img src={previewImage} alt="Zoom" className="max-w-full max-h-full object-contain rounded-2xl" />
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-fade-in" onClick={() => setPreviewImage(null)}>
+            <div className="relative max-w-4xl w-full aspect-square bg-white rounded-2xl overflow-hidden border-4 border-accent shadow-2xl">
+                <img src={previewImage} alt="Zoom" className="w-full h-full object-contain" />
+                <button className="absolute top-4 right-4 bg-black/50 text-white p-3 rounded-full hover:bg-accent transition-colors"><CrossIcon className="w-6 h-6" /></button>
+            </div>
         </div>
       )}
 
