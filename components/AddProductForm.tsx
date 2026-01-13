@@ -59,12 +59,12 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
   }, [productSearch, allInventory]);
 
   const storesWithProduct = useMemo(() => {
-    if (!selectedProduct) return [];
-    const lowerCaseName = selectedProduct.name.toLowerCase();
+    const productNameToFind = selectedProduct?.name || productSearch;
+    if (!productNameToFind) return [];
     return allInventory
-        .filter(p => p.name.toLowerCase() === lowerCaseName)
+        .filter(p => p.name.toLowerCase() === productNameToFind.toLowerCase())
         .map(p => p.storeId);
-  }, [selectedProduct, allInventory]);
+  }, [selectedProduct, productSearch, allInventory]);
 
   useEffect(() => {
     setHighlightedIndex(-1);
@@ -101,11 +101,17 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
     setImageFile(null); // Reset file if selecting existing
     setShowSuggestions(false);
     
-    // Unselect stores that already have this product
+    // Al seleccionar uno existente, marcar las tiendas donde NO existe
     const existingStoreIds = allInventory
         .filter(p => p.name.toLowerCase() === product.name.toLowerCase())
         .map(p => p.storeId);
-    setSelectedStoreIds(prev => prev.filter(id => !existingStoreIds.includes(id)));
+    
+    // Si no existe en la tienda actual, dejarla seleccionada. Si existe, buscar otras.
+    if (!existingStoreIds.includes(currentStoreId)) {
+        setSelectedStoreIds([currentStoreId]);
+    } else {
+        setSelectedStoreIds([]);
+    }
   };
   
   const handleStoreSelection = (storeId: string) => {
@@ -151,7 +157,7 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
         }
     }
 
-    if (!productDataForSubmission.name || !productDataForSubmission.price || !productDataForSubmission.cost || !productDataForSubmission.stock || !productDataForSubmission.description || !productDataForSubmission.categoryId || selectedStoreIds.length === 0) {
+    if (!productDataForSubmission.name || isNaN(productDataForSubmission.price) || isNaN(productDataForSubmission.cost) || isNaN(productDataForSubmission.stock) || !productDataForSubmission.description || !productDataForSubmission.categoryId || selectedStoreIds.length === 0) {
       alert('Por favor, completa todos los campos requeridos y selecciona al menos una tienda.');
       return;
     }
@@ -180,19 +186,22 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               onKeyDown={handleKeyDown}
-              className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" 
+              className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-bold" 
               required
               autoComplete="off"
             />
             {showSuggestions && suggestedProducts.length > 0 && (
-                <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <ul className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {suggestedProducts.map((p, index) => (
                         <li key={p.id}
-                            className={`p-2 cursor-pointer ${index === highlightedIndex ? 'bg-accent/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                            className={`p-2 cursor-pointer flex items-center gap-3 ${index === highlightedIndex ? 'bg-accent/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                             onMouseDown={() => handleProductSelect(p)}
                             onMouseEnter={() => setHighlightedIndex(index)}
                         >
-                            {p.name}
+                            <div className="w-8 h-8 rounded bg-gray-200 overflow-hidden flex-shrink-0">
+                                {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover"/> : <PlusCircleIcon className="w-full h-full text-gray-400 p-1"/>}
+                            </div>
+                            <span className="font-bold text-sm">{p.name}</span>
                         </li>
                     ))}
                 </ul>
@@ -216,7 +225,7 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
             <input type="number" id="cost" value={cost} onChange={e => setCost(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" required min="0" step="1" />
           </div>
           <div>
-            <label htmlFor="stock" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Stock Inicial (por tienda)</label>
+            <label htmlFor="stock" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Añadir Stock (por tienda)</label>
             <input type="number" id="stock" value={stock} onChange={e => setStock(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" required min="0" />
           </div>
           <div>
@@ -229,9 +238,9 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
           <textarea id="description" value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" required />
         </div>
         <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Imagen del Producto</label>
+            <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Imagen del Producto (Global para todas las sedes)</label>
             <div className="mt-1 flex items-center gap-4">
-                <span className="inline-block h-24 w-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                <span className="inline-block h-24 w-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border-2 border-gray-200">
                     {imagePreview ? (
                         <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
                     ) : (
@@ -240,35 +249,37 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
                 </span>
                 <label htmlFor="image-upload" className="cursor-pointer bg-white dark:bg-gray-700 py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 dark:text-text-dark hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent">
                     <UploadIcon className="inline-block w-5 h-5 mr-2" />
-                    <span>Subir Archivo</span>
+                    <span>Subir Nueva Foto</span>
                     <input id="image-upload" name="image-upload" type="file" className="sr-only" onChange={handleImageChange} accept="image/png, image/jpeg" />
                 </label>
+                {(selectedProduct || storesWithProduct.length > 0) && (
+                    <p className="text-[10px] text-gray-400 italic">Este producto ya existe. Al subir una foto nueva, se actualizará en todas las sedes.</p>
+                )}
             </div>
         </div>
         <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Crear en Tiendas</label>
+            <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Tiendas donde añadir stock:</label>
             <div className="flex flex-wrap gap-3">
                 {stores.map(store => {
                     const alreadyExists = storesWithProduct.includes(store.id);
                     return (
-                      <label key={store.id} className={`flex items-center space-x-2 ${alreadyExists ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                      <label key={store.id} className={`flex items-center space-x-2 p-2 rounded-lg border transition-colors ${alreadyExists ? 'bg-green-500/10 border-green-500/30' : 'cursor-pointer hover:bg-gray-50'}`}>
                           <input 
                               type="checkbox"
-                              checked={!alreadyExists && selectedStoreIds.includes(store.id)}
+                              checked={selectedStoreIds.includes(store.id)}
                               onChange={() => handleStoreSelection(store.id)}
-                              disabled={alreadyExists}
                               className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent"
                           />
-                          <span>{store.name} {alreadyExists && <span className="text-xs text-green-500">(Ya existe)</span>}</span>
+                          <span className="text-sm font-bold">{store.name} {alreadyExists && <span className="text-[10px] text-green-500">(Sumar a existente)</span>}</span>
                       </label>
                     )
                 })}
             </div>
         </div>
-        <div className="flex justify-end">
-            <button type="submit" className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover disabled:bg-gray-600">
+        <div className="flex justify-end pt-4">
+            <button type="submit" className="bg-accent text-white font-black py-3 px-8 rounded-xl flex items-center justify-center space-x-2 transition-all duration-300 hover:bg-accent-hover shadow-lg shadow-accent/20 active:scale-95">
                 <PlusCircleIcon />
-                <span>Agregar Producto</span>
+                <span>{selectedProduct || storesWithProduct.length > 0 ? 'Actualizar/Sumar Producto' : 'Crear Producto'}</span>
             </button>
         </div>
       </form>

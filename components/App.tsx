@@ -763,18 +763,72 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
+  // FIX: Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
-      const imageUrl = imageFile ? await uploadImageAndGetURL(imageFile) : '';
+      // 1. Verificar si el producto ya existe globalmente para reutilizar info
+      const q = query(collection(db, 'inventory'), where('name', '==', newProductData.name));
+      const snapshot = await getDocs(q);
+      
+      let imageUrl = '';
+      let existingDescription = newProductData.description;
+      let existingCategoryId = newProductData.categoryId;
+      let existingSku = '';
+
+      if (!snapshot.empty) {
+          const firstMatch = snapshot.docs[0].data() as Product;
+          imageUrl = firstMatch.imageUrl;
+          existingDescription = firstMatch.description;
+          existingCategoryId = firstMatch.categoryId;
+          existingSku = firstMatch.sku;
+      }
+
+      // 2. Si hay nueva imagen, subirla y será la nueva global
+      if (imageFile) {
+          imageUrl = await uploadImageAndGetURL(imageFile);
+      }
+
       const batch = writeBatch(db);
+      
+      // 3. Actualizar todas las instancias existentes con la nueva info/foto global
+      snapshot.docs.forEach(docSnap => {
+          batch.update(docSnap.ref, {
+              imageUrl,
+              description: existingDescription,
+              categoryId: existingCategoryId
+          });
+      });
+
+      // 4. Determinar SKU (existente o nuevo prefijo)
       const namePrefix = newProductData.name.substring(0, 3).toUpperCase();
-      const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const sku = existingSku || `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const existingStoreIds = snapshot.docs.map(d => (d.data() as Product).storeId);
+
+      // 5. Crear en tiendas nuevas o actualizar stock en existentes
       selectedStoreIds.forEach(storeId => {
-          const newRef = doc(collection(db, 'inventory'));
-          batch.set(newRef, { ...newProductData, id: newRef.id, sku, imageUrl, storeId, isDisabled: false });
+          if (existingStoreIds.includes(storeId)) {
+              // Si ya existe en esta tienda, solo actualizamos el stock relativo al formulario
+              const existingDoc = snapshot.docs.find(d => (d.data() as Product).storeId === storeId);
+              if (existingDoc) {
+                  batch.update(existingDoc.ref, { stock: increment(newProductData.stock) });
+              }
+          } else {
+              const newRef = doc(collection(db, 'inventory'));
+              batch.set(newRef, { 
+                  ...newProductData, 
+                  description: existingDescription,
+                  categoryId: existingCategoryId,
+                  id: newRef.id, 
+                  sku, 
+                  imageUrl, 
+                  storeId, 
+                  isDisabled: false 
+              });
+          }
       });
       await batch.commit();
   };
 
+  // FIX: Sincronización Global de Productos al Actualizar
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
       let newImageUrl = updatedProduct.imageUrl;
       if (imageFile) {
@@ -782,15 +836,29 @@ const App: React.FC = () => {
       }
 
       const batch = writeBatch(db);
-      if (imageFile || updatedProduct.imageUrl === '') {
-          const q = query(collection(db, 'inventory'), where('name', '==', updatedProduct.name));
-          const snapshot = await getDocs(q);
-          snapshot.docs.forEach(docSnap => {
-              batch.update(docSnap.ref, { imageUrl: newImageUrl });
-          });
-      }
-      const specificRef = doc(db, 'inventory', updatedProduct.id);
-      batch.update(specificRef, { ...updatedProduct, imageUrl: newImageUrl });
+      
+      // Siempre sincronizamos la imagen, descripción y categoría por nombre de producto
+      const q = query(collection(db, 'inventory'), where('name', '==', updatedProduct.name));
+      const snapshot = await getDocs(q);
+      
+      snapshot.docs.forEach(docSnap => {
+          const updateData: any = { 
+              imageUrl: newImageUrl,
+              description: updatedProduct.description,
+              categoryId: updatedProduct.categoryId
+          };
+          // Solo actualizamos el stock y precio del producto específico que se está editando
+          // a menos que el usuario esté en un modo de edición masiva (no implementado aún)
+          if (docSnap.id === updatedProduct.id) {
+              updateData.stock = updatedProduct.stock;
+              updateData.price = updatedProduct.price;
+              updateData.cost = updatedProduct.cost;
+              updateData.supplier = updatedProduct.supplier;
+              updateData.isDisabled = updatedProduct.isDisabled;
+          }
+          batch.update(docSnap.ref, updateData);
+      });
+      
       await batch.commit();
   };
 
