@@ -23,10 +23,32 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.9.0',
+    date: '2024-06-01',
+    description: 'Sincronización Total de Metadatos',
+    isCurrent: true,
+    changes: [
+      'Herencia Inteligente: Al comprar o crear un producto que ya existe en otra sede, se copia automáticamente su foto, descripción y categoría.',
+      'Sincronización de Imágenes en Tiempo Real: Al subir una foto desde POS o Compras, se actualiza globalmente en todas las tiendas con el mismo producto.',
+      'Mejora en Compras Multi-tienda: Detección global de productos para evitar fichas vacías al ingresar mercancía.',
+      'Corrección en carga de archivos multimedia desde el historial de compras.'
+    ]
+  },
+  {
+    version: '2.8.0',
+    date: '2024-05-31',
+    description: 'Gestión Cromática de Sedes',
+    changes: [
+      'Identificación Visual en Compras: Cada tienda ahora tiene un color asignado en el lote de compras para evitar errores de digitación entre sedes.',
+      'Bordes e indicadores dinámicos basados en el color de acento de cada tienda.',
+      'Sincronización mejorada de cantidades en lote con botones de copia rápida por columna.',
+      'Mejoras en la legibilidad de tablas en dispositivos móviles.'
+    ]
+  },
+  {
     version: '2.7.0',
     date: '2024-05-30',
     description: 'Estabilidad y Sincronización Multimedia',
-    isCurrent: true,
     changes: [
       'Corrección Crítica: Se resolvió el error de carga infinita que impedía entrar a la base de datos al iniciar sesión.',
       'Sincronización de Imágenes: Las fotos editadas o subidas desde cualquier tienda ahora se actualizan automáticamente en todas las sedes.',

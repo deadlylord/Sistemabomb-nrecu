@@ -914,14 +914,31 @@ const App: React.FC = () => {
     storeEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }>;
   }) => {
     if (!currentUser) return;
-    const batch = writeBatch(db);
+    
     const { productInfo, storeEntries } = data;
     const normalizedName = toTitleCase(productInfo.name);
+    
+    // 1. Fetch metadata globally first to ensure we use the best available (image, desc)
+    const namesToSearch = Array.from(new Set([productInfo.name, normalizedName]));
+    const globalQ = query(collection(db, 'inventory'), where('name', 'in', namesToSearch), limit(1));
+    const globalSnap = await getDocs(globalQ);
+    
+    let globalImage = '';
+    let globalDesc = 'Sin descripción...';
+    let globalCategoryId = productInfo.categoryId;
+
+    if (!globalSnap.empty) {
+        const d = globalSnap.docs[0].data() as Product;
+        globalImage = d.imageUrl;
+        globalDesc = d.description;
+        globalCategoryId = d.categoryId;
+    }
+
+    const batch = writeBatch(db);
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
-            // Buscamos el producto en esta tienda usando búsqueda flexible para evitar duplicados por formato
-            const namesToSearch = Array.from(new Set([productInfo.name, normalizedName]));
+            // Find existing product in THIS specific store
             const q = query(collection(db, 'inventory'), 
                            where('name', 'in', namesToSearch), 
                            where('storeId', '==', storeId), 
@@ -935,14 +952,19 @@ const App: React.FC = () => {
             if (!snapshot.empty) {
                 const docSnap = snapshot.docs[0];
                 productRef = docSnap.ref;
-                currentStock = docSnap.data().stock || 0;
+                const existingData = docSnap.data();
+                currentStock = existingData.stock || 0;
                 productId = docSnap.id;
+                
                 batch.update(productRef, {
                     name: normalizedName,
                     stock: increment(entry.quantity),
                     cost: entry.cost,
                     price: entry.price,
                     supplier: entry.supplier,
+                    imageUrl: globalImage || existingData.imageUrl, // Prioritize global
+                    description: globalDesc || existingData.description,
+                    categoryId: globalCategoryId,
                     isDisabled: false
                 });
             } else {
@@ -955,14 +977,15 @@ const App: React.FC = () => {
                 batch.set(newProductRef, {
                     id: productId,
                     name: normalizedName,
-                    categoryId: productInfo.categoryId,
+                    categoryId: globalCategoryId,
                     sku,
                     cost: entry.cost,
                     price: entry.price,
                     stock: entry.quantity,
                     supplier: entry.supplier,
                     storeId,
-                    imageUrl: '',
+                    imageUrl: globalImage,
+                    description: globalDesc,
                     isDisabled: false
                 });
             }

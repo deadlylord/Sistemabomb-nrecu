@@ -278,13 +278,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   const filteredPurchases = useMemo(() => {
     const searchTermNormalized = normalizeText(historySearchTerm);
-    // FIX: Se implementa el filtrado local por "Mes Actual" aquí.
     const startOfMonthDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
     return purchases.filter(p => {
       const d = new Date(p.createdAt);
       
-      // Si no se ha solicitado el historial completo, filtramos localmente por el mes actual por defecto
       if (!isFullHistoryLoaded && d < startOfMonthDate) return false;
 
       const start = startDate ? new Date(startDate + 'T00:00:00') : null;
@@ -358,7 +356,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                             {suggestedProducts.map((p) => (
                                 <div key={p.id} className="p-4 flex flex-col sm:flex-row items-center justify-between hover:bg-accent/5 transition-colors gap-4">
                                     <div className="flex items-center gap-4 flex-1">
-                                        {/* Miniatura ampliable en el buscador */}
                                         <div 
                                             className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-700 flex-shrink-0 cursor-zoom-in relative group/thumb"
                                             onClick={() => p.imageUrl && setPreviewImage(p.imageUrl)}
@@ -440,11 +437,16 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                       <thead>
                           <tr className="bg-gray-100 dark:bg-gray-800/80 border-b dark:border-gray-700">
                               <th className="p-4 text-[10px] font-black uppercase text-gray-500 w-1/4">Producto</th>
-                              {activeStoreIds.map(sid => (
-                                  <th key={sid} className="p-4 text-[10px] font-black uppercase text-accent border-l dark:border-gray-700 min-w-[300px]">
-                                      {stores.find(s => s.id === sid)?.name}
+                              {activeStoreIds.map(sid => {
+                                  const store = stores.find(s => s.id === sid);
+                                  return (
+                                  <th key={sid} className="p-4 border-l dark:border-gray-700 min-w-[300px] relative overflow-hidden" style={{ borderTop: `4px solid ${store?.accentColor || '#ff007f'}` }}>
+                                      <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundColor: store?.accentColor || 'transparent' }}></div>
+                                      <span className="text-[11px] font-black uppercase tracking-wider relative z-10" style={{ color: store?.accentColor || '#ff007f' }}>
+                                          {store?.name}
+                                      </span>
                                   </th>
-                              ))}
+                              )})}
                               <th className="p-4 w-10"></th>
                           </tr>
                       </thead>
@@ -453,7 +455,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                               <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-accent/5 transition-colors">
                                   <td className="p-4">
                                       <div className="flex items-center gap-3">
-                                          {/* Miniatura del producto en el lote */}
                                           <div 
                                               className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-900 border dark:border-gray-700 overflow-hidden flex-shrink-0 cursor-zoom-in"
                                               onClick={() => item.imageUrl && setPreviewImage(item.imageUrl)}
@@ -484,8 +485,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                           </div>
                                       </div>
                                   </td>
-                                  {activeStoreIds.map((sid, idx) => (
-                                      <td key={sid} className="p-4 border-l dark:border-gray-700">
+                                  {activeStoreIds.map((sid, idx) => {
+                                      const store = stores.find(s => s.id === sid);
+                                      return (
+                                      <td key={sid} className="p-4 border-l dark:border-gray-700" style={{ borderLeftColor: `${store?.accentColor}33` }}>
                                           <div className="grid grid-cols-3 gap-2">
                                               <div className="flex flex-col gap-1">
                                                   <div className="flex justify-between items-center px-1">
@@ -494,7 +497,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                                           <button onClick={() => handleSyncValueAcrossStores(item.id, 'quantity', sid)} className="text-accent hover:scale-125 transition-transform" title="Copiar cantidad a todas las tiendas"><CopyIcon className="w-2.5 h-2.5"/></button>
                                                       )}
                                                   </div>
-                                                  <input type="number" value={item.storeEntries[sid]?.quantity || ''} onChange={e => handleUpdateBatchStoreEntry(item.id, sid, 'quantity', e.target.value)} className="w-full bg-white dark:bg-gray-900 border dark:border-gray-700 rounded p-1.5 text-center font-black text-sm outline-none focus:border-accent" placeholder="0" />
+                                                  <input type="number" value={item.storeEntries[sid]?.quantity || ''} onChange={e => handleUpdateBatchStoreEntry(item.id, sid, 'quantity', e.target.value)} className="w-full bg-white dark:bg-gray-900 border dark:border-gray-700 rounded p-1.5 text-center font-black text-sm outline-none focus:border-accent" style={{ borderBottomColor: store?.accentColor }} placeholder="0" />
                                               </div>
                                               <div className="flex flex-col gap-1">
                                                   <div className="flex justify-between items-center px-1">
@@ -516,7 +519,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                               </div>
                                           </div>
                                       </td>
-                                  ))}
+                                  )})}
                                   <td className="p-4">
                                       <button onClick={() => handleRemoveFromBatch(item.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><TrashIcon className="w-5 h-5"/></button>
                                   </td>
@@ -591,7 +594,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                       ) : (
                                           <PackageIcon className="w-6 h-6 mx-auto mt-3 text-gray-300" />
                                       )}
-                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/opacity-100 transition-opacity flex items-center justify-center">
                                           <SearchIcon className="w-4 h-4 text-white" />
                                       </div>
                                   </div>
