@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon } from './Icons';
+import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon } from './Icons';
 import { formatCOP } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 
@@ -40,7 +41,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [categoryFilter, setCategoryFilter] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // New state for supplier suggestions
+  // Sugerencias de proveedores
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
   const [highlightedSupplierIndex, setHighlightedSupplierIndex] = useState(-1);
 
@@ -60,7 +61,24 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     }
   }, [successMessage]);
   
-  const searchSource = useMemo(() => allInventoryForSearch && allInventoryForSearch.length > 0 ? allInventoryForSearch : inventory, [allInventoryForSearch, inventory]);
+  // Función para normalizar texto (quita espacios extras internos y externos)
+  const normalizeText = (text: string) => {
+    return (text || '').toLowerCase().trim().replace(/\s\s+/g, ' ');
+  };
+
+  const searchSource = useMemo(() => {
+    const globalList = allInventoryForSearch || [];
+    const unified = [...globalList];
+    const existingIds = new Set(unified.map(p => p.id));
+    
+    inventory.forEach(p => {
+        if (!existingIds.has(p.id)) {
+            unified.push(p);
+        }
+    });
+    
+    return unified;
+  }, [allInventoryForSearch, inventory]);
 
   const resetForm = () => {
     setProductSearch('');
@@ -75,26 +93,44 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   };
   
   const suggestedProducts = useMemo(() => {
-    if (!productSearch) return [];
-    const lowerCaseSearch = productSearch.toLowerCase();
+    const searchTermNormalized = normalizeText(productSearch);
+    if (!searchTermNormalized) return [];
+
     const uniqueProductNames = new Set<string>();
+    
     return searchSource
       .filter(p => {
-        const nameLower = p.name.toLowerCase();
-        if (nameLower.includes(lowerCaseSearch) && !uniqueProductNames.has(nameLower)) {
-          uniqueProductNames.add(nameLower);
+        const nameNormalized = normalizeText(p.name);
+        const skuNormalized = normalizeText(p.sku);
+        const supplierNormalized = normalizeText(p.supplier || '');
+        
+        const matches = nameNormalized.includes(searchTermNormalized) || 
+                        skuNormalized.includes(searchTermNormalized) ||
+                        supplierNormalized.includes(searchTermNormalized);
+
+        if (matches && !uniqueProductNames.has(nameNormalized)) {
+          uniqueProductNames.add(nameNormalized);
           return true;
         }
         return false;
       })
-      .slice(0, 10);
-  }, [productSearch, searchSource]);
+      .sort((a, b) => {
+          // Prioridad 1: Si el producto está en la tienda actual
+          const aInCurrent = a.storeId === currentStoreId;
+          const bInCurrent = b.storeId === currentStoreId;
+          if (aInCurrent && !bInCurrent) return -1;
+          if (!aInCurrent && bInCurrent) return 1;
+          
+          // Prioridad 2: Orden alfabético
+          return a.name.localeCompare(b.name);
+      })
+      .slice(0, 12);
+  }, [productSearch, searchSource, currentStoreId]);
   
   useEffect(() => {
     setHighlightedIndex(-1);
   }, [suggestedProducts]);
 
-  // Supplier suggestions logic
   const uniqueSuppliers = useMemo(() => {
     const suppliers = new Set<string>();
     searchSource.forEach(product => {
@@ -106,16 +142,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   }, [searchSource]);
 
   const suggestedSuppliers = useMemo(() => {
-    if (!supplier.trim()) {
-      return [];
-    }
-    const lowerCaseSearch = supplier.toLowerCase();
-    return uniqueSuppliers.filter(s => s.toLowerCase().includes(lowerCaseSearch));
+    const searchTerm = normalizeText(supplier);
+    if (!searchTerm) return [];
+    return uniqueSuppliers.filter(s => normalizeText(s).includes(searchTerm));
   }, [supplier, uniqueSuppliers]);
-
-  useEffect(() => {
-    setHighlightedSupplierIndex(-1);
-  }, [suggestedSuppliers]);
 
   const handleSupplierKeyDown = (e: React.KeyboardEvent) => {
     if (showSupplierSuggestions && suggestedSuppliers.length > 0) {
@@ -140,7 +170,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     setSupplier(selectedSupplier);
     setShowSupplierSuggestions(false);
   };
-  // End of supplier suggestions logic
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (showSuggestions && suggestedProducts.length > 0) {
@@ -168,26 +197,21 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     setIsCreatingNew(false);
     setShowSuggestions(false);
 
-    // Find all instances of this product across all stores
-    const allInstances = searchSource.filter(p => p.name.toLowerCase() === product.name.toLowerCase());
+    const nameToMatch = normalizeText(product.name);
+    const allInstances = searchSource.filter(p => normalizeText(p.name) === nameToMatch);
     
     setStoreData(prevStoreData => {
         const newStoreData = { ...prevStoreData };
-        
-        // Iterate over the stores we are currently displaying in the form
         Object.keys(newStoreData).forEach(storeId => {
-            // Find if there's an instance for THIS specific store
             const instanceForThisStore = allInstances.find(p => p.storeId === storeId);
             
             if (instanceForThisStore) {
-                // If an instance exists, pre-fill its data
                 newStoreData[storeId] = {
-                    ...newStoreData[storeId], // Keep the existing selection and quantity
+                    ...newStoreData[storeId],
                     cost: instanceForThisStore.cost.toString(),
                     price: instanceForThisStore.price.toString(),
                 };
             } else {
-                // If no instance exists for this store, pre-fill from the base selected product as a suggestion.
                 newStoreData[storeId] = {
                     ...newStoreData[storeId],
                     cost: product.cost.toString(),
@@ -195,7 +219,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 };
             }
         });
-
         return newStoreData;
     });
   };
@@ -232,13 +255,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     }
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const productName = selectedProduct ? selectedProduct.name : productSearch;
-      if (!productName.trim()) {
+      const productName = (selectedProduct ? selectedProduct.name : productSearch).trim();
+      if (!productName) {
         throw new Error('Por favor, busca o escribe el nombre de un producto.');
       }
   
@@ -266,13 +288,13 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       });
       
       if (!isValid) {
-        throw new Error('Por favor, completa todos los campos (Cantidad, Costo, Precio) con valores válidos para las tiendas seleccionadas.');
+        throw new Error('Por favor, completa todos los campos (Cantidad, Costo, Precio) con valores válidos.');
       }
   
-      const baseProduct = searchSource.find(p => p.name.toLowerCase() === productName.toLowerCase());
+      const baseProduct = searchSource.find(p => normalizeText(p.name) === normalizeText(productName));
 
       if (!isCreatingNew && !baseProduct) {
-        throw new Error(`El producto "${productName}" no se encontró en la base de datos. Si es un producto nuevo, bórralo y escríbelo de nuevo para ver la opción de crearlo.`);
+        throw new Error(`Producto no encontrado. Si es nuevo, pulsa "Confirmar Creación".`);
       }
   
       await onMultiStorePurchase({
@@ -283,19 +305,17 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         storeEntries,
       });
       
-      // Only reset form and show success on successful completion
       resetForm();
       setSuccessMessage('Compras registradas y stock actualizado correctamente.');
 
     } catch (error: any) {
-        // The error alert is already shown in App.tsx. 
-        // We just catch it here to prevent the form from resetting on failure.
-        console.error("Submit failed, form not reset.");
+        alert(error.message);
+        console.error("Submit failed:", error);
     }
   };
   
   const filteredPurchases = useMemo(() => {
-    const lowerCaseSearchTerm = historySearchTerm.toLowerCase();
+    const searchTermNormalized = normalizeText(historySearchTerm);
     const productMap = new Map(inventory.map(p => [p.id, p]));
 
     return purchases.filter(p => {
@@ -305,9 +325,9 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       const matchesStartDate = start ? purchaseDate >= start : true;
       const matchesEndDate = end ? purchaseDate <= end : true;
       
-      const matchesSearch = lowerCaseSearchTerm ? 
-          p.productName.toLowerCase().includes(lowerCaseSearchTerm) ||
-          p.supplier.toLowerCase().includes(lowerCaseSearchTerm)
+      const matchesSearch = searchTermNormalized ? 
+          normalizeText(p.productName).includes(searchTermNormalized) ||
+          normalizeText(p.supplier).includes(searchTermNormalized)
           : true;
 
       const product = productMap.get(p.productId) as Product | undefined;
@@ -328,7 +348,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     );
   }, [filteredPurchases]);
 
-  const productExists = useMemo(() => searchSource.some(p => p.name.toLowerCase() === productSearch.toLowerCase()), [searchSource, productSearch]);
+  const productExists = useMemo(() => {
+      const searchNormalized = normalizeText(productSearch);
+      return searchNormalized !== '' && searchSource.some(p => normalizeText(p.name) === searchNormalized);
+  }, [searchSource, productSearch]);
 
   return (
     <>
@@ -350,7 +373,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                     onFocus={() => setShowSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     onKeyDown={handleKeyDown}
-                    className="w-full bg-gray-100 dark:bg-gray-800 p-2 pl-10 pr-10 rounded-md" placeholder="Escribe para buscar o crear..." autoComplete="off"
+                    className="w-full bg-gray-100 dark:bg-gray-800 p-2 pl-10 pr-10 rounded-md outline-none focus:ring-2 focus:ring-accent" placeholder="Escribe el nombre, SKU o marca..." autoComplete="off"
                  />
                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"/>
                  {productSearch && (
@@ -366,15 +389,26 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
               </div>
               {showSuggestions && suggestedProducts.length > 0 && (
                 <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {suggestedProducts.map((p, index) => (
-                        <li key={p.id}
-                            className={`p-2 cursor-pointer ${index === highlightedIndex ? 'bg-accent/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                            onMouseDown={() => handleProductSelect(p)}
-                            onMouseEnter={() => setHighlightedIndex(index)}
-                        >
-                            {p.name}
-                        </li>
-                    ))}
+                    {suggestedProducts.map((p, index) => {
+                        const isCurrentStore = p.storeId === currentStoreId;
+                        return (
+                            <li key={p.id}
+                                className={`p-2 flex items-center justify-between cursor-pointer ${index === highlightedIndex ? 'bg-accent/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                                onMouseDown={() => handleProductSelect(p)}
+                                onMouseEnter={() => setHighlightedIndex(index)}
+                            >
+                                <div className="flex flex-col">
+                                    <span className="font-bold">{p.name}</span>
+                                    <span className="text-[10px] text-slate-500 font-mono">{p.sku} • {p.supplier || 'Sin Marca'}</span>
+                                </div>
+                                {isCurrentStore && (
+                                    <span className="flex items-center gap-1 text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                                        <BuildingStorefrontIcon className="w-3 h-3" /> Aquí
+                                    </span>
+                                )}
+                            </li>
+                        );
+                    })}
                 </ul>
               )}
             </div>
@@ -391,7 +425,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 onFocus={() => setShowSupplierSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSupplierSuggestions(false), 200)}
                 onKeyDown={handleSupplierKeyDown}
-                className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" 
+                className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md outline-none focus:ring-2 focus:ring-accent" 
                 placeholder="Nombre del proveedor"
                 autoComplete="off"
               />
@@ -413,12 +447,13 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
           </div>
           
           {isCreatingNew && (
-             <div className="bg-accent/10 p-3 rounded-lg">
-                <label htmlFor="category" className="block text-sm font-medium text-accent mb-1">Categoría para "{productSearch}"</label>
-                <select id="category" value={newProductCategoryId} onChange={e => setNewProductCategoryId(e.target.value)} className="w-full md:w-1/2 bg-white dark:bg-gray-800 p-2 rounded-md" required>
+             <div className="bg-accent/10 p-3 rounded-lg border border-accent/20 animate-fade-in">
+                <label htmlFor="category" className="block text-sm font-bold text-accent mb-1">Categoría para "{productSearch.trim()}"</label>
+                <select id="category" value={newProductCategoryId} onChange={e => setNewProductCategoryId(e.target.value)} className="w-full md:w-1/2 bg-white dark:bg-gray-800 p-2 rounded-md border border-accent/30" required>
                     <option value="" disabled>Selecciona una categoría</option>
                     {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                 </select>
+                <p className="text-[10px] text-accent mt-1 italic">El producto se creará en el sistema una vez que registres la compra.</p>
              </div>
           )}
 
@@ -426,24 +461,24 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
              <h3 className="text-lg font-bold text-gray-800 dark:text-text-light mb-2">Gestionar Compra por Tienda</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                  {stores.map(store => (
-                     <div key={store.id} className={`p-4 rounded-lg transition-all ${storeData[store.id]?.selected ? 'bg-accent/10 ring-2 ring-accent' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                     <div key={store.id} className={`p-4 rounded-lg transition-all ${storeData[store.id]?.selected ? 'bg-accent/10 ring-2 ring-accent shadow-lg shadow-accent/5' : 'bg-gray-100 dark:bg-gray-800'}`}>
                          <label className="flex items-center space-x-3 cursor-pointer">
                            <input type="checkbox" checked={storeData[store.id]?.selected || false} onChange={() => handleStoreToggle(store.id)} className="h-5 w-5 rounded text-accent focus:ring-accent" />
                            <span className="font-bold text-lg">{store.name}</span>
                          </label>
                          {storeData[store.id]?.selected && (
-                            <div className="mt-3 space-y-2">
+                            <div className="mt-3 space-y-2 animate-fade-in">
                                 <div>
                                     <label className="text-xs font-medium">Cantidad</label>
-                                    <input type="number" value={storeData[store.id].quantity} onChange={e => handleInputChange(store.id, 'quantity', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm" min="1"/>
+                                    <input type="number" value={storeData[store.id].quantity} onChange={e => handleInputChange(store.id, 'quantity', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm border focus:border-accent" min="1"/>
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium">Costo Unitario</label>
-                                    <input type="number" value={storeData[store.id].cost} onChange={e => handleInputChange(store.id, 'cost', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm" min="0" step="1"/>
+                                    <input type="number" value={storeData[store.id].cost} onChange={e => handleInputChange(store.id, 'cost', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm border focus:border-accent" min="0" step="1"/>
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium">Precio Venta</label>
-                                    <input type="number" value={storeData[store.id].price} onChange={e => handleInputChange(store.id, 'price', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm" min="0" step="1"/>
+                                    <input type="number" value={storeData[store.id].price} onChange={e => handleInputChange(store.id, 'price', e.target.value)} className="w-full bg-white dark:bg-gray-700 p-1.5 rounded-md text-sm border focus:border-accent" min="0" step="1"/>
                                 </div>
                             </div>
                          )}
@@ -451,20 +486,21 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                  ))}
              </div>
              <div className="flex gap-2 mt-2">
-                <button type="button" onClick={() => applyToAll('quantity')} className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded-md">Aplicar Cant. a todos</button>
-                <button type="button" onClick={() => applyToAll('cost')} className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded-md">Aplicar Costo a todos</button>
+                <button type="button" onClick={() => applyToAll('quantity')} className="text-[10px] px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 transition-colors uppercase font-bold text-gray-600 dark:text-gray-300">Aplicar Cant. a todos</button>
+                <button type="button" onClick={() => applyToAll('cost')} className="text-[10px] px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 transition-colors uppercase font-bold text-gray-600 dark:text-gray-300">Aplicar Costo a todos</button>
+                <button type="button" onClick={() => applyToAll('price')} className="text-[10px] px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 transition-colors uppercase font-bold text-gray-600 dark:text-gray-300">Aplicar Precio a todos</button>
              </div>
           </div>
           
-          <div className="flex justify-end pt-4 border-t-2 border-gray-200 dark:border-gray-700">
-            {productSearch && !productExists && !isCreatingNew && (
-                <button type="button" onClick={() => setIsCreatingNew(true)} className="bg-yellow-500 text-white font-bold py-2 px-6 rounded-lg mr-4">
-                  Confirmar Creación de "{productSearch}"
+          <div className="flex justify-end pt-4 border-t-2 border-gray-200 dark:border-gray-700 gap-3">
+            {productSearch.trim() && !productExists && !isCreatingNew && (
+                <button type="button" onClick={() => setIsCreatingNew(true)} className="bg-yellow-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg hover:bg-yellow-600 transition-all active:scale-95">
+                  Confirmar Creación de "{productSearch.trim()}"
                 </button>
             )}
-            <button type="submit" className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 hover:bg-accent-hover">
+            <button type="submit" className="bg-accent text-white font-bold py-2.5 px-8 rounded-lg flex items-center space-x-2 hover:bg-accent-hover shadow-lg transition-all active:scale-95">
               <PlusCircleIcon />
-              <span>Registrar</span>
+              <span>Registrar Compra</span>
             </button>
           </div>
         </form>
@@ -478,25 +514,16 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                   placeholder="Buscar por producto o proveedor..."
                   value={historySearchTerm}
                   onChange={e => setHistorySearchTerm(e.target.value)}
-                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none"
                 />
                 <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400">
                   <SearchIcon />
                 </div>
-                {historySearchTerm && (
-                  <button
-                      onClick={() => setHistorySearchTerm('')}
-                      className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-                      aria-label="Limpiar búsqueda"
-                  >
-                      <CrossIcon className="w-5 h-5" />
-                  </button>
-                )}
               </div>
               <select
                 value={categoryFilter}
                 onChange={e => setCategoryFilter(e.target.value)}
-                className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="">Todas las categorías</option>
                 {categories.map(cat => (
@@ -512,19 +539,19 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
               <table className="w-full text-left">
                   <thead className="bg-gray-100 dark:bg-gray-800">
                       <tr>
-                          <th className="p-3 text-sm font-semibold tracking-wide">Fecha</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide">Producto</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide">Proveedor</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide text-center">Cant.</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide text-right">Costo Unit.</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide text-right">Costo Total</th>
-                          <th className="p-3 text-sm font-semibold tracking-wide text-center">Acciones</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider">Fecha</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider">Producto</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider">Proveedor</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider text-center">Cant.</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider text-right">Costo Unit.</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider text-right">Costo Total</th>
+                          <th className="p-3 text-xs font-black uppercase text-gray-500 tracking-wider text-center">Acciones</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                       {filteredPurchases.map((purchase) => (
                           <tr key={purchase.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <td className="p-3 text-sm whitespace-nowrap">{new Date(purchase.createdAt).toLocaleString()}</td>
+                              <td className="p-3 text-sm whitespace-nowrap text-gray-500">{new Date(purchase.createdAt).toLocaleString()}</td>
                               <td className="p-3 font-bold">{purchase.productName}</td>
                               <td className="p-3 text-sm text-gray-500 dark:text-text-dark">{purchase.supplier}</td>
                               <td className="p-3 text-center font-semibold">{purchase.quantity}</td>
@@ -533,10 +560,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                               <td className="p-3 text-center">
                                   <div className="flex justify-center items-center space-x-2">
                                       <button onClick={() => setEditingPurchase(purchase)} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors">
-                                          <EditIcon />
+                                          <EditIcon className="w-4 h-4" />
                                       </button>
                                       <button onClick={() => onDeletePurchase(purchase.id)} className="text-gray-500 dark:text-text-dark hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors">
-                                          <TrashIcon />
+                                          <TrashIcon className="w-4 h-4" />
                                       </button>
                                   </div>
                               </td>
@@ -544,8 +571,8 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                       ))}
                   </tbody>
                    <tfoot>
-                    <tr className="bg-gray-200 dark:bg-gray-900 font-bold">
-                      <td colSpan={3} className="p-3 text-right text-sm">Totales:</td>
+                    <tr className="bg-gray-200 dark:bg-gray-900 font-black">
+                      <td colSpan={3} className="p-3 text-right text-xs uppercase tracking-widest text-gray-500">Totales:</td>
                       <td className="p-3 text-center text-sm">{totals.totalQuantity}</td>
                       <td className="p-3"></td>
                       <td className="p-3 text-right text-accent text-base">{formatCOP(totals.totalCostValue)}</td>
