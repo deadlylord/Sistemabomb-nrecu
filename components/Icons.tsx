@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // Props type for all icons
@@ -47,6 +48,7 @@ export const TrashIcon: React.FC<IconProps> = ({ className = "w-6 h-6" }) => (
   </svg>
 );
 
+// FIX: This PlusIcon is defined on line 51 and is used throughout the app. Removed duplicate definition at the end of file.
 export const PlusIcon: React.FC<IconProps> = ({ className = "w-4 h-4" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
