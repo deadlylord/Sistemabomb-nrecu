@@ -4,6 +4,7 @@ import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMet
 import { formatCOP, COMMISSION_RATES } from '../constants';
 import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
+import { analyzeSalesData } from '../services/geminiService';
 
 
 interface DashboardViewProps {
@@ -29,6 +30,8 @@ interface DashboardViewProps {
   onReprintSale: (sale: Sale) => void;
   onOpenVerification: () => void;
   purchases: Purchase[];
+  allSales?: Sale[];
+  allInventory?: Product[];
 }
 
 interface UnifiedTransaction {
@@ -173,6 +176,21 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
   );
 };
 
+const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+    const htmlContent = useMemo(() => {
+        return content
+            .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-gray-800 dark:text-text-light mt-4 mb-2">$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-accent mt-6 mb-3 border-b-2 border-accent/30 pb-1">$1</h2>')
+            .replace(/^\* (.*$)/gim, '<li class="ml-5 list-disc">$1</li>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-accent">$1</strong>')
+            .replace(/\n/g, '<br />')
+            .replace(/<br \/><li>/g, '<li>') 
+            .replace(/<\/li><br \/>/g, '</li>');
+    }, [content]);
+
+    return <div className="prose dark:prose-invert max-w-none text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+};
+
 
 const toYYYYMMDD = (date: Date) => {
     const year = date.getFullYear();
@@ -185,7 +203,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
-    onOpenVerification, purchases
+    onOpenVerification, purchases, allSales, allInventory
   } = props;
   
   const today = new Date();
@@ -216,7 +234,10 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   // AI Insights Interaction State
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
-  const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients'>('insights');
+  const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients' | 'query'>('insights');
+  const [customAIQuery, setCustomAIQuery] = useState('');
+  const [aiQueryResult, setAiQueryResult] = useState('');
+  const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -239,10 +260,65 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     };
   }, [startDate, endDate]);
 
+  const handleCustomAIQuery = async () => {
+    if (!customAIQuery.trim() || isAiQueryLoading) return;
+    setIsAiQueryLoading(true);
+    setAiQueryResult('');
+
+    try {
+        const start = new Date(startDate + 'T00:00:00');
+        const end = new Date(endDate + 'T23:59:59');
+        
+        // Prepare global data for AI if Admin
+        const salesToAnalyze = (isAdmin && allSales) ? allSales : sales;
+        const inventoryToAnalyze = (isAdmin && allInventory) ? allInventory : inventory;
+
+        const filteredSales = salesToAnalyze.filter(s => {
+            const d = new Date(s.createdAt);
+            return d >= start && d <= end;
+        });
+
+        const dataForAI = {
+            periodo: { inicio: startDate, fin: endDate },
+            resumenPorTienda: stores.map(store => {
+                const storeSales = filteredSales.filter(s => s.storeId === store.id);
+                const storeInventory = inventoryToAnalyze.filter(p => p.storeId === store.id);
+                const productsSold = new Map<string, { name: string, quantity: number, revenue: number }>();
+                
+                storeSales.forEach(sale => {
+                    (sale.items || []).forEach(item => {
+                        if(!item) return;
+                        const existing = productsSold.get(item.id);
+                        if (existing) {
+                            existing.quantity += item.quantity;
+                            existing.revenue += item.price * item.quantity;
+                        } else {
+                            productsSold.set(item.id, { name: item.name, quantity: item.quantity, revenue: item.price * item.quantity });
+                        }
+                    });
+                });
+
+                return {
+                    nombreTienda: store.name,
+                    totalVentas: storeSales.reduce((sum, s) => sum + s.totalAmount, 0),
+                    productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue).slice(0, 10),
+                    productosEstancados: storeInventory.filter(p => p.stock > 0 && !productsSold.has(p.id)).slice(0, 5).map(p => p.name)
+                };
+            })
+        };
+
+        const result = await analyzeSalesData(dataForAI, customAIQuery);
+        setAiQueryResult(result);
+    } catch (e) {
+        setAiQueryResult("Error al procesar la consulta. Intente nuevamente.");
+    } finally {
+        setIsAiQueryLoading(false);
+    }
+  };
+
   const aiInsights = useMemo(() => {
     if (!sales || !inventory || !purchases) return null;
 
-    // Use Dashboard range for consistent analysis
     const startD = new Date(startDate + 'T00:00:00');
     const endD = new Date(endDate + 'T23:59:59');
     const periodLabel = `${startD.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})} - ${endD.toLocaleDateString('es-CO', {day: 'numeric', month: 'short'})}`;
@@ -1149,15 +1225,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
                  {isAIExpanded && (
                  <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-                    <div className="flex border-b border-gray-200 dark:border-gray-700">
-                        <button onClick={() => setActiveAITab('insights')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                            <PackageIcon className="w-3 h-3" /> Inventario & Insights
+                    <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
+                        <button onClick={() => setActiveAITab('insights')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <PackageIcon className="w-3 h-3" /> Inventario
                         </button>
-                        <button onClick={() => setActiveAITab('forecast')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                            <ChartBarIcon className="w-3 h-3" /> Proyección de Cierre
+                        <button onClick={() => setActiveAITab('forecast')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <ChartBarIcon className="w-3 h-3" /> Proyección
                         </button>
-                        <button onClick={() => setActiveAITab('clients')} className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-                            <UsersIcon className="w-3 h-3" /> Retención & Fuga
+                        <button onClick={() => setActiveAITab('clients')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <UsersIcon className="w-3 h-3" /> Clientes
+                        </button>
+                        <button onClick={() => setActiveAITab('query')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'query' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                            <SparklesIcon className="w-3 h-3" /> Consultar
                         </button>
                     </div>
 
@@ -1278,7 +1357,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 </div>
                             </div>
                         </div>
-                    ) : (
+                    ) : activeAITab === 'clients' ? (
                         <div className="w-full animate-fade-in">
                             <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-3">Clientes en Riesgo de Fuga</h4>
                             <div className="max-h-[200px] overflow-y-auto pr-2">
@@ -1288,6 +1367,48 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         <div className="text-right"><p className="text-xs font-bold text-red-500">{client.daysSince} días</p><p className="text-[10px] text-gray-400">sin volver</p></div>
                                     </div>
                                 )) : <p className="text-xs text-center text-gray-400">Todo bien por ahora.</p>}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="w-full animate-fade-in flex flex-col gap-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-black text-gray-500 uppercase tracking-widest">Consulta personalizada multi-tienda</label>
+                                <div className="flex gap-2">
+                                    <textarea 
+                                        value={customAIQuery}
+                                        onChange={e => setCustomAIQuery(e.target.value)}
+                                        placeholder="Ej: ¿Cuál ha sido el producto más vendido en las 3 tiendas este mes?"
+                                        rows={2}
+                                        className="flex-grow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-accent outline-none shadow-inner"
+                                    />
+                                    <button 
+                                        onClick={handleCustomAIQuery}
+                                        disabled={isAiQueryLoading || !customAIQuery.trim()}
+                                        className="bg-accent text-white px-6 rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-accent/20"
+                                    >
+                                        {isAiQueryLoading ? (
+                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                                        ) : (
+                                            <SparklesIcon className="w-5 h-5" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 min-h-[120px] max-h-[300px] overflow-y-auto">
+                                {aiQueryResult ? (
+                                    <SimpleMarkdownRenderer content={aiQueryResult} />
+                                ) : isAiQueryLoading ? (
+                                    <div className="flex flex-col items-center justify-center h-full py-8 text-gray-400">
+                                        <SparklesIcon className="w-8 h-8 animate-pulse mb-2 text-accent" />
+                                        <p className="text-xs font-bold animate-pulse uppercase tracking-widest">La IA está analizando los datos multi-tienda...</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full py-8 text-gray-300">
+                                        <SearchIcon className="w-10 h-10 mb-2 opacity-20" />
+                                        <p className="text-xs italic">Escribe una pregunta para obtener un resumen detallado del periodo filtrado.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
