@@ -23,10 +23,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.9.2',
+    date: '2024-06-03',
+    description: 'Optimización de Historial de Compras',
+    isCurrent: true,
+    changes: [
+      'Nueva columna "Proveedor" en la tabla de historial de compras para una mejor trazabilidad.',
+      'Sistema de ordenamiento por columnas en el historial: Ahora puedes ordenar por fecha, nombre, proveedor, cantidad o costo total.',
+      'Mejora visual en los encabezados de tabla con indicadores de dirección de orden.',
+      'Mantenimiento de la capitalización automática en tiempo real en el buscador de productos.'
+    ]
+  },
+  {
     version: '2.9.1',
     date: '2024-06-02',
     description: 'Ajuste de Precisión en Búsqueda',
-    isCurrent: true,
     changes: [
       'Eliminación de Normalización de Texto: Se retiró el formateo automático a "Mayúsculas Cada Palabra" para evitar que los productos no coincidan con la base de datos existente.',
       'Sincronización de Compras Multi-tienda Mejorada: Ahora el sistema reconoce los productos exactamente por su nombre literal, asegurando que la herencia de fotos y descripciones funcione correctamente.',

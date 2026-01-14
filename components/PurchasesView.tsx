@@ -35,6 +35,8 @@ interface BatchPurchaseItem {
     storeEntries: Record<string, { quantity: string; cost: string; price: string; }>;
 }
 
+type HistorySortKey = 'createdAt' | 'productName' | 'supplier' | 'storeId' | 'quantity' | 'totalCost';
+
 const toYYYYMMDD = (date: Date) => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -59,6 +61,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [historySortConfig, setHistorySortConfig] = useState<{ key: HistorySortKey, direction: 'asc' | 'desc' }>({ key: 'createdAt', direction: 'desc' });
   const [successMessage, setSuccessMessage] = useState('');
 
   const [batchItems, setBatchItems] = useState<BatchPurchaseItem[]>([]);
@@ -115,7 +118,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   const handleProductSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Capitalize each word as user types without breaking spaces
     const formatted = val.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     setProductSearch(formatted);
     setShowSuggestions(true);
@@ -302,7 +304,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     const searchTermNormalized = normalizeText(historySearchTerm);
     const startOfMonthDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-    return purchases.filter(p => {
+    let result = purchases.filter(p => {
       const d = new Date(p.createdAt);
       
       if (!isFullHistoryLoaded && d < startOfMonthDate) return false;
@@ -313,8 +315,49 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       const matchesCategory = !categoryFilter || inventory.find(inv => inv.id === p.productId)?.categoryId === categoryFilter;
       
       return (!start || d >= start) && (!end || d <= end) && matchesSearch && matchesCategory;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [purchases, startDate, endDate, historySearchTerm, categoryFilter, inventory, isFullHistoryLoaded]);
+    });
+
+    const { key, direction } = historySortConfig;
+    result.sort((a, b) => {
+        let valA: any = a[key as keyof Purchase];
+        let valB: any = b[key as keyof Purchase];
+
+        if (key === 'createdAt') {
+            valA = new Date(valA).getTime();
+            valB = new Date(valB).getTime();
+        }
+
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    return result;
+  }, [purchases, startDate, endDate, historySearchTerm, categoryFilter, inventory, isFullHistoryLoaded, historySortConfig]);
+
+  const handleRequestSort = (key: HistorySortKey) => {
+    setHistorySortConfig(prev => ({
+        key,
+        direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const SortHeader = ({ k, label }: { k: HistorySortKey, label: string }) => {
+    const isSorted = historySortConfig.key === k;
+    return (
+        <th 
+            className="p-3 text-[10px] font-black uppercase text-gray-400 cursor-pointer hover:text-accent transition-colors"
+            onClick={() => handleRequestSort(k)}
+        >
+            <div className="flex items-center gap-1">
+                {label}
+                {isSorted && (
+                    <span className="text-[8px]">{historySortConfig.direction === 'desc' ? '▼' : '▲'}</span>
+                )}
+            </div>
+        </th>
+    );
+  };
 
   const currentMonthName = new Date().toLocaleString('es-CO', { month: 'long' });
 
@@ -617,7 +660,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="relative md:col-span-2">
-                <input type="text" placeholder="Buscar por producto o proveedor..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 focus:ring-2 focus:ring-accent outline-none font-bold" />
+                <input type="text" placeholder="Buscar por producto o proveedor..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none font-bold" />
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               </div>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
@@ -629,11 +672,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                   <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                       <tr>
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400">Imagen</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400">Fecha</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400">Producto</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400">Tienda</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400 text-center">Cant.</th>
-                          <th className="p-3 text-[10px] font-black uppercase text-gray-400 text-right">Costo Total</th>
+                          <SortHeader k="createdAt" label="Fecha" />
+                          <SortHeader k="productName" label="Producto" />
+                          <SortHeader k="supplier" label="Proveedor" />
+                          <SortHeader k="storeId" label="Tienda" />
+                          <SortHeader k="quantity" label="Cant." />
+                          <SortHeader k="totalCost" label="Costo Total" />
                           <th className="p-3 text-center w-20">Acciones</th>
                       </tr>
                   </thead>
@@ -669,6 +713,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                       </button>
                                   </div>
                               </td>
+                              <td className="p-3 text-xs text-gray-500 font-bold uppercase">{p.supplier || 'N/A'}</td>
                               <td className="p-3"><span className="px-2 py-1 bg-accent/10 text-accent rounded text-[10px] font-black uppercase">{stores.find(s => s.id === p.storeId)?.name}</span></td>
                               <td className="p-3 text-center font-black">{p.quantity}</td>
                               <td className="p-3 text-right font-black text-accent">{formatCOP(p.totalCost)}</td>
