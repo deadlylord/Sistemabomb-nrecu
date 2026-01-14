@@ -28,7 +28,7 @@ interface BatchPurchaseItem {
     id: string;
     productId?: string;
     productName: string;
-    imageUrl?: string; // Nuevo campo para miniatura
+    imageUrl?: string;
     categoryId: string;
     isNew: boolean;
     supplier: string;
@@ -47,12 +47,13 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeStoreIds, setActiveStoreIds] = useState<string[]>([currentStoreId]);
   const [globalSupplier, setGlobalSupplier] = useState('');
+  const [showGlobalSupplierSuggestions, setShowGlobalSupplierSuggestions] = useState(false);
+  const [itemSupplierSearchId, setItemSupplierSearchId] = useState<string | null>(null);
   
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   
-  // Filtros inicializados al mes actual
   const [startDate, setStartDate] = useState(toYYYYMMDD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [endDate, setEndDate] = useState(toYYYYMMDD(new Date()));
   
@@ -80,6 +81,20 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     return unified;
   }, [allInventoryForSearch, inventory]);
 
+  const existingSuppliers = useMemo(() => {
+    const suppliers = new Set<string>();
+    searchSource.forEach(p => {
+        if (p.supplier) suppliers.add(p.supplier.trim());
+    });
+    return Array.from(suppliers).sort((a, b) => a.localeCompare(b));
+  }, [searchSource]);
+
+  const filteredGlobalSupplierSuggestions = useMemo(() => {
+    if (!globalSupplier) return [];
+    const norm = normalizeText(globalSupplier);
+    return existingSuppliers.filter(s => normalizeText(s).includes(norm)).slice(0, 8);
+  }, [globalSupplier, existingSuppliers]);
+
   const suggestedProducts = useMemo(() => {
     const searchTermNormalized = normalizeText(productSearch);
     if (!searchTermNormalized) return [];
@@ -97,6 +112,14 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       })
       .slice(0, 15);
   }, [productSearch, searchSource]);
+
+  const handleProductSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // Capitalize each word as user types without breaking spaces
+    const formatted = val.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    setProductSearch(formatted);
+    setShowSuggestions(true);
+  };
 
   const handleToggleActiveStore = (id: string) => {
       setActiveStoreIds(prev => prev.includes(id) ? (prev.length > 1 ? prev.filter(sid => sid !== id) : prev) : [...prev, id]);
@@ -242,7 +265,6 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         if (!hasQty) { alert(`El producto "${item.productName}" no tiene cantidades en las tiendas seleccionadas.`); return; }
     }
 
-    if (!window.confirm(`¿Procesar lote con ${batchItems.length} productos?`)) return;
     setIsProcessingBatch(true);
     try {
         for (const item of batchItems) {
@@ -321,15 +343,28 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                     </div>
                 </div>
             </div>
-            <div className="w-full lg:w-1/3">
+            <div className="w-full lg:w-1/3 relative">
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Proveedor del Lote (Opcional)</label>
-                <input 
-                    type="text" 
-                    value={globalSupplier} 
-                    onChange={e => setGlobalSupplier(e.target.value)}
-                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl outline-none focus:ring-2 focus:ring-accent font-bold"
-                    placeholder="Nombre del proveedor..."
-                />
+                <div className="relative">
+                    <input 
+                        type="text" 
+                        value={globalSupplier} 
+                        onChange={e => setGlobalSupplier(e.target.value)}
+                        onFocus={() => setShowGlobalSupplierSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowGlobalSupplierSuggestions(false), 200)}
+                        className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl outline-none focus:ring-2 focus:ring-accent font-bold"
+                        placeholder="Escribe el proveedor..."
+                    />
+                    {showGlobalSupplierSuggestions && filteredGlobalSupplierSuggestions.length > 0 && (
+                        <div className="absolute z-[60] w-full mt-1 bg-white dark:bg-gray-900 border rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+                            {filteredGlobalSupplierSuggestions.map(s => (
+                                <button key={s} onMouseDown={() => setGlobalSupplier(s)} className="w-full text-left p-3 hover:bg-accent/10 transition-colors font-bold text-xs uppercase border-b last:border-0 dark:border-gray-800">
+                                    {s}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
         
@@ -338,7 +373,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 <input 
                     type="text" 
                     value={productSearch} 
-                    onChange={e => { setProductSearch(e.target.value); setShowSuggestions(true); }}
+                    onChange={handleProductSearchChange}
                     onFocus={() => setShowSuggestions(true)}
                     className="w-full bg-gray-50 dark:bg-gray-800 p-5 pl-14 pr-10 rounded-2xl outline-none focus:ring-4 focus:ring-accent/20 font-black text-xl shadow-inner border-2 border-transparent focus:border-accent/30" 
                     placeholder="BUSCA Y SELECCIONA PRODUCTOS..."
@@ -481,7 +516,30 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                                       <p className="text-[10px] text-gray-400 font-bold uppercase">{categories.find(c => c.id === item.categoryId)?.name || 'Sin cat.'}</p>
                                                   </div>
                                               )}
-                                              <input type="text" value={item.supplier} onChange={e => handleUpdateBatchItem(item.id, { supplier: e.target.value })} className="mt-2 w-full bg-transparent border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase py-1 outline-none" placeholder="Marca/Proveedor..."/>
+                                              <div className="relative mt-2">
+                                                  <input 
+                                                      type="text" 
+                                                      value={item.supplier} 
+                                                      onChange={e => handleUpdateBatchItem(item.id, { supplier: e.target.value })} 
+                                                      onFocus={() => setItemSupplierSearchId(item.id)}
+                                                      onBlur={() => setTimeout(() => setItemSupplierSearchId(null), 200)}
+                                                      className="w-full bg-transparent border-b border-gray-200 dark:border-gray-700 text-[10px] font-bold uppercase py-1 outline-none" 
+                                                      placeholder="Marca/Proveedor..."
+                                                  />
+                                                  {itemSupplierSearchId === item.id && item.supplier && (
+                                                      <div className="absolute z-[60] w-full mt-1 bg-white dark:bg-gray-900 border rounded-lg shadow-2xl overflow-hidden animate-fade-in">
+                                                          {existingSuppliers
+                                                              .filter(s => normalizeText(s).includes(normalizeText(item.supplier)))
+                                                              .slice(0, 5)
+                                                              .map(s => (
+                                                                  <button key={s} onMouseDown={() => handleUpdateBatchItem(item.id, { supplier: s })} className="w-full text-left p-2 hover:bg-accent/10 transition-colors font-bold text-[9px] uppercase border-b last:border-0 dark:border-gray-800">
+                                                                      {s}
+                                                                  </button>
+                                                              ))
+                                                          }
+                                                      </div>
+                                                  )}
+                                              </div>
                                           </div>
                                       </div>
                                   </td>
