@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
 import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon } from './Icons';
-import { formatCOP, toTitleCase } from '../constants';
+import { formatCOP } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
 
@@ -143,7 +143,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         const newItem: BatchPurchaseItem = {
             id: Math.random().toString(36).substr(2, 9),
             productId: product.id,
-            productName: toTitleCase(product.name),
+            productName: product.name,
             imageUrl: product.imageUrl,
             categoryId: product.categoryId,
             isNew: false,
@@ -155,7 +155,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   };
 
   const handleCreateNewFromSearch = () => {
-      const name = toTitleCase(productSearch.trim());
+      const name = productSearch.trim();
       if (!name) return;
       const defaultEntries: Record<string, { quantity: string; cost: string; price: string; }> = {};
       activeStoreIds.forEach(sid => {
@@ -262,7 +262,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             });
             if (Object.keys(finalStoreEntries).length > 0) {
                 await onMultiStorePurchase({
-                    productInfo: { name: toTitleCase(item.productName), categoryId: item.categoryId },
+                    productInfo: { name: item.productName, categoryId: item.categoryId },
                     storeEntries: finalStoreEntries,
                 });
             }
@@ -541,7 +541,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       )}
 
       {/* HISTORIAL DE COMPRAS */}
-      <div className="bg-white dark:bg-secondary p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-800">
+      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b dark:border-gray-700 pb-2">
             <h2 className="text-2xl font-black text-gray-800 dark:text-text-light flex items-center gap-3">
                 <HistoryIcon className="w-6 h-6 text-accent" />

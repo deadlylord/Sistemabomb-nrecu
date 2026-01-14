@@ -41,7 +41,7 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, toTitleCase } from '../constants';
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
@@ -567,7 +567,7 @@ const App: React.FC = () => {
       if (!fromProductDoc.exists()) throw new Error("Producto no encontrado en la tienda de origen.");
       const fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
       if (fromProduct.stock < quantity) throw new Error("Stock insuficiente.");
-      const toProductQuery = query(collection(db, 'inventory'), where('name', '==', toTitleCase(fromProduct.name)), where('storeId', '==', toStoreId), limit(1));
+      const toProductQuery = query(collection(db, 'inventory'), where('name', '==', fromProduct.name), where('storeId', '==', toStoreId), limit(1));
       const toProductSnapshot = await getDocs(toProductQuery);
       if (toProductSnapshot.empty) throw new Error(`Producto "${fromProduct.name}" debe existir en la tienda de destino antes de hacer el traslado.`);
       const toProductDoc = toProductSnapshot.docs[0];
@@ -764,13 +764,10 @@ const App: React.FC = () => {
 
   // Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
-      const originalInputName = newProductData.name;
-      const normalizedName = toTitleCase(originalInputName);
+      const inputName = newProductData.name;
       
       // 1. Verificar si el producto ya existe globalmente para reutilizar info
-      // Buscamos tanto por el nombre ingresado como por el normalizado para capturar cualquier sede previa
-      const namesToSearch = Array.from(new Set([originalInputName, normalizedName]));
-      const q = query(collection(db, 'inventory'), where('name', 'in', namesToSearch));
+      const q = query(collection(db, 'inventory'), where('name', '==', inputName));
       const snapshot = await getDocs(q);
       
       let imageUrl = '';
@@ -793,10 +790,9 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // 3. Actualizar todas las instancias existentes con la nueva info/foto global y normalizar sus nombres
+      // 3. Actualizar todas las instancias existentes con la nueva info/foto global
       snapshot.docs.forEach(docSnap => {
           batch.update(docSnap.ref, {
-              name: normalizedName,
               imageUrl,
               description: existingDescription,
               categoryId: existingCategoryId
@@ -804,7 +800,7 @@ const App: React.FC = () => {
       });
 
       // 4. Determinar SKU (existente o nuevo prefijo)
-      const namePrefix = normalizedName.substring(0, 3).toUpperCase();
+      const namePrefix = inputName.substring(0, 3).toUpperCase();
       const sku = existingSku || `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
       const existingStoreIds = snapshot.docs.map(d => (d.data() as Product).storeId);
 
@@ -815,15 +811,13 @@ const App: React.FC = () => {
               const existingDoc = snapshot.docs.find(d => (d.data() as Product).storeId === storeId);
               if (existingDoc) {
                   batch.update(existingDoc.ref, { 
-                      stock: increment(newProductData.stock),
-                      name: normalizedName 
+                      stock: increment(newProductData.stock)
                   });
               }
           } else {
               const newRef = doc(collection(db, 'inventory'));
               batch.set(newRef, { 
                   ...newProductData, 
-                  name: normalizedName,
                   description: existingDescription,
                   categoryId: existingCategoryId,
                   id: newRef.id, 
@@ -843,8 +837,7 @@ const App: React.FC = () => {
       
       // 1. Obtener datos actuales del producto desde la DB para saber su nombre actual
       const currentSnap = await getDoc(productRef);
-      const originalNameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
-      const newNormalizedName = toTitleCase(updatedProduct.name);
+      const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
       
       let newImageUrl = updatedProduct.imageUrl;
       if (imageFile) {
@@ -853,15 +846,14 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // 2. Buscamos todas las instancias globales por el nombre anterior o el nuevo para sincronizar
-      const namesToSearch = Array.from(new Set([originalNameInDb, newNormalizedName]));
-      const q = query(collection(db, 'inventory'), where('name', 'in', namesToSearch));
+      // 2. Buscamos todas las instancias globales por el nombre exacto para sincronizar
+      const q = query(collection(db, 'inventory'), where('name', '==', nameInDb));
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
           // Si por alguna razón la búsqueda por nombre falla, al menos actualizamos por ID
           batch.update(productRef, {
-              name: newNormalizedName,
+              name: updatedProduct.name,
               imageUrl: newImageUrl,
               description: updatedProduct.description,
               categoryId: updatedProduct.categoryId,
@@ -874,7 +866,7 @@ const App: React.FC = () => {
       } else {
           snapshot.docs.forEach(docSnap => {
               const updateData: any = { 
-                  name: newNormalizedName, // Normalizamos el nombre en todas las sedes
+                  name: updatedProduct.name, // Sincronizamos nombre si cambió
                   imageUrl: newImageUrl,
                   description: updatedProduct.description,
                   categoryId: updatedProduct.categoryId
@@ -901,10 +893,9 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       products.forEach(p => {
           const newRef = doc(collection(db, 'inventory'));
-          const normalizedName = toTitleCase(p.name);
-          const namePrefix = normalizedName.substring(0, 3).toUpperCase();
+          const namePrefix = p.name.substring(0, 3).toUpperCase();
           const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-          batch.set(newRef, { ...p, name: normalizedName, id: newRef.id, sku, storeId, isDisabled: false });
+          batch.set(newRef, { ...p, id: newRef.id, sku, storeId, isDisabled: false });
       });
       await batch.commit();
   };
@@ -916,11 +907,10 @@ const App: React.FC = () => {
     if (!currentUser) return;
     
     const { productInfo, storeEntries } = data;
-    const normalizedName = toTitleCase(productInfo.name);
+    const inputName = productInfo.name;
     
     // 1. Fetch metadata globally first to ensure we use the best available (image, desc)
-    const namesToSearch = Array.from(new Set([productInfo.name, normalizedName]));
-    const globalQ = query(collection(db, 'inventory'), where('name', 'in', namesToSearch), limit(1));
+    const globalQ = query(collection(db, 'inventory'), where('name', '==', inputName), limit(1));
     const globalSnap = await getDocs(globalQ);
     
     let globalImage = '';
@@ -938,9 +928,9 @@ const App: React.FC = () => {
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
-            // Find existing product in THIS specific store
+            // Find existing product in THIS specific store using exact name
             const q = query(collection(db, 'inventory'), 
-                           where('name', 'in', namesToSearch), 
+                           where('name', '==', inputName), 
                            where('storeId', '==', storeId), 
                            limit(1));
             const snapshot = await getDocs(q);
@@ -957,12 +947,11 @@ const App: React.FC = () => {
                 productId = docSnap.id;
                 
                 batch.update(productRef, {
-                    name: normalizedName,
                     stock: increment(entry.quantity),
                     cost: entry.cost,
                     price: entry.price,
                     supplier: entry.supplier,
-                    imageUrl: globalImage || existingData.imageUrl, // Prioritize global
+                    imageUrl: globalImage || existingData.imageUrl, 
                     description: globalDesc || existingData.description,
                     categoryId: globalCategoryId,
                     isDisabled: false
@@ -971,12 +960,12 @@ const App: React.FC = () => {
                 const newProductRef = doc(collection(db, 'inventory'));
                 productRef = newProductRef;
                 productId = newProductRef.id;
-                const namePrefix = normalizedName.substring(0, 3).toUpperCase();
+                const namePrefix = inputName.substring(0, 3).toUpperCase();
                 const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
                 
                 batch.set(newProductRef, {
                     id: productId,
-                    name: normalizedName,
+                    name: inputName,
                     categoryId: globalCategoryId,
                     sku,
                     cost: entry.cost,
@@ -994,7 +983,7 @@ const App: React.FC = () => {
             batch.set(purchaseRef, {
                 id: purchaseRef.id,
                 productId: productId,
-                productName: normalizedName,
+                productName: inputName,
                 quantity: entry.quantity,
                 cost: entry.cost,
                 totalCost: entry.quantity * entry.cost,
@@ -1007,7 +996,7 @@ const App: React.FC = () => {
             const log = {
                 id: logRef.id,
                 productId,
-                productName: normalizedName,
+                productName: inputName,
                 storeId,
                 changedBy: currentUser.name,
                 timestamp: new Date().toISOString(),

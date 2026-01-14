@@ -23,10 +23,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.9.1',
+    date: '2024-06-02',
+    description: 'Ajuste de Precisión en Búsqueda',
+    isCurrent: true,
+    changes: [
+      'Eliminación de Normalización de Texto: Se retiró el formateo automático a "Mayúsculas Cada Palabra" para evitar que los productos no coincidan con la base de datos existente.',
+      'Sincronización de Compras Multi-tienda Mejorada: Ahora el sistema reconoce los productos exactamente por su nombre literal, asegurando que la herencia de fotos y descripciones funcione correctamente.',
+      'Mejora en creación manual: Los productos creados mantienen el formato de texto exacto ingresado por el usuario.'
+    ]
+  },
+  {
     version: '2.9.0',
     date: '2024-06-01',
     description: 'Sincronización Total de Metadatos',
-    isCurrent: true,
     changes: [
       'Herencia Inteligente: Al comprar o crear un producto que ya existe en otra sede, se copia automáticamente su foto, descripción y categoría.',
       'Sincronización de Imágenes en Tiempo Real: Al subir una foto desde POS o Compras, se actualiza globalmente en todas las tiendas con el mismo producto.',
