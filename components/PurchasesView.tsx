@@ -335,6 +335,13 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
     return result;
   }, [purchases, startDate, endDate, historySearchTerm, categoryFilter, inventory, isFullHistoryLoaded, historySortConfig]);
 
+  const { totalHistoryQuantity, totalHistoryCost } = useMemo(() => {
+    return filteredPurchases.reduce((acc, p) => ({
+      totalHistoryQuantity: acc.totalHistoryQuantity + p.quantity,
+      totalHistoryCost: acc.totalHistoryCost + p.totalCost
+    }), { totalHistoryQuantity: 0, totalHistoryCost: 0 });
+  }, [filteredPurchases]);
+
   const handleRequestSort = (key: HistorySortKey) => {
     setHistorySortConfig(prev => ({
         key,
@@ -726,6 +733,18 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                           </tr>
                       )})}
                   </tbody>
+                  {filteredPurchases.length > 0 && (
+                    <tfoot className="bg-gray-50/80 dark:bg-gray-800/80 font-black border-t-2 border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <td className="p-4" colSpan={2}></td>
+                            <td className="p-4 text-xs uppercase text-gray-500 tracking-widest">TOTAL FILTRADO</td>
+                            <td className="p-4" colSpan={2}></td>
+                            <td className="p-4 text-center text-lg">{totalHistoryQuantity}</td>
+                            <td className="p-4 text-right text-lg text-accent">{formatCOP(totalHistoryCost)}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                  )}
               </table>
               {filteredPurchases.length === 0 && (
                 <div className="p-10 text-center text-gray-400">
