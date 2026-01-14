@@ -683,11 +683,128 @@ const App: React.FC = () => {
   };
 
   const handleUpdateIncident = async (incident: Incident) => { await setDoc(doc(db, 'incidents', incident.id), incident, { merge: true }); };
-  const handleDeleteIncident = async (incidentId: string) => { if (window.confirm('¿Estás seguro de eliminar esta novedad?')) await deleteDoc(doc(db, 'incidents', incidentId)); };
-  const handleUpdateLayaway = async (updatedLayaway: Layaway) => { await setDoc(doc(db, 'layaways', updatedLayaway.id), updatedLayaway); };
-  const handleDeleteLayaway = async (layawayId: string) => { if(window.confirm('¿Eliminar abono?')) await deleteDoc(doc(db, 'layaways', layawayId)); };
-  const handleUpdateSale = async (updatedSale: Sale) => { await setDoc(doc(db, 'sales', updatedSale.id), updatedSale); };
-  const handleDeleteSale = async (saleId: string) => { if(window.confirm('¿Eliminar venta?')) await deleteDoc(doc(db, 'sales', saleId)); };
+
+  const handleDeleteIncident = async (incidentId: string) => {
+      if (window.confirm('¿Eliminar novedad permanentemente?')) {
+          await deleteDoc(doc(db, 'incidents', incidentId));
+      }
+  };
+  
+  const handleUpdateLayaway = async (updatedLayaway: Layaway, originalLayaway: Layaway) => {
+      // Basic update for layaways - in a real scenario, you'd want to handle stock diffs if items changed.
+      // For now, focusing on the basics.
+      await setDoc(doc(db, 'layaways', updatedLayaway.id), updatedLayaway);
+  };
+
+  const handleDeleteLayaway = async (layawayId: string) => {
+      const layaway = layaways.find(l => l.id === layawayId);
+      if (!layaway || !currentUser) return;
+
+      if (!window.confirm('¿Eliminar abono? Las unidades apartadas volverán al inventario.')) return;
+
+      const batch = writeBatch(db);
+      const layawayRef = doc(db, 'layaways', layawayId);
+      
+      // If it was active or pre-order (and had reserved items), return stock
+      if (layaway.status === 'active' || layaway.status === 'pre-order') {
+          layaway.items.forEach(item => {
+              const productRef = doc(db, 'inventory', item.id);
+              batch.update(productRef, { stock: increment(item.quantity) });
+              
+              // Optional: Log the return
+              const logRef = doc(collection(db, 'productHistory'));
+              const log: ProductHistoryLog = {
+                  id: logRef.id,
+                  productId: item.id,
+                  productName: item.name,
+                  storeId: layaway.storeId,
+                  changedBy: currentUser.name,
+                  timestamp: new Date().toISOString(),
+                  changeType: ProductChangeType.LAYAWAY_DELETED,
+                  details: `Abono eliminado/cancelado. Stock devuelto: +${item.quantity}`
+              };
+              batch.set(logRef, log);
+          });
+      }
+
+      batch.delete(layawayRef);
+      await batch.commit();
+  };
+
+  const handleUpdateSale = async (updatedSale: Sale, originalSale: Sale) => {
+      if (!currentUser) return;
+      const batch = writeBatch(db);
+      
+      // 1. Revert stock from original sale
+      originalSale.items.forEach(item => {
+          const productRef = doc(db, 'inventory', item.id);
+          batch.update(productRef, { stock: increment(item.quantity) });
+      });
+
+      // 2. Deduct stock for updated sale
+      updatedSale.items.forEach(item => {
+          const productRef = doc(db, 'inventory', item.id);
+          batch.update(productRef, { stock: increment(-item.quantity) });
+      });
+
+      // 3. Update Sale Document
+      const saleRef = doc(db, 'sales', updatedSale.id);
+      batch.set(saleRef, updatedSale);
+
+      // 4. Log the edit
+      // Just logging the fact that a sale was edited, linking to the first item for simplicity or generic log
+      if (updatedSale.items.length > 0) {
+          const logRef = doc(collection(db, 'productHistory'));
+          const log: ProductHistoryLog = {
+              id: logRef.id,
+              productId: updatedSale.items[0].id, // Associate with first item or use a generic ID
+              productName: "Venta Editada",
+              storeId: updatedSale.storeId,
+              changedBy: currentUser.name,
+              timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.RETURN, // Reusing existing type or add SALE_EDIT
+              details: `Factura #${updatedSale.invoiceNumber} editada. Inventario ajustado.`
+          };
+          batch.set(logRef, log);
+      }
+
+      await batch.commit();
+  };
+
+  const handleDeleteSale = async (saleId: string) => {
+      const sale = sales.find(s => s.id === saleId);
+      if (!sale || !currentUser) return;
+
+      if (!window.confirm('¿Eliminar venta? Las unidades vendidas volverán al inventario.')) return;
+
+      const batch = writeBatch(db);
+      
+      // 1. Restore stock
+      sale.items.forEach(item => {
+          const productRef = doc(db, 'inventory', item.id);
+          batch.update(productRef, { stock: increment(item.quantity) });
+
+          // 2. Log history for each item returned
+          const logRef = doc(collection(db, 'productHistory'));
+          const log: ProductHistoryLog = {
+              id: logRef.id,
+              productId: item.id,
+              productName: item.name,
+              storeId: sale.storeId,
+              changedBy: currentUser.name,
+              timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.SALE_DELETED,
+              details: `Venta #${sale.invoiceNumber} eliminada. Stock restaurado: +${item.quantity}`
+          };
+          batch.set(logRef, log);
+      });
+
+      // 3. Delete sale doc
+      batch.delete(doc(db, 'sales', saleId));
+
+      await batch.commit();
+  };
+
   const handleReprintSale = (sale: Sale) => { setSaleForReceipt(sale); setShowReceiptModal(true); };
 
   const handleSaveStockTake = async (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => {
