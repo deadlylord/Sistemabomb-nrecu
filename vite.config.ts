@@ -2,14 +2,15 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-// @FIX: Import fileURLToPath from 'url' to polyfill __dirname in an ES module context.
 import { fileURLToPath } from 'url';
 
-// @FIX: Define __dirname for ES modules. This is the standard way to get the current directory name.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Prioritize API_KEY as it's the standard name in Netlify/Gemini guidelines
+    const effectiveApiKey = env.API_KEY || env.GEMINI_API_KEY || '';
+    
     return {
       server: {
         port: 3000,
@@ -17,8 +18,8 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.API_KEY': JSON.stringify(effectiveApiKey),
+        'process.env.GEMINI_API_KEY': JSON.stringify(effectiveApiKey)
       },
       resolve: {
         alias: {

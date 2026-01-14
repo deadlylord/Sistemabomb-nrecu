@@ -1,17 +1,12 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Ensure API_KEY is available in the environment variables
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-    throw new Error("API_KEY environment variable not set.");
-}
-const ai = new GoogleGenAI({ apiKey });
-
 export const generateDescription = async (productName: string): Promise<string> => {
   if (!productName.trim()) {
     throw new Error("Product name cannot be empty.");
   }
+  
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const prompt = `Genera una descripción de producto corta y atractiva para un sistema de punto de venta. El producto es: "${productName}". La descripción debe ser de una sola oración, máximo 20 palabras.`;
@@ -40,9 +35,9 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
     throw new Error("Sales data and user query cannot be empty.");
   }
   
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   try {
-    const model = 'gemini-3-pro-preview'; 
-    
     const prompt = `
       **PERSONA:** Actúa como un Senior Business Consultant especializado en Retail de Moda y Estrategia de Operaciones con 20 años de experiencia en el sector (estilo Inditex, LVMH o Nike).
       
@@ -58,17 +53,17 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
       "${userQuery}"
 
       **INSTRUCCIONES CRÍTICAS DE RESPUESTA:**
-      1. **Contextualización:** Si el query es vago o te faltan datos clave para ser preciso (ej. costos de adquisición exactos en algunos casos), haz una pregunta específica al inicio para profundizar.
+      1. **Contextualización:** Si el query es vago o te faltan datos clave para ser preciso, haz una pregunta específica al inicio para profundizar.
       2. **Impacto de Negocio:** Siempre que sugieras una acción, explica su impacto esperado en el **flujo de caja (Cash Flow)** o en el **posicionamiento de marca**.
       3. **Formato:** Usa Markdown impecable. Títulos ##, subtítulos ###, negritas ** para cifras y conceptos clave.
-      4. **Modernidad:** Integra conceptos de omnicanalidad y social commerce si son relevantes para la consulta.
+      4. **Modernidad:** Integra conceptos de omnicanalidad y social commerce si son relevantes.
       5. **Tono:** Profesional, analítico, directo y altamente estratégico.
 
       Responde en español, enfocándote en rentabilidad neta.
     `;
     
     const response = await ai.models.generateContent({
-      model: model,
+      model: 'gemini-3-pro-preview',
       contents: prompt,
     });
     
@@ -87,6 +82,8 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
 };
 
 export const analyzeAccountingData = async (accountingData: any): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     try {
         const prompt = `
             Eres el Contador Jefe de "Street/Bombón". Analiza estos datos financieros mensuales y dame una auditoría rápida y consejos estratégicos.
