@@ -657,7 +657,23 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         ? allPayments.filter(p => p.paymentMethod === paymentMethodFilter)
         : allPayments;
 
-    return { totalsByMethod, commissionsByMethod, filteredTransactions };
+    // Grouping by Day for the Detail Table
+    const groupedTransactions: { [date: string]: { total: number; items: UnifiedTransaction[] } } = {};
+    filteredTransactions.forEach(t => {
+        const dateKey = new Date(t.date).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        if (!groupedTransactions[dateKey]) {
+            groupedTransactions[dateKey] = { total: 0, items: [] };
+        }
+        groupedTransactions[dateKey].total += t.amount;
+        groupedTransactions[dateKey].items.push(t);
+    });
+
+    const sortedGroups = Object.entries(groupedTransactions).sort((a, b) => {
+        // We use the timestamp of the first item to sort groups descending
+        return new Date(b[1].items[0].date).getTime() - new Date(a[1].items[0].date).getTime();
+    });
+
+    return { totalsByMethod, commissionsByMethod, filteredTransactions, sortedGroups };
 
   }, [sales, layaways, allIncidents, inventory, isWithinRange, paymentMethodFilter]);
 
@@ -1300,7 +1316,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                 <h4 className="font-black text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1">⚡ VENTA RELÁMPAGO</h4>
                                                 <p className="text-gray-700 dark:text-gray-300 text-xs leading-tight mb-2">
                                                     Este ítem se está moviendo a <span className="font-bold text-accent">{highVelItem.unitsPerDay.toFixed(1)} uds/día</span>.
-                                                    Ventas totales en el rango: <span className="font-bold">{highVelItem.soldSinceQty}</span> unidades.
+                                                    Ventas totales in the range: <span className="font-bold">{highVelItem.soldSinceQty}</span> unidades.
                                                 </p>
                                                 <p className="text-[10px] text-gray-400 italic mb-2">Analizado del {highVelItem.period}</p>
                                                 <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden mb-3">
@@ -1512,33 +1528,46 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         }
                     </div>
                     
-                    {paymentMethodFilter && detailedReportData.filteredTransactions.length > 0 && (
+                    {paymentMethodFilter && detailedReportData.sortedGroups.length > 0 && (
                         <div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in">
-                            <div className="flex justify-between items-center mb-2">
-                                <h4 className="font-bold text-sm text-accent">Detalle: {paymentMethodFilter}</h4>
-                                <button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter(null); }} className="text-xs text-red-500 hover:underline">Cerrar</button>
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter}</h4>
+                                <button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter(null); }} className="text-xs text-red-500 hover:underline">Cerrar Detalle</button>
                             </div>
-                            <div className="max-h-60 overflow-y-auto">
-                                <table className="w-full text-xs text-left">
-                                    <thead className="sticky top-0 bg-gray-100 dark:bg-gray-800">
-                                        <tr>
-                                            <th className="p-2">Fecha</th>
-                                            <th className="p-2">Factura</th>
-                                            <th className="p-2">Cliente</th>
-                                            <th className="p-2 text-right">Monto</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {detailedReportData.filteredTransactions.map(t => (
-                                            <tr key={t.id} className="border-b dark:border-gray-700 last:border-0">
-                                                <td className="p-2">{new Date(t.date).toLocaleString()}</td>
-                                                <td className="p-2 font-mono">{t.invoiceNumber}</td>
-                                                <td className="p-2">{t.customer}</td>
-                                                <td className="p-2 text-right font-bold">{formatCOP(t.amount)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="max-h-96 overflow-y-auto space-y-4">
+                                {detailedReportData.sortedGroups.map(([date, group]) => (
+                                    <div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                                        <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700">
+                                            <span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span>
+                                            <span className="font-black text-sm text-accent">Total Día: {formatCOP(group.total)}</span>
+                                        </div>
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500">
+                                                <tr>
+                                                    <th className="p-3">Hora</th>
+                                                    <th className="p-3">Factura</th>
+                                                    <th className="p-3">Cliente</th>
+                                                    <th className="p-3 text-right">Monto</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {group.items.map(t => (
+                                                    <tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors">
+                                                        <td className="p-3 whitespace-nowrap text-gray-400 font-mono">
+                                                            {new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                        </td>
+                                                        <td className="p-3 font-bold text-gray-600 dark:text-gray-300">#{t.invoiceNumber}</td>
+                                                        <td className="p-3">
+                                                            <p className="font-semibold">{t.customer}</p>
+                                                            <p className="text-[10px] text-gray-400">{t.seller}</p>
+                                                        </td>
+                                                        <td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -1562,7 +1591,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     </div>
                     <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-l-4 border-red-500">
                         <p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase">Total Descuentos (Discounts)</p>
-                        <p className="text-2xl font-extrabold text-red-600 dark:text-red-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
+                        <p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p>
                     </div>
                     <div className={`p-4 rounded-lg border-l-4 ${priceVariationReportData.summary.netDifference >= 0 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'}`}>
                         <p className="text-sm font-semibold uppercase">Diferencia Neta</p>
