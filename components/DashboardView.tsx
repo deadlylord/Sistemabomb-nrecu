@@ -1463,6 +1463,21 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         </div>
                     </div>
                 </div>
+                
+                {isUnitsSoldExpanded && (
+                    <div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6">
+                        <h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {metricsForCurrentStore.unitsBySeller.map((item) => (
+                                <div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                                    <span className="text-xs font-medium">{item.sellerName}</span>
+                                    <span className="text-xs font-bold text-accent">{item.units}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="mb-6">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Desglose por Medio de Pago</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -1488,7 +1503,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         {Object.entries(detailedReportData.totalsByMethod)
                             .filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito')
                             .map(([method, total]) => {
-                                const commission = detailedReportData.commissionsByMethod[method];
                                 return (
                                 <button key={method} onClick={() => setPaymentMethodFilter(paymentMethodFilter === method ? null : method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === method ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}>
                                     <p className="font-bold text-gray-800 dark:text-text-light">{method}</p>
@@ -1497,6 +1511,37 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             )})
                         }
                     </div>
+                    
+                    {paymentMethodFilter && detailedReportData.filteredTransactions.length > 0 && (
+                        <div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-sm text-accent">Detalle: {paymentMethodFilter}</h4>
+                                <button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter(null); }} className="text-xs text-red-500 hover:underline">Cerrar</button>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="sticky top-0 bg-gray-100 dark:bg-gray-800">
+                                        <tr>
+                                            <th className="p-2">Fecha</th>
+                                            <th className="p-2">Factura</th>
+                                            <th className="p-2">Cliente</th>
+                                            <th className="p-2 text-right">Monto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {detailedReportData.filteredTransactions.map(t => (
+                                            <tr key={t.id} className="border-b dark:border-gray-700 last:border-0">
+                                                <td className="p-2">{new Date(t.date).toLocaleString()}</td>
+                                                <td className="p-2 font-mono">{t.invoiceNumber}</td>
+                                                <td className="p-2">{t.customer}</td>
+                                                <td className="p-2 text-right font-bold">{formatCOP(t.amount)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
@@ -1591,7 +1636,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 {managedSales.length > 0 ? (
                     <div className="overflow-x-auto"><table className="w-full text-left">
                         <thead className="bg-gray-100 dark:bg-gray-800"><tr>
-                            <th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th>
+                            <th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {managedSales.map((transaction) => {
@@ -1619,6 +1664,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 </td>
                                 <td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td>
                                 <td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td>
+                                <td className="p-3 text-sm">
+                                    {renderPaymentMethods(transaction)}
+                                </td>
                                 <td className="p-3 text-sm font-medium">{transaction.seller}</td>
                                 <td className="p-3 text-center">
                                     <div className="flex items-center justify-center gap-1">
@@ -1629,7 +1677,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             </tr>
                             {isExpanded && (
                                 <tr className="bg-gray-50 dark:bg-gray-800/40">
-                                    <td colSpan={7} className="p-4 pt-0">
+                                    <td colSpan={8} className="p-4 pt-0">
                                         <div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner">
                                             <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4>
                                             <div className="space-y-2">
