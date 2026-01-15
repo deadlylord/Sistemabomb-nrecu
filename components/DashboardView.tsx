@@ -1516,6 +1516,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                 </div>
                             )}
                         </div>
+                        {/* Casilla de Recaudos Sistec. aparte */}
+                        <button 
+                            onClick={() => setPaymentMethodFilter(paymentMethodFilter === 'Recaudo Sistecredito' ? null : 'Recaudo Sistecredito')} 
+                            className={`bg-purple-100 dark:bg-purple-900/30 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === 'Recaudo Sistecredito' ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}
+                        >
+                            <p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p>
+                            <p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p>
+                        </button>
                         {Object.entries(detailedReportData.totalsByMethod)
                             .filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito')
                             .map(([method, total]) => {
