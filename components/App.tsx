@@ -19,7 +19,8 @@ import {
   DocumentReference,
   Query,
   WriteBatch,
-  arrayUnion
+  arrayUnion,
+  runTransaction
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense } from '../types';
@@ -432,33 +433,62 @@ const App: React.FC = () => {
 
   const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
-    const batch = writeBatch(db);
-    const saleRef = doc(collection(db, 'sales'));
-    const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const newSale: Sale = {
-        id: saleRef.id,
-        invoiceNumber: currentStore.nextInvoiceNumber,
-        customerName: saleData.customerName,
-        customerPhone: saleData.customerPhone,
-        items: activeCart,
-        totalAmount,
-        payments: saleData.payments,
-        paymentMethod: saleData.payments[0]?.method, 
-        seller: saleData.seller,
-        createdAt: saleDate.toISOString(),
-        storeId: currentStoreId,
-    };
-    batch.set(saleRef, newSale);
-    activeCart.forEach(item => {
-        const productRef = doc(db, 'inventory', item.id);
-        batch.update(productRef, { stock: increment(-item.quantity) });
-    });
-    const storeRef = doc(db, 'stores', currentStore.id);
-    batch.update(storeRef, { nextInvoiceNumber: increment(1) });
-    await batch.commit();
-    setSaleForReceipt(newSale);
-    setShowReceiptModal(true);
-    handleClearCart();
+
+    try {
+        let savedSale: Sale | null = null;
+
+        // Use transaction to ensure invoice number uniqueness and stock integrity
+        await runTransaction(db, async (transaction) => {
+            const storeRef = doc(db, 'stores', currentStoreId);
+            const storeDoc = await transaction.get(storeRef);
+            if (!storeDoc.exists()) {
+                throw new Error("Store document does not exist!");
+            }
+
+            // Read latest invoice number directly from DB
+            const currentInvoiceNumber = storeDoc.data().nextInvoiceNumber;
+
+            const saleRef = doc(collection(db, 'sales'));
+            const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+            const newSale: Sale = {
+                id: saleRef.id,
+                invoiceNumber: currentInvoiceNumber,
+                customerName: saleData.customerName,
+                customerPhone: saleData.customerPhone,
+                items: activeCart,
+                totalAmount,
+                payments: saleData.payments,
+                paymentMethod: saleData.payments[0]?.method,
+                seller: saleData.seller,
+                createdAt: saleDate.toISOString(),
+                storeId: currentStoreId,
+            };
+
+            savedSale = newSale;
+
+            // Perform writes
+            transaction.set(saleRef, newSale);
+
+            activeCart.forEach(item => {
+                const productRef = doc(db, 'inventory', item.id);
+                transaction.update(productRef, { stock: increment(-item.quantity) });
+            });
+
+            // Increment Invoice Number atomically
+            transaction.update(storeRef, { nextInvoiceNumber: currentInvoiceNumber + 1 });
+        });
+
+        if (savedSale) {
+            setSaleForReceipt(savedSale);
+            setShowReceiptModal(true);
+            handleClearCart();
+        }
+
+    } catch (e) {
+        console.error("Transaction failed: ", e);
+        alert("Error procesando la venta. Por favor, intente nuevamente.");
+    }
   };
 
   const handleHoldSale = async (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => {
@@ -486,34 +516,63 @@ const App: React.FC = () => {
 
   const handleCreateLayaway = async (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
     if (!currentStoreId) return;
-    const batch = writeBatch(db);
-    const layawayRef = doc(collection(db, 'layaways'));
-    const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const payment: Payment = { amount: initialPayment.amount, method: initialPayment.method, date: saleDate.toISOString(), seller: seller };
-    const newLayaway: Layaway = {
-        id: layawayRef.id,
-        invoiceNumber,
-        customerName,
-        customerPhone,
-        items: activeCart,
-        totalAmount,
-        paidAmount: initialPayment.amount,
-        payments: [payment],
-        status: isPreOrder ? 'pre-order' : 'active',
-        createdAt: saleDate.toISOString(),
-        seller,
-        storeId: currentStoreId,
-        description,
-    };
-    batch.set(layawayRef, newLayaway);
-    if (!isPreOrder) {
-        activeCart.forEach(item => {
-            const productRef = doc(db, 'inventory', item.id);
-            batch.update(productRef, { stock: increment(-item.quantity) });
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const storeRef = doc(db, 'stores', currentStoreId);
+            const storeDoc = await transaction.get(storeRef);
+            if (!storeDoc.exists()) throw new Error("Store not found");
+
+            // Check if we need to auto-increment (if passed invoice matches current DB next, or if we force it)
+            // For safety against duplicates, we pull the real next invoice number if the user is relying on the sequence.
+            const dbNextInvoice = storeDoc.data().nextInvoiceNumber;
+            let finalInvoiceNumber = invoiceNumber;
+            let shouldIncrementStoreCounter = false;
+
+            // Simple logic: if what was passed matches the store's "next", we assume standard sequence and increment.
+            if (parseInt(invoiceNumber) === dbNextInvoice) {
+                shouldIncrementStoreCounter = true;
+            }
+
+            const layawayRef = doc(collection(db, 'layaways'));
+            const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const payment: Payment = { amount: initialPayment.amount, method: initialPayment.method, date: saleDate.toISOString(), seller: seller };
+            
+            const newLayaway: Layaway = {
+                id: layawayRef.id,
+                invoiceNumber: finalInvoiceNumber,
+                customerName,
+                customerPhone,
+                items: activeCart,
+                totalAmount,
+                paidAmount: initialPayment.amount,
+                payments: [payment],
+                status: isPreOrder ? 'pre-order' : 'active',
+                createdAt: saleDate.toISOString(),
+                seller,
+                storeId: currentStoreId,
+                description,
+            };
+
+            transaction.set(layawayRef, newLayaway);
+
+            if (!isPreOrder) {
+                activeCart.forEach(item => {
+                    const productRef = doc(db, 'inventory', item.id);
+                    transaction.update(productRef, { stock: increment(-item.quantity) });
+                });
+            }
+
+            if (shouldIncrementStoreCounter) {
+                transaction.update(storeRef, { nextInvoiceNumber: dbNextInvoice + 1 });
+            }
         });
+
+        handleClearCart();
+    } catch (e) {
+        console.error("Layaway transaction failed:", e);
+        alert("Error al crear abono. Intente nuevamente.");
     }
-    await batch.commit();
-    handleClearCart();
   };
 
   const handleAddPaymentToLayaway = async (layawayId: string, amount: number, method: PaymentMethod, seller: string) => {
