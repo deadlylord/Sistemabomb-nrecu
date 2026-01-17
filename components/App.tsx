@@ -498,9 +498,9 @@ const App: React.FC = () => {
         id: cartRef.id,
         items: activeCart,
         storeId: currentStoreId,
-        customerName: data?.customer?.name,
-        customerPhone: data?.customer?.phone,
-        sellerName: data?.sellerName,
+        customerName: data?.customer?.name ?? null,
+        customerPhone: data?.customer?.phone ?? null,
+        sellerName: data?.sellerName ?? null,
     };
     await setDoc(cartRef, heldCart);
     handleClearCart();

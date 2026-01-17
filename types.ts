@@ -129,9 +129,9 @@ export interface HeldCart {
     id: string;
     items: CartItem[];
     storeId: string;
-    customerName?: string;
-    customerPhone?: string;
-    sellerName?: string;
+    customerName?: string | null;
+    customerPhone?: string | null;
+    sellerName?: string | null;
 }
 
 export interface StockTake {
