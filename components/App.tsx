@@ -445,8 +445,16 @@ const App: React.FC = () => {
                 throw new Error("Store document does not exist!");
             }
 
-            // Read latest invoice number directly from DB
-            const currentInvoiceNumber = storeDoc.data().nextInvoiceNumber;
+            // Read latest invoice number directly from DB and sanitize it
+            let currentInvoiceNumber = storeDoc.data().nextInvoiceNumber;
+            
+            // Ensure it's a number (safeguard against string values in DB)
+            if (typeof currentInvoiceNumber !== 'number') {
+                currentInvoiceNumber = Number(currentInvoiceNumber);
+            }
+            if (isNaN(currentInvoiceNumber)) {
+                currentInvoiceNumber = 1; // Fallback reset
+            }
 
             const saleRef = doc(collection(db, 'sales'));
             const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -524,13 +532,21 @@ const App: React.FC = () => {
             if (!storeDoc.exists()) throw new Error("Store not found");
 
             // Check if we need to auto-increment (if passed invoice matches current DB next, or if we force it)
-            // For safety against duplicates, we pull the real next invoice number if the user is relying on the sequence.
-            const dbNextInvoice = storeDoc.data().nextInvoiceNumber;
+            let dbNextInvoice = storeDoc.data().nextInvoiceNumber;
+            
+            // Ensure numeric
+            if (typeof dbNextInvoice !== 'number') dbNextInvoice = Number(dbNextInvoice);
+            if (isNaN(dbNextInvoice)) dbNextInvoice = 1;
+
             let finalInvoiceNumber = invoiceNumber;
             let shouldIncrementStoreCounter = false;
 
-            // Simple logic: if what was passed matches the store's "next", we assume standard sequence and increment.
-            if (parseInt(invoiceNumber) === dbNextInvoice) {
+            // Strict parsing for comparison to avoid string mismatch "100" vs 100
+            const inputInvoiceNum = parseInt(invoiceNumber, 10);
+
+            // Logic: if the user input matches the store's "next", we assume standard sequence and increment.
+            // If they typed something random (like "F-500"), we don't increment the global counter.
+            if (!isNaN(inputInvoiceNum) && inputInvoiceNum === dbNextInvoice) {
                 shouldIncrementStoreCounter = true;
             }
 
