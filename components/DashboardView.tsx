@@ -1501,18 +1501,41 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             <p className="font-bold text-green-800 dark:text-green-300">Ingresos del Periodo</p>
                             <p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(totalPeriodIncome)}</p>
                         </div>
-                        <div className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === 'Efectivo' ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}>
-                            <div onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="cursor-pointer">
-                                <div className="flex justify-between items-center">
-                                    <p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p>
+                        <div 
+                            className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 cursor-pointer ${paymentMethodFilter === 'Efectivo' ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setPaymentMethodFilter(paymentMethodFilter === 'Efectivo' ? null : 'Efectivo');
+                                if (paymentMethodFilter !== 'Efectivo') setIsCashBreakdownVisible(true);
+                            }}
+                        >
+                            <div className="flex justify-between items-center">
+                                <p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }}
+                                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                                >
                                     <ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} />
-                                </div>
-                                <p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>
+                                </button>
                             </div>
+                            <p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>
+                            
                             {isCashBreakdownVisible && cashBreakdown && (
-                                <div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in">
-                                    <div className="flex justify-between"><span>Ventas (incluye excedentes):</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div>
+                                <div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}>
+                                    <div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div>
                                     <div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>
+                                    {cashBreakdown.incomeAdjustments.length > 0 && (
+                                        <div className="flex justify-between text-green-600">
+                                            <span>Ingresos Extra:</span>
+                                            <span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span>
+                                        </div>
+                                    )}
+                                    {cashBreakdown.expenseAdjustments.length > 0 && (
+                                        <div className="flex justify-between text-red-500">
+                                            <span>Gastos/Salidas:</span>
+                                            <span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1553,7 +1576,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                             <thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500">
                                                 <tr>
                                                     <th className="p-3">Hora</th>
-                                                    <th className="p-3">Factura</th>
+                                                    <th className="p-3">Tipo / Factura</th>
                                                     <th className="p-3">Cliente</th>
                                                     <th className="p-3 text-right">Monto</th>
                                                 </tr>
@@ -1564,7 +1587,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                                         <td className="p-3 whitespace-nowrap text-gray-400 font-mono">
                                                             {new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                                         </td>
-                                                        <td className="p-3 font-bold text-gray-600 dark:text-gray-300">#{t.invoiceNumber}</td>
+                                                        <td className="p-3">
+                                                            <p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p>
+                                                            <p className="text-[10px] text-gray-400">
+                                                                {t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}
+                                                            </p>
+                                                        </td>
                                                         <td className="p-3">
                                                             <p className="font-semibold">{t.customer}</p>
                                                             <p className="text-[10px] text-gray-400">{t.seller}</p>
