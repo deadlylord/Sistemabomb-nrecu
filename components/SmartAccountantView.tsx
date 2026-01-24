@@ -1,45 +1,81 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory } from '../types';
 import { formatCOP } from '../constants';
-import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon } from './Icons';
-import { analyzeAccountingData } from '../services/geminiService';
+import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon } from './Icons';
+import { getAccountingChatResponse } from '../services/geminiService';
 
 interface SmartAccountantViewProps {
   sales: Sale[];
   layaways: Layaway[];
   expenses: Expense[];
+  expenseCategories: ExpenseCategory[];
   payrollHistory: PayrollRecord[];
   currentStore: Store | undefined;
   currentUser: Seller;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
   onUpdateExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
+  onAddExpenseCategory: (name: string) => void;
+  onUpdateExpenseCategory: (id: string, name: string) => void;
+  onDeleteExpenseCategory: (id: string) => void;
 }
+
+interface ChatMessage {
+    role: 'user' | 'model';
+    content: string;
+}
+
+const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+    const htmlContent = useMemo(() => {
+        return content
+            .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-gray-800 dark:text-text-light mt-4 mb-2">$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-accent mt-6 mb-3 border-b-2 border-accent/30 pb-1">$1</h2>')
+            .replace(/^\* (.*$)/gim, '<li class="ml-5 list-disc">$1</li>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-accent">$1</strong>')
+            .replace(/\n/g, '<br />')
+            .replace(/<br \/><li>/g, '<li>') 
+            .replace(/<\/li><br \/>/g, '</li>');
+    }, [content]);
+
+    return <div className="prose dark:prose-invert max-w-none text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+};
 
 const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   sales,
   layaways,
   expenses,
+  expenseCategories,
   payrollHistory,
   currentStore,
   currentUser,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
+  onAddExpenseCategory,
+  onUpdateExpenseCategory,
+  onDeleteExpenseCategory
 }) => {
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'ai'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'categories' | 'ai'>('summary');
   
   // Form States
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseType, setExpenseType] = useState<'fixed' | 'variable'>('fixed');
-  const [expenseCategory, setExpenseCategory] = useState<Expense['category']>('Other');
+  const [expenseCategory, setExpenseCategory] = useState<string>('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
-  const [aiResponse, setAiResponse] = useState('');
+  // Category Management States
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+
+  // Chat State
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [userInput, setUserInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Date constants
   const now = new Date();
@@ -55,10 +91,21 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     }
   }, [activeTab, editingExpense]);
 
+  // Set default category
+  useEffect(() => {
+    if (!expenseCategory && expenseCategories.length > 0) {
+        setExpenseCategory(expenseCategories[0].name);
+    }
+  }, [expenseCategories, expenseCategory]);
+
+  // Scroll to bottom of chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isAiLoading]);
+
   const stats = useMemo(() => {
     const firstDay = new Date(currentYear, currentMonthIdx, 1);
     
-    // Revenue: Sum of all payments received this month
     const monthlySalesPayments = sales
         .flatMap(s => (Array.isArray(s.payments) ? s.payments : Object.values(s.payments || {})) as any[])
         .filter(p => p && new Date(p.date) >= firstDay)
@@ -71,7 +118,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
     const totalRevenue = monthlySalesPayments + monthlyLayawayPayments;
 
-    // COGS: Cost value of items sold this month
     const monthlyCogs = sales
         .filter(s => new Date(s.createdAt) >= firstDay)
         .reduce((sum, s) => {
@@ -79,7 +125,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             return sum + itemsArray.reduce((iSum, item) => iSum + ((item.cost || 0) * (item.quantity || 0)), 0);
         }, 0);
 
-    // Monthly Expenses (Excluding templates)
     const monthlyManualExpenses = expenses
         .filter(e => {
             if (e.isRecurring) return false;
@@ -88,7 +133,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         })
         .reduce((sum, e) => sum + e.amount, 0);
 
-    // Payroll paid this month
     const monthlyPayroll = payrollHistory
         .filter(p => new Date(p.paidAt) >= firstDay)
         .reduce((sum, p) => sum + p.totalToPay, 0);
@@ -103,7 +147,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expenseDesc || !expenseAmount) return;
+    if (!expenseDesc || !expenseAmount || !expenseCategory) return;
     
     const amount = parseFloat(expenseAmount);
 
@@ -115,7 +159,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             type: expenseType,
             category: expenseCategory,
             isRecurring: isRecurring,
-            // If it's a template, we keep the special date tag, otherwise we keep its original date
             date: isRecurring ? 'TEMPLATE' : editingExpense.date 
         });
         setEditingExpense(null);
@@ -132,7 +175,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         });
     }
     
-    // Reset Form
     setExpenseDesc('');
     setExpenseAmount('');
     setEditingExpense(null);
@@ -145,7 +187,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
       setExpenseType(expense.type);
       setExpenseCategory(expense.category);
       setIsRecurring(!!expense.isRecurring);
-      // Stay or move to appropriate tab
       setActiveTab(expense.isRecurring ? 'templates' : 'expenses');
   };
 
@@ -173,23 +214,85 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     }
   };
 
-  const askAI = async () => {
+  // Category CRUD
+  const handleAddCat = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newCatName.trim()) {
+        onAddExpenseCategory(newCatName.trim());
+        setNewCatName('');
+    }
+  };
+
+  const handleUpdateCat = (id: string) => {
+    if (editingCatName.trim()) {
+        onUpdateExpenseCategory(id, editingCatName.trim());
+        setEditingCatId(null);
+        setEditingCatName('');
+    }
+  };
+
+  const handleDeleteCat = (id: string, name: string) => {
+    const inUse = expenses.some(e => e.category === name);
+    if (inUse) {
+        if (!window.confirm(`La categoría "${name}" está siendo usada por algunos gastos. ¿Seguro que deseas eliminarla?`)) return;
+    } else {
+        if (!window.confirm(`¿Deseas eliminar la categoría "${name}"?`)) return;
+    }
+    onDeleteExpenseCategory(id);
+  };
+
+  // --- Chat Functions ---
+  const handleStartAudit = async () => {
     setIsAiLoading(true);
+    const initialQuery = "Haz una auditoría detallada de mis números de este mes y dame consejos estratégicos para mejorar.";
+    
     try {
-        const dataForAI = {
-            currentMonth: currentMonthName,
-            metrics: stats,
-            expensesCount: expenses.filter(e => !e.isRecurring && new Date(e.date).getMonth() === currentMonthIdx).length,
-            storeName: currentStore?.name
-        };
-        const response = await analyzeAccountingData(dataForAI);
-        setAiResponse(response);
+        const history = []; // Empty history for start
+        const response = await getAccountingChatResponse(stats, history, initialQuery);
+        setMessages([
+            { role: 'user', content: initialQuery },
+            { role: 'model', content: response }
+        ]);
     } catch (error) {
-        setAiResponse("Lo siento, no pude generar el análisis contable en este momento.");
+        setMessages([{ role: 'model', content: "Error al conectar con el contador IA. Por favor, intenta de nuevo." }]);
     } finally {
         setIsAiLoading(false);
     }
   };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userInput.trim() || isAiLoading) return;
+
+    const userMsg = userInput.trim();
+    setUserInput('');
+    
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: userMsg }];
+    setMessages(newMessages);
+    setIsAiLoading(true);
+
+    try {
+        // Format history for API
+        const apiHistory = messages.map(msg => ({
+            role: msg.role,
+            parts: [{ text: msg.content }]
+        }));
+
+        const response = await getAccountingChatResponse(stats, apiHistory, userMsg);
+        setMessages([...newMessages, { role: 'model', content: response }]);
+    } catch (error) {
+        setMessages([...newMessages, { role: 'model', content: "Hubo un problema procesando tu mensaje. Revisa tu conexión." }]);
+    } finally {
+        setIsAiLoading(false);
+    }
+  };
+
+  const handleResetChat = () => {
+      if (window.confirm("¿Deseas reiniciar la conversación con el contador?")) {
+          setMessages([]);
+          setUserInput('');
+      }
+  }
 
   const filteredExpensesList = useMemo(() => {
     if (activeTab === 'templates') {
@@ -220,7 +323,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             <button onClick={() => setActiveTab('summary')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'summary' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Resumen</button>
             <button onClick={() => setActiveTab('expenses')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'expenses' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Gastos del Mes</button>
             <button onClick={() => setActiveTab('templates')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'templates' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Plantillas Fijas</button>
-            <button onClick={() => setActiveTab('ai')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'ai' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Auditoría IA</button>
+            <button onClick={() => setActiveTab('categories')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Categorías</button>
+            <button onClick={() => setActiveTab('ai')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'ai' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Auditoría IA Chat</button>
           </div>
         </div>
 
@@ -317,13 +421,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         <input type="number" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="Monto $" className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-bold shadow-sm" required />
                     </div>
                     <div>
-                        <select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value as any)} className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm">
-                            <option value="Rent">Arriendo</option>
-                            <option value="Utilities">Servicios</option>
-                            <option value="Marketing">Publicidad</option>
-                            <option value="Supplies">Insumos</option>
-                            <option value="Maintenance">Mantenimiento</option>
-                            <option value="Other">Otro</option>
+                        <select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm" required>
+                            {expenseCategories.map(cat => (
+                                <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))}
+                            {expenseCategories.length === 0 && <option value="" disabled>Cargando categorías...</option>}
                         </select>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -407,38 +509,169 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           </div>
         )}
 
-        {activeTab === 'ai' && (
-          <div className="animate-fade-in">
-            <div className="bg-gradient-to-br from-slate-900 to-accent/20 p-8 rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-accent/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
-                <div className="flex flex-col md:flex-row items-center gap-6 mb-10 relative z-10">
-                    <div className="p-4 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-xl">
-                        <SparklesIcon className="w-12 h-12 text-accent animate-pulse" />
-                    </div>
-                    <div className="text-center md:text-left">
-                        <h3 className="text-3xl font-black text-white tracking-tight">Estrategia Financiera IA</h3>
-                        <p className="text-accent font-bold uppercase tracking-widest text-xs">Análisis de Rentabilidad Mensual</p>
-                    </div>
+        {activeTab === 'categories' && (
+            <div className="animate-fade-in space-y-6">
+                <div className="bg-gray-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600">
+                    <h3 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2 mb-4">
+                        <PlusCircleIcon className="w-5 h-5 text-accent"/>
+                        Agregar Nueva Categoría de Gastos
+                    </h3>
+                    <form onSubmit={handleAddCat} className="flex gap-4">
+                        <input 
+                            type="text" 
+                            value={newCatName}
+                            onChange={e => setNewCatName(e.target.value)}
+                            placeholder="Nombre de la categoría (ej: Papelería, Transporte...)"
+                            className="flex-grow p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-medium shadow-sm"
+                            required
+                        />
+                        <button type="submit" className="bg-accent text-white font-black px-8 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95">
+                            <PlusCircleIcon className="w-6 h-6"/>
+                            CREAR
+                        </button>
+                    </form>
                 </div>
 
-                {!aiResponse ? (
-                    <div className="text-center py-12 relative z-10">
-                        <button onClick={askAI} disabled={isAiLoading} className="group relative bg-white text-slate-900 font-black px-10 py-5 rounded-2xl shadow-2xl hover:scale-105 transition-all flex items-center gap-4 mx-auto disabled:opacity-50 active:scale-95">
-                            {isAiLoading ? (
-                                <><div className="animate-spin h-6 w-6 border-4 border-accent border-t-transparent rounded-full"></div> Analizando tus números...</>
-                            ) : (
-                                <><SparklesIcon className="w-6 h-6 text-accent" /> Generar Informe de Auditoría</>
-                            )}
-                        </button>
+                <div className="bg-white dark:bg-gray-800/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 flex items-center gap-2 border-b dark:border-gray-700">
+                        <SettingsIcon className="w-5 h-5 text-accent"/>
+                        <h4 className="font-bold text-gray-600 dark:text-gray-300">Categorías Disponibles</h4>
                     </div>
-                ) : (
-                    <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-8 rounded-2xl border border-white/20 shadow-2xl relative z-10">
-                        <div className="prose dark:prose-invert max-w-none">
-                            <div className="whitespace-pre-wrap text-slate-800 dark:text-slate-100 leading-relaxed font-medium">
-                                {aiResponse}
+                    <div className="divide-y dark:divide-gray-800">
+                        {expenseCategories.map(cat => (
+                            <div key={cat.id} className="p-4 flex items-center justify-between hover:bg-accent/5 transition-colors group">
+                                {editingCatId === cat.id ? (
+                                    <div className="flex-grow flex gap-2">
+                                        <input 
+                                            type="text"
+                                            value={editingCatName}
+                                            onChange={e => setEditingCatName(e.target.value)}
+                                            className="flex-grow p-2 rounded-lg bg-white dark:bg-gray-700 border border-accent focus:ring-2 focus:ring-accent outline-none font-bold"
+                                            autoFocus
+                                        />
+                                        <button onClick={() => handleUpdateCat(cat.id)} className="p-2 text-green-500 hover:bg-green-50 rounded-full">
+                                            <CheckIcon className="w-6 h-6"/>
+                                        </button>
+                                        <button onClick={() => setEditingCatId(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-full">
+                                            <CrossIcon className="w-6 h-6"/>
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="font-bold text-gray-800 dark:text-gray-200">{cat.name}</p>
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar">
+                                                <EditIcon className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => handleDeleteCat(cat.id, cat.name)} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50" title="Eliminar">
+                                                <TrashIcon className="w-5 h-5"/>
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'ai' && (
+          <div className="animate-fade-in flex flex-col h-[700px]">
+            <div className="bg-gradient-to-br from-slate-900 to-accent/20 rounded-3xl border border-white/10 shadow-2xl flex flex-col h-full overflow-hidden">
+                {/* Header del Chat */}
+                <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/20 backdrop-blur-md">
+                    <div className="flex items-center gap-4">
+                        <div className="p-2 bg-accent/20 rounded-xl">
+                            <SparklesIcon className="w-6 h-6 text-accent" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-white tracking-tight">Conversación con el Contador IA</h3>
+                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría en tiempo real</p>
+                        </div>
+                    </div>
+                    {messages.length > 0 && (
+                        <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación">
+                            <CrossIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+
+                {/* Área de Mensajes */}
+                <div className="flex-grow overflow-y-auto p-6 space-y-6 scrollbar-hide bg-black/10">
+                    {messages.length === 0 && !isAiLoading ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
+                            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center animate-pulse">
+                                <SparklesIcon className="w-12 h-12 text-accent" />
+                            </div>
+                            <div className="max-w-md">
+                                <h4 className="text-white font-bold text-lg mb-2">¿Listo para analizar este mes?</h4>
+                                <p className="text-gray-400 text-sm mb-8">El contador analizará tus ingresos, costos y gastos de {currentMonthName} para darte una perspectiva experta.</p>
+                                <button onClick={handleStartAudit} className="bg-accent text-white font-black px-10 py-4 rounded-2xl hover:scale-105 transition-all shadow-xl shadow-accent/20 active:scale-95 uppercase tracking-widest">
+                                    Iniciar Auditoría del Mes
+                                </button>
                             </div>
                         </div>
-                        <button onClick={() => setAiResponse('')} className="mt-8 text-xs font-black text-accent uppercase tracking-widest hover:underline">Solicitar nueva auditoría</button>
+                    ) : (
+                        <>
+                            {messages.map((msg, index) => (
+                                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                                    <div className={`max-w-[85%] p-5 rounded-3xl shadow-lg ${
+                                        msg.role === 'user' 
+                                            ? 'bg-accent text-white rounded-tr-none' 
+                                            : 'bg-white/10 dark:bg-slate-800/80 backdrop-blur-md text-white rounded-tl-none border border-white/10'
+                                    }`}>
+                                        <div className="flex items-center gap-2 mb-2 opacity-60">
+                                            {msg.role === 'model' && <SparklesIcon className="w-3 h-3 text-accent" />}
+                                            <span className="text-[10px] font-black uppercase tracking-tighter">
+                                                {msg.role === 'user' ? currentUser.name : 'Contador Jefe IA'}
+                                            </span>
+                                        </div>
+                                        {msg.role === 'model' ? (
+                                            <SimpleMarkdownRenderer content={msg.content} />
+                                        ) : (
+                                            <p className="text-sm font-medium leading-relaxed">{msg.content}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {isAiLoading && (
+                                <div className="flex justify-start animate-pulse">
+                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10 flex items-center gap-3">
+                                        <div className="flex gap-1">
+                                            <div className="w-2 h-2 bg-accent rounded-full animate-bounce"></div>
+                                            <div className="w-2 h-2 bg-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                            <div className="w-2 h-2 bg-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                        </div>
+                                        <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">Contador analizando...</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} />
+                        </>
+                    )}
+                </div>
+
+                {/* Input de Chat */}
+                {(messages.length > 0 || isAiLoading) && (
+                    <div className="p-4 bg-black/40 backdrop-blur-xl border-t border-white/10">
+                        <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto">
+                            <input 
+                                type="text" 
+                                value={userInput}
+                                onChange={e => setUserInput(e.target.value)}
+                                placeholder="Pregunta algo sobre tus finanzas..."
+                                className="flex-grow bg-white/5 border border-white/10 rounded-2xl p-4 text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-accent transition-all font-medium"
+                                disabled={isAiLoading}
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={isAiLoading || !userInput.trim()}
+                                className="bg-accent text-white p-4 rounded-2xl hover:scale-105 transition-all shadow-lg shadow-accent/20 disabled:opacity-50 active:scale-95"
+                            >
+                                <CheckIcon className="w-6 h-6" />
+                            </button>
+                        </form>
                     </div>
                 )}
             </div>

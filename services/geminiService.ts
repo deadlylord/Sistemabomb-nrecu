@@ -81,34 +81,43 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
   }
 };
 
-export const analyzeAccountingData = async (accountingData: any): Promise<string> => {
+export const getAccountingChatResponse = async (
+  accountingData: any, 
+  history: { role: 'user' | 'model', parts: { text: string }[] }[], 
+  userMessage: string
+): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     try {
-        const prompt = `
-            Eres el Contador Jefe de "Street/Bombón". Analiza estos datos financieros mensuales y dame una auditoría rápida y consejos estratégicos.
+        const systemInstruction = `
+            Eres el Contador Jefe de "Street/Bombón". Tu misión es ayudar al dueño a entender sus finanzas y tomar decisiones estratégicas.
             
-            **Datos Financieros:**
+            **DATOS FINANCIEROS DEL MES:**
             ${JSON.stringify(accountingData, null, 2)}
             
-            **Lo que espero:**
-            1. Un saludo profesional.
-            2. Análisis de Utilidad Neta (¿es saludable?).
-            3. Punto de equilibrio: Calcula cuántas unidades de calzado/ropa promedio se deben vender para cubrir gastos si cada unidad deja un margen promedio del 40%.
-            4. Análisis de Gastos: Identifica si los gastos operativos o nómina son muy altos comparados con ingresos.
-            5. Tres consejos accionables para mejorar la rentabilidad este mes.
+            **TU FORMA DE TRABAJAR:**
+            1. Saludo profesional y directo.
+            2. Siempre basa tus respuestas en los datos proporcionados arriba.
+            3. Si te preguntan sobre utilidad, ingresos o gastos, usa las cifras exactas.
+            4. Si el usuario te hace preguntas de seguimiento, mantén el hilo de la conversación.
+            5. Usa Markdown (negritas, listas, subtítulos) para que la información sea fácil de leer.
+            6. Si notas algo preocupante (ej. gastos muy altos vs ingresos), menciónalo con tacto pero con firmeza profesional.
             
-            Usa un tono directo, profesional y motivador. Formato Markdown.
+            Responde siempre en español.
         `;
 
-        const response = await ai.models.generateContent({
+        const chat = ai.chats.create({
             model: 'gemini-3-pro-preview',
-            contents: prompt,
+            config: {
+                systemInstruction: systemInstruction,
+            },
+            history: history,
         });
 
-        return response.text || "No se pudo generar el análisis.";
+        const response = await chat.sendMessage({ message: userMessage });
+        return response.text || "No se pudo generar una respuesta.";
     } catch (error) {
-        console.error("Gemini Accounting Error:", error);
+        console.error("Gemini Accounting Chat Error:", error);
         throw error;
     }
 };

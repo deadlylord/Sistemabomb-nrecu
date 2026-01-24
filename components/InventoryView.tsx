@@ -1,9 +1,7 @@
 
-
 import React, { useState, useMemo } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import AddProductForm from './AddProductForm';
-// FIX: Changed from default to named import to match the exported component.
 import { InventoryTable } from './InventoryTable';
 import CategoryManager from './CategoryManager';
 import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon } from './Icons';
@@ -23,7 +21,6 @@ interface InventoryViewProps {
   currentStoreId: string;
   onAddProduct: (newProductData: Omit<Product, 'id' | 'sku' | 'storeId' | 'imageUrl'>, selectedStoreIds: string[], imageFile?: File) => void;
   onUpdateProduct: (updatedProduct: Product, imageFile?: File) => Promise<void>;
-  // FIX: Expanded type to include optional description and imageUrl from bulk add modal.
   onBulkAddProducts: (
     productsToAdd: {
       name: string;
@@ -82,31 +79,24 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   };
 
   const handleExportToExcel = () => {
-    // 1. Filter products with stock
     const productsToExport = inventory.filter(p => p.stock > 0);
-
-    // 2. Get category map for easy lookup
     const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
-    // 3. Sort products by category, then by name
     productsToExport.sort((a, b) => {
       const categoryA = categoryMap.get(a.categoryId) || 'zzzz';
       const categoryB = categoryMap.get(b.categoryId) || 'zzzz';
-
       if (categoryA < categoryB) return -1;
       if (categoryA > categoryB) return 1;
-
       return a.name.localeCompare(b.name);
     });
 
-    // 4. Create CSV content
     const headers = ['Categoría', 'Nombre del Producto', 'SKU', 'Stock Actual', 'Precio de Venta'];
     const csvRows = [headers.join(',')];
 
     productsToExport.forEach(product => {
       const row = [
         `"${categoryMap.get(product.categoryId) || 'Sin Categoría'}"`,
-        `"${product.name.replace(/"/g, '""')}"`, // Escape double quotes
+        `"${product.name.replace(/"/g, '""')}"`,
         `"${product.sku}"`,
         product.stock,
         product.price
@@ -115,9 +105,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     });
 
     const csvContent = csvRows.join('\n');
-
-    // 5. Trigger download
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel compatibility
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
@@ -142,14 +130,12 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(today.getDate() - 90);
 
-    // Consolidate all relevant sales transactions once for performance
     const salesAndLayaways = [
         ...sales.flatMap(s => (s.items || []).map(item => item ? ({ ...item, date: s.createdAt }) : null)),
         ...layaways.flatMap(l => (l.status === 'active' || l.status === 'completed') ? (l.items || []).map(item => item ? ({ ...item, date: l.createdAt }) : null) : [])
     ].filter(Boolean) as (Product & { quantity: number; date: string })[];
 
     const productsWithVelocity = inventory.map(product => {
-        // --- Sales History for current product ---
         const productTransactions = salesAndLayaways
             .filter(item => item.id === product.id)
             .map(item => ({ ...item, transactionDate: new Date(item.date) }));
@@ -170,60 +156,66 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             ? new Date(Math.max(...productTransactions.map(t => t.transactionDate.getTime())))
             : null;
         
-        // --- Determine Trend ---
+        // Find last purchase date
+        const productPurchases = purchases
+            .filter(p => p.productId === product.id)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const lastPurchaseDate = productPurchases.length > 0 ? new Date(productPurchases[0].createdAt) : null;
+
         let trend: 'improving' | 'stable' | 'worsening' = 'stable';
         if (salesInLast30Days > salesInPrevious30Days) {
             trend = 'improving';
         } else if (salesInLast30Days < salesInPrevious30Days) {
-            if (salesInPrevious30Days > 0) { // Only flag as worsening if there were sales previously
+            if (salesInPrevious30Days > 0) {
                  trend = 'worsening';
             }
         }
         
-        // --- Determine Status and Days ---
         let status = 'Sin Datos';
         let days = Infinity;
         
-        const isStagnatedByDate = product.stock > 0 && lastSaleDate && (today.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24) > 30;
-
-        if (isStagnatedByDate) {
-            status = 'Estancado';
-            days = Infinity;
-        } else if (salesInLast90Days > 0) {
-            // Rule 2: Performance Calculation (if there are recent sales)
-            const avgDaysPerUnit = 90 / salesInLast90Days;
-            days = avgDaysPerUnit;
-            if (avgDaysPerUnit <= 7) status = 'Alta Rotación';
-            else if (avgDaysPerUnit <= 15) status = 'Rotación Media';
-            else if (avgDaysPerUnit <= 30) status = 'Baja Rotación';
-            else if (avgDaysPerUnit <= 60) status = 'En Riesgo';
-            else status = 'Estancado';
-        } else {
-            // Rule 3: No sales in last 90 days - either New or Stagnant
-            const creationLogs = productHistory.filter(h => h.productId === product.id && h.changeType === ProductChangeType.CREATED);
-            const purchaseLogs = purchases.filter(p => p.productId === product.id);
-            const potentialDates = [
-                ...(creationLogs.map(l => new Date(l.timestamp).getTime())),
-                ...(purchaseLogs.map(p => new Date(p.createdAt).getTime()))
-            ];
-
-            if (potentialDates.length > 0) {
-                const firstStockedDate = new Date(Math.min(...potentialDates));
-                const daysOnMarket = (today.getTime() - firstStockedDate.getTime()) / (1000 * 60 * 60 * 24);
-                
-                if (productTransactions.length === 0) { // If it has never sold at all
-                     status = daysOnMarket < 90 ? 'Nuevo' : 'Estancado';
-                } else { // It has sold before, but not in the last 90 days
-                     status = 'Estancado';
-                }
+        // NEW LOGIC: Consider stock and time since last purchase/sale
+        if (product.stock === 0) {
+            if (!lastSaleDate) {
+                status = 'Agotado (Sin Ventas)';
             } else {
-                // No creation/purchase date found, and no sales in 90 days.
-                status = productTransactions.length > 0 ? 'Estancado' : 'Nuevo';
+                const daysSinceLastSale = (today.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24);
+                
+                if (daysSinceLastSale > 30) {
+                    // If it's been zero for a long time, it's just "out of stock", not "at risk"
+                    status = 'Agotado (Inactivo)';
+                    trend = 'stable'; // Performance isn't worsening, it's just unavailable
+                } else {
+                    // Recently ran out - check if it was a high velocity item
+                    const avgDaysPerUnit = salesInLast90Days > 0 ? 90 / salesInLast90Days : Infinity;
+                    status = avgDaysPerUnit <= 15 ? 'Agotado (Alta Demanda)' : 'Agotado';
+                }
             }
-        }
-        
-        if (status === 'Estancado') {
-            trend = 'worsening';
+        } else {
+            // Normal performance logic for stocked items
+            if (salesInLast90Days > 0) {
+                const avgDaysPerUnit = 90 / salesInLast90Days;
+                days = avgDaysPerUnit;
+                if (avgDaysPerUnit <= 7) status = 'Alta Rotación';
+                else if (avgDaysPerUnit <= 15) status = 'Rotación Media';
+                else if (avgDaysPerUnit <= 30) status = 'Baja Rotación';
+                else if (avgDaysPerUnit <= 60) status = 'En Riesgo';
+                else status = 'Estancado';
+            } else {
+                const creationLogs = productHistory.filter(h => h.productId === product.id && h.changeType === ProductChangeType.CREATED);
+                const potentialDates = [
+                    ...(creationLogs.map(l => new Date(l.timestamp).getTime())),
+                    ...(lastPurchaseDate ? [lastPurchaseDate.getTime()] : [])
+                ];
+
+                if (potentialDates.length > 0) {
+                    const firstStockedDate = new Date(Math.min(...potentialDates));
+                    const daysOnMarket = (today.getTime() - firstStockedDate.getTime()) / (1000 * 60 * 60 * 24);
+                    status = daysOnMarket < 90 ? 'Nuevo' : 'Estancado';
+                } else {
+                    status = productTransactions.length > 0 ? 'Estancado' : 'Nuevo';
+                }
+            }
         }
         
         return { ...product, velocity: { status, days, trend } };
@@ -292,7 +284,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const inventoryCostHistory = useMemo(() => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setHours(0, 0, 0, 0);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29); // Start of the 30-day window
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
 
     const valueEvents: { date: Date; valueChange: number }[] = [];
 
@@ -306,15 +298,12 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     });
 
     layaways.forEach(l => {
-        if (l.status === 'active') { // only when stock is first deducted
+        if (l.status === 'active') {
             const layawayCost = l.items.reduce((sum, item) => sum + (item.cost * item.quantity), 0);
             valueEvents.push({ date: new Date(l.createdAt), valueChange: -layawayCost });
         }
     });
     
-    // This is complex, but for now we won't process returns/edits for history.
-    // A more robust system might use daily snapshots.
-
     const netChangeLast30Days = valueEvents
         .filter(e => e.date >= thirtyDaysAgo)
         .reduce((sum, e) => sum + e.valueChange, 0);

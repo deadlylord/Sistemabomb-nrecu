@@ -23,7 +23,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -42,7 +42,8 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES } from '../constants';
+// FIX: Added formatCOP to the import list from constants
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
@@ -87,6 +88,7 @@ const App: React.FC = () => {
   const [payrollHistory, setPayrollHistory] = useState<PayrollRecord[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -344,6 +346,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('expenses'), setExpenses);
+            attach(storeSpecificQuery('expenseCategories'), setExpenseCategories);
             fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             break;
     }
@@ -385,6 +388,26 @@ const App: React.FC = () => {
     };
     runColorMigration();
   }, [isAppReady, stores]);
+
+  // Inicialización de categorías de gastos
+  useEffect(() => {
+    if (currentView === View.ACCOUNTING && expenseCategories.length === 0 && currentStoreId) {
+        const checkAndInitCategories = async () => {
+            const q = query(collection(db, 'expenseCategories'), where('storeId', '==', currentStoreId));
+            const snap = await getDocs(q);
+            if (snap.empty) {
+                const defaults = ["Arriendo", "Servicios", "Publicidad", "Insumos", "Mantenimiento", "Otro"];
+                const batch = writeBatch(db);
+                defaults.forEach(name => {
+                    const ref = doc(collection(db, 'expenseCategories'));
+                    batch.set(ref, { id: ref.id, name, storeId: currentStoreId });
+                });
+                await batch.commit();
+            }
+        };
+        checkAndInitCategories();
+    }
+  }, [currentView, expenseCategories.length, currentStoreId]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -481,6 +504,21 @@ const App: React.FC = () => {
             activeCart.forEach(item => {
                 const productRef = doc(db, 'inventory', item.id);
                 transaction.update(productRef, { stock: increment(-item.quantity) });
+
+                // ADDED: Log each product sale in history
+                const logRef = doc(collection(db, 'productHistory'));
+                const log: ProductHistoryLog = {
+                    id: logRef.id,
+                    productId: item.id,
+                    productName: item.name,
+                    storeId: currentStoreId,
+                    changedBy: saleData.seller,
+                    timestamp: saleDate.toISOString(),
+                    changeType: ProductChangeType.SALE,
+                    // FIX: Replaced potentially missing formatCOP with an imported version
+                    details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}`
+                };
+                transaction.set(logRef, log);
             });
 
             // Increment Invoice Number atomically
@@ -576,6 +614,20 @@ const App: React.FC = () => {
                 activeCart.forEach(item => {
                     const productRef = doc(db, 'inventory', item.id);
                     transaction.update(productRef, { stock: increment(-item.quantity) });
+
+                    // ADDED: Log layaway reservation in history
+                    const logRef = doc(collection(db, 'productHistory'));
+                    const log: ProductHistoryLog = {
+                        id: logRef.id,
+                        productId: item.id,
+                        productName: item.name,
+                        storeId: currentStoreId,
+                        changedBy: seller,
+                        timestamp: saleDate.toISOString(),
+                        changeType: ProductChangeType.LAYAWAY_RESERVED,
+                        details: `Apartado por Abono #${finalInvoiceNumber}. Cantidad: -${item.quantity}.`
+                    };
+                    transaction.set(logRef, log);
                 });
             }
 
@@ -627,6 +679,20 @@ const App: React.FC = () => {
       layaway.items.forEach(item => {
           const productRef = doc(db, 'inventory', item.id);
           batch.update(productRef, { stock: increment(-item.quantity) });
+
+          // ADDED: Log pre-order fulfillment in history
+          const logRef = doc(collection(db, 'productHistory'));
+          const log: ProductHistoryLog = {
+              id: logRef.id,
+              productId: item.id,
+              productName: item.name,
+              storeId: layaway.storeId,
+              changedBy: currentUser?.name || 'Sistema',
+              timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.PRE_ORDER_FULFILLED,
+              details: `Encargo #${layaway.invoiceNumber} recibido y stock rebajado: -${item.quantity}.`
+          };
+          batch.set(logRef, log);
       });
       batch.update(layawayRef, { status: 'active' });
       await batch.commit();
@@ -722,12 +788,56 @@ const App: React.FC = () => {
             if (!incident.productId) throw new Error('No se especificó un producto.');
             const productToDamageRef = doc(db, 'inventory', incident.productId);
             batch.update(productToDamageRef, { stock: increment(-1) });
+
+            // Log damage report
+            const damageLogRef = doc(collection(db, 'productHistory'));
+            const damageLog: ProductHistoryLog = {
+                id: damageLogRef.id,
+                productId: incident.productId,
+                productName: incident.productName || 'Producto',
+                storeId: incident.storeId,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                changeType: ProductChangeType.DAMAGED,
+                details: `Prenda reportada como dañada. Stock rebajado: -1.`
+            };
+            batch.set(damageLogRef, damageLog);
             break;
           case IncidentType.PRODUCT_EXCHANGE:
             if (incident.status !== IncidentStatus.CAMBIO_SOLICITADO) return;
             newStatus = IncidentStatus.CAMBIO_PROCESADO;
-            incident.returnedItems?.forEach(item => { batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); });
-            incident.takenItems?.forEach(item => { batch.update(doc(db, 'inventory', item.productId), { stock: increment(-item.quantity) }); });
+            incident.returnedItems?.forEach(item => { 
+                batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); 
+                // Log return
+                const exchangeInLogRef = doc(collection(db, 'productHistory'));
+                const exchangeInLog: ProductHistoryLog = {
+                    id: exchangeInLogRef.id,
+                    productId: item.productId,
+                    productName: item.productName,
+                    storeId: incident.storeId,
+                    changedBy: currentUser.name,
+                    timestamp: new Date().toISOString(),
+                    changeType: ProductChangeType.EXCHANGE_IN,
+                    details: `Devolución por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: +${item.quantity}`
+                };
+                batch.set(exchangeInLogRef, exchangeInLog);
+            });
+            incident.takenItems?.forEach(item => { 
+                batch.update(doc(db, 'inventory', item.productId), { stock: increment(-item.quantity) }); 
+                // Log taking new item
+                const exchangeOutLogRef = doc(collection(db, 'productHistory'));
+                const exchangeOutLog: ProductHistoryLog = {
+                    id: exchangeOutLogRef.id,
+                    productId: item.productId,
+                    productName: item.productName,
+                    storeId: incident.storeId,
+                    changedBy: currentUser.name,
+                    timestamp: new Date().toISOString(),
+                    changeType: ProductChangeType.EXCHANGE_OUT,
+                    details: `Salida por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: -${item.quantity}`
+                };
+                batch.set(exchangeOutLogRef, exchangeOutLog);
+            });
             break;
           case IncidentType.INVENTORY_TRANSFER_REQUEST:
             if (incident.status !== IncidentStatus.TRASLADO_SOLICITADO) return;
@@ -752,7 +862,22 @@ const App: React.FC = () => {
     if (incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE) newStatus = IncidentStatus.WARRANTY_RETURNED;
     else if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO) {
         newStatus = IncidentStatus.DEVUELTO_Y_RESUELTO;
-        if (incident.productId) batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
+        if (incident.productId) {
+            batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
+            // Log repair return
+            const repairLogRef = doc(collection(db, 'productHistory'));
+            const repairLog: ProductHistoryLog = {
+                id: repairLogRef.id,
+                productId: incident.productId,
+                productName: incident.productName || 'Producto',
+                storeId: incident.storeId,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                changeType: ProductChangeType.DAMAGED_RETURNED,
+                details: `Prenda dañada retornada de arreglo. Stock restaurado: +1.`
+            };
+            batch.set(repairLogRef, repairLog);
+        }
     }
     if (newStatus) { batch.update(incidentRef, { status: newStatus, resolutionDate: new Date().toISOString() }); await batch.commit(); }
   };
@@ -1030,6 +1155,8 @@ const App: React.FC = () => {
       // 1. Obtener datos actuales del producto desde la DB para saber su nombre actual
       const currentSnap = await getDoc(productRef);
       const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
+      const oldStock = currentSnap.exists() ? (currentSnap.data().stock || 0) : 0;
+      const oldPrice = currentSnap.exists() ? (currentSnap.data().price || 0) : 0;
       
       let newImageUrl = updatedProduct.imageUrl;
       if (imageFile) {
@@ -1074,6 +1201,27 @@ const App: React.FC = () => {
               }
               batch.update(docSnap.ref, updateData);
           });
+      }
+
+      // ADDED: Create log for manual adjustment if stock or price changed
+      if (oldStock !== updatedProduct.stock || oldPrice !== updatedProduct.price) {
+          const logRef = doc(collection(db, 'productHistory'));
+          let details = `Ajuste manual: `;
+          if (oldStock !== updatedProduct.stock) details += `Stock ${oldStock} -> ${updatedProduct.stock}. `;
+          // FIX: Replaced potentially missing formatCOP with an imported version
+          if (oldPrice !== updatedProduct.price) details += `Precio ${formatCOP(oldPrice)} -> ${formatCOP(updatedProduct.price)}. `;
+          
+          const log: ProductHistoryLog = {
+              id: logRef.id,
+              productId: updatedProduct.id,
+              productName: updatedProduct.name,
+              storeId: updatedProduct.storeId,
+              changedBy: currentUser?.name || 'Administrador',
+              timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.MANUAL_EDIT,
+              details
+          };
+          batch.set(logRef, log);
       }
       
       await batch.commit();
@@ -1267,6 +1415,15 @@ const App: React.FC = () => {
   const handleAddCategory = async (name: string) => { const newRef = doc(collection(db, 'categories')); await setDoc(newRef, { id: newRef.id, name }); };
   const handleUpdateCategory = async (id: string, name: string) => await updateDoc(doc(db, 'categories', id), { name });
   const handleDeleteCategory = async (id: string) => await deleteDoc(doc(db, 'categories', id));
+  
+  const handleAddExpenseCategory = async (name: string) => {
+    if (!currentStoreId) return;
+    const newRef = doc(collection(db, 'expenseCategories'));
+    await setDoc(newRef, { id: newRef.id, name, storeId: currentStoreId });
+  };
+  const handleUpdateExpenseCategory = async (id: string, name: string) => await updateDoc(doc(db, 'expenseCategories', id), { name });
+  const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
+
   const handleAddStore = async (name: string) => { const newRef = doc(collection(db, 'stores')); await setDoc(newRef, { id: newRef.id, name, nextInvoiceNumber: 1, accentColor: '#000000', accentColorHover: '#333333' }); };
   const handleUpdateStore = async (updatedStore: Store) => await updateDoc(doc(db, 'stores', updatedStore.id), updatedStore as any);
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
@@ -1280,11 +1437,13 @@ const App: React.FC = () => {
   const handleToggleSellerStatus = async (id: string) => { const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
   const handleAddRole = async (name: string) => { const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [] }); };
   const handleUpdateRole = async (updatedRole: Role) => await setDoc(doc(db, 'roles', updatedRole.id), updatedRole);
+  
   const handleSavePayroll = async (payrollData: any) => {
       if (!currentStoreId || !currentUser) return;
       const newRef = doc(collection(db, 'payrollHistory'));
       await setDoc(newRef, { ...payrollData, id: newRef.id, paidAt: new Date().toISOString(), paidBy: currentUser.name, storeId: currentStoreId });
   };
+  
   const handleBulkAddCustomers = async (newCustomers: any[]) => {
       if (!currentStoreId) return;
       const batch = writeBatch(db);
@@ -1343,11 +1502,11 @@ const App: React.FC = () => {
         }} onDeleteStore={handleDeleteStore} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} />}
+        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} currentStore={currentStore} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
-        {currentView === View.ACCOUNTING && <SmartAccountantView sales={sales} layaways={layaways} expenses={expenses} payrollHistory={payrollHistory} currentStore={currentStore} currentUser={currentUser} onAddExpense={handleAddExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} />}
+        {currentView === View.ACCOUNTING && <SmartAccountantView sales={sales} layaways={layaways} expenses={expenses} expenseCategories={expenseCategories} payrollHistory={payrollHistory} currentStore={currentStore} currentUser={currentUser} onAddExpense={handleAddExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} onAddExpenseCategory={handleAddExpenseCategory} onUpdateExpenseCategory={handleUpdateExpenseCategory} onDeleteExpenseCategory={handleDeleteExpenseCategory} />}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} onClose={() => setShowReceiptModal(false)} />}

@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { Product, Category } from '../types';
 import { EditIcon, HistoryIcon, TrashIcon, PowerIcon, PackageIcon } from './Icons';
@@ -95,8 +94,20 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
             pillClasses += ' bg-slate-500/20 text-slate-400';
             tooltip = 'Producto nuevo, sin suficientes datos de venta.';
             break;
-        default: // 'Sin Datos'
-            return <span>-</span>;
+        case 'Agotado (Alta Demanda)':
+            pillClasses += ' bg-purple-500/20 text-purple-300 animate-pulse';
+            tooltip = '¡Crítico! Se vendía muy rápido antes de agotarse. Reponer urgente.';
+            break;
+        case 'Agotado (Inactivo)':
+            pillClasses += ' bg-slate-500/10 text-slate-500';
+            tooltip = 'Producto sin stock desde hace más de 30 días. Rendimiento en pausa.';
+            break;
+        case 'Agotado':
+            pillClasses += ' bg-red-500/10 text-red-400';
+            tooltip = 'Sin existencias en sistema.';
+            break;
+        default:
+            return <span>{status}</span>;
     }
 
     return (
@@ -112,14 +123,12 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const handleToggleDisabled = (product: Product) => {
-    // If we are trying to disable the product (current state is enabled)
     if (!product.isDisabled) {
         if (product.stock > 0) {
             alert('No se puede descontinuar un producto que tiene stock. Vende las unidades restantes o ajústalas a cero primero.');
-            return; // Prevent the action
+            return;
         }
     }
-    // Otherwise, allow toggling (enabling, or disabling a zero-stock product)
     onUpdateProduct({ ...product, isDisabled: !product.isDisabled });
   };
 

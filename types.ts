@@ -91,6 +91,12 @@ export interface Category {
   name: string;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  storeId: string;
+}
+
 export interface Role {
   id: string;
   name: string;
@@ -262,6 +268,7 @@ export interface PayrollRecord {
   id: string;
   sellerName: string;
   period: string;
+  paymentType?: 'nomina' | 'admin' | 'utilidad';
   baseSalary: number;
   daysWorked: number;
   adjustedBase: number;
@@ -351,7 +358,7 @@ export interface Expense {
   description: string;
   amount: number;
   type: 'fixed' | 'variable';
-  category: 'Rent' | 'Utilities' | 'Marketing' | 'Supplies' | 'Maintenance' | 'Payroll' | 'Other';
+  category: string;
   date: string;
   storeId: string;
   registeredBy: string;
