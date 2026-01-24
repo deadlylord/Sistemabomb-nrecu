@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Product, Category } from '../types';
 import { EditIcon, HistoryIcon, TrashIcon, PowerIcon, PackageIcon } from './Icons';
@@ -94,6 +93,10 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
             pillClasses += ' bg-slate-500/20 text-slate-400';
             tooltip = 'Producto nuevo, sin suficientes datos de venta.';
             break;
+        case 'Sin Historial':
+            pillClasses += ' bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700';
+            tooltip = 'Producto sin registros de compra ni de venta en el sistema.';
+            break;
         case 'Agotado (Alta Demanda)':
             pillClasses += ' bg-purple-500/20 text-purple-300 animate-pulse';
             tooltip = '¡Crítico! Se vendía muy rápido antes de agotarse. Reponer urgente.';
@@ -101,6 +104,10 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
         case 'Agotado (Inactivo)':
             pillClasses += ' bg-slate-500/10 text-slate-500';
             tooltip = 'Producto sin stock desde hace más de 30 días. Rendimiento en pausa.';
+            break;
+        case 'Agotado (Sin Ventas)':
+            pillClasses += ' bg-gray-500/10 text-gray-500';
+            tooltip = 'Producto sin stock y sin historial de ventas registrado.';
             break;
         case 'Agotado':
             pillClasses += ' bg-red-500/10 text-red-400';

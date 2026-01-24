@@ -399,11 +399,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     // FIX: Explicitly type 'p' in forEach and ensure amount is treated as a number to avoid unknown type errors.
     allPayments.forEach((p: UnifiedTransaction) => { 
         const methodKey = String(p.paymentMethod);
-        const amount = Number(p.amount) || 0;
-        totalsByMethod[methodKey] = (totalsByMethod[methodKey] || 0) + amount; 
+        const amount: number = Number(p.amount) || 0;
+        const currentTotal: number = totalsByMethod[methodKey] || 0;
+        totalsByMethod[methodKey] = currentTotal + amount; 
         const rate = COMMISSION_RATES[p.paymentMethod as PaymentMethod]; 
         if (rate !== undefined) {
-            commissionsByMethod[methodKey] = (commissionsByMethod[methodKey] || 0) + (amount * rate); 
+            const currentCommission: number = commissionsByMethod[methodKey] || 0;
+            commissionsByMethod[methodKey] = currentCommission + (amount * rate); 
         }
     });
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import { InventoryTable } from './InventoryTable';
@@ -55,7 +54,7 @@ type SortConfig = {
 const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('');
-  const [filterVelocity, setFilterVelocity] = useState(''); // Nuevo filtro por rendimiento
+  const [filterVelocity, setFilterVelocity] = useState(''); 
   const [historyModalProduct, setHistoryModalProduct] = useState<Product | null>(null);
   const [hideZeroStock, setHideZeroStock] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
@@ -204,18 +203,27 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                 else if (avgDaysPerUnit <= 60) status = 'En Riesgo';
                 else status = 'Estancado';
             } else {
-                const creationLogs = productHistory.filter(h => h.productId === product.id && h.changeType === ProductChangeType.CREATED);
-                const potentialDates = [
-                    ...(creationLogs.map(l => new Date(l.timestamp).getTime())),
-                    ...(lastPurchaseDate ? [lastPurchaseDate.getTime()] : [])
-                ];
+                // No sales in last 90 days
+                const totalSalesCount = productTransactions.length;
+                const totalPurchasesCount = productPurchases.length;
 
-                if (potentialDates.length > 0) {
-                    const firstStockedDate = new Date(Math.min(...potentialDates));
-                    const daysOnMarket = (today.getTime() - firstStockedDate.getTime()) / (1000 * 60 * 60 * 24);
-                    status = daysOnMarket < 90 ? 'Nuevo' : 'Estancado';
+                // NUEVO ESTADO: Nunca comprado ni vendido (en el sistema de registros)
+                if (totalSalesCount === 0 && totalPurchasesCount === 0) {
+                  status = 'Sin Historial';
                 } else {
-                    status = productTransactions.length > 0 ? 'Estancado' : 'Nuevo';
+                  const creationLogs = productHistory.filter(h => h.productId === product.id && h.changeType === ProductChangeType.CREATED);
+                  const potentialDates = [
+                      ...(creationLogs.map(l => new Date(l.timestamp).getTime())),
+                      ...(lastPurchaseDate ? [lastPurchaseDate.getTime()] : [])
+                  ];
+
+                  if (potentialDates.length > 0) {
+                      const firstStockedDate = new Date(Math.min(...potentialDates));
+                      const daysOnMarket = (today.getTime() - firstStockedDate.getTime()) / (1000 * 60 * 60 * 24);
+                      status = daysOnMarket < 90 ? 'Nuevo' : 'Estancado';
+                  } else {
+                      status = productTransactions.length > 0 ? 'Estancado' : 'Nuevo';
+                  }
                 }
             }
         }
@@ -457,7 +465,10 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
               <option value="En Riesgo">En Riesgo</option>
               <option value="Estancado">Estancado</option>
               <option value="Nuevo">Nuevo</option>
+              <option value="Sin Historial">Sin Historial (Nunca Comprado/Vendido)</option>
               <option value="Agotado (Alta Demanda)">Agotado (Crítico)</option>
+              <option value="Agotado (Inactivo)">Agotado (Inactivo)</option>
+              <option value="Agotado (Sin Ventas)">Agotado (Sin Ventas)</option>
               <option value="Agotado">Agotado</option>
             </select>
           </div>
