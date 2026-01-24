@@ -666,10 +666,20 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="relative md:col-span-2">
-                <input type="text" placeholder="Buscar por producto o proveedor..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none font-bold" />
+              <div className="relative md:col-span-1">
+                <input type="text" placeholder="Producto o proveedor..." value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 pl-10 pr-10 focus:ring-2 focus:ring-accent outline-none font-bold text-sm" />
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               </div>
+              <select 
+                  value={categoryFilter} 
+                  onChange={e => setCategoryFilter(e.target.value)} 
+                  className="w-full bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm outline-none focus:ring-2 focus:ring-accent"
+              >
+                  <option value="">Todas las categorías</option>
+                  {categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+              </select>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
           </div>

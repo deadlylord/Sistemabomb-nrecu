@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
@@ -6,7 +5,7 @@ import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIco
 import { EditSaleModal } from './EditSaleModal';
 import { analyzeSalesData } from '../services/geminiService';
 
-
+// FIX: Added missing DashboardViewProps interface to resolve 'Cannot find name' error.
 interface DashboardViewProps {
   stores: Store[];
   allLayaways: Layaway[];
@@ -22,14 +21,14 @@ interface DashboardViewProps {
   categories: Category[];
   sellers: Seller[];
   dailyNotes: DailyNote[];
-  currentStore?: Store;
+  currentStore: Store | undefined;
   onUpdateSale: (updatedSale: Sale, originalSale: Sale) => void;
   onDeleteSale: (saleId: string) => void;
   onReprintSale: (sale: Sale) => void;
   onOpenVerification: () => void;
   purchases: Purchase[];
-  allSales?: Sale[];
-  allInventory?: Product[];
+  allSales: Sale[];
+  allInventory: Product[];
 }
 
 interface UnifiedTransaction {
@@ -150,7 +149,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
-    onOpenVerification, purchases, allSales, allInventory
+    onOpenVerification, purchases, allSales, allInventory, categories
   } = props;
   
   const today = new Date();
@@ -397,13 +396,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     layaways.forEach(layaway => { const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { allPayments.push({ id: `${layaway.id}-${index}`, date: payment.date, type: 'Abono', invoiceNumber: layaway.invoiceNumber, details: index === 0 ? `Abono inicial para #${layaway.invoiceNumber}` : `Pago a abono #${layaway.invoiceNumber}`, customer: layaway.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number((payment as Payment).amount) }); } }); });
     allIncidents.forEach(incident => { if (incident.storeId === currentStoreId && isWithinRange(incident.createdAt)) { if (incident.type === IncidentType.PRODUCT_EXCHANGE) return; if (incident.type === IncidentType.CASH_ADJUSTMENT && incident.description.includes('Excedente pagado por cambio')) return; const isIncome = (incident.type === IncidentType.RECAUDO || incident.type === IncidentType.ADDITIONAL_INCOME || (incident.type === IncidentType.CASH_ADJUSTMENT && incident.adjustmentType === 'income')); let paymentMethod: PaymentMethod | string | undefined = incident.paymentMethod; let type: UnifiedTransaction['type'] = 'Ajuste de Efectivo'; if(incident.type === IncidentType.RECAUDO) { type = 'Recaudo Sistecredito'; paymentMethod = 'Recaudo Sistecredito'; } else if (incident.type === IncidentType.ADDITIONAL_INCOME) type = 'Ingreso Adicional'; if (isIncome && paymentMethod && (incident.adjustmentAmount || 0) > 0) { allPayments.push({ id: incident.id, date: incident.createdAt, type: type, invoiceNumber: incident.originalSaleInvoiceNumber || '-', details: incident.description, customer: incident.customerName || 'N/A', seller: incident.sellerName, paymentMethod: paymentMethod!, amount: incident.adjustmentAmount || 0 }); } } });
     
-    // FIX: Replaced potentially missing property access with explicit indexing to avoid unknown type errors.
-    allPayments.forEach(p => { 
+    // FIX: Explicitly type 'p' in forEach and ensure amount is treated as a number to avoid unknown type errors.
+    allPayments.forEach((p: UnifiedTransaction) => { 
         const methodKey = String(p.paymentMethod);
-        totalsByMethod[methodKey] = (totalsByMethod[methodKey] || 0) + p.amount; 
+        const amount = Number(p.amount) || 0;
+        totalsByMethod[methodKey] = (totalsByMethod[methodKey] || 0) + amount; 
         const rate = COMMISSION_RATES[p.paymentMethod as PaymentMethod]; 
-        if (rate) {
-            commissionsByMethod[methodKey] = (commissionsByMethod[methodKey] || 0) + (p.amount * rate); 
+        if (rate !== undefined) {
+            commissionsByMethod[methodKey] = (commissionsByMethod[methodKey] || 0) + (amount * rate); 
         }
     });
 
@@ -425,17 +425,60 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return { items: filteredItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), summary: { ...summary, netDifference: summary.totalMarkup + summary.totalDiscount } };
 }, [sales, inventory, isWithinRange, priceVariationSellerFilter, priceVariationPaymentMethodFilter]);
 
+  // FIX: Safer implementation of category report to avoid unknown type errors.
   const categoryReport = useMemo(() => {
     const allTransactions = [...sales.filter(s => isWithinRange(s.createdAt)), ...layaways.filter(l => isWithinRange(l.createdAt))];
     const categoryData: { [key: string]: { totalSales: number; totalUnits: number, products: Record<string, {name: string, qty: number, revenue: number}> } } = {};
-    allTransactions.forEach(transaction => { ((transaction.items as CartItem[]) || []).forEach(item => { if (!item) return; const categoryId = item.categoryId; if (!categoryData[categoryId]) categoryData[categoryId] = { totalSales: 0, totalUnits: 0, products: {} }; categoryData[categoryId].totalSales += item.price * item.quantity; categoryData[categoryId].totalUnits += item.quantity; if (!categoryData[categoryId].products[item.id]) categoryData[categoryId].products[item.id] = { name: item.name, qty: 0, revenue: 0 }; categoryData[categoryId].products[item.id].qty += item.quantity; categoryData[categoryId].products[item.id].revenue += item.price * item.quantity; }); });
-    return Object.entries(categoryData).map(([categoryId, data]) => ({ categoryId, categoryName: props.categories.find(c => c.id === categoryId)?.name || 'Sin Categoría', ...data, productList: Object.values(data.products).sort((a, b) => b.qty - a.qty) })).sort((a, b) => b.totalSales - a.totalSales);
-    }, [sales, layaways, props.categories, isWithinRange]);
+    
+    allTransactions.forEach(transaction => { 
+        const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
+        itemsArray.forEach((item: CartItem) => { 
+            if (!item) return; 
+            const categoryId = item.categoryId; 
+            if (!categoryData[categoryId]) {
+                categoryData[categoryId] = { totalSales: 0, totalUnits: 0, products: {} }; 
+            }
+            const price = Number(item.price) || 0;
+            const quantity = Number(item.quantity) || 0;
+            categoryData[categoryId].totalSales += price * quantity; 
+            categoryData[categoryId].totalUnits += quantity; 
+            
+            if (!categoryData[categoryId].products[item.id]) {
+                categoryData[categoryId].products[item.id] = { name: item.name, qty: 0, revenue: 0 }; 
+            }
+            categoryData[categoryId].products[item.id].qty += quantity; 
+            categoryData[categoryId].products[item.id].revenue += price * quantity; 
+        }); 
+    });
+    
+    return Object.entries(categoryData).map(([categoryId, data]) => ({ 
+        categoryId, 
+        categoryName: categories.find(c => c.id === categoryId)?.name || 'Sin Categoría', 
+        ...data, 
+        productList: Object.values(data.products).sort((a, b) => b.qty - a.qty) 
+    })).sort((a, b) => b.totalSales - a.totalSales);
+  }, [sales, layaways, categories, isWithinRange]);
 
+    // FIX: Safer implementation of top products report to avoid unknown type errors.
     const topProductsReport = useMemo(() => {
         const allTransactions = [...sales.filter(s => isWithinRange(s.createdAt)), ...layaways.filter(l => isWithinRange(l.createdAt))];
         const productData: { [key: string]: { totalUnits: number; totalSales: number } } = {};
-        allTransactions.forEach(transaction => { ((transaction.items as CartItem[]) || []).forEach(item => { if (!item) return; const productId = item.id; if (!productData[productId]) productData[productId] = { totalUnits: 0, totalSales: 0 }; productData[productId].totalUnits += item.quantity; productData[productId].totalSales += item.price * item.quantity; }); });
+        
+        allTransactions.forEach(transaction => { 
+            const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
+            itemsArray.forEach((item: CartItem) => { 
+                if (!item) return; 
+                const productId = item.id; 
+                if (!productData[productId]) {
+                    productData[productId] = { totalUnits: 0, totalSales: 0 }; 
+                }
+                const price = Number(item.price) || 0;
+                const quantity = Number(item.quantity) || 0;
+                productData[productId].totalUnits += quantity; 
+                productData[productId].totalSales += price * quantity; 
+            }); 
+        });
+        
         return Object.entries(productData).map(([productId, data]) => ({ productId, productName: inventory.find(p => p.id === productId)?.name || 'Producto Desconocido', ...data })).sort((a, b) => b.totalUnits - a.totalUnits).slice(0, 10);
     }, [sales, layaways, inventory, isWithinRange]);
     
@@ -656,7 +699,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       </div>
 
       {/* Historical Sales Table */}
-      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} /></div>{isSalesHistoryVisible && (<div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"><div className="relative"><input type="text" placeholder="Factura, cliente, producto..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" /><div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div></div><select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select><select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todas las categorías</option>{props.categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button></div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u</p></div></div>))}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
+      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} /></div>{isSalesHistoryVisible && (<div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"><div className="relative"><input type="text" placeholder="Factura, cliente, producto..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" /><div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div></div><select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select><select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todas las categorías</option>{categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button></div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u</p></div></div>))}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3><div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
         <div id="sales-chart" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8"><div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-bold text-accent">Análisis de Ventas</h2><div className="flex gap-2"><button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button><button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button></div></div><SalesHistoryChart data={salesChartData} viewMode={chartViewMode} /></div>

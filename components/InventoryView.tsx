@@ -1,10 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
-import AddProductForm from './AddProductForm';
 import { InventoryTable } from './InventoryTable';
 import CategoryManager from './CategoryManager';
-import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon } from './Icons';
+import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon, ChartBarIcon, ReceiptIcon, SettingsIcon, PackageIcon } from './Icons';
 import ProductHistoryModal from './ProductHistoryModal';
 import InventoryCostChart from './InventoryCostChart';
 import BulkAddProductsModal from './BulkAddProductsModal';
@@ -56,6 +55,7 @@ type SortConfig = {
 const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterVelocity, setFilterVelocity] = useState(''); // Nuevo filtro por rendimiento
   const [historyModalProduct, setHistoryModalProduct] = useState<Product | null>(null);
   const [hideZeroStock, setHideZeroStock] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
@@ -76,6 +76,13 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
       direction = 'descending';
     }
     setSortConfig({ key, direction });
+  };
+
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const handleExportToExcel = () => {
@@ -156,7 +163,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             ? new Date(Math.max(...productTransactions.map(t => t.transactionDate.getTime())))
             : null;
         
-        // Find last purchase date
         const productPurchases = purchases
             .filter(p => p.productId === product.id)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -174,7 +180,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         let status = 'Sin Datos';
         let days = Infinity;
         
-        // NEW LOGIC: Consider stock and time since last purchase/sale
         if (product.stock === 0) {
             if (!lastSaleDate) {
                 status = 'Agotado (Sin Ventas)';
@@ -182,17 +187,14 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                 const daysSinceLastSale = (today.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24);
                 
                 if (daysSinceLastSale > 30) {
-                    // If it's been zero for a long time, it's just "out of stock", not "at risk"
                     status = 'Agotado (Inactivo)';
-                    trend = 'stable'; // Performance isn't worsening, it's just unavailable
+                    trend = 'stable'; 
                 } else {
-                    // Recently ran out - check if it was a high velocity item
                     const avgDaysPerUnit = salesInLast90Days > 0 ? 90 / salesInLast90Days : Infinity;
                     status = avgDaysPerUnit <= 15 ? 'Agotado (Alta Demanda)' : 'Agotado';
                 }
             }
         } else {
-            // Normal performance logic for stocked items
             if (salesInLast90Days > 0) {
                 const avgDaysPerUnit = 90 / salesInLast90Days;
                 days = avgDaysPerUnit;
@@ -226,6 +228,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
       const matchesSearch = product.name.toLowerCase().includes(lowerCaseSearchTerm) ||
                             (product.supplier && product.supplier.toLowerCase().includes(lowerCaseSearchTerm));
       const matchesCategory = filterCategoryId ? product.categoryId === filterCategoryId : true;
+      const matchesVelocity = filterVelocity ? product.velocity.status === filterVelocity : true;
       const matchesStock = hideZeroStock ? product.stock > 0 : true;
       
       let matchesDisabled;
@@ -235,7 +238,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         matchesDisabled = showDisabledProducts ? true : !product.isDisabled;
       }
 
-      return matchesSearch && matchesCategory && matchesStock && matchesDisabled;
+      return matchesSearch && matchesCategory && matchesStock && matchesDisabled && matchesVelocity;
     });
 
     if (sortConfig.key) {
@@ -270,7 +273,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     }
 
     return filteredProducts;
-  }, [inventory, searchTerm, filterCategoryId, hideZeroStock, sortConfig, categories, sales, layaways, purchases, productHistory, showDisabledProducts, showOnlyDisabled]);
+  }, [inventory, searchTerm, filterCategoryId, filterVelocity, hideZeroStock, sortConfig, categories, sales, layaways, purchases, productHistory, showDisabledProducts, showOnlyDisabled]);
 
   const categorySummary = useMemo(() => {
     return categories.map(category => {
@@ -278,7 +281,9 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
       const productCount = productsInCategory.length;
       const totalStock = productsInCategory.reduce((sum, p) => sum + p.stock, 0);
       return { ...category, productCount, totalStock };
-    }).sort((a,b) => b.totalStock - a.totalStock);
+    })
+    .filter(cat => cat.totalStock > 0)
+    .sort((a,b) => b.totalStock - a.totalStock);
   }, [inventory, categories]);
 
   const inventoryCostHistory = useMemo(() => {
@@ -337,50 +342,39 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
 
   return (
     <>
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-3 bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg">
-                <h3 className="text-xl font-bold text-accent mb-3">Historial de Costo de Inventario (Últimos 30 días)</h3>
-                <InventoryCostChart data={inventoryCostHistory} />
-            </div>
-            <div className="lg:col-span-2 bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg flex flex-col">
-                <h3 className="text-xl font-bold text-accent mb-3">Resumen por Categoría</h3>
-                <div className="flex-grow space-y-2 overflow-y-auto pr-2">
-                  {categorySummary.map((summary, index) => (
-                    <div key={summary.id} className={`flex justify-between items-center p-3 rounded-lg ${index % 2 === 0 ? 'bg-slate-100 dark:bg-slate-800/80' : 'bg-slate-50 dark:bg-slate-800/40'}`}>
-                      <div>
-                          <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{summary.name}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{summary.productCount} Productos</p>
-                      </div>
-                      <p className="text-lg font-extrabold text-accent">{summary.totalStock} <span className="text-sm font-normal">unidades</span></p>
+      <div className="max-w-7xl mx-auto space-y-6">
+        
+        {/* Accesos Directos */}
+        <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-2 rounded-2xl flex flex-wrap gap-2 sticky top-[68px] z-30 shadow-lg">
+            <button onClick={() => scrollToSection('inventory-table-container')} className="px-4 py-2 text-sm font-black bg-accent text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2">
+                <PackageIcon className="w-4 h-4" /> Tabla de Productos
+            </button>
+            <button onClick={() => scrollToSection('analysis-section')} className="px-4 py-2 text-sm font-black bg-blue-600 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2">
+                <ChartBarIcon className="w-4 h-4" /> Análisis de Costos
+            </button>
+            <button onClick={() => scrollToSection('category-management-section')} className="px-4 py-2 text-sm font-black bg-purple-600 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2">
+                <SettingsIcon className="w-4 h-4" /> Gestionar Categorías
+            </button>
+        </div>
+
+        {/* Resumen por Categoría Compacto */}
+        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+            <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                <ReceiptIcon className="w-4 h-4 text-accent" /> Existencias por Categoría
+            </h3>
+            <div className="flex flex-wrap gap-2">
+                {categorySummary.length > 0 ? categorySummary.map((summary) => (
+                    <div key={summary.id} className="bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl flex items-baseline gap-2 border border-slate-200 dark:border-slate-700">
+                        <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{summary.name}</span>
+                        <span className="font-black text-accent text-base">{summary.totalStock}</span>
+                        <span className="text-[10px] text-gray-400 uppercase font-bold">uds</span>
                     </div>
-                  ))}
-                </div>
+                )) : <p className="text-xs text-gray-400 italic">No hay productos con stock actualmente.</p>}
             </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          <div className="lg:col-span-2">
-            <AddProductForm 
-              onAddProduct={onAddProduct} 
-              categories={categories} 
-              stores={stores} 
-              currentStoreId={currentStoreId}
-              allInventory={allInventory}
-            />
-          </div>
-          <div className="lg:col-span-1">
-            <CategoryManager 
-              categories={categories}
-              inventory={allInventory}
-              onAddCategory={onAddCategory}
-              onUpdateCategory={onUpdateCategory}
-              onDeleteCategory={onDeleteCategory}
-            />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-4 rounded-xl shadow-lg">
+        {/* Filtros e Inventario */}
+        <div id="inventory-table-container" className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-4 rounded-xl shadow-lg scroll-mt-24">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
             <h2 className="text-2xl font-bold text-accent">Inventario Actual</h2>
             <div className="flex items-center gap-2 flex-wrap">
@@ -419,7 +413,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div className="relative">
                 <input 
                   type="text"
@@ -450,6 +444,21 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
               {categories.map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
+            </select>
+            <select 
+              value={filterVelocity}
+              onChange={e => setFilterVelocity(e.target.value)}
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+            >
+              <option value="">Rendimiento (Todos)</option>
+              <option value="Alta Rotación">Alta Rotación</option>
+              <option value="Rotación Media">Rotación Media</option>
+              <option value="Baja Rotación">Baja Rotación</option>
+              <option value="En Riesgo">En Riesgo</option>
+              <option value="Estancado">Estancado</option>
+              <option value="Nuevo">Nuevo</option>
+              <option value="Agotado (Alta Demanda)">Agotado (Crítico)</option>
+              <option value="Agotado">Agotado</option>
             </select>
           </div>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
@@ -504,6 +513,26 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             sortConfig={sortConfig}
             isAdmin={isAdmin}
         />
+
+        {/* Sección Inferior de Análisis y Gestión */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+            <div id="analysis-section" className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg scroll-mt-24">
+                <h3 className="text-xl font-bold text-accent mb-3 flex items-center gap-2">
+                    <ChartBarIcon className="w-6 h-6" /> Valorización (Últimos 30 días)
+                </h3>
+                <InventoryCostChart data={inventoryCostHistory} />
+            </div>
+            
+            <div id="category-management-section" className="scroll-mt-24">
+                <CategoryManager 
+                    categories={categories}
+                    inventory={allInventory}
+                    onAddCategory={onAddCategory}
+                    onUpdateCategory={onUpdateCategory}
+                    onDeleteCategory={onDeleteCategory}
+                />
+            </div>
+        </div>
       </div>
 
       {historyModalProduct && (
