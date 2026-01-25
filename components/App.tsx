@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
@@ -42,7 +41,6 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-// FIX: Added formatCOP to the import list from constants
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
@@ -117,12 +115,10 @@ const App: React.FC = () => {
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   
-  // Modals de Información
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
 
-  // Optimización de compras
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
   const handleToggleProductVerification = (productId: string) => {
@@ -353,7 +349,6 @@ const App: React.FC = () => {
     return () => unsubscribers.forEach(unsub => unsub());
 }, [isAppReady, isAuthReady, currentStoreId, currentView, currentUser, roles, userPermissions, fetchOnceFromFirestore]);
 
-  // Briefing de novedades y encargos pendientes al iniciar
   useEffect(() => {
     if (currentUser && !hasShownBriefing) {
       const pendingIncidentsCount = incidents.filter(i => 
@@ -389,7 +384,6 @@ const App: React.FC = () => {
     runColorMigration();
   }, [isAppReady, stores]);
 
-  // Inicialización de categorías de gastos
   useEffect(() => {
     if (currentView === View.ACCOUNTING && expenseCategories.length === 0 && currentStoreId) {
         const checkAndInitCategories = async () => {
@@ -460,7 +454,6 @@ const App: React.FC = () => {
     try {
         let savedSale: Sale | null = null;
 
-        // Use transaction to ensure invoice number uniqueness and stock integrity
         await runTransaction(db, async (transaction) => {
             const storeRef = doc(db, 'stores', currentStoreId);
             const storeDoc = await transaction.get(storeRef);
@@ -468,15 +461,13 @@ const App: React.FC = () => {
                 throw new Error("Store document does not exist!");
             }
 
-            // Read latest invoice number directly from DB and sanitize it
             let currentInvoiceNumber = storeDoc.data().nextInvoiceNumber;
             
-            // Ensure it's a number (safeguard against string values in DB)
             if (typeof currentInvoiceNumber !== 'number') {
                 currentInvoiceNumber = Number(currentInvoiceNumber);
             }
             if (isNaN(currentInvoiceNumber)) {
-                currentInvoiceNumber = 1; // Fallback reset
+                currentInvoiceNumber = 1;
             }
 
             const saleRef = doc(collection(db, 'sales'));
@@ -498,14 +489,12 @@ const App: React.FC = () => {
 
             savedSale = newSale;
 
-            // Perform writes
             transaction.set(saleRef, newSale);
 
             activeCart.forEach(item => {
                 const productRef = doc(db, 'inventory', item.id);
                 transaction.update(productRef, { stock: increment(-item.quantity) });
 
-                // ADDED: Log each product sale in history
                 const logRef = doc(collection(db, 'productHistory'));
                 const log: ProductHistoryLog = {
                     id: logRef.id,
@@ -515,13 +504,11 @@ const App: React.FC = () => {
                     changedBy: saleData.seller,
                     timestamp: saleDate.toISOString(),
                     changeType: ProductChangeType.SALE,
-                    // FIX: Replaced potentially missing formatCOP with an imported version
                     details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}`
                 };
                 transaction.set(logRef, log);
             });
 
-            // Increment Invoice Number atomically
             transaction.update(storeRef, { nextInvoiceNumber: currentInvoiceNumber + 1 });
         });
 
@@ -569,21 +556,16 @@ const App: React.FC = () => {
             const storeDoc = await transaction.get(storeRef);
             if (!storeDoc.exists()) throw new Error("Store not found");
 
-            // Check if we need to auto-increment (if passed invoice matches current DB next, or if we force it)
             let dbNextInvoice = storeDoc.data().nextInvoiceNumber;
             
-            // Ensure numeric
             if (typeof dbNextInvoice !== 'number') dbNextInvoice = Number(dbNextInvoice);
             if (isNaN(dbNextInvoice)) dbNextInvoice = 1;
 
             let finalInvoiceNumber = invoiceNumber;
             let shouldIncrementStoreCounter = false;
 
-            // Strict parsing for comparison to avoid string mismatch "100" vs 100
             const inputInvoiceNum = parseInt(invoiceNumber, 10);
 
-            // Logic: if the user input matches the store's "next", we assume standard sequence and increment.
-            // If they typed something random (like "F-500"), we don't increment the global counter.
             if (!isNaN(inputInvoiceNum) && inputInvoiceNum === dbNextInvoice) {
                 shouldIncrementStoreCounter = true;
             }
@@ -615,7 +597,6 @@ const App: React.FC = () => {
                     const productRef = doc(db, 'inventory', item.id);
                     transaction.update(productRef, { stock: increment(-item.quantity) });
 
-                    // ADDED: Log layaway reservation in history
                     const logRef = doc(collection(db, 'productHistory'));
                     const log: ProductHistoryLog = {
                         id: logRef.id,
@@ -680,7 +661,6 @@ const App: React.FC = () => {
           const productRef = doc(db, 'inventory', item.id);
           batch.update(productRef, { stock: increment(-item.quantity) });
 
-          // ADDED: Log pre-order fulfillment in history
           const logRef = doc(collection(db, 'productHistory'));
           const log: ProductHistoryLog = {
               id: logRef.id,
@@ -789,7 +769,6 @@ const App: React.FC = () => {
             const productToDamageRef = doc(db, 'inventory', incident.productId);
             batch.update(productToDamageRef, { stock: increment(-1) });
 
-            // Log damage report
             const damageLogRef = doc(collection(db, 'productHistory'));
             const damageLog: ProductHistoryLog = {
                 id: damageLogRef.id,
@@ -808,7 +787,6 @@ const App: React.FC = () => {
             newStatus = IncidentStatus.CAMBIO_PROCESADO;
             incident.returnedItems?.forEach(item => { 
                 batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); 
-                // Log return
                 const exchangeInLogRef = doc(collection(db, 'productHistory'));
                 const exchangeInLog: ProductHistoryLog = {
                     id: exchangeInLogRef.id,
@@ -824,7 +802,6 @@ const App: React.FC = () => {
             });
             incident.takenItems?.forEach(item => { 
                 batch.update(doc(db, 'inventory', item.productId), { stock: increment(-item.quantity) }); 
-                // Log taking new item
                 const exchangeOutLogRef = doc(collection(db, 'productHistory'));
                 const exchangeOutLog: ProductHistoryLog = {
                     id: exchangeOutLogRef.id,
@@ -864,7 +841,6 @@ const App: React.FC = () => {
         newStatus = IncidentStatus.DEVUELTO_Y_RESUELTO;
         if (incident.productId) {
             batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
-            // Log repair return
             const repairLogRef = doc(collection(db, 'productHistory'));
             const repairLog: ProductHistoryLog = {
                 id: repairLogRef.id,
@@ -891,9 +867,43 @@ const App: React.FC = () => {
   };
   
   const handleUpdateLayaway = async (updatedLayaway: Layaway, originalLayaway: Layaway) => {
-      // Basic update for layaways - in a real scenario, you'd want to handle stock diffs if items changed.
-      // For now, focusing on the basics.
-      await setDoc(doc(db, 'layaways', updatedLayaway.id), updatedLayaway);
+      if (!currentUser) return;
+      const batch = writeBatch(db);
+
+      // 1. Revertir stock del abono original si afectaba inventario
+      if (originalLayaway.status === 'active' || originalLayaway.status === 'completed') {
+          originalLayaway.items.forEach(item => {
+              const productRef = doc(db, 'inventory', item.id);
+              batch.update(productRef, { stock: increment(item.quantity) });
+          });
+      }
+
+      // 2. Restar stock del abono actualizado si afecta inventario
+      if (updatedLayaway.status === 'active' || updatedLayaway.status === 'completed') {
+          updatedLayaway.items.forEach(item => {
+              const productRef = doc(db, 'inventory', item.id);
+              batch.update(productRef, { stock: increment(-item.quantity) });
+
+              // Registrar en historial para cada producto
+              const logRef = doc(collection(db, 'productHistory'));
+              const log: ProductHistoryLog = {
+                  id: logRef.id,
+                  productId: item.id,
+                  productName: item.name,
+                  storeId: updatedLayaway.storeId,
+                  changedBy: currentUser.name,
+                  timestamp: new Date().toISOString(),
+                  changeType: ProductChangeType.LAYAWAY_RESERVED,
+                  details: `Abono #${updatedLayaway.invoiceNumber} editado. Inventario sincronizado: -${item.quantity}`
+              };
+              batch.set(logRef, log);
+          });
+      }
+
+      // 3. Actualizar documento del abono
+      batch.set(doc(db, 'layaways', updatedLayaway.id), updatedLayaway);
+
+      await batch.commit();
   };
 
   const handleDeleteLayaway = async (layawayId: string) => {
@@ -905,13 +915,12 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       const layawayRef = doc(db, 'layaways', layawayId);
       
-      // If it was active or pre-order (and had reserved items), return stock
-      if (layaway.status === 'active' || layaway.status === 'pre-order') {
+      // Solo devolver stock si el abono realmente lo había restado (encargos no restan stock)
+      if (layaway.status === 'active' || layaway.status === 'completed') {
           layaway.items.forEach(item => {
               const productRef = doc(db, 'inventory', item.id);
               batch.update(productRef, { stock: increment(item.quantity) });
               
-              // Optional: Log the return
               const logRef = doc(collection(db, 'productHistory'));
               const log: ProductHistoryLog = {
                   id: logRef.id,
@@ -935,34 +944,29 @@ const App: React.FC = () => {
       if (!currentUser) return;
       const batch = writeBatch(db);
       
-      // 1. Revert stock from original sale
       originalSale.items.forEach(item => {
           const productRef = doc(db, 'inventory', item.id);
           batch.update(productRef, { stock: increment(item.quantity) });
       });
 
-      // 2. Deduct stock for updated sale
       updatedSale.items.forEach(item => {
           const productRef = doc(db, 'inventory', item.id);
           batch.update(productRef, { stock: increment(-item.quantity) });
       });
 
-      // 3. Update Sale Document
       const saleRef = doc(db, 'sales', updatedSale.id);
       batch.set(saleRef, updatedSale);
 
-      // 4. Log the edit
-      // Just logging the fact that a sale was edited, linking to the first item for simplicity or generic log
       if (updatedSale.items.length > 0) {
           const logRef = doc(collection(db, 'productHistory'));
           const log: ProductHistoryLog = {
               id: logRef.id,
-              productId: updatedSale.items[0].id, // Associate with first item or use a generic ID
+              productId: updatedSale.items[0].id, 
               productName: "Venta Editada",
               storeId: updatedSale.storeId,
               changedBy: currentUser.name,
               timestamp: new Date().toISOString(),
-              changeType: ProductChangeType.RETURN, // Reusing existing type or add SALE_EDIT
+              changeType: ProductChangeType.RETURN, 
               details: `Factura #${updatedSale.invoiceNumber} editada. Inventario ajustado.`
           };
           batch.set(logRef, log);
@@ -979,12 +983,10 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // 1. Restore stock
       sale.items.forEach(item => {
           const productRef = doc(db, 'inventory', item.id);
           batch.update(productRef, { stock: increment(item.quantity) });
 
-          // 2. Log history for each item returned
           const logRef = doc(collection(db, 'productHistory'));
           const log: ProductHistoryLog = {
               id: logRef.id,
@@ -999,7 +1001,6 @@ const App: React.FC = () => {
           batch.set(logRef, log);
       });
 
-      // 3. Delete sale doc
       batch.delete(doc(db, 'sales', saleId));
 
       await batch.commit();
@@ -1079,11 +1080,9 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
-  // Sincronización Global de Productos al Agregar
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
       const inputName = newProductData.name;
       
-      // 1. Verificar si el producto ya existe globalmente para reutilizar info
       const q = query(collection(db, 'inventory'), where('name', '==', inputName));
       const snapshot = await getDocs(q);
       
@@ -1100,14 +1099,12 @@ const App: React.FC = () => {
           existingSku = firstMatch.sku;
       }
 
-      // 2. Si hay nueva imagen, subirla y será la nueva global
       if (imageFile) {
           imageUrl = await uploadImageAndGetURL(imageFile);
       }
 
       const batch = writeBatch(db);
       
-      // 3. Actualizar todas las instancias existentes con la nueva info/foto global
       snapshot.docs.forEach(docSnap => {
           batch.update(docSnap.ref, {
               imageUrl,
@@ -1116,15 +1113,12 @@ const App: React.FC = () => {
           });
       });
 
-      // 4. Determinar SKU (existente o nuevo prefijo)
       const namePrefix = inputName.substring(0, 3).toUpperCase();
       const sku = existingSku || `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
       const existingStoreIds = snapshot.docs.map(d => (d.data() as Product).storeId);
 
-      // 5. Crear en tiendas nuevas o actualizar stock en existentes
       selectedStoreIds.forEach(storeId => {
           if (existingStoreIds.includes(storeId)) {
-              // Si ya existe en esta tienda, solo actualizamos el stock relativo al formulario
               const existingDoc = snapshot.docs.find(d => (d.data() as Product).storeId === storeId);
               if (existingDoc) {
                   batch.update(existingDoc.ref, { 
@@ -1148,11 +1142,9 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  // Sincronización Global de Productos al Actualizar (Incluyendo FOTOS)
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
       const productRef = doc(db, 'inventory', updatedProduct.id);
       
-      // 1. Obtener datos actuales del producto desde la DB para saber su nombre actual
       const currentSnap = await getDoc(productRef);
       const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
       const oldStock = currentSnap.exists() ? (currentSnap.data().stock || 0) : 0;
@@ -1165,12 +1157,10 @@ const App: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // 2. Buscamos todas las instancias globales por el nombre exacto para sincronizar
       const q = query(collection(db, 'inventory'), where('name', '==', nameInDb));
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
-          // Si por alguna razón la búsqueda por nombre falla, al menos actualizamos por ID
           batch.update(productRef, {
               name: updatedProduct.name,
               imageUrl: newImageUrl,
@@ -1185,13 +1175,12 @@ const App: React.FC = () => {
       } else {
           snapshot.docs.forEach(docSnap => {
               const updateData: any = { 
-                  name: updatedProduct.name, // Sincronizamos nombre si cambió
+                  name: updatedProduct.name, 
                   imageUrl: newImageUrl,
                   description: updatedProduct.description,
                   categoryId: updatedProduct.categoryId
               };
               
-              // Los datos de stock y precio solo se actualizan para la tienda actual
               if (docSnap.id === updatedProduct.id) {
                   updateData.stock = updatedProduct.stock;
                   updateData.price = updatedProduct.price;
@@ -1203,12 +1192,10 @@ const App: React.FC = () => {
           });
       }
 
-      // ADDED: Create log for manual adjustment if stock or price changed
       if (oldStock !== updatedProduct.stock || oldPrice !== updatedProduct.price) {
           const logRef = doc(collection(db, 'productHistory'));
           let details = `Ajuste manual: `;
           if (oldStock !== updatedProduct.stock) details += `Stock ${oldStock} -> ${updatedProduct.stock}. `;
-          // FIX: Replaced potentially missing formatCOP with an imported version
           if (oldPrice !== updatedProduct.price) details += `Precio ${formatCOP(oldPrice)} -> ${formatCOP(updatedProduct.price)}. `;
           
           const log: ProductHistoryLog = {
@@ -1249,7 +1236,6 @@ const App: React.FC = () => {
     const { productInfo, storeEntries } = data;
     const inputName = productInfo.name;
     
-    // 1. Fetch metadata globally first to ensure we use the best available (image, desc)
     const globalQ = query(collection(db, 'inventory'), where('name', '==', inputName), limit(1));
     const globalSnap = await getDocs(globalQ);
     
@@ -1268,7 +1254,6 @@ const App: React.FC = () => {
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
-            // Find existing product in THIS specific store using exact name
             const q = query(collection(db, 'inventory'), 
                            where('name', '==', inputName), 
                            where('storeId', '==', storeId), 

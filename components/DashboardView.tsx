@@ -5,7 +5,6 @@ import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIco
 import { EditSaleModal } from './EditSaleModal';
 import { analyzeSalesData } from '../services/geminiService';
 
-// FIX: Added missing DashboardViewProps interface to resolve 'Cannot find name' error.
 interface DashboardViewProps {
   stores: Store[];
   allLayaways: Layaway[];
@@ -180,7 +179,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
   
-  // Helper to calculate profit for a sale or layaway
   const calculateSaleProfit = (transaction: UnifiedSaleTransaction): number => {
     const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
     const rawProfit = itemsArray.reduce((sum, item) => {
@@ -204,7 +202,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return rawProfit - totalCommission;
   };
 
-  // Helper to render payment methods for a sale or layaway
   const renderPaymentMethods = (transaction: UnifiedSaleTransaction) => {
     const paymentsArray = (Array.isArray(transaction.payments) ? transaction.payments : Object.values(transaction.payments || {})) as Payment[];
     const methods = paymentsArray && paymentsArray.length > 0 
@@ -276,7 +273,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const tDate = new Date(t.createdAt);
         const hour = tDate.getHours();
         hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-        (t.items || []).forEach(item => { if (!item) return; if (!allSoldItems[item.id]) allSoldItems[item.id] = []; allSoldItems[item.id].push({ quantity: item.quantity, createdAt: t.createdAt }); });
+        const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as CartItem[];
+        items.forEach(item => { if (!item) return; if (!allSoldItems[item.id]) allSoldItems[item.id] = []; allSoldItems[item.id].push({ quantity: item.quantity, createdAt: t.createdAt }); });
     });
 
     const sortedHours = Object.entries(hourCounts).map(([hour, count]) => ({ hour: parseInt(hour), count })).sort((a, b) => b.count - a.count);
@@ -298,7 +296,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       const soldInPeriod = (allSoldItems[p.id] || []).reduce((sum, s) => sum + s.quantity, 0);
       const unitsPerDay = soldInPeriod / daysInRange;
       
-      // HIGH VELOCITY LOGIC (Considering Potential Loss if stock is zero)
       if (unitsPerDay >= 0.7 || (p.stock === 0 && soldInPeriod > 0)) {
           insights.highVelocity.push({
               id: p.id,
@@ -315,27 +312,22 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
       if (soldInPeriod >= 5) insights.trending.push({ id: p.id, name: p.name, quantity: soldInPeriod, context: `Ventas sólidas: ${soldInPeriod} uds en el rango seleccionado.` });
 
-      // RESTOCK ALERTS + OPPORTUNITY LOSS
       if (soldInPeriod >= 2) {
           if (p.stock === 0) {
               const lastSale = (allSoldItems[p.id] || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
               const daysSinceOut = lastSale ? Math.floor((new Date().getTime() - new Date(lastSale.createdAt).getTime()) / (1000 * 60 * 60 * 24)) : 0;
               const lostSales = Math.floor(unitsPerDay * daysSinceOut);
-              if (daysSinceOut < 30) { // Only suggest restock if out for less than a month (otherwise it might be seasonal/deprecated)
+              if (daysSinceOut < 30) {
                   insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldInPeriod, daysLeft: 0, lostSalesPotential: lostSales });
               }
           } else if (p.stock <= 3) {
-              insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldInPeriod, daysLeft: Math.floor(p.stock / unitsPerDay) });
+              insights.restock.push({ id: p.id, name: p.name, stock: p.stock, velocity: soldInPeriod, daysLeft: Math.floor(p.stock / (unitsPerDay || 1)) });
           }
       }
 
-      // STAGNANT EXCEPTION: Skip if stock was 0 for most of the period
       if (daysInRange >= 15 && p.stock >= 5 && soldInPeriod === 0) {
-        // Find if we actually had stock in those days - simplified by checking last purchase
         const productPurchases = purchases.filter(purch => purch.productId === p.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         const lastPurchaseDate = productPurchases.length > 0 ? new Date(productPurchases[0].createdAt) : null;
-        
-        // If it was restocked recently or out of stock for long, don't mark as stagnant
         if (lastPurchaseDate && (today.getTime() - lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24) > 15) {
             const idealDiscount = 0.25; 
             let suggestedPrice = Math.round(p.price * (1 - idealDiscount));
@@ -365,10 +357,10 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const newActiveLayawaysInRange = layaways.filter(l => isWithinRange(l.createdAt) && l.status === 'active');
         const allSoldItems = [...directSalesInRange.flatMap(s => s.items || []), ...newActiveLayawaysInRange.flatMap(l => l.items || [])].filter(Boolean);
         const unitsBySeller: { [key: string]: number } = {};
-        [...directSalesInRange, ...newActiveLayawaysInRange].forEach(transaction => { const seller = transaction.seller; if (!unitsBySeller[seller]) unitsBySeller[seller] = 0; const transactionUnits = (transaction.items || []).reduce((sum, item) => sum + (item?.quantity || 0), 0); unitsBySeller[seller] += transactionUnits; });
+        [...directSalesInRange, ...newActiveLayawaysInRange].forEach(transaction => { const seller = transaction.seller; if (!unitsBySeller[seller]) unitsBySeller[seller] = 0; const items = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[]; const transactionUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0); unitsBySeller[seller] += transactionUnits; });
         const sortedUnitsBySeller = Object.entries(unitsBySeller).map(([sellerName, units]) => ({ sellerName, units })).sort((a, b) => b.units - a.units);
-        const totalUnitsSold = allSoldItems.reduce((sum, item) => sum + item.quantity, 0);
-        const totalProfit = directSalesInRange.reduce((sum, sale) => { const rawProfit = (sale.items || []).reduce((itemSum, item) => { if (!item || item.cost === undefined) return itemSum; return itemSum + ((item.price - item.cost) * item.quantity); }, 0); let saleCommission = 0; if (sale.payments && sale.payments.length > 0) { sale.payments.forEach(payment => { const rate = COMMISSION_RATES[payment.method as PaymentMethod]; if (rate) saleCommission += payment.amount * rate; }); } else if (sale.paymentMethod) { const rate = COMMISSION_RATES[sale.paymentMethod as PaymentMethod]; if (rate) saleCommission += sale.totalAmount * rate; } return sum + (rawProfit - saleCommission); }, 0);
+        const totalUnitsSold = allSoldItems.reduce((sum, item) => sum + (item as CartItem).quantity, 0);
+        const totalProfit = directSalesInRange.reduce((sum, sale) => { const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; const rawProfit = items.reduce((itemSum, item) => { if (!item || item.cost === undefined) return itemSum; return itemSum + ((item.price - item.cost) * item.quantity); }, 0); let saleCommission = 0; const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; if (payments && payments.length > 0) { payments.forEach(payment => { const rate = COMMISSION_RATES[payment.method as PaymentMethod]; if (rate) saleCommission += payment.amount * rate; }); } else if (sale.paymentMethod) { const rate = COMMISSION_RATES[sale.paymentMethod as PaymentMethod]; if (rate) saleCommission += sale.totalAmount * rate; } return sum + (rawProfit - saleCommission); }, 0);
         const totalDirectSalesValue = directSalesInRange.reduce((sum, s) => sum + s.totalAmount, 0);
         const averageTicketSize = directSalesInRange.length > 0 ? totalDirectSalesValue / directSalesInRange.length : 0;
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
@@ -392,20 +384,19 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const commissionsByMethod: { [key: string]: number } = {};
     const allPayments: UnifiedTransaction[] = [];
     const currentStoreId = inventory[0]?.storeId;
-    sales.forEach(sale => { const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; if (!sale.layawayId && paymentsArray) { paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { allPayments.push({ id: `${sale.id}-${index}`, date: payment.date, type: 'Venta', invoiceNumber: sale.invoiceNumber, details: (sale.items || []).map(i => `${i.quantity}x ${i.name}`).join(', '), customer: sale.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number((payment as Payment).amount) }); } }); } });
-    layaways.forEach(layaway => { const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { allPayments.push({ id: `${layaway.id}-${index}`, date: payment.date, type: 'Abono', invoiceNumber: layaway.invoiceNumber, details: index === 0 ? `Abono inicial para #${layaway.invoiceNumber}` : `Pago a abono #${layaway.invoiceNumber}`, customer: layaway.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number((payment as Payment).amount) }); } }); });
+    sales.forEach(sale => { const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; if (!sale.layawayId && paymentsArray) { paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; allPayments.push({ id: `${sale.id}-${index}`, date: payment.date, type: 'Venta', invoiceNumber: sale.invoiceNumber, details: items.map(i => `${i.quantity}x ${i.name}`).join(', '), customer: sale.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number(payment.amount) }); } }); } });
+    layaways.forEach(layaway => { const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { allPayments.push({ id: `${layaway.id}-${index}`, date: payment.date, type: 'Abono', invoiceNumber: layaway.invoiceNumber, details: index === 0 ? `Abono inicial para #${layaway.invoiceNumber}` : `Pago a abono #${layaway.invoiceNumber}`, customer: layaway.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number(payment.amount) }); } }); });
     allIncidents.forEach(incident => { if (incident.storeId === currentStoreId && isWithinRange(incident.createdAt)) { if (incident.type === IncidentType.PRODUCT_EXCHANGE) return; if (incident.type === IncidentType.CASH_ADJUSTMENT && incident.description.includes('Excedente pagado por cambio')) return; const isIncome = (incident.type === IncidentType.RECAUDO || incident.type === IncidentType.ADDITIONAL_INCOME || (incident.type === IncidentType.CASH_ADJUSTMENT && incident.adjustmentType === 'income')); let paymentMethod: PaymentMethod | string | undefined = incident.paymentMethod; let type: UnifiedTransaction['type'] = 'Ajuste de Efectivo'; if(incident.type === IncidentType.RECAUDO) { type = 'Recaudo Sistecredito'; paymentMethod = 'Recaudo Sistecredito'; } else if (incident.type === IncidentType.ADDITIONAL_INCOME) type = 'Ingreso Adicional'; if (isIncome && paymentMethod && (incident.adjustmentAmount || 0) > 0) { allPayments.push({ id: incident.id, date: incident.createdAt, type: type, invoiceNumber: incident.originalSaleInvoiceNumber || '-', details: incident.description, customer: incident.customerName || 'N/A', seller: incident.sellerName, paymentMethod: paymentMethod!, amount: incident.adjustmentAmount || 0 }); } } });
     
-    // FIX: Explicitly type 'p' in forEach and ensure amount is treated as a number to avoid unknown type errors.
     allPayments.forEach((p: UnifiedTransaction) => { 
         const methodKey = String(p.paymentMethod);
-        const amount: number = Number(p.amount) || 0;
-        const currentTotal: number = totalsByMethod[methodKey] || 0;
-        totalsByMethod[methodKey] = currentTotal + amount; 
+        const amountValue: number = Number(p.amount) || 0;
+        const currentTotalValue: number = Number(totalsByMethod[methodKey]) || 0;
+        totalsByMethod[methodKey] = currentTotalValue + amountValue; 
         const rate = COMMISSION_RATES[p.paymentMethod as PaymentMethod]; 
         if (rate !== undefined) {
-            const currentCommission: number = commissionsByMethod[methodKey] || 0;
-            commissionsByMethod[methodKey] = currentCommission + (amount * rate); 
+            const currentCommissionValue: number = Number(commissionsByMethod[methodKey]) || 0;
+            commissionsByMethod[methodKey] = currentCommissionValue + (amountValue * rate); 
         }
     });
 
@@ -416,22 +407,20 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return { totalsByMethod, commissionsByMethod, filteredTransactions, sortedGroups: Object.entries(groupedTransactions).sort((a, b) => new Date(b[1].items[0].date).getTime() - new Date(a[1].items[0].date).getTime()) };
   }, [sales, layaways, allIncidents, inventory, isWithinRange, paymentMethodFilter]);
 
-  const totalPeriodIncome = useMemo(() => Object.entries(detailedReportData.totalsByMethod).reduce((sum, [method, total]) => method !== 'Recaudo Sistecredito' ? sum + total : sum, 0), [detailedReportData.totalsByMethod]);
-  const totalRecaudos = useMemo(() => detailedReportData.totalsByMethod['Recaudo Sistecredito'] || 0, [detailedReportData.totalsByMethod]);
+  const totalPeriodIncome = useMemo(() => Object.entries(detailedReportData.totalsByMethod).reduce((sum, [method, total]) => method !== 'Recaudo Sistecredito' ? sum + (total as number) : sum, 0), [detailedReportData.totalsByMethod]);
+  const totalRecaudos = useMemo(() => (detailedReportData.totalsByMethod['Recaudo Sistecredito'] as number) || 0, [detailedReportData.totalsByMethod]);
 
   const priceVariationReportData = useMemo(() => {
     const reportItems: PriceVariationItem[] = [];
-    sales.forEach(sale => { if (isWithinRange(sale.createdAt) && sale.items) { const paymentMethods = sale.payments && sale.payments.length > 0 ? [...new Set(sale.payments.map(p => p.method))] : (sale.paymentMethod ? [sale.paymentMethod] : []); sale.items.forEach(item => { if (!item) return; const productInInventory = inventory.find(p => p.id === item.id); if (!productInInventory) return; const variation = item.price - productInInventory.price; const totalVariation = variation * item.quantity; reportItems.push({ id: `${sale.id}-${item.id}`, date: sale.createdAt, invoiceNumber: sale.invoiceNumber, productName: item.name, seller: sale.seller, soldPrice: item.price, currentPrice: productInInventory.price, variation: variation, quantity: item.quantity, totalVariation: totalVariation, status: variation > 0 ? 'markup' : (variation < 0 ? 'discount' : 'normal'), paymentMethods: paymentMethods }); }); } });
+    sales.forEach(sale => { if (isWithinRange(sale.createdAt) && sale.items) { const paymentMethods = sale.payments && sale.payments.length > 0 ? [...new Set(sale.payments.map(p => p.method))] : (sale.paymentMethod ? [sale.paymentMethod] : []); const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; items.forEach(item => { if (!item) return; const productInInventory = inventory.find(p => p.id === item.id); if (!productInInventory) return; const variation = item.price - productInInventory.price; const totalVariation = variation * item.quantity; reportItems.push({ id: `${sale.id}-${item.id}`, date: sale.createdAt, invoiceNumber: sale.invoiceNumber, productName: item.name, seller: sale.seller, soldPrice: item.price, currentPrice: productInInventory.price, variation: variation, quantity: item.quantity, totalVariation: totalVariation, status: variation > 0 ? 'markup' : (variation < 0 ? 'discount' : 'normal'), paymentMethods: paymentMethods }); }); } });
     const filteredItems = reportItems.filter(item => (priceVariationSellerFilter ? item.seller === priceVariationSellerFilter : true) && (priceVariationPaymentMethodFilter ? item.paymentMethods.includes(priceVariationPaymentMethodFilter as PaymentMethod) : true));
     const summary = filteredItems.reduce((acc, item) => { if (item.totalVariation > 0) acc.totalMarkup += item.totalVariation; else if (item.totalVariation < 0) acc.totalDiscount += item.totalVariation; return acc; }, { totalMarkup: 0, totalDiscount: 0 });
     return { items: filteredItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), summary: { ...summary, netDifference: summary.totalMarkup + summary.totalDiscount } };
 }, [sales, inventory, isWithinRange, priceVariationSellerFilter, priceVariationPaymentMethodFilter]);
 
-  // FIX: Safer implementation of category report to avoid unknown type errors.
   const categoryReport = useMemo(() => {
     const allTransactions = [...sales.filter(s => isWithinRange(s.createdAt)), ...layaways.filter(l => isWithinRange(l.createdAt))];
     const categoryData: { [key: string]: { totalSales: number; totalUnits: number, products: Record<string, {name: string, qty: number, revenue: number}> } } = {};
-    
     allTransactions.forEach(transaction => { 
         const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
         itemsArray.forEach((item: CartItem) => { 
@@ -444,7 +433,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             const quantity = Number(item.quantity) || 0;
             categoryData[categoryId].totalSales += price * quantity; 
             categoryData[categoryId].totalUnits += quantity; 
-            
             if (!categoryData[categoryId].products[item.id]) {
                 categoryData[categoryId].products[item.id] = { name: item.name, qty: 0, revenue: 0 }; 
             }
@@ -452,7 +440,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             categoryData[categoryId].products[item.id].revenue += price * quantity; 
         }); 
     });
-    
     return Object.entries(categoryData).map(([categoryId, data]) => ({ 
         categoryId, 
         categoryName: categories.find(c => c.id === categoryId)?.name || 'Sin Categoría', 
@@ -461,11 +448,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     })).sort((a, b) => b.totalSales - a.totalSales);
   }, [sales, layaways, categories, isWithinRange]);
 
-    // FIX: Safer implementation of top products report to avoid unknown type errors.
     const topProductsReport = useMemo(() => {
         const allTransactions = [...sales.filter(s => isWithinRange(s.createdAt)), ...layaways.filter(l => isWithinRange(l.createdAt))];
         const productData: { [key: string]: { totalUnits: number; totalSales: number } } = {};
-        
         allTransactions.forEach(transaction => { 
             const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
             itemsArray.forEach((item: CartItem) => { 
@@ -480,7 +465,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 productData[productId].totalSales += price * quantity; 
             }); 
         });
-        
         return Object.entries(productData).map(([productId, data]) => ({ productId, productName: inventory.find(p => p.id === productId)?.name || 'Producto Desconocido', ...data })).sort((a, b) => b.totalUnits - a.totalUnits).slice(0, 10);
     }, [sales, layaways, inventory, isWithinRange]);
     
@@ -502,43 +486,20 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return Array.from(customerMap.values()).filter(c => ((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)) > 45 && c.purchaseCount > 1).map(c => { let preferredMethod = 'Desconocido'; let maxCount = 0; Object.entries(c.paymentMethods).forEach(([method, count]) => { if (count > maxCount) { maxCount = count; preferredMethod = method; } }); return { ...c, daysSince: Math.floor((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)), preferredMethod }; }).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 20);
   }, [sales, layaways]);
 
-  // FIX: Added salesChartData useMemo to calculate history data for SalesHistoryChart.
   const salesChartData = useMemo(() => {
     const dataMap = new Map<string, { total: number; partialTotal: number }>();
     const now = new Date();
-
-    const allTransactions: (Sale | Layaway)[] = [
-        ...sales.filter(s => !s.layawayId),
-        ...layaways.filter(l => l.status === 'active' || l.status === 'completed')
-    ];
-
+    const allTransactions: (Sale | Layaway)[] = [...sales.filter(s => !s.layawayId), ...layaways.filter(l => l.status === 'active' || l.status === 'completed')];
     allTransactions.forEach(t => {
         const date = new Date(t.createdAt);
         let label = '';
-        
-        if (chartViewMode === 'daily') {
-            label = date.toISOString().split('T')[0];
-        } else {
-            label = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-        }
-
+        if (chartViewMode === 'daily') { label = date.toISOString().split('T')[0]; } else { label = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`; }
         const existing = dataMap.get(label) || { total: 0, partialTotal: 0 };
         existing.total += t.totalAmount;
-        
-        if (chartViewMode !== 'daily') {
-            if (date.getDate() <= now.getDate()) {
-                existing.partialTotal += t.totalAmount;
-            }
-        } else {
-            existing.partialTotal = existing.total;
-        }
-        
+        if (chartViewMode !== 'daily') { if (date.getDate() <= now.getDate()) { existing.partialTotal += t.totalAmount; } } else { existing.partialTotal = existing.total; }
         dataMap.set(label, existing);
     });
-
-    return Array.from(dataMap.entries())
-        .map(([label, { total, partialTotal }]) => ({ label, total, partialTotal }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+    return Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sales, layaways, chartViewMode]);
 
     const managedSales = useMemo(() => {
@@ -604,7 +565,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                     {aiInsights.highVelocity.length > 0 && (
                                         <div className="space-y-1">
                                             <p className="font-black text-orange-600 dark:text-orange-400 text-[10px] uppercase tracking-widest flex items-center gap-1"><SparklesIcon className="w-3 h-3 animate-pulse" /> Movimiento Rápido</p>
-                                            {aiInsights.highVelocity.map((item) => (
+                                            {aiInsights.highVelocity.map((item: any) => (
                                                 <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                                                     <span className={`truncate ${item.urgency === 'critical' ? 'font-black text-red-600' : 'font-bold'}`}>{item.name} {item.isSoldOut && '(AGOTADO)'}</span>
                                                     <span className="text-[10px] font-bold bg-orange-100 dark:bg-orange-900/40 px-1 rounded">{item.unitsPerDay.toFixed(1)} uds/día</span>
@@ -615,7 +576,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                     {aiInsights.restock.length > 0 && (
                                         <div className="space-y-1 mt-2">
                                             <p className="font-bold text-red-600 dark:text-red-400 text-[10px] uppercase tracking-wide">⚠️ Alertas Stock</p>
-                                            {aiInsights.restock.slice(0, 4).map((item) => (
+                                            {aiInsights.restock.slice(0, 4).map((item: any) => (
                                                 <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
                                                     <span className="truncate font-medium">{item.name}</span>
                                                     <span className="text-gray-500 whitespace-nowrap">{item.stock === 0 ? 'SIN STOCK' : `Quedan: ${item.stock}`}</span>
@@ -672,7 +633,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     ) : activeAITab === 'clients' ? (
                         <div className="w-full animate-fade-in"><h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-3">Clientes en Riesgo de Fuga</h4><div className="max-h-[200px] overflow-y-auto pr-2">{churnAnalysis.length > 0 ? churnAnalysis.map((client, index) => (<div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border-l-4 border-l-red-500 flex justify-between items-center"><div><p className="font-bold text-sm">{client.name}</p><p className="text-xs text-gray-500">{client.phone}</p></div><div className="text-right"><p className="text-xs font-bold text-red-500">{client.daysSince} días</p><p className="text-[10px] text-gray-400">sin volver</p></div></div>)) : <p className="text-xs text-center text-gray-400">Todo bien por ahora.</p>}</div></div>
                     ) : (
-                        <div className="w-full animate-fade-in flex flex-col gap-4"><div className="flex flex-col gap-2"><label className="text-xs font-black text-gray-500 uppercase tracking-widest">Consulta personalizada multi-tienda</label><div className="flex gap-2"><textarea value={customAIQuery} onChange={e => setCustomAIQuery(e.target.value)} placeholder="Ej: ¿Cuál ha sido el producto más vendido en las 3 tiendas este mes?" rows={2} className="flex-grow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-accent outline-none shadow-inner"/><button onClick={handleCustomAIQuery} disabled={isAiQueryLoading || !customAIQuery.trim()} className="bg-accent text-white px-6 rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-accent/20">{isAiQueryLoading ? (<div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>) : (<circle className="w-5 h-5" />)}</button></div></div><div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 min-h-[120px] max-h-[300px] overflow-y-auto">{aiQueryResult ? (<SimpleMarkdownRenderer content={aiQueryResult} />) : isAiQueryLoading ? (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-400"><SparklesIcon className="w-8 h-8 animate-pulse mb-2 text-accent" /><p className="text-xs font-bold animate-pulse uppercase tracking-widest">La IA está analizando los datos multi-tienda...</p></div>) : (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-300"><SearchIcon className="w-10 h-10 mb-2 opacity-20" /><p className="text-xs italic">Escribe una pregunta para obtener un resumen detallado del periodo filtrado.</p></div>)}</div></div>
+                        <div className="w-full animate-fade-in flex flex-col gap-4"><div className="flex flex-col gap-2"><label className="text-xs font-black text-gray-500 uppercase tracking-widest">Consulta personalizada multi-tienda</label><div className="flex gap-2"><textarea value={customAIQuery} onChange={e => setCustomAIQuery(e.target.value)} placeholder="Ej: ¿Cuál ha sido el producto más vendido en las 3 tiendas este mes?" rows={2} className="flex-grow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-accent outline-none shadow-inner"/><button onClick={handleCustomAIQuery} disabled={isAiQueryLoading || !customAIQuery.trim()} className="bg-accent text-white px-6 rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-accent/20">{isAiQueryLoading ? (<div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>) : (<SparklesIcon className="w-5 h-5" />)}</button></div></div><div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 min-h-[120px] max-h-[300px] overflow-y-auto">{aiQueryResult ? (<SimpleMarkdownRenderer content={aiQueryResult} />) : isAiQueryLoading ? (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-400"><SparklesIcon className="w-8 h-8 animate-pulse mb-2 text-accent" /><p className="text-xs font-bold animate-pulse uppercase tracking-widest">La IA está analizando los datos multi-tienda...</p></div>) : (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-300"><SearchIcon className="w-10 h-10 mb-2 opacity-20" /><p className="text-xs italic">Escribe una pregunta para obtener un resumen detallado del periodo filtrado.</p></div>)}</div></div>
                     )}
                     </div>
                  </div>
@@ -692,7 +653,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-      {/* PRICE ANALYSIS SECTION */}
       <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Análisis de Precios y Diferencias</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} /></div>
         {isPriceAnalysisVisible && (
@@ -700,7 +660,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-      {/* Historical Sales Table */}
       <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} /></div>{isSalesHistoryVisible && (<div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"><div className="relative"><input type="text" placeholder="Factura, cliente, producto..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" /><div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div></div><select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select><select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todas las categorías</option>{categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); setEditingSale(transaction as Sale); }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>{isAdmin && transaction.transactionType === 'sale' && (<button onClick={(e) => { e.stopPropagation(); onDeleteSale(transaction.id); }} className="text-gray-500 hover:text-red-500 p-1.5 rounded-full hover:bg-red-100 transition-colors" title="Eliminar Venta"><TrashIcon className="w-4 h-4" /></button>)}</div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u</p></div></div>))}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3><div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
