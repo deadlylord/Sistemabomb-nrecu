@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
 import ProductGrid from './ProductGrid';
@@ -79,8 +78,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
-    props.onProcessSale(saleData, saleDate);
+  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, selectedDate: Date) => {
+    const now = new Date();
+    const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
+    props.onProcessSale(saleData, finalDate);
     setCustomerInfo(null);
   };
 
@@ -89,8 +90,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleCreateLayawayTransaction = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
-    props.onCreateLayaway(customerName, customerPhone, invoiceNumber, seller, initialPayment, saleDate, isPreOrder, description);
+  const handleCreateLayawayTransaction = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, selectedDate: Date, isPreOrder: boolean, description?: string) => {
+    const now = new Date();
+    const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
+    props.onCreateLayaway(customerName, customerPhone, invoiceNumber, seller, initialPayment, finalDate, isPreOrder, description);
     setCustomerInfo(null);
   };
 
@@ -136,8 +139,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsMobileCartOpen(false);
   };
 
-  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
-      handleProcessSaleTransaction(saleData, saleDate);
+  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, currentSaleDate: Date) => {
+      handleProcessSaleTransaction(saleData, currentSaleDate);
       setIsMobileCartOpen(false);
   };
 
@@ -151,8 +154,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsMobileCartOpen(true); 
   };
 
-  const handleCreateLayawayWithClose = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
-      handleCreateLayawayTransaction(customerName, customerPhone, invoiceNumber, seller, initialPayment, saleDate, isPreOrder, description);
+  const handleCreateLayawayWithClose = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, currentSaleDate: Date, isPreOrder: boolean, description?: string) => {
+      handleCreateLayawayTransaction(customerName, customerPhone, invoiceNumber, seller, initialPayment, currentSaleDate, isPreOrder, description);
       setIsMobileCartOpen(false);
   };
 
