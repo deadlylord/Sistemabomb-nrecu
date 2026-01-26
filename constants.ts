@@ -22,10 +22,32 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.9.9',
+    date: '2024-06-10',
+    description: 'Informes Contables Avanzados con IA',
+    isCurrent: true,
+    changes: [
+      'IA Financiera Completa: El contador ahora analiza el valor del inventario actual y el histórico de compras del mes.',
+      'Reportes Estructurados: Botones para generar automáticamente PyG (Pérdidas y Ganancias), Balance General y Flujo de Caja.',
+      'Análisis de Activos: El sistema ahora incluye el valor de la mercancía en bodega como parte del patrimonio del negocio.',
+      'Trazabilidad de Inversión: La IA detecta la relación entre compras de mercancía y flujo de caja operativo.'
+    ]
+  },
+  {
+    version: '2.9.8',
+    date: '2024-06-09',
+    description: 'Chat Persistente con Contador IA',
+    changes: [
+      'Persistencia de Memoria: El historial de conversación con el Contador Jefe IA ahora se guarda automáticamente en el navegador.',
+      'Continuidad Operativa: Puedes navegar entre diferentes pestañas o refrescar la página sin perder el hilo del análisis financiero actual.',
+      'Gestión de Memoria: Opción de reinicio de chat para limpiar el historial guardado y comenzar una nueva auditoría desde cero.',
+      'Sincronización de Contexto: La IA mantiene el contexto de los números actuales incluso si retomas la conversación días después.'
+    ]
+  },
+  {
     version: '2.9.7',
     date: '2024-06-08',
     description: 'Nómina Flexible y Manual',
-    isCurrent: true,
     changes: [
       'Ingreso Manual de Destinatarios: Ahora puedes escribir el nombre de la persona a pagar si no se encuentra en la base de datos (ej. personal nuevo o externo).',
       'Agregado de Días Manuales: Nueva función para insertar cualquier fecha específica en la liquidación de nómina sin depender de inicios de sesión previos.',
@@ -53,147 +75,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Cálculo inteligente de jornada: Reconoce automáticamente el horario estándar de lunes a jueves (10:30am - 8:30pm) y fines de semana (10:00am - 8:30pm).',
       'Ajuste de pago proporcional: Si un empleado trabaja menos de su jornada asignada, el sistema calcula el valor exacto basado en la fracción de tiempo laborado.',
       'Mejor trazabilidad: Los comprobantes de pago ahora detallan los rangos horarios liquidados por cada día.'
-    ]
-  },
-  {
-    version: '2.9.4',
-    date: '2024-06-05',
-    description: 'Liquidación por Horas en Nómina',
-    changes: [
-      'Nueva funcionalidad de pago por horas: Ahora puedes ingresar el total de horas trabajadas por día en lugar de solo fracciones manuales.',
-      'Cálculo basado en jornada estándar de 8 horas: El sistema divide automáticamente el valor del día por las horas laboradas para una precisión total.',
-      'Soporte para turnos extendidos: Permite pagar más de un día si el empleado trabajó horas extra en una jornada.',
-      'Interfaz de usuario optimizada para el registro rápido de tiempo por día seleccionado.'
-    ]
-  },
-  {
-    version: '2.9.3',
-    date: '2024-06-04',
-    description: 'Pago de Jornadas Parciales en Nómina',
-    changes: [
-      'Nueva funcionalidad para pagar fracciones de día: Ahora puedes ajustar si un día se paga completo (1.0), medio día (0.5) o cualquier otra proporción.',
-      'Cálculo de sueldo básico ajustado automáticamente según la carga horaria de cada día seleccionado.',
-      'Visualización clara de la proporción de jornada en el resumen de liquidación.',
-      'Mantenimiento de la integridad de los registros de asistencia con soporte para turnos incompletos.'
-    ]
-  },
-  {
-    version: '2.9.2',
-    date: '2024-06-03',
-    description: 'Optimización de Historial de Compras',
-    changes: [
-      'Nueva columna "Proveedor" en la tabla de historial de compras para una mejor trazabilidad.',
-      'Sistema de ordenamiento por columnas en el historial: Ahora puedes ordenar por fecha, nombre, proveedor, cantidad o costo total.',
-      'Mejora visual en los encabezados de tabla con indicadores de dirección de orden.',
-      'Mantenimiento de la capitalización automática en tiempo real en el buscador de productos.'
-    ]
-  },
-  {
-    version: '2.9.1',
-    date: '2024-06-02',
-    description: 'Ajuste de Precisión en Búsqueda',
-    changes: [
-      'Eliminación de Normalización de Texto: Se retiró el formateo automático a "Mayúsculas Cada Palabra" para evitar que los productos no coincidan con la base de datos existente.',
-      'Sincronización de Compras Multi-tienda Mejorada: Ahora el sistema reconoce los productos exactamente por su nombre literal, asegurando que la herencia de fotos y descripciones funcione correctamente.',
-      'Mejora en creación manual: Los productos creados mantienen el formato de texto exacto ingresado por el usuario.'
-    ]
-  },
-  {
-    version: '2.9.0',
-    date: '2024-06-01',
-    description: 'Sincronización Total de Metadatos',
-    changes: [
-      'Herencia Inteligente: Al comprar o crear un producto que ya existe en otra sede, se copia automáticamente su foto, descripción y categoría.',
-      'Sincronización de Imágenes en Tiempo Real: Al subir una foto desde POS o Compras, se actualiza globalmente en todas las tiendas con el mismo producto.',
-      'Mejora en Compras Multi-tienda: Detección global de productos para evitar fichas vacías al ingresar mercancía.',
-      'Corrección en carga de archivos multimedia desde el historial de compras.'
-    ]
-  },
-  {
-    version: '2.8.0',
-    date: '2024-05-31',
-    description: 'Gestión Cromática de Sedes',
-    changes: [
-      'Identificación Visual en Compras: Cada tienda ahora tiene un color asignado en el lote de compras para evitar errores de digitación entre sedes.',
-      'Bordes e indicadores dinámicos basados en el color de acento de cada tienda.',
-      'Sincronización mejorada de cantidades en lote con botones de copia rápida por columna.',
-      'Mejoras en la legibilidad de tablas en dispositivos móviles.'
-    ]
-  },
-  {
-    version: '2.7.0',
-    date: '2024-05-30',
-    description: 'Estabilidad y Sincronización Multimedia',
-    changes: [
-      'Corrección Crítica: Se resolvió el error de carga infinita que impedía entrar a la base de datos al iniciar sesión.',
-      'Sincronización de Imágenes: Las fotos editadas o subidas desde cualquier tienda ahora se actualizan automáticamente en todas las sedes.',
-      'Normalización de Datos: El sistema ahora es más inteligente al detectar productos existentes, ignorando espacios dobles y variaciones de mayúsculas.',
-      'Mejora en Atributos Globales: Al cambiar la descripción o categoría de un producto, el cambio se aplica globalmente en toda la cadena.'
-    ]
-  },
-  {
-    version: '2.6.0',
-    date: '2024-05-29',
-    description: 'Sincronización Inteligente y Experiencia Visual',
-    changes: [
-      'Ampliación de imágenes (Zoom): Ahora puedes ver las fotos de los productos en detalle directamente desde el buscador de ventas y compras.',
-      'Sincronización rápida en compras: Nuevos botones para copiar unidades, costos y precios a todas las sedes activas con un solo clic.',
-      'Normalización automática de nombres: El sistema ahora detecta productos existentes sin importar si escribes en mayúsculas o minúsculas, evitando duplicados.',
-      'Mejora en la consistencia de datos global para productos compartidos entre tiendas.'
-    ]
-  },
-  {
-    version: '2.5.0',
-    date: '2024-05-28',
-    description: 'Optimización de Compras y Gestión Visual',
-    changes: [
-      'Nuevo modo de "Compra por Lotes": Agrega múltiples productos de un mismo proveedor antes de procesar.',
-      'Buscador de productos en Compras ahora incluye miniaturas visuales.',
-      'Lightbox de expansión para fotos de productos en todas las listas.',
-      'Acceso directo a edición de fotos desde el historial de compras.',
-      'Optimización de carga de imágenes para ahorro de datos móviles.'
-    ]
-  },
-  {
-    version: '2.4.0',
-    date: '2024-05-24',
-    description: 'Sistema de Versiones e Interfaz Optimizada',
-    changes: [
-      'Implementación de sistema de historial de versiones (Changelog).',
-      'Optimización del buscador en Compras: Normalización de espacios y priorización de tienda actual.',
-      'Mejora en Novedades: Buscador predictivo para traslados de inventario.',
-      'Corrección de error de sintaxis en resolución de incidencias.',
-      'Mejora visual en badges de estado y notificaciones.'
-    ]
-  },
-  {
-    version: '2.3.0',
-    date: '2024-05-20',
-    description: 'Gestión Avanzada de Novedades',
-    changes: [
-      'Nuevo flujo de aprobación de prendas dañadas.',
-      'Sincronización de stock en cambios de facturas.',
-      'Notificaciones persistentes de tareas pendientes.'
-    ]
-  },
-  {
-    version: '2.2.0',
-    date: '2024-05-15',
-    description: 'Integración Multi-tienda',
-    changes: [
-      'Compras globales: Registro de productos en múltiples sedes simultáneamente.',
-      'Módulo de traslados entre tiendas con historial de saldos.',
-      'Buscador global de inventario para administradores.'
-    ]
-  },
-  {
-    version: '2.1.0',
-    date: '2024-05-01',
-    description: 'Estadísticas e IA',
-    changes: [
-      'Dashboard con gráficos de rendimiento mensual.',
-      'Street AI: Generación de descripciones y análisis de rentabilidad.',
-      'Contador inteligente para gestión de gastos y nómina.'
     ]
   }
 ];

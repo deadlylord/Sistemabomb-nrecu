@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase } from '../types';
 import { formatCOP } from '../constants';
-import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon } from './Icons';
+import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
 
 interface SmartAccountantViewProps {
@@ -11,6 +10,8 @@ interface SmartAccountantViewProps {
   expenses: Expense[];
   expenseCategories: ExpenseCategory[];
   payrollHistory: PayrollRecord[];
+  inventory: Product[];
+  purchases: Purchase[];
   currentStore: Store | undefined;
   currentUser: Seller;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
@@ -38,7 +39,7 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
             .replace(/<\/li><br \/>/g, '</li>');
     }, [content]);
 
-    return <div className="prose dark:prose-invert max-w-none text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+    return <div className="prose dark:prose-invert max-none text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 
 const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
@@ -47,6 +48,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   expenses,
   expenseCategories,
   payrollHistory,
+  inventory,
+  purchases,
   currentStore,
   currentUser,
   onAddExpense,
@@ -71,11 +74,19 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState('');
 
-  // Chat State
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Chat State with Persistence
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+      const saved = localStorage.getItem('accountingChatHistory');
+      return saved ? JSON.parse(saved) : [];
+  });
   const [userInput, setUserInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('accountingChatHistory', JSON.stringify(messages));
+  }, [messages]);
 
   // Date constants
   const now = new Date();
@@ -101,7 +112,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   // Scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isAiLoading]);
+  }, [messages, isAiLoading, activeTab]);
 
   const stats = useMemo(() => {
     const firstDay = new Date(currentYear, currentMonthIdx, 1);
@@ -137,13 +148,32 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         .filter(p => new Date(p.paidAt) >= firstDay)
         .reduce((sum, p) => sum + p.totalToPay, 0);
 
+    const monthlyPurchases = purchases
+        .filter(p => new Date(p.createdAt) >= firstDay)
+        .reduce((sum, p) => sum + p.totalCost, 0);
+
     const totalExpenses = monthlyManualExpenses + monthlyPayroll;
     const grossProfit = totalRevenue - monthlyCogs;
     const netProfit = grossProfit - totalExpenses;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    
+    // Asset info
+    const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
 
-    return { totalRevenue, monthlyCogs, grossProfit, totalExpenses, netProfit, margin, monthlyManualExpenses, monthlyPayroll };
-  }, [sales, layaways, expenses, payrollHistory, currentMonthIdx, currentYear]);
+    return { 
+        totalRevenue, 
+        monthlyCogs, 
+        grossProfit, 
+        totalExpenses, 
+        netProfit, 
+        margin, 
+        monthlyManualExpenses, 
+        monthlyPayroll,
+        monthlyPurchases,
+        totalInventoryValue,
+        expenseDetails: expenses.filter(e => !e.isRecurring && new Date(e.date) >= firstDay).map(e => ({ desc: e.description, amount: e.amount, cat: e.category }))
+    };
+  }, [sales, layaways, expenses, payrollHistory, inventory, purchases, currentMonthIdx, currentYear]);
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,6 +272,26 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   };
 
   // --- Chat Functions ---
+  const requestSpecialReport = async (query: string) => {
+    setIsAiLoading(true);
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: query }];
+    setMessages(newMessages);
+
+    try {
+        const apiHistory = messages.map(msg => ({
+            role: msg.role,
+            parts: [{ text: msg.content }]
+        }));
+
+        const response = await getAccountingChatResponse(stats, apiHistory, query);
+        setMessages([...newMessages, { role: 'model', content: response }]);
+    } catch (error) {
+        setMessages([...newMessages, { role: 'model', content: "Error al generar el reporte solicitado." }]);
+    } finally {
+        setIsAiLoading(false);
+    }
+  }
+
   const handleStartAudit = async () => {
     setIsAiLoading(true);
     const initialQuery = "Haz una auditoría detallada de mis números de este mes y dame consejos estratégicos para mejorar.";
@@ -288,9 +338,10 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   };
 
   const handleResetChat = () => {
-      if (window.confirm("¿Deseas reiniciar la conversación con el contador?")) {
+      if (window.confirm("¿Deseas reiniciar la conversación con el contador? Esto borrará el historial persistente.")) {
           setMessages([]);
           setUserInput('');
+          localStorage.removeItem('accountingChatHistory');
       }
   }
 
@@ -339,14 +390,14 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 </div>
               </div>
               <div className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/10 dark:to-gray-800 p-5 rounded-2xl border border-orange-100 dark:border-orange-800/30 shadow-sm">
-                <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase mb-2">Costo Mercancía</p>
-                <p className="text-3xl font-black text-orange-600">{formatCOP(stats.monthlyCogs)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">Lo que te costó lo vendido</p>
+                <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase mb-2">Inversión en Compras</p>
+                <p className="text-3xl font-black text-orange-600">{formatCOP(stats.monthlyPurchases)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Nuevos ingresos de mercancía</p>
               </div>
-              <div className="bg-gradient-to-br from-red-50 to-white dark:from-red-900/10 dark:to-gray-800 p-5 rounded-2xl border border-red-100 dark:border-red-800/30 shadow-sm">
-                <p className="text-xs font-black text-red-600 dark:text-red-400 uppercase mb-2">Gastos Totales</p>
-                <p className="text-3xl font-black text-red-600">{formatCOP(stats.totalExpenses)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">Gastos Mes + Nómina</p>
+              <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-gray-800 p-5 rounded-2xl border border-blue-100 dark:border-blue-800/30 shadow-sm">
+                <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase mb-2">Valor de Inventario</p>
+                <p className="text-3xl font-black text-blue-600">{formatCOP(stats.totalInventoryValue)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Activo actual en bodega</p>
               </div>
               <div className="bg-accent/5 p-5 rounded-2xl border-2 border-accent/20 shadow-lg ring-4 ring-accent/5">
                 <p className="text-xs font-black text-accent uppercase mb-2">Utilidad Neta</p>
@@ -359,7 +410,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 <div className="bg-gray-50 dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                     <h3 className="font-black text-lg mb-6 flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <ChartBarIcon className="w-6 h-6 text-accent"/> 
-                        Desglose Operativo
+                        Desglose de Costos de Operación
                     </h3>
                     <div className="space-y-5">
                         <div className="space-y-2">
@@ -380,6 +431,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                 <div className="bg-purple-500 h-full rounded-full transition-all duration-1000" style={{width: `${(stats.monthlyPayroll / (stats.totalExpenses || 1)) * 100}%`}}></div>
                             </div>
                         </div>
+                        <p className="text-xs text-gray-400 italic pt-2">Total gastos operativos: {formatCOP(stats.totalExpenses)}</p>
                     </div>
                 </div>
                 
@@ -387,12 +439,12 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                     <div className="absolute -right-10 -top-10 opacity-5">
                         <SparklesIcon className="w-40 h-40 text-accent" />
                     </div>
-                    <p className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-2">Margen Neto de Rentabilidad</p>
+                    <p className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-2">Rentabilidad Operativa</p>
                     <p className={`text-7xl font-black ${stats.margin > 20 ? 'text-green-500' : 'text-accent'} tracking-tighter`}>
                         {stats.margin.toFixed(1)}<span className="text-3xl">%</span>
                     </p>
                     <div className="mt-4 px-4 py-1 bg-white dark:bg-gray-800 rounded-full text-xs font-bold text-gray-500 shadow-sm border border-gray-100 dark:border-gray-700">
-                        {stats.margin > 20 ? '💎 Excelente' : stats.margin > 10 ? '✅ Saludable' : '🔥 Alerta Costos'}
+                        {stats.margin > 20 ? '💎 Negocio Brillante' : stats.margin > 10 ? '✅ En buen camino' : '🔥 Revisar estructura'}
                     </div>
                 </div>
             </div>
@@ -577,24 +629,29 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         )}
 
         {activeTab === 'ai' && (
-          <div className="animate-fade-in flex flex-col h-[700px]">
+          <div className="animate-fade-in flex flex-col h-[800px]">
             <div className="bg-gradient-to-br from-slate-900 to-accent/20 rounded-3xl border border-white/10 shadow-2xl flex flex-col h-full overflow-hidden">
                 {/* Header del Chat */}
-                <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/20 backdrop-blur-md">
+                <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-black/20 backdrop-blur-md gap-4">
                     <div className="flex items-center gap-4">
                         <div className="p-2 bg-accent/20 rounded-xl">
                             <SparklesIcon className="w-6 h-6 text-accent" />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-white tracking-tight">Conversación con el Contador IA</h3>
-                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría en tiempo real</p>
+                            <h3 className="text-xl font-black text-white tracking-tight">Consultoría Contable IA</h3>
+                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría Financiera Integral</p>
                         </div>
                     </div>
-                    {messages.length > 0 && (
-                        <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación">
-                            <CrossIcon className="w-5 h-5" />
-                        </button>
-                    )}
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <button onClick={() => requestSpecialReport("Genera un Estado de Resultados (PyG) detallado de este mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">PyG</button>
+                        <button onClick={() => requestSpecialReport("Genera un Balance General proyectado a hoy.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-purple-600 hover:text-white transition-all">Balance</button>
+                        <button onClick={() => requestSpecialReport("Analiza el Flujo de Caja (entradas vs salidas reales) del mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-green-600/20 text-green-400 border border-green-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">Flujo</button>
+                        {messages.length > 0 && (
+                            <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación">
+                                <CrossIcon className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Área de Mensajes */}
@@ -605,18 +662,22 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                 <SparklesIcon className="w-12 h-12 text-accent" />
                             </div>
                             <div className="max-w-md">
-                                <h4 className="text-white font-bold text-lg mb-2">¿Listo para analizar este mes?</h4>
-                                <p className="text-gray-400 text-sm mb-8">El contador analizará tus ingresos, costos y gastos de {currentMonthName} para darte una perspectiva experta.</p>
-                                <button onClick={handleStartAudit} className="bg-accent text-white font-black px-10 py-4 rounded-2xl hover:scale-105 transition-all shadow-xl shadow-accent/20 active:scale-95 uppercase tracking-widest">
-                                    Iniciar Auditoría del Mes
-                                </button>
+                                <h4 className="text-white font-bold text-lg mb-2">Análisis Financiero Especializado</h4>
+                                <p className="text-gray-400 text-sm mb-8">El contador IA analizará tus ventas, el valor de tu inventario, tus compras y gastos para darte reportes reales.</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button onClick={handleStartAudit} className="col-span-2 bg-accent text-white font-black px-10 py-4 rounded-2xl hover:scale-105 transition-all shadow-xl shadow-accent/20 active:scale-95 uppercase tracking-widest">
+                                        Auditoría General del Mes
+                                    </button>
+                                    <button onClick={() => requestSpecialReport("Genera un Estado de Resultados (PyG) detallado.")} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Ver PyG (Ganancias)</button>
+                                    <button onClick={() => requestSpecialReport("Analiza mi patrimonio actual: Caja + Valor de Inventario.")} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Balance de Activos</button>
+                                </div>
                             </div>
                         </div>
                     ) : (
                         <>
                             {messages.map((msg, index) => (
                                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                                    <div className={`max-w-[85%] p-5 rounded-3xl shadow-lg ${
+                                    <div className={`max-w-[90%] p-5 rounded-3xl shadow-lg ${
                                         msg.role === 'user' 
                                             ? 'bg-accent text-white rounded-tr-none' 
                                             : 'bg-white/10 dark:bg-slate-800/80 backdrop-blur-md text-white rounded-tl-none border border-white/10'
@@ -624,7 +685,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                         <div className="flex items-center gap-2 mb-2 opacity-60">
                                             {msg.role === 'model' && <SparklesIcon className="w-3 h-3 text-accent" />}
                                             <span className="text-[10px] font-black uppercase tracking-tighter">
-                                                {msg.role === 'user' ? currentUser.name : 'Contador Jefe IA'}
+                                                {msg.role === 'user' ? currentUser.name : 'Director Financiero IA'}
                                             </span>
                                         </div>
                                         {msg.role === 'model' ? (
@@ -643,7 +704,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                             <div className="w-2 h-2 bg-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                                             <div className="w-2 h-2 bg-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                                         </div>
-                                        <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">Contador analizando...</span>
+                                        <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">Calculando balances contables...</span>
                                     </div>
                                 </div>
                             )}
@@ -660,7 +721,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                 type="text" 
                                 value={userInput}
                                 onChange={e => setUserInput(e.target.value)}
-                                placeholder="Pregunta algo sobre tus finanzas..."
+                                placeholder="Pide un reporte contable o haz una consulta..."
                                 className="flex-grow bg-white/5 border border-white/10 rounded-2xl p-4 text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-accent transition-all font-medium"
                                 disabled={isAiLoading}
                             />

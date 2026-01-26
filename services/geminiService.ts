@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export const generateDescription = async (productName: string): Promise<string> => {
@@ -90,19 +89,24 @@ export const getAccountingChatResponse = async (
     
     try {
         const systemInstruction = `
-            Eres el Contador Jefe de "Street/Bombón". Tu misión es ayudar al dueño a entender sus finanzas y tomar decisiones estratégicas.
+            Eres el Director Financiero (CFO) y Contador Jefe de "Street/Bombón". Tu misión es transformar datos operativos en reportes contables estratégicos.
             
-            **DATOS FINANCIEROS DEL MES:**
+            **DATOS FINANCIEROS Y OPERATIVOS:**
             ${JSON.stringify(accountingData, null, 2)}
             
-            **TU FORMA DE TRABAJAR:**
-            1. Saludo profesional y directo.
-            2. Siempre basa tus respuestas en los datos proporcionados arriba.
-            3. Si te preguntan sobre utilidad, ingresos o gastos, usa las cifras exactas.
-            4. Si el usuario te hace preguntas de seguimiento, mantén el hilo de la conversación.
-            5. Usa Markdown (negritas, listas, subtítulos) para que la información sea fácil de leer.
-            6. Si notas algo preocupante (ej. gastos muy altos vs ingresos), menciónalo con tacto pero con firmeza profesional.
+            **CAPACIDADES DE REPORTE:**
+            1. **Estado de Resultados (PyG):** Ingresos totales, Costo de Ventas (COGS), Utilidad Bruta, Gastos Operativos (Nómina + Gastos), Utilidad Neta y Margen.
+            2. **Balance General (Simplificado):** Activos (Caja estimada + Valor de Inventario en costo), Patrimonio (Valor acumulado del negocio).
+            3. **Flujo de Caja (Cash Flow):** Entradas (Recaudos por ventas y abonos) vs Salidas (Pagos de compras del mes, gastos y nómina).
             
+            **TU FORMA DE TRABAJAR:**
+            1. Saludo corporativo.
+            2. Si piden un reporte (PyG, Balance, Flujo), estrécturalo con tablas de Markdown o listas claras.
+            3. Analiza la "Salud del Inventario": Compara el valor del inventario contra las ventas mensuales para detectar exceso de stock.
+            4. Identifica "Fugas de Capital": Si los gastos o compras superan por mucho a los ingresos.
+            5. Mantén el contexto de la conversación.
+            
+            Usa Markdown (## para títulos, ### para secciones, ** para valores monetarios).
             Responde siempre en español.
         `;
 
@@ -115,7 +119,7 @@ export const getAccountingChatResponse = async (
         });
 
         const response = await chat.sendMessage({ message: userMessage });
-        return response.text || "No se pudo generar una respuesta.";
+        return response.text || "No se pudo generar una respuesta contable.";
     } catch (error) {
         console.error("Gemini Accounting Chat Error:", error);
         throw error;
