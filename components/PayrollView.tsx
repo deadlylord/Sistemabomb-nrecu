@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
 import { formatCOP } from '../constants';
-import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon } from './Icons';
+import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon, EditIcon, CheckIcon, PlusIcon } from './Icons';
 
 interface PayrollViewProps {
   sellers: Seller[];
@@ -20,7 +19,7 @@ interface PayrollResult {
   period: string;
   paymentType: 'nomina' | 'admin' | 'utilidad';
   baseSalary: number;
-  daysWorked: number;
+  daysWorked: number; // This represents the weighted sum of ratios
   adjustedBase: number;
   totalUnitsSold: number;
   totalCommissionableUnits: number;
@@ -34,6 +33,10 @@ interface DailyBreakdown {
   unitsSold: number;
   commissionableUnits: number;
   commissionEarned: number;
+  workRatio: number;
+  hoursWorked: number;
+  startTime: string;
+  endTime: string;
 }
 
 const PayrollReceiptModal: React.FC<{
@@ -108,6 +111,8 @@ const PayrollReceiptModal: React.FC<{
 
 const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, currentUser, currentStore }) => {
   const [selectedSeller, setSelectedSeller] = useState('');
+  const [isManualName, setIsManualName] = useState(false);
+  const [manualName, setManualName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [baseSalary, setBaseSalary] = useState(() => localStorage.getItem('payrollBaseSalary') || '1500000');
@@ -123,11 +128,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
 
-  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; startTime?: string; endTime?: string; checked: boolean }[]>([]);
+  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; startTime: string; endTime: string; checked: boolean; }[]>([]);
   const [deductions, setDeductions] = useState<{ reason: string; amount: number }[]>([]);
   const [bonuses, setBonuses] = useState<{ reason: string; amount: number }[]>([]);
   const [newDeduction, setNewDeduction] = useState({ reason: '', amount: '' });
   const [newBonus, setNewBonus] = useState({ reason: '', amount: '' });
+  
+  const [extraDate, setExtraDate] = useState('');
 
   const COMMISSION_FLOOR = 0; 
   const COMMISSION_PER_UNIT = 1000;
@@ -142,7 +149,24 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     setDeductions([]);
     setBonuses([]);
     setManualAmount('');
-  }, [selectedSeller, startDate, endDate, paymentType]);
+  }, [selectedSeller, manualName, startDate, endDate, paymentType]);
+
+  const getStandardSchedule = (dateStr: string) => {
+    const date = new Date(dateStr + 'T12:00:00');
+    const day = date.getDay(); // 0=Sun, 1=Mon, ..., 4=Thu, 5=Fri, 6=Sat
+    // Lunes a Jueves: 10:30am a 8:30pm (10 horas)
+    if (day >= 1 && day <= 4) return { start: '10:30', end: '20:30', hours: 10 };
+    // Viernes, Sábado y Domingo: 10:00am a 8:30pm (10.5 horas)
+    return { start: '10:00', end: '20:30', hours: 10.5 };
+  };
+
+  const calculateHoursDiff = (start: string, end: string) => {
+    const [sH, sM] = start.split(':').map(Number);
+    const [eH, eM] = end.split(':').map(Number);
+    const startDecimal = sH + sM / 60;
+    const endDecimal = eH + eM / 60;
+    return Math.max(0, endDecimal - startDecimal);
+  };
 
   const setFortnight = (fortnight: 'first' | 'second') => {
     const today = new Date();
@@ -170,8 +194,9 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   };
 
   const handleLoadDays = () => {
-    if (!selectedSeller || !startDate || !endDate) {
-      alert('Por favor, selecciona un destinatario y un periodo.');
+    const currentName = isManualName ? manualName : selectedSeller;
+    if (!currentName || !startDate || !endDate) {
+      alert('Por favor, ingresa el destinatario y el periodo.');
       return;
     }
 
@@ -187,7 +212,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     loginHistory
       .filter(record => {
         const recordDate = new Date(record.date);
-        return record.sellerName === selectedSeller && recordDate >= startFilterDate && recordDate <= endFilterDate;
+        return record.sellerName === currentName && recordDate >= startFilterDate && recordDate <= endFilterDate;
       })
       .forEach(record => {
         const dateStr = toLocalDateString(new Date(record.date));
@@ -201,7 +226,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
     sales.filter(sale => {
         const saleDate = new Date(sale.createdAt);
-        return !sale.layawayId && sale.seller === selectedSeller && saleDate >= startFilterDate && saleDate <= endFilterDate;
+        return !sale.layawayId && sale.seller === currentName && saleDate >= startFilterDate && saleDate <= endFilterDate;
     }).forEach(sale => {
         const dateStr = toLocalDateString(new Date(sale.createdAt));
         const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -210,7 +235,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
     layaways.filter(layaway => {
         const layawayDate = new Date(layaway.createdAt);
-        return layaway.status === 'active' && layaway.seller === selectedSeller && layawayDate >= startFilterDate && layawayDate <= endFilterDate;
+        return layaway.status === 'active' && layaway.seller === currentName && layawayDate >= startFilterDate && layawayDate <= endFilterDate;
     }).forEach(layaway => {
         const dateStr = toLocalDateString(new Date(layaway.createdAt));
         const layawayUnits = layaway.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -222,14 +247,10 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     const combinedDays = Array.from(allDates)
       .map(dateStr => {
         const dayLogins = loginsByDay.get(dateStr) || [];
-        let startTime, endTime;
-
-        if (dayLogins.length > 0) {
-          dayLogins.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          const timeFormat: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
-          startTime = new Date(dayLogins[0].date).toLocaleTimeString('es-CO', timeFormat);
-          endTime = new Date(dayLogins[dayLogins.length - 1].date).toLocaleTimeString('es-CO', timeFormat);
-        }
+        const sched = getStandardSchedule(dateStr);
+        // Default to standard schedule
+        let startTime = sched.start;
+        let endTime = sched.end;
 
         return {
           date: dateStr,
@@ -237,7 +258,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
           logins: dayLogins.map(l => new Date(l.date).toLocaleTimeString('es-CO')),
           startTime,
           endTime,
-          checked: dayLogins.length > 0
+          checked: true,
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -249,9 +270,33 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   const handleToggleDay = (date: string) => {
     setLoginDays(prev => prev.map(day => day.date === date ? { ...day, checked: !day.checked } : day));
   };
+
+  const handleUpdateTimes = (date: string, field: 'startTime' | 'endTime', value: string) => {
+    setLoginDays(prev => prev.map(day => day.date === date ? { ...day, [field]: value } : day));
+  };
   
+  const handleAddExtraDay = () => {
+    if (!extraDate) return;
+    if (loginDays.some(d => d.date === extraDate)) {
+        alert("Esta fecha ya está en la lista.");
+        return;
+    }
+    const sched = getStandardSchedule(extraDate);
+    const newDay = {
+        date: extraDate,
+        unitsSold: 0,
+        logins: [],
+        startTime: sched.start,
+        endTime: sched.end,
+        checked: true
+    };
+    setLoginDays(prev => [...prev, newDay].sort((a,b) => a.date.localeCompare(b.date)));
+    setExtraDate('');
+  };
+
   const handleCalculate = () => {
-    if (!selectedSeller) {
+    const currentName = isManualName ? manualName : selectedSeller;
+    if (!currentName) {
       alert('Por favor, selecciona un destinatario.');
       return;
     }
@@ -263,16 +308,23 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
             return;
         }
         const base = parseFloat(baseSalary);
-        const calculatedDaysWorked = checkedDays.length;
-
-        const dailyBreakdown = checkedDays.map(({ date, unitsSold }) => {
+        
+        const dailyBreakdown = checkedDays.map(({ date, unitsSold, startTime, endTime }) => {
             const commissionableUnits = Math.max(0, unitsSold - COMMISSION_FLOOR);
             const commissionEarned = commissionableUnits * COMMISSION_PER_UNIT;
+            const sched = getStandardSchedule(date);
+            const hoursWorked = calculateHoursDiff(startTime, endTime);
+            const workRatio = hoursWorked / sched.hours;
+            
             return {
-                date: new Date(date + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }),
+                date: new Date(date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' }),
                 unitsSold,
                 commissionableUnits,
-                commissionEarned
+                commissionEarned,
+                workRatio,
+                hoursWorked,
+                startTime,
+                endTime
             };
         });
 
@@ -280,18 +332,19 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
             acc.totalUnitsSold += day.unitsSold;
             acc.totalCommissionableUnits += day.commissionableUnits;
             acc.totalCommissionAmount += day.commissionEarned;
+            acc.totalWeightedDays += day.workRatio;
             return acc;
-        }, { totalUnitsSold: 0, totalCommissionableUnits: 0, totalCommissionAmount: 0 });
+        }, { totalUnitsSold: 0, totalCommissionableUnits: 0, totalCommissionAmount: 0, totalWeightedDays: 0 });
 
-        const adjustedBase = (base / 30) * calculatedDaysWorked;
+        const adjustedBase = (base / 30) * totals.totalWeightedDays;
         const totalToPay = adjustedBase + totals.totalCommissionAmount;
 
         setResult({
-            sellerName: selectedSeller,
+            sellerName: currentName,
             paymentType: 'nomina',
-            period: `${new Date(startDate + 'T00:00:00').toLocaleDateString()} - ${new Date(endDate + 'T00:00:00').toLocaleDateString()}`,
+            period: `${new Date(startDate + 'T12:00:00').toLocaleDateString()} - ${new Date(endDate + 'T12:00:00').toLocaleDateString()}`,
             baseSalary: base,
-            daysWorked: calculatedDaysWorked,
+            daysWorked: totals.totalWeightedDays,
             adjustedBase,
             totalUnitsSold: totals.totalUnitsSold,
             totalCommissionableUnits: totals.totalCommissionableUnits,
@@ -307,9 +360,9 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         }
 
         setResult({
-            sellerName: selectedSeller,
+            sellerName: currentName,
             paymentType: paymentType,
-            period: `${new Date(startDate + 'T00:00:00').toLocaleDateString()} - ${new Date(endDate + 'T00:00:00').toLocaleDateString()}`,
+            period: `${new Date(startDate + 'T12:00:00').toLocaleDateString()} - ${new Date(endDate + 'T12:00:00').toLocaleDateString()}`,
             baseSalary: amount,
             daysWorked: 0,
             adjustedBase: amount,
@@ -350,12 +403,18 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         setIsSaving(true);
         try {
             const checkedLoginDays = loginDays.filter(day => day.checked);
-            const loginAccesses = checkedLoginDays.map(day => ({ 
-                date: day.date, 
-                times: day.logins,
-                startTime: day.startTime,
-                endTime: day.endTime,
-            }));
+            const loginAccesses = checkedLoginDays.map(day => {
+                const sched = getStandardSchedule(day.date);
+                const hrs = calculateHoursDiff(day.startTime, day.endTime);
+                return { 
+                    date: day.date, 
+                    times: day.logins,
+                    startTime: day.startTime,
+                    endTime: day.endTime,
+                    hoursWorked: hrs,
+                    workRatio: hrs / sched.hours
+                };
+            });
 
             const finalData = {
               ...result,
@@ -368,16 +427,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
             };
 
             await onSavePayroll(finalData);
-
-            // Set receipt before clearing
             setReceiptToShow(finalData);
             
-            // Clear calculation state
             setResult(null);
             setLoginDays([]);
             setDeductions([]);
             setBonuses([]);
             setManualAmount('');
+            setManualName('');
             alert("Pago registrado correctamente.");
         } catch (error) {
             console.error("Error saving payroll:", error);
@@ -403,6 +460,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
       })
       .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
   }, [payrollHistory, historySearchTerm, historyStartDate, historyEndDate]);
+
+  const formatSimpleTime = (time: string) => {
+      if (!time) return '';
+      const [h, m] = time.split(':').map(Number);
+      const period = h >= 12 ? 'pm' : 'am';
+      const hours12 = h % 12 || 12;
+      return `${hours12}:${m.toString().padStart(2, '0')} ${period}`;
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -433,13 +498,31 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
             <div>
-              <label htmlFor="seller" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">
-                  {paymentType === 'utilidad' ? 'Socio / Dueño' : 'Destinatario'}
-              </label>
-              <select id="seller" value={selectedSeller} onChange={e => setSelectedSeller(e.target.value)} className="w-full bg-white dark:bg-primary p-2 rounded-md border border-gray-300 dark:border-gray-700">
-                <option value="" disabled>Selecciona...</option>
-                {sellers.filter(s => !s.isDisabled).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              </select>
+              <div className="flex justify-between items-center mb-1">
+                <label htmlFor="seller" className="block text-sm font-medium text-gray-500 dark:text-text-dark">
+                    {paymentType === 'utilidad' ? 'Socio / Dueño' : 'Destinatario'}
+                </label>
+                <button 
+                    onClick={() => { setIsManualName(!isManualName); setLoginDays([]); setResult(null); }}
+                    className="text-[10px] font-black text-accent uppercase hover:underline"
+                >
+                    {isManualName ? 'Usar Lista' : 'Ingreso Manual'}
+                </button>
+              </div>
+              {isManualName ? (
+                  <input 
+                    type="text"
+                    value={manualName}
+                    onChange={e => setManualName(e.target.value)}
+                    placeholder="Escribir nombre..."
+                    className="w-full bg-white dark:bg-primary p-2 rounded-md border border-accent/40 font-bold outline-none"
+                  />
+              ) : (
+                  <select id="seller" value={selectedSeller} onChange={e => setSelectedSeller(e.target.value)} className="w-full bg-white dark:bg-primary p-2 rounded-md border border-gray-300 dark:border-gray-700 font-bold">
+                    <option value="" disabled>Selecciona...</option>
+                    {sellers.filter(s => !s.isDisabled).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  </select>
+              )}
             </div>
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Periodo Correspondiente</label>
@@ -460,10 +543,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                     <label htmlFor="baseSalary" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Sueldo Básico Mensual</label>
                     <input type="number" id="baseSalary" value={baseSalary} onChange={e => setBaseSalary(e.target.value)} placeholder="1500000" className="w-full bg-white dark:bg-primary p-2 rounded-md border border-gray-300 dark:border-gray-700 font-bold"/>
                     </div>
-                    <div className="md:col-span-2 lg:col-span-2">
-                        <button onClick={handleLoadDays} className="w-full bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors shadow-md">
-                            Cargar Asistencia y Ventas
+                    <div className="md:col-span-2 lg:col-span-2 flex gap-2">
+                        <button onClick={handleLoadDays} className="flex-grow bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors shadow-md">
+                            Cargar Datos Automáticos
                         </button>
+                        <div className="flex gap-1 items-center bg-accent/10 p-1 rounded-lg border border-accent/20">
+                            <input type="date" value={extraDate} onChange={e => setExtraDate(e.target.value)} className="bg-white dark:bg-primary p-1.5 text-xs rounded border outline-none"/>
+                            <button onClick={handleAddExtraDay} className="bg-accent text-white p-1.5 rounded hover:bg-accent-hover" title="Agregar jornada manual"><PlusIcon className="w-4 h-4"/></button>
+                        </div>
                     </div>
                 </>
             ) : (
@@ -484,29 +571,63 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
         {loginDays.length > 0 && paymentType === 'nomina' && (
           <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-6">
-            <h3 className="text-lg font-bold text-gray-800 dark:text-text-light mb-2">Seleccionar Días Trabajados</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
-              {loginDays.map(day => (
-                <label key={day.date} className="flex flex-col p-3 bg-white dark:bg-secondary rounded-lg cursor-pointer border-2 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-sm">{new Date(day.date + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                    <input type="checkbox" checked={day.checked} onChange={() => handleToggleDay(day.date)} className="h-4 w-4 rounded text-accent focus:ring-accent"/>
+            <h3 className="text-lg font-bold text-gray-800 dark:text-text-light mb-2">Configurar Jornadas Seleccionadas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2">
+              {loginDays.map(day => {
+                const sched = getStandardSchedule(day.date);
+                const worked = calculateHoursDiff(day.startTime, day.endTime);
+                const ratio = worked / sched.hours;
+                
+                return (
+                <div key={day.date} className={`flex flex-col p-4 bg-white dark:bg-secondary rounded-lg border-2 transition-colors ${day.checked ? 'border-accent bg-accent/5 shadow-md' : 'border-transparent opacity-60'}`}>
+                  <div className="flex justify-between items-start mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer flex-grow">
+                        <input type="checkbox" checked={day.checked} onChange={() => handleToggleDay(day.date)} className="h-6 w-6 rounded text-accent focus:ring-accent border-2"/>
+                        <div>
+                            <p className="font-black text-sm uppercase">{new Date(day.date + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long' })}</p>
+                            <p className="text-xs text-gray-500">{new Date(day.date + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</p>
+                        </div>
+                    </label>
+                    <div className="text-right">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${ratio >= 1 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {ratio.toFixed(2)} DÍA
+                        </span>
+                        <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">{worked.toFixed(1)}h de {sched.hours}h</p>
+                    </div>
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-text-dark mt-1 font-bold">{day.unitsSold} uds vendidas</span>
-                  {day.startTime ? (
-                    <span className="text-[10px] text-blue-400 mt-1 font-mono">
-                        {day.startTime === day.endTime ? day.startTime : `${day.startTime} - ${day.endTime}`}
-                    </span>
-                  ) : (
-                    day.unitsSold > 0 && (
-                        <span className="text-[10px] text-yellow-500 mt-1 italic">(Ventas sin login)</span>
-                    )
+                  
+                  {day.checked && (
+                      <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700 mb-2">
+                          <div className="flex flex-col">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Entrada</label>
+                              <input 
+                                type="time" 
+                                value={day.startTime} 
+                                onChange={(e) => handleUpdateTimes(day.date, 'startTime', e.target.value)}
+                                className="bg-white dark:bg-primary border border-gray-200 dark:border-gray-700 rounded-lg p-1.5 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-accent"
+                              />
+                          </div>
+                          <div className="flex flex-col">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Salida</label>
+                              <input 
+                                type="time" 
+                                value={day.endTime} 
+                                onChange={(e) => handleUpdateTimes(day.date, 'endTime', e.target.value)}
+                                className="bg-white dark:bg-primary border border-gray-200 dark:border-gray-700 rounded-lg p-1.5 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-accent"
+                              />
+                          </div>
+                      </div>
                   )}
-                </label>
-              ))}
+
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] text-accent font-black uppercase">{day.unitsSold} uds vendidas</span>
+                    <button onClick={() => setLoginDays(prev => prev.filter(d => d.date !== day.date))} className="text-[10px] text-red-500 font-bold hover:underline">Quitar de lista</button>
+                  </div>
+                </div>
+              )})}
             </div>
-            <div className="flex justify-center mt-4">
-              <button onClick={handleCalculate} className="bg-accent text-white font-black py-3 px-12 rounded-xl transition-all duration-300 hover:scale-105 hover:bg-accent-hover shadow-lg shadow-accent/20 active:scale-95">
+            <div className="flex justify-center mt-6">
+              <button onClick={handleCalculate} className="bg-accent text-white font-black py-4 px-16 rounded-2xl transition-all duration-300 hover:scale-105 hover:bg-accent-hover shadow-xl shadow-accent/20 active:scale-95 uppercase tracking-widest">
                 GENERAR PRE-NÓMINA
               </button>
             </div>
@@ -524,11 +645,30 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                 <div>
                     {result.paymentType === 'nomina' ? (
                         <>
-                            <h4 className="text-sm font-black text-gray-500 uppercase tracking-widest mb-3">Detalle de Ventas</h4>
-                            <div className="overflow-x-auto max-h-96 border border-gray-200 dark:border-gray-700 rounded-lg shadow-inner">
-                                <table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800 sticky top-0"><tr><th className="p-2 text-xs font-black uppercase">Fecha</th><th className="p-2 text-xs font-black uppercase text-center">Vtas</th><th className="p-2 text-xs font-black uppercase text-right">Comisión</th></tr></thead>
-                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">{result.dailyBreakdown.map((day, index) => (<tr key={index} className="hover:bg-accent/5"><td className="p-2 text-xs font-medium">{day.date}</td><td className="p-2 text-center text-xs font-black text-accent">{day.unitsSold}</td><td className={`p-2 text-right text-xs font-bold text-green-600`}>{formatCOP(day.commissionEarned)}</td></tr>))
-                                }</tbody></table>
+                            <h4 className="text-sm font-black text-gray-500 uppercase tracking-widest mb-3">Detalle de Ventas y Rangos Horarios</h4>
+                            <div className="overflow-x-auto max-h-[400px] border border-gray-200 dark:border-gray-700 rounded-lg shadow-inner">
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                                        <tr>
+                                            <th className="p-2 text-xs font-black uppercase">Fecha</th>
+                                            <th className="p-2 text-xs font-black uppercase text-center">Horario</th>
+                                            <th className="p-2 text-xs font-black uppercase text-center">Factor</th>
+                                            <th className="p-2 text-xs font-black uppercase text-right">Comisión</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                        {result.dailyBreakdown.map((day, index) => (
+                                            <tr key={index} className="hover:bg-accent/5">
+                                                <td className="p-2 text-xs font-medium">{day.date}</td>
+                                                <td className="p-2 text-center text-[10px] font-bold text-gray-500">
+                                                    {formatSimpleTime(day.startTime)} - {formatSimpleTime(day.endTime)}
+                                                </td>
+                                                <td className="p-2 text-center text-xs font-black text-accent">{day.workRatio.toFixed(2)}</td>
+                                                <td className={`p-2 text-right text-xs font-bold text-green-600`}>{formatCOP(day.commissionEarned)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </>
                     ) : (
@@ -545,7 +685,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                     <div className="space-y-3 bg-gray-50 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-700">
                         {result.paymentType === 'nomina' ? (
                             <>
-                                <div className="flex justify-between items-center text-sm font-bold"><span className="text-gray-500">Días Trabajados ({result.daysWorked}):</span><span className="text-gray-800 dark:text-text-light">{formatCOP(result.adjustedBase)}</span></div>
+                                <div className="flex justify-between items-center text-sm font-bold"><span className="text-gray-500">Jornadas Pagadas ({result.daysWorked.toFixed(2)} días):</span><span className="text-gray-800 dark:text-text-light">{formatCOP(result.adjustedBase)}</span></div>
                                 <div className="flex justify-between items-center text-sm font-bold"><span className="text-gray-500">Total Comisiones ({result.totalUnitsSold} uds):</span><span className="text-green-600 font-black">{formatCOP(result.commissionAmount)}</span></div>
                             </>
                         ) : (
@@ -630,7 +770,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                                 <h4 className="font-black text-center mb-3 text-gray-400 text-xs uppercase tracking-widest">Resumen del Pago</h4>
                                 {record.paymentType === 'nomina' ? (
                                     <>
-                                        <div className="flex justify-between"><span>Sueldo Base Ajustado ({record.daysWorked} días):</span> <span>{formatCOP(record.adjustedBase)}</span></div>
+                                        <div className="flex justify-between"><span>Sueldo Base Ajustado ({record.daysWorked.toFixed(2)} días):</span> <span>{formatCOP(record.adjustedBase)}</span></div>
                                         <div className="flex justify-between"><span>Comisiones ({record.totalUnitsSold} uds):</span> <span className="text-green-600 font-bold">{formatCOP(record.commissionAmount)}</span></div>
                                     </>
                                 ) : (
@@ -641,12 +781,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                                 <div className="flex justify-between font-black text-lg pt-3 border-t-2 border-dashed border-gray-100 dark:border-gray-800"><span>TOTAL PAGADO:</span> <span className="text-accent">{formatCOP(record.totalToPay)}</span></div>
                                 {record.loginAccesses && record.loginAccesses.length > 0 && record.paymentType === 'nomina' && (
                                   <div className="pt-3 border-t mt-2"><p className="text-[10px] font-black uppercase text-gray-400 mb-1">Días Validados:</p><p className="text-xs text-gray-500">{record.loginAccesses.map(l => {
-                                      const dateStr = new Date(l.date+'T00:00:00').toLocaleDateString('es-CO', {day: '2-digit', month: '2-digit'});
+                                      const dateStr = new Date(l.date+'T12:00:00').toLocaleDateString('es-CO', {day: '2-digit', month: '2-digit'});
+                                      const ratioStr = l.workRatio !== undefined ? ` [${l.workRatio.toFixed(2)} d]` : '';
+                                      const hoursStr = l.hoursWorked !== undefined ? ` (${l.hoursWorked.toFixed(1)}h)` : '';
                                       if (l.startTime) {
-                                          const timeStr = l.startTime === l.endTime ? l.startTime : `${l.startTime} - ${l.endTime}`;
-                                          return `${dateStr} (${timeStr})`;
+                                          const timeStr = `${formatSimpleTime(l.startTime)} - ${formatSimpleTime(l.endTime)}`;
+                                          return `${dateStr} ${timeStr}${hoursStr}${ratioStr}`;
                                       }
-                                      return dateStr;
+                                      return `${dateStr}${hoursStr}${ratioStr}`;
                                   }).join(', ')}</p></div>
                                 )}
                              </div>

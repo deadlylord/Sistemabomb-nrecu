@@ -1,4 +1,3 @@
-
 import { Product, Category, Seller, Role, View, Store, PaymentMethod, VersionLog } from './types';
 
 export const formatCOP = (amount: number): string => {
@@ -23,10 +22,65 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.9.7',
+    date: '2024-06-08',
+    description: 'Nómina Flexible y Manual',
+    isCurrent: true,
+    changes: [
+      'Ingreso Manual de Destinatarios: Ahora puedes escribir el nombre de la persona a pagar si no se encuentra en la base de datos (ej. personal nuevo o externo).',
+      'Agregado de Días Manuales: Nueva función para insertar cualquier fecha específica en la liquidación de nómina sin depender de inicios de sesión previos.',
+      'Horarios Estándar Forzados: Todas las jornadas (detectadas o manuales) cargan por defecto el horario completo de la tienda para agilizar el proceso.',
+      'Mejora en la interfaz de gestión de días para permitir una personalización total antes de generar el comprobante.'
+    ]
+  },
+  {
+    version: '2.9.6',
+    date: '2024-06-07',
+    description: 'Pago Manual y Horarios Estándar',
+    changes: [
+      'Soporte para Personal en Entrenamiento: Ahora puedes registrar pagos de nómina para personas que no están creadas en el sistema mediante ingreso manual de nombre.',
+      'Horarios Estándar por Defecto: Al cargar los días, el sistema ya no depende de los registros de login para las horas; asigna automáticamente la jornada completa (L-J 10:30-20:30, V-D 10:00-20:30).',
+      'Carga Proyectada de Días: En modo manual, el sistema genera automáticamente todos los días del calendario en el rango seleccionado para una liquidación rápida.',
+      'Mejora en la flexibilidad administrativa para pagos ocasionales o externos.'
+    ]
+  },
+  {
+    version: '2.9.5',
+    date: '2024-06-06',
+    description: 'Selector de Horas de Entrada/Salida en Nómina',
+    changes: [
+      'Nuevo sistema de liquidación por rango horario: Define la hora exacta de entrada y salida para cada día de la nómina.',
+      'Cálculo inteligente de jornada: Reconoce automáticamente el horario estándar de lunes a jueves (10:30am - 8:30pm) y fines de semana (10:00am - 8:30pm).',
+      'Ajuste de pago proporcional: Si un empleado trabaja menos de su jornada asignada, el sistema calcula el valor exacto basado en la fracción de tiempo laborado.',
+      'Mejor trazabilidad: Los comprobantes de pago ahora detallan los rangos horarios liquidados por cada día.'
+    ]
+  },
+  {
+    version: '2.9.4',
+    date: '2024-06-05',
+    description: 'Liquidación por Horas en Nómina',
+    changes: [
+      'Nueva funcionalidad de pago por horas: Ahora puedes ingresar el total de horas trabajadas por día en lugar de solo fracciones manuales.',
+      'Cálculo basado en jornada estándar de 8 horas: El sistema divide automáticamente el valor del día por las horas laboradas para una precisión total.',
+      'Soporte para turnos extendidos: Permite pagar más de un día si el empleado trabajó horas extra en una jornada.',
+      'Interfaz de usuario optimizada para el registro rápido de tiempo por día seleccionado.'
+    ]
+  },
+  {
+    version: '2.9.3',
+    date: '2024-06-04',
+    description: 'Pago de Jornadas Parciales en Nómina',
+    changes: [
+      'Nueva funcionalidad para pagar fracciones de día: Ahora puedes ajustar si un día se paga completo (1.0), medio día (0.5) o cualquier otra proporción.',
+      'Cálculo de sueldo básico ajustado automáticamente según la carga horaria de cada día seleccionado.',
+      'Visualización clara de la proporción de jornada en el resumen de liquidación.',
+      'Mantenimiento de la integridad de los registros de asistencia con soporte para turnos incompletos.'
+    ]
+  },
+  {
     version: '2.9.2',
     date: '2024-06-03',
     description: 'Optimización de Historial de Compras',
-    isCurrent: true,
     changes: [
       'Nueva columna "Proveedor" en la tabla de historial de compras para una mejor trazabilidad.',
       'Sistema de ordenamiento por columnas en el historial: Ahora puedes ordenar por fecha, nombre, proveedor, cantidad o costo total.',

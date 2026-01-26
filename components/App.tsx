@@ -326,7 +326,7 @@ const App: React.FC = () => {
             break;
         case View.PAYROLL:
             fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
-            fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
+            attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('layaways'), setLayaways);
             break;
@@ -343,7 +343,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('expenses'), setExpenses);
             attach(storeSpecificQuery('expenseCategories'), setExpenseCategories);
-            fetchOnce(storeSpecificQuery('payrollHistory'), setPayrollHistory);
+            attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
