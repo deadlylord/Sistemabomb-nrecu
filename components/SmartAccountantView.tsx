@@ -20,6 +20,8 @@ interface SmartAccountantViewProps {
   onAddExpenseCategory: (name: string) => void;
   onUpdateExpenseCategory: (id: string, name: string) => void;
   onDeleteExpenseCategory: (id: string) => void;
+  chatMessages: ChatMessage[];
+  onUpdateChatMessages: (messages: ChatMessage[]) => Promise<void>;
 }
 
 interface ChatMessage {
@@ -57,7 +59,9 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   onDeleteExpense,
   onAddExpenseCategory,
   onUpdateExpenseCategory,
-  onDeleteExpenseCategory
+  onDeleteExpenseCategory,
+  chatMessages,
+  onUpdateChatMessages
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'categories' | 'ai'>('summary');
   
@@ -74,19 +78,10 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState('');
 
-  // Chat State with Persistence
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-      const saved = localStorage.getItem('accountingChatHistory');
-      return saved ? JSON.parse(saved) : [];
-  });
+  // Local state for immediate UI feedback in chat
   const [userInput, setUserInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Save messages to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('accountingChatHistory', JSON.stringify(messages));
-  }, [messages]);
 
   // Date constants
   const now = new Date();
@@ -112,7 +107,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   // Scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isAiLoading, activeTab]);
+  }, [chatMessages, isAiLoading, activeTab]);
 
   const stats = useMemo(() => {
     const firstDay = new Date(currentYear, currentMonthIdx, 1);
@@ -274,19 +269,22 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   // --- Chat Functions ---
   const requestSpecialReport = async (query: string) => {
     setIsAiLoading(true);
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: query }];
-    setMessages(newMessages);
+    const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: query }];
+    // Sync users message immediately for UI
+    await onUpdateChatMessages(newMessages);
 
     try {
-        const apiHistory = messages.map(msg => ({
+        const apiHistory = chatMessages.map(msg => ({
             role: msg.role,
             parts: [{ text: msg.content }]
         }));
 
         const response = await getAccountingChatResponse(stats, apiHistory, query);
-        setMessages([...newMessages, { role: 'model', content: response }]);
+        const finalMessages: ChatMessage[] = [...newMessages, { role: 'model', content: response }];
+        await onUpdateChatMessages(finalMessages);
     } catch (error) {
-        setMessages([...newMessages, { role: 'model', content: "Error al generar el reporte solicitado." }]);
+        const errorMessages: ChatMessage[] = [...newMessages, { role: 'model', content: "Error al generar el reporte solicitado." }];
+        await onUpdateChatMessages(errorMessages);
     } finally {
         setIsAiLoading(false);
     }
@@ -297,14 +295,14 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     const initialQuery = "Haz una auditoría detallada de mis números de este mes y dame consejos estratégicos para mejorar.";
     
     try {
-        const history = []; // Empty history for start
-        const response = await getAccountingChatResponse(stats, history, initialQuery);
-        setMessages([
+        const response = await getAccountingChatResponse(stats, [], initialQuery);
+        const finalMessages: ChatMessage[] = [
             { role: 'user', content: initialQuery },
             { role: 'model', content: response }
-        ]);
+        ];
+        await onUpdateChatMessages(finalMessages);
     } catch (error) {
-        setMessages([{ role: 'model', content: "Error al conectar con el contador IA. Por favor, intenta de nuevo." }]);
+        console.error(error);
     } finally {
         setIsAiLoading(false);
     }
@@ -317,31 +315,31 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     const userMsg = userInput.trim();
     setUserInput('');
     
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: userMsg }];
-    setMessages(newMessages);
+    const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: userMsg }];
+    await onUpdateChatMessages(newMessages);
     setIsAiLoading(true);
 
     try {
-        // Format history for API
-        const apiHistory = messages.map(msg => ({
+        const apiHistory = chatMessages.map(msg => ({
             role: msg.role,
             parts: [{ text: msg.content }]
         }));
 
         const response = await getAccountingChatResponse(stats, apiHistory, userMsg);
-        setMessages([...newMessages, { role: 'model', content: response }]);
+        const finalMessages: ChatMessage[] = [...newMessages, { role: 'model', content: response }];
+        await onUpdateChatMessages(finalMessages);
     } catch (error) {
-        setMessages([...newMessages, { role: 'model', content: "Hubo un problema procesando tu mensaje. Revisa tu conexión." }]);
+        const errorMessages: ChatMessage[] = [...newMessages, { role: 'model', content: "Hubo un problema procesando tu mensaje. Revisa tu conexión." }];
+        await onUpdateChatMessages(errorMessages);
     } finally {
         setIsAiLoading(false);
     }
   };
 
-  const handleResetChat = () => {
-      if (window.confirm("¿Deseas reiniciar la conversación con el contador? Esto borrará el historial persistente.")) {
-          setMessages([]);
+  const handleResetChat = async () => {
+      if (window.confirm("¿Deseas reiniciar la conversación con el contador? Esto borrará el historial de la nube para todos los dispositivos de esta sede.")) {
+          await onUpdateChatMessages([]);
           setUserInput('');
-          localStorage.removeItem('accountingChatHistory');
       }
   }
 
@@ -639,16 +637,16 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         </div>
                         <div>
                             <h3 className="text-xl font-black text-white tracking-tight">Consultoría Contable IA</h3>
-                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría Financiera Integral</p>
+                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría Financiera Integral (Sincronizada)</p>
                         </div>
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto">
                         <button onClick={() => requestSpecialReport("Genera un Estado de Resultados (PyG) detallado de este mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">PyG</button>
                         <button onClick={() => requestSpecialReport("Genera un Balance General proyectado a hoy.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-purple-600 hover:text-white transition-all">Balance</button>
                         <button onClick={() => requestSpecialReport("Analiza el Flujo de Caja (entradas vs salidas reales) del mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-green-600/20 text-green-400 border border-green-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">Flujo</button>
-                        {messages.length > 0 && (
-                            <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación">
-                                <CrossIcon className="w-5 h-5" />
+                        {chatMessages.length > 0 && (
+                            <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación globalmente">
+                                <TrashIcon className="w-5 h-5" />
                             </button>
                         )}
                     </div>
@@ -656,7 +654,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
                 {/* Área de Mensajes */}
                 <div className="flex-grow overflow-y-auto p-6 space-y-6 scrollbar-hide bg-black/10">
-                    {messages.length === 0 && !isAiLoading ? (
+                    {chatMessages.length === 0 && !isAiLoading ? (
                         <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
                             <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center animate-pulse">
                                 <SparklesIcon className="w-12 h-12 text-accent" />
@@ -675,7 +673,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         </div>
                     ) : (
                         <>
-                            {messages.map((msg, index) => (
+                            {chatMessages.map((msg, index) => (
                                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
                                     <div className={`max-w-[90%] p-5 rounded-3xl shadow-lg ${
                                         msg.role === 'user' 
@@ -714,7 +712,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 </div>
 
                 {/* Input de Chat */}
-                {(messages.length > 0 || isAiLoading) && (
+                {(chatMessages.length > 0 || isAiLoading) && (
                     <div className="p-4 bg-black/40 backdrop-blur-xl border-t border-white/10">
                         <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto">
                             <input 

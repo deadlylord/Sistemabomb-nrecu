@@ -22,10 +22,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.10.0',
+    date: '2024-06-11',
+    description: 'Chat IA con Persistencia Global',
+    isCurrent: true,
+    changes: [
+      'Persistencia Multi-dispositivo: La conversación con el Contador IA ahora se guarda en la nube y no se pierde al cambiar de celular o computadora.',
+      'Sincronización en Tiempo Real: Las respuestas de la IA se reflejan instantáneamente en todos los dispositivos conectados a la misma sede.',
+      'Gestión de Memoria Centralizada: El reinicio del chat ahora limpia el historial globalmente para esa tienda.',
+      'Seguridad de Datos: El contexto contable se mantiene protegido bajo el perfil de administrador en la base de datos.'
+    ]
+  },
+  {
     version: '2.9.9',
     date: '2024-06-10',
     description: 'Informes Contables Avanzados con IA',
-    isCurrent: true,
     changes: [
       'IA Financiera Completa: El contador ahora analiza el valor del inventario actual y el histórico de compras del mes.',
       'Reportes Estructurados: Botones para generar automáticamente PyG (Pérdidas y Ganancias), Balance General y Flujo de Caja.',
@@ -53,28 +64,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Agregado de Días Manuales: Nueva función para insertar cualquier fecha específica en la liquidación de nómina sin depender de inicios de sesión previos.',
       'Horarios Estándar Forzados: Todas las jornadas (detectadas o manuales) cargan por defecto el horario completo de la tienda para agilizar el proceso.',
       'Mejora en la interfaz de gestión de días para permitir una personalización total antes de generar el comprobante.'
-    ]
-  },
-  {
-    version: '2.9.6',
-    date: '2024-06-07',
-    description: 'Pago Manual y Horarios Estándar',
-    changes: [
-      'Soporte para Personal en Entrenamiento: Ahora puedes registrar pagos de nómina para personas que no están creadas en el sistema mediante ingreso manual de nombre.',
-      'Horarios Estándar por Defecto: Al cargar los días, el sistema ya no depende de los registros de login para las horas; asigna automáticamente la jornada completa (L-J 10:30-20:30, V-D 10:00-20:30).',
-      'Carga Proyectada de Días: En modo manual, el sistema genera automáticamente todos los días del calendario en el rango seleccionado para una liquidación rápida.',
-      'Mejora en la flexibilidad administrativa para pagos ocasionales o externos.'
-    ]
-  },
-  {
-    version: '2.9.5',
-    date: '2024-06-06',
-    description: 'Selector de Horas de Entrada/Salida en Nómina',
-    changes: [
-      'Nuevo sistema de liquidación por rango horario: Define la hora exacta de entrada y salida para cada día de la nómina.',
-      'Cálculo inteligente de jornada: Reconoce automáticamente el horario estándar de lunes a jueves (10:30am - 8:30pm) y fines de semana (10:00am - 8:30pm).',
-      'Ajuste de pago proporcional: Si un empleado trabaja menos de su jornada asignada, el sistema calcula el valor exacto basado en la fracción de tiempo laborado.',
-      'Mejor trazabilidad: Los comprobantes de pago ahora detallan los rangos horarios liquidados por cada día.'
     ]
   }
 ];

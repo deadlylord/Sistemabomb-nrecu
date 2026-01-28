@@ -121,6 +121,9 @@ const App: React.FC = () => {
 
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
+  // Chat de Contabilidad Sincronizado
+  const [accountingChatHistory, setAccountingChatHistory] = useState<any[]>([]);
+
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
         const newSet = new Set(prev);
@@ -346,6 +349,16 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('purchases'), setPurchases);
+            
+            // Listener para chat de contabilidad de esta sede
+            const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
+            unsubscribers.push(onSnapshot(chatRef, (doc) => {
+              if (doc.exists()) {
+                setAccountingChatHistory(doc.data().messages || []);
+              } else {
+                setAccountingChatHistory([]);
+              }
+            }));
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
@@ -1456,6 +1469,12 @@ const App: React.FC = () => {
       if (window.confirm('¿Eliminar este registro de gasto?')) await deleteDoc(doc(db, 'expenses', id));
   };
 
+  const handleUpdateAccountingChat = async (messages: any[]) => {
+    if (!currentStoreId) return;
+    const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
+    await setDoc(chatRef, { messages, lastUpdated: new Date().toISOString() });
+  };
+
   const handleLogin = (sellerName: string, passwordAttempt: string) => {
     const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
     if (seller && seller.password.trim() === passwordAttempt.trim()) {
@@ -1493,7 +1512,27 @@ const App: React.FC = () => {
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
-        {currentView === View.ACCOUNTING && <SmartAccountantView sales={sales} layaways={layaways} expenses={expenses} expenseCategories={expenseCategories} payrollHistory={payrollHistory} inventory={inventory} purchases={purchases} currentStore={currentStore} currentUser={currentUser} onAddExpense={handleAddExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} onAddExpenseCategory={handleAddExpenseCategory} onUpdateExpenseCategory={handleUpdateExpenseCategory} onDeleteExpenseCategory={handleDeleteExpenseCategory} />}
+        {currentView === View.ACCOUNTING && (
+          <SmartAccountantView 
+            sales={sales} 
+            layaways={layaways} 
+            expenses={expenses} 
+            expenseCategories={expenseCategories} 
+            payrollHistory={payrollHistory} 
+            inventory={inventory} 
+            purchases={purchases} 
+            currentStore={currentStore} 
+            currentUser={currentUser} 
+            onAddExpense={handleAddExpense} 
+            onUpdateExpense={handleUpdateExpense} 
+            onDeleteExpense={handleDeleteExpense} 
+            onAddExpenseCategory={handleAddExpenseCategory} 
+            onUpdateExpenseCategory={handleUpdateExpenseCategory} 
+            onDeleteExpenseCategory={handleDeleteExpenseCategory}
+            chatMessages={accountingChatHistory}
+            onUpdateChatMessages={handleUpdateAccountingChat}
+          />
+        )}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} onClose={() => setShowReceiptModal(false)} />}
