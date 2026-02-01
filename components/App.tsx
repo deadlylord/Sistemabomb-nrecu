@@ -1441,7 +1441,8 @@ const App: React.FC = () => {
   const handleSavePayroll = async (payrollData: any) => {
       if (!currentStoreId || !currentUser) return;
       const newRef = doc(collection(db, 'payrollHistory'));
-      await setDoc(newRef, { ...payrollData, id: newRef.id, paidAt: new Date().toISOString(), paidBy: currentUser.name, storeId: currentStoreId });
+      const paidAt = payrollData.paidAt || new Date().toISOString();
+      await setDoc(newRef, { ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId });
   };
   
   const handleBulkAddCustomers = async (newCustomers: any[]) => {

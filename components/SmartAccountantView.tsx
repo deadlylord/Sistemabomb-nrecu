@@ -65,11 +65,17 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'categories' | 'ai'>('summary');
   
+  // Maestro de Periodo
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
   // Form States
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseType, setExpenseType] = useState<'fixed' | 'variable'>('fixed');
   const [expenseCategory, setExpenseCategory] = useState<string>('');
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [isRecurring, setIsRecurring] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
@@ -83,12 +89,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Date constants
-  const now = new Date();
-  const currentMonthIdx = now.getMonth();
-  const currentYear = now.getFullYear();
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-  const currentMonthName = monthNames[currentMonthIdx];
+  const currentMonthName = monthNames[selectedMonth];
 
   // Sync isRecurring with Active Tab
   useEffect(() => {
@@ -110,22 +112,23 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   }, [chatMessages, isAiLoading, activeTab]);
 
   const stats = useMemo(() => {
-    const firstDay = new Date(currentYear, currentMonthIdx, 1);
+    const startOfSelected = new Date(selectedYear, selectedMonth, 1);
+    const endOfSelected = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
     
     const monthlySalesPayments = sales
         .flatMap(s => (Array.isArray(s.payments) ? s.payments : Object.values(s.payments || {})) as any[])
-        .filter(p => p && new Date(p.date) >= firstDay)
+        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const monthlyLayawayPayments = layaways
         .flatMap(l => (Array.isArray(l.payments) ? l.payments : Object.values(l.payments || {})) as any[])
-        .filter(p => p && new Date(p.date) >= firstDay)
+        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const totalRevenue = monthlySalesPayments + monthlyLayawayPayments;
 
     const monthlyCogs = sales
-        .filter(s => new Date(s.createdAt) >= firstDay)
+        .filter(s => new Date(s.createdAt) >= startOfSelected && new Date(s.createdAt) <= endOfSelected)
         .reduce((sum, s) => {
             const itemsArray = (Array.isArray(s.items) ? s.items : Object.values(s.items || {})) as any[];
             return sum + itemsArray.reduce((iSum, item) => iSum + ((item.cost || 0) * (item.quantity || 0)), 0);
@@ -135,16 +138,16 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         .filter(e => {
             if (e.isRecurring) return false;
             const d = new Date(e.date);
-            return !isNaN(d.getTime()) && d >= firstDay;
+            return !isNaN(d.getTime()) && d >= startOfSelected && d <= endOfSelected;
         })
         .reduce((sum, e) => sum + e.amount, 0);
 
     const monthlyPayroll = payrollHistory
-        .filter(p => new Date(p.paidAt) >= firstDay)
+        .filter(p => new Date(p.paidAt) >= startOfSelected && new Date(p.paidAt) <= endOfSelected)
         .reduce((sum, p) => sum + p.totalToPay, 0);
 
     const monthlyPurchases = purchases
-        .filter(p => new Date(p.createdAt) >= firstDay)
+        .filter(p => new Date(p.createdAt) >= startOfSelected && new Date(p.createdAt) <= endOfSelected)
         .reduce((sum, p) => sum + p.totalCost, 0);
 
     const totalExpenses = monthlyManualExpenses + monthlyPayroll;
@@ -156,6 +159,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
 
     return { 
+        periodo: `${currentMonthName} ${selectedYear}`,
         totalRevenue, 
         monthlyCogs, 
         grossProfit, 
@@ -166,15 +170,16 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         monthlyPayroll,
         monthlyPurchases,
         totalInventoryValue,
-        expenseDetails: expenses.filter(e => !e.isRecurring && new Date(e.date) >= firstDay).map(e => ({ desc: e.description, amount: e.amount, cat: e.category }))
+        expenseDetails: expenses.filter(e => !e.isRecurring && new Date(e.date) >= startOfSelected && new Date(e.date) <= endOfSelected).map(e => ({ desc: e.description, amount: e.amount, cat: e.category }))
     };
-  }, [sales, layaways, expenses, payrollHistory, inventory, purchases, currentMonthIdx, currentYear]);
+  }, [sales, layaways, expenses, payrollHistory, inventory, purchases, selectedMonth, selectedYear, currentMonthName]);
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
     if (!expenseDesc || !expenseAmount || !expenseCategory) return;
     
     const amount = parseFloat(expenseAmount);
+    const dateToSave = new Date(expenseDate + "T12:00:00").toISOString();
 
     if (editingExpense) {
         onUpdateExpense({
@@ -184,7 +189,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             type: expenseType,
             category: expenseCategory,
             isRecurring: isRecurring,
-            date: isRecurring ? 'TEMPLATE' : editingExpense.date 
+            date: isRecurring ? 'TEMPLATE' : dateToSave 
         });
         setEditingExpense(null);
     } else {
@@ -193,7 +198,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           amount,
           type: expenseType,
           category: expenseCategory,
-          date: isRecurring ? 'TEMPLATE' : new Date().toISOString(),
+          date: isRecurring ? 'TEMPLATE' : dateToSave,
           storeId: currentStore?.id || '',
           registeredBy: currentUser.name,
           isRecurring: isRecurring,
@@ -211,6 +216,9 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
       setExpenseAmount(expense.amount.toString());
       setExpenseType(expense.type);
       setExpenseCategory(expense.category);
+      if (!expense.isRecurring) {
+          setExpenseDate(new Date(expense.date).toISOString().split('T')[0]);
+      }
       setIsRecurring(!!expense.isRecurring);
       setActiveTab(expense.isRecurring ? 'templates' : 'expenses');
   };
@@ -221,20 +229,23 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         alert("No hay plantillas de gastos fijos creadas.");
         return;
     }
-    if (window.confirm(`¿Seguro que deseas aplicar ${templates.length} gastos fijos a este mes (${currentMonthName})?`)) {
+    if (window.confirm(`¿Seguro que deseas aplicar ${templates.length} gastos fijos a ${currentMonthName} ${selectedYear}?`)) {
+        // Usar el primer día del mes seleccionado
+        const targetDate = new Date(selectedYear, selectedMonth, 1, 12, 0, 0).toISOString();
+        
         templates.forEach(t => {
             onAddExpense({
                 description: `[FIJO] ${t.description}`,
                 amount: t.amount,
                 type: 'fixed',
                 category: t.category,
-                date: new Date().toISOString(),
+                date: targetDate,
                 storeId: currentStore?.id || '',
                 registeredBy: currentUser.name,
                 isRecurring: false 
             });
         });
-        alert("Plantillas aplicadas como gastos del mes correctamente.");
+        alert("Plantillas aplicadas correctamente al mes seleccionado.");
         setActiveTab('expenses');
     }
   };
@@ -270,7 +281,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const requestSpecialReport = async (query: string) => {
     setIsAiLoading(true);
     const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: query }];
-    // Sync users message immediately for UI
     await onUpdateChatMessages(newMessages);
 
     try {
@@ -292,7 +302,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
   const handleStartAudit = async () => {
     setIsAiLoading(true);
-    const initialQuery = "Haz una auditoría detallada de mis números de este mes y dame consejos estratégicos para mejorar.";
+    const initialQuery = `Haz una auditoría detallada de mis números de ${currentMonthName} ${selectedYear} y dame consejos estratégicos para mejorar.`;
     
     try {
         const response = await getAccountingChatResponse(stats, [], initialQuery);
@@ -350,12 +360,44 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     return expenses.filter(e => {
         if (e.isRecurring) return false;
         const d = new Date(e.date);
-        return !isNaN(d.getTime()) && d.getMonth() === currentMonthIdx && d.getFullYear() === currentYear;
+        return !isNaN(d.getTime()) && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
     }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, activeTab, currentMonthIdx, currentYear]);
+  }, [expenses, activeTab, selectedMonth, selectedYear]);
+
+  const years = useMemo(() => {
+    const currentY = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentY - 2 + i);
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
+      
+      {/* Selector de Periodo Global */}
+      <div className="bg-accent/10 border border-accent/20 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-4">
+              <div className="p-2 bg-accent text-white rounded-xl">
+                  <ChartBarIcon className="w-5 h-5" />
+              </div>
+              <h3 className="font-black text-gray-800 dark:text-white uppercase tracking-tighter">Analizando Periodo:</h3>
+          </div>
+          <div className="flex items-center gap-2">
+              <select 
+                value={selectedMonth} 
+                onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                className="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-accent/30 font-bold outline-none focus:ring-2 focus:ring-accent"
+              >
+                  {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+              <select 
+                value={selectedYear} 
+                onChange={e => setSelectedYear(parseInt(e.target.value))}
+                className="bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-accent/30 font-bold outline-none focus:ring-2 focus:ring-accent"
+              >
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+          </div>
+      </div>
+
       {/* KPI Panel */}
       <div className="bg-white dark:bg-secondary p-6 rounded-2xl shadow-xl border-l-8 border-accent">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
@@ -365,7 +407,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             </div>
             <div>
               <h2 className="text-3xl font-black text-gray-800 dark:text-white tracking-tight">Contador Inteligente</h2>
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-widest">{currentStore?.name} • {currentMonthName} {currentYear}</p>
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-widest">{currentStore?.name} • {currentMonthName} {selectedYear}</p>
             </div>
           </div>
           <div className="flex bg-gray-100 dark:bg-slate-800 p-1.5 rounded-xl shadow-inner w-full md:w-auto overflow-x-auto scrollbar-hide">
@@ -478,7 +520,14 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                             {expenseCategories.length === 0 && <option value="" disabled>Cargando categorías...</option>}
                         </select>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    
+                    {!isRecurring ? (
+                        <div>
+                             <input type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm" required />
+                        </div>
+                    ) : <div></div>}
+
+                    <div className="flex flex-col gap-2 lg:col-span-1">
                         <button type="submit" className={`${editingExpense ? 'bg-yellow-600' : 'bg-accent'} text-white font-black rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95 py-3 h-full`}>
                             {editingExpense ? <CheckIcon className="w-6 h-6"/> : <PlusCircleIcon className="w-6 h-6"/>}
                             {editingExpense ? 'GUARDAR CAMBIOS' : 'AGREGAR'}
@@ -497,11 +546,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 <div className="p-4 bg-gray-50 dark:bg-gray-800 flex justify-between items-center border-b dark:border-gray-700">
                     <h4 className="font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
                         {activeTab === 'templates' ? <HistoryIcon className="w-5 h-5 text-accent"/> : <ReceiptIcon className="w-5 h-5 text-accent"/>}
-                        {activeTab === 'templates' ? 'Lista de Gastos Fijos (Plantillas)' : `Gastos Reales de ${currentMonthName}`}
+                        {activeTab === 'templates' ? 'Lista de Gastos Fijos (Plantillas)' : `Gastos Reales de ${currentMonthName} ${selectedYear}`}
                     </h4>
                     {activeTab === 'templates' && filteredExpensesList.length > 0 && (
                         <button onClick={handleApplyTemplates} className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-green-700 transition-all shadow-md active:scale-95">
-                            <CheckIcon className="w-4 h-4"/> Aplicar plantillas a este mes
+                            <CheckIcon className="w-4 h-4"/> Aplicar plantillas a {currentMonthName}
                         </button>
                     )}
                 </div>
@@ -551,7 +600,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                     <div className="py-20 text-center space-y-4">
                         <ReceiptIcon className="w-16 h-16 mx-auto text-gray-200" />
                         <p className="text-gray-400 font-bold italic">
-                            {activeTab === 'templates' ? 'No tienes plantillas creadas. Agrega los pagos fijos aquí.' : 'No hay gastos reales registrados este mes.'}
+                            {activeTab === 'templates' ? 'No tienes plantillas creadas. Agrega los pagos fijos aquí.' : `No hay gastos registrados en ${currentMonthName} ${selectedYear}.`}
                         </p>
                     </div>
                 )}
@@ -637,13 +686,13 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         </div>
                         <div>
                             <h3 className="text-xl font-black text-white tracking-tight">Consultoría Contable IA</h3>
-                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría Financiera Integral (Sincronizada)</p>
+                            <p className="text-[10px] text-accent font-bold uppercase tracking-widest">Auditoría de {currentMonthName} {selectedYear}</p>
                         </div>
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto">
-                        <button onClick={() => requestSpecialReport("Genera un Estado de Resultados (PyG) detallado de este mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">PyG</button>
-                        <button onClick={() => requestSpecialReport("Genera un Balance General proyectado a hoy.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-purple-600 hover:text-white transition-all">Balance</button>
-                        <button onClick={() => requestSpecialReport("Analiza el Flujo de Caja (entradas vs salidas reales) del mes.")} className="flex-1 sm:flex-none px-3 py-1.5 bg-green-600/20 text-green-400 border border-green-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">Flujo</button>
+                        <button onClick={() => requestSpecialReport(`Genera un Estado de Resultados (PyG) detallado de ${currentMonthName} ${selectedYear}.`)} className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-600/20 text-blue-400 border border-blue-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">PyG</button>
+                        <button onClick={() => requestSpecialReport(`Genera un Balance General proyectado a finales de ${currentMonthName} ${selectedYear}.`)} className="flex-1 sm:flex-none px-3 py-1.5 bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-purple-600 hover:text-white transition-all">Balance</button>
+                        <button onClick={() => requestSpecialReport(`Analiza el Flujo de Caja (entradas vs salidas reales) de ${currentMonthName} ${selectedYear}.`)} className="flex-1 sm:flex-none px-3 py-1.5 bg-green-600/20 text-green-400 border border-green-600/30 rounded-lg text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">Flujo</button>
                         {chatMessages.length > 0 && (
                             <button onClick={handleResetChat} className="p-2 text-gray-400 hover:text-white transition-colors" title="Reiniciar conversación globalmente">
                                 <TrashIcon className="w-5 h-5" />
@@ -661,13 +710,13 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                             </div>
                             <div className="max-w-md">
                                 <h4 className="text-white font-bold text-lg mb-2">Análisis Financiero Especializado</h4>
-                                <p className="text-gray-400 text-sm mb-8">El contador IA analizará tus ventas, el valor de tu inventario, tus compras y gastos para darte reportes reales.</p>
+                                <p className="text-gray-400 text-sm mb-8">El contador IA analizará tus ventas, el valor de tu inventario, tus compras y gastos de <strong>{currentMonthName} {selectedYear}</strong> para darte reportes reales.</p>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button onClick={handleStartAudit} className="col-span-2 bg-accent text-white font-black px-10 py-4 rounded-2xl hover:scale-105 transition-all shadow-xl shadow-accent/20 active:scale-95 uppercase tracking-widest">
-                                        Auditoría General del Mes
+                                        Auditoría General del Periodo
                                     </button>
-                                    <button onClick={() => requestSpecialReport("Genera un Estado de Resultados (PyG) detallado.")} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Ver PyG (Ganancias)</button>
-                                    <button onClick={() => requestSpecialReport("Analiza mi patrimonio actual: Caja + Valor de Inventario.")} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Balance de Activos</button>
+                                    <button onClick={() => requestSpecialReport(`Genera un Estado de Resultados (PyG) de ${currentMonthName}.`)} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Ver PyG (Ganancias)</button>
+                                    <button onClick={() => requestSpecialReport(`Analiza mi patrimonio a ${currentMonthName}: Caja + Valor de Inventario.`)} className="bg-white/5 text-white font-bold p-3 rounded-xl border border-white/10 hover:bg-white/10 text-xs">Balance de Activos</button>
                                 </div>
                             </div>
                         </div>

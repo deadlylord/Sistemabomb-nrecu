@@ -22,48 +22,34 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '2.10.0',
-    date: '2024-06-11',
-    description: 'Chat IA con Persistencia Global',
+    version: '2.10.3',
+    date: '2024-06-14',
+    description: 'Auditoría de Sesión en Nómina',
     isCurrent: true,
     changes: [
-      'Persistencia Multi-dispositivo: La conversación con el Contador IA ahora se guarda en la nube y no se pierde al cambiar de celular o computadora.',
-      'Sincronización en Tiempo Real: Las respuestas de la IA se reflejan instantáneamente en todos los dispositivos conectados a la misma sede.',
-      'Gestión de Memoria Centralizada: El reinicio del chat ahora limpia el historial globalmente para esa tienda.',
-      'Seguridad de Datos: El contexto contable se mantiene protegido bajo el perfil de administrador en la base de datos.'
+      'Detección de Inconsistencias: El sistema ahora advierte si un vendedor tuvo ventas en días donde no registró inicio de sesión.',
+      'Control de Pago: Opción para decidir si se paga o no la jornada en días con ventas pero sin login registrado.',
+      'Indicadores Visuales: Alertas resaltadas en la preparación de nómina para evitar pagos erróneos o identificar personal que no ficha entrada.'
     ]
   },
   {
-    version: '2.9.9',
-    date: '2024-06-10',
-    description: 'Informes Contables Avanzados con IA',
+    version: '2.10.2',
+    date: '2024-06-13',
+    description: 'Flexibilidad en Registro de Pagos',
     changes: [
-      'IA Financiera Completa: El contador ahora analiza el valor del inventario actual y el histórico de compras del mes.',
-      'Reportes Estructurados: Botones para generar automáticamente PyG (Pérdidas y Ganancias), Balance General y Flujo de Caja.',
-      'Análisis de Activos: El sistema ahora incluye el valor de la mercancía en bodega como parte del patrimonio del negocio.',
-      'Trazabilidad de Inversión: La IA detecta la relación entre compras de mercancía y flujo de caja operativo.'
+      'Fecha de Registro Manual: Ahora puedes seleccionar la fecha exacta en la que se registra un pago de nómina o utilidad, permitiendo contabilizar pagos retroactivos.',
+      'Sincronización de Periodos: Mejora en la visualización de periodos de pago en el historial.',
     ]
   },
   {
-    version: '2.9.8',
-    date: '2024-06-09',
-    description: 'Chat Persistente con Contador IA',
+    version: '2.10.1',
+    date: '2024-06-12',
+    description: 'Contabilidad Multimes y Fechas Flexibles',
     changes: [
-      'Persistencia de Memoria: El historial de conversación con el Contador Jefe IA ahora se guarda automáticamente en el navegador.',
-      'Continuidad Operativa: Puedes navegar entre diferentes pestañas o refrescar la página sin perder el hilo del análisis financiero actual.',
-      'Gestión de Memoria: Opción de reinicio de chat para limpiar el historial guardado y comenzar una nueva auditoría desde cero.',
-      'Sincronización de Contexto: La IA mantiene el contexto de los números actuales incluso si retomas la conversación días después.'
-    ]
-  },
-  {
-    version: '2.9.7',
-    date: '2024-06-08',
-    description: 'Nómina Flexible y Manual',
-    changes: [
-      'Ingreso Manual de Destinatarios: Ahora puedes escribir el nombre de la persona a pagar si no se encuentra en la base de datos (ej. personal nuevo o externo).',
-      'Agregado de Días Manuales: Nueva función para insertar cualquier fecha específica en la liquidación de nómina sin depender de inicios de sesión previos.',
-      'Horarios Estándar Forzados: Todas las jornadas (detectadas o manuales) cargan por defecto el horario completo de la tienda para agilizar el proceso.',
-      'Mejora en la interfaz de gestión de días para permitir una personalización total antes de generar el comprobante.'
+      'Selector de Periodo: Ahora puedes elegir qué mes y año analizar en el panel del Contador IA.',
+      'Gastos con Fecha Manual: Posibilidad de elegir la fecha exacta al registrar un gasto, permitiendo completar meses anteriores.',
+      'Plantillas Retroactivas: Al aplicar gastos fijos, se registran automáticamente en el mes que estés visualizando.',
+      'Contexto IA Dinámico: El Contador IA ahora recibe la información del mes seleccionado, no solo del actual.'
     ]
   }
 ];

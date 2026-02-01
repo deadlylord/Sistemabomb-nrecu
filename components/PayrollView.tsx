@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
 import { formatCOP } from '../constants';
-import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon, EditIcon, CheckIcon, PlusIcon } from './Icons';
+import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon, EditIcon, CheckIcon, PlusIcon, AlertTriangleIcon } from './Icons';
 
 interface PayrollViewProps {
   sellers: Seller[];
@@ -51,7 +51,7 @@ const PayrollReceiptModal: React.FC<{
         `*Beneficiario:* ${receipt.sellerName}\n` +
         `*Tipo:* ${receipt.paymentType === 'nomina' ? 'Nómina' : (receipt.paymentType === 'admin' ? 'Salario Admin' : 'Utilidades')}\n` +
         `*Periodo:* ${receipt.period}\n` +
-        `*Fecha de Pago:* ${new Date().toLocaleDateString()}\n` +
+        `*Fecha de Pago:* ${new Date(receipt.paidAt).toLocaleDateString()}\n` +
         `-----------------------------------\n` +
         `*Base / Subtotal:* ${formatCOP(receipt.adjustedBase)}\n` +
         (receipt.commissionAmount > 0 ? `*Comisiones:* ${formatCOP(receipt.commissionAmount)}\n` : '') +
@@ -84,7 +84,7 @@ const PayrollReceiptModal: React.FC<{
                     <div className="space-y-1">
                         <p><strong>Para:</strong> {receipt.sellerName}</p>
                         <p><strong>Periodo:</strong> {receipt.period}</p>
-                        <p><strong>Fecha:</strong> {new Date().toLocaleString()}</p>
+                        <p><strong>Fecha:</strong> {new Date(receipt.paidAt).toLocaleString()}</p>
                     </div>
                     <div className="border-t border-b border-dashed py-3 space-y-1">
                         <div className="flex justify-between"><span>Base/Ajuste:</span> <span>{formatCOP(receipt.adjustedBase)}</span></div>
@@ -128,13 +128,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
 
-  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; startTime: string; endTime: string; checked: boolean; }[]>([]);
+  const [loginDays, setLoginDays] = useState<{ date: string; unitsSold: number; logins: string[]; startTime: string; endTime: string; checked: boolean; hasInconsistency: boolean; }[]>([]);
   const [deductions, setDeductions] = useState<{ reason: string; amount: number }[]>([]);
   const [bonuses, setBonuses] = useState<{ reason: string; amount: number }[]>([]);
   const [newDeduction, setNewDeduction] = useState({ reason: '', amount: '' });
   const [newBonus, setNewBonus] = useState({ reason: '', amount: '' });
   
   const [extraDate, setExtraDate] = useState('');
+  const [registrationDate, setRegistrationDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const COMMISSION_FLOOR = 0; 
   const COMMISSION_PER_UNIT = 1000;
@@ -247,18 +248,20 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     const combinedDays = Array.from(allDates)
       .map(dateStr => {
         const dayLogins = loginsByDay.get(dateStr) || [];
+        const unitsSold = salesAndLayawaysByDay.get(dateStr) || 0;
         const sched = getStandardSchedule(dateStr);
-        // Default to standard schedule
-        let startTime = sched.start;
-        let endTime = sched.end;
+        
+        // Detección de inconsistencia: Ventas pero sin registros de login
+        const hasInconsistency = unitsSold > 0 && dayLogins.length === 0;
 
         return {
           date: dateStr,
-          unitsSold: salesAndLayawaysByDay.get(dateStr) || 0,
+          unitsSold,
           logins: dayLogins.map(l => new Date(l.date).toLocaleTimeString('es-CO')),
-          startTime,
-          endTime,
+          startTime: sched.start,
+          endTime: sched.end,
           checked: true,
+          hasInconsistency
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -288,7 +291,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         logins: [],
         startTime: sched.start,
         endTime: sched.end,
-        checked: true
+        checked: true,
+        hasInconsistency: false
     };
     setLoginDays(prev => [...prev, newDay].sort((a,b) => a.date.localeCompare(b.date)));
     setExtraDate('');
@@ -398,7 +402,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     if (result && !isSaving) {
       const finalTotal = result.totalToPay + totalBonuses - totalDeductions;
       const typeLabel = result.paymentType === 'nomina' ? 'nómina' : (result.paymentType === 'admin' ? 'salario administrativo' : 'pago de utilidades');
-      
+      const finalPaidAt = new Date(registrationDate + 'T12:00:00').toISOString();
+
       if (window.confirm(`¿Confirmas el registro del ${typeLabel} de ${formatCOP(finalTotal)} para ${result.sellerName}?`)) {
         setIsSaving(true);
         try {
@@ -424,6 +429,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
               bonuses,
               totalBonuses,
               loginAccesses,
+              paidAt: finalPaidAt,
             };
 
             await onSavePayroll(finalData);
@@ -595,6 +601,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                         <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">{worked.toFixed(1)}h de {sched.hours}h</p>
                     </div>
                   </div>
+
+                  {day.hasInconsistency && (
+                      <div className="flex items-center gap-2 mb-3 p-2 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800/50">
+                          <AlertTriangleIcon className="w-4 h-4 text-red-600 dark:text-red-400 animate-pulse" />
+                          <span className="text-[10px] font-black text-red-600 dark:text-red-400 uppercase tracking-tighter">Venta sin Inicio de Sesión detectada</span>
+                      </div>
+                  )}
                   
                   {day.checked && (
                       <div className="grid grid-cols-2 gap-4 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700 mb-2">
@@ -712,9 +725,20 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                     </div>
 
                     <div className="bg-accent p-6 rounded-2xl shadow-xl shadow-accent/20">
-                         <div className="flex justify-between items-center text-white mb-4">
-                            <span className="text-lg font-black uppercase tracking-tighter">NETO A PAGAR:</span>
-                            <span className="text-3xl font-black">{formatCOP(result.totalToPay + totalBonuses - totalDeductions)}</span>
+                         <div className="flex flex-col gap-4 mb-6">
+                            <div className="flex justify-between items-center text-white">
+                                <span className="text-lg font-black uppercase tracking-tighter">NETO A PAGAR:</span>
+                                <span className="text-3xl font-black">{formatCOP(result.totalToPay + totalBonuses - totalDeductions)}</span>
+                            </div>
+                            <div className="bg-white/10 rounded-xl p-3 border border-white/20">
+                                <label className="block text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Fecha de Registro del Pago:</label>
+                                <input 
+                                    type="date" 
+                                    value={registrationDate}
+                                    onChange={e => setRegistrationDate(e.target.value)}
+                                    className="w-full bg-white dark:bg-primary border-none rounded-lg p-2 text-sm font-bold outline-none focus:ring-2 focus:ring-white"
+                                />
+                            </div>
                         </div>
                         <button onClick={handleRegisterPayment} disabled={isSaving} className="w-full bg-white text-accent font-black py-4 rounded-xl hover:bg-gray-100 transition-all shadow-lg active:scale-95 uppercase tracking-widest disabled:opacity-50">
                             {isSaving ? 'REGISTRANDO...' : 'REGISTRAR PAGO EN SISTEMA'}
@@ -749,7 +773,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                                 <p className="font-black text-lg text-gray-900 dark:text-white leading-none">{record.sellerName}</p>
                             </div>
                             <p className="text-sm text-gray-500 dark:text-text-dark">Periodo: {record.period}</p>
-                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Pagado el {new Date(record.paidAt).toLocaleString()} por {record.paidBy}</p>
+                            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Registrado el {new Date(record.paidAt).toLocaleString()} por {record.paidBy}</p>
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="text-right">
