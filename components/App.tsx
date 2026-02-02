@@ -800,6 +800,8 @@ const App: React.FC = () => {
           case IncidentType.PRODUCT_EXCHANGE:
             if (incident.status !== IncidentStatus.CAMBIO_SOLICITADO) return;
             newStatus = IncidentStatus.CAMBIO_PROCESADO;
+            
+            // 1. Actualización de Inventario
             incident.returnedItems?.forEach(item => { 
                 batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); 
                 const exchangeInLogRef = doc(collection(db, 'productHistory'));
@@ -830,6 +832,49 @@ const App: React.FC = () => {
                 };
                 batch.set(exchangeOutLogRef, exchangeOutLog);
             });
+
+            // 2. Actualización de la Venta Original para mantener consistencia en Dashboard
+            if (incident.originalSaleId) {
+                const originalSale = allSales.find(s => s.id === incident.originalSaleId) || sales.find(s => s.id === incident.originalSaleId);
+                if (originalSale) {
+                    const saleRef = doc(db, 'sales', originalSale.id);
+                    let updatedItems = [...originalSale.items];
+                    
+                    // Procesar devoluciones en la factura
+                    incident.returnedItems?.forEach(ret => {
+                        const idx = updatedItems.findIndex(i => i.id === ret.productId);
+                        if (idx !== -1) {
+                            updatedItems[idx].quantity -= ret.quantity;
+                            if (updatedItems[idx].quantity <= 0) updatedItems.splice(idx, 1);
+                        }
+                    });
+
+                    // Procesar nuevos productos en la factura
+                    incident.takenItems?.forEach(taken => {
+                        const idx = updatedItems.findIndex(i => i.id === taken.productId);
+                        if (idx !== -1) {
+                            updatedItems[idx].quantity += taken.quantity;
+                        } else {
+                            // Reconstruir CartItem desde los datos del incidente
+                            updatedItems.push({
+                                id: taken.productId,
+                                name: taken.productName,
+                                sku: taken.sku || '',
+                                categoryId: taken.categoryId || '',
+                                price: taken.price,
+                                cost: taken.cost,
+                                quantity: taken.quantity,
+                                storeId: originalSale.storeId,
+                                description: 'Artículo por cambio',
+                                imageUrl: ''
+                            } as CartItem);
+                        }
+                    });
+
+                    const newTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+                    batch.update(saleRef, { items: updatedItems, totalAmount: newTotal });
+                }
+            }
             break;
           case IncidentType.INVENTORY_TRANSFER_REQUEST:
             if (incident.status !== IncidentStatus.TRASLADO_SOLICITADO) return;
@@ -1080,7 +1125,7 @@ const App: React.FC = () => {
       const product = inventory.find(p => p.id === pid);
       if (product) {
         batch.update(productRef, { stock: count });
-        const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.DETAILED_VERIFICATION, `Ajuste detallado de stock a ${count} unidades por administrador.`);
+        const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste detallado de stock a ${count} unidades por administrador.`);
         batch.set(doc(db, 'productHistory', log.id), log);
       }
     });

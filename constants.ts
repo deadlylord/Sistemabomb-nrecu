@@ -22,10 +22,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.10.4',
+    date: '2024-06-15',
+    description: 'Sincronización Total de Cambios',
+    isCurrent: true,
+    changes: [
+      'Integridad de Ventas: Al aprobar un cambio de producto, la factura original se actualiza automáticamente con los nuevos artículos.',
+      'Precisión del Dashboard: El cálculo de ganancias, unidades vendidas y reportes por categoría ahora reflejan los cambios realizados.',
+      'Trazabilidad de Inventario: Mejora en la persistencia de datos durante el proceso de reversión y salida de prendas por garantía o cambio.'
+    ]
+  },
+  {
     version: '2.10.3',
     date: '2024-06-14',
     description: 'Auditoría de Sesión en Nómina',
-    isCurrent: true,
     changes: [
       'Detección de Inconsistencias: El sistema ahora advierte si un vendedor tuvo ventas en días donde no registró inicio de sesión.',
       'Control de Pago: Opción para decidir si se paga o no la jornada en días con ventas pero sin login registrado.',
@@ -39,17 +49,6 @@ export const APP_VERSIONS: VersionLog[] = [
     changes: [
       'Fecha de Registro Manual: Ahora puedes seleccionar la fecha exacta en la que se registra un pago de nómina o utilidad, permitiendo contabilizar pagos retroactivos.',
       'Sincronización de Periodos: Mejora en la visualización de periodos de pago en el historial.',
-    ]
-  },
-  {
-    version: '2.10.1',
-    date: '2024-06-12',
-    description: 'Contabilidad Multimes y Fechas Flexibles',
-    changes: [
-      'Selector de Periodo: Ahora puedes elegir qué mes y año analizar en el panel del Contador IA.',
-      'Gastos con Fecha Manual: Posibilidad de elegir la fecha exacta al registrar un gasto, permitiendo completar meses anteriores.',
-      'Plantillas Retroactivas: Al aplicar gastos fijos, se registran automáticamente en el mes que estés visualizando.',
-      'Contexto IA Dinámico: El Contador IA ahora recibe la información del mes seleccionado, no solo del actual.'
     ]
   }
 ];

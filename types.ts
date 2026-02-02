@@ -1,4 +1,3 @@
-
 export enum ProductChangeType {
   SALE = 'Venta',
   RETURN = 'Devolución (Venta Editada)',
@@ -322,6 +321,8 @@ export interface ExchangedItem {
   quantity: number;
   price: number;
   cost: number;
+  sku?: string;
+  categoryId?: string;
 }
 
 export interface Incident {

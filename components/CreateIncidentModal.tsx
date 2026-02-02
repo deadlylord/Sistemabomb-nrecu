@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Incident, IncidentType, Product, Seller, Sale, Store, Customer, ExchangedItem, CartItem, PaymentMethod, Role } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
@@ -280,7 +279,15 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
             const newQty = Math.min(maxQty, existing.quantity + 1);
             return prev.map(i => i.productId === item.id ? { ...i, quantity: newQty } : i);
         } else {
-            return [...prev, { productId: item.id, productName: item.name, quantity: 1, price: item.price, cost: item.cost }];
+            return [...prev, { 
+              productId: item.id, 
+              productName: item.name, 
+              quantity: 1, 
+              price: item.price, 
+              cost: item.cost,
+              sku: item.sku,
+              categoryId: item.categoryId
+            }];
         }
     });
   };
@@ -293,7 +300,15 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
             const newQty = Math.min(maxQty, existing.quantity + 1);
             return prev.map(i => i.productId === product.id ? { ...i, quantity: newQty } : i);
         } else {
-            return [...prev, { productId: product.id, productName: product.name, quantity: 1, price: product.price, cost: product.cost }];
+            return [...prev, { 
+              productId: product.id, 
+              productName: product.name, 
+              quantity: 1, 
+              price: product.price, 
+              cost: product.cost,
+              sku: product.sku,
+              categoryId: product.categoryId
+            }];
         }
     });
     setTakenItemSearch('');
