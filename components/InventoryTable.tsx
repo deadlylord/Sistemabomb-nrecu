@@ -21,6 +21,9 @@ interface InventoryTableProps {
   requestSort: (key: keyof Product | 'categoryName' | 'velocity') => void;
   sortConfig: { key: keyof Product | 'categoryName' | 'velocity' | null; direction: 'ascending' | 'descending' };
   isAdmin: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (productId: string) => void;
+  onToggleSelectAll: (allVisibleIds: string[]) => void;
 }
 
 const SortableHeader: React.FC<{
@@ -126,7 +129,7 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
 };
 
 
-export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, onUpdateProduct, onDeleteProduct, onShowHistory, requestSort, sortConfig, isAdmin }) => {
+export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, onUpdateProduct, onDeleteProduct, onShowHistory, requestSort, sortConfig, isAdmin, selectedIds, onToggleSelect, onToggleSelectAll }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const handleToggleDisabled = (product: Product) => {
@@ -142,14 +145,25 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
   const getCategoryName = (categoryId: string) => {
     return categories.find(cat => cat.id === categoryId)?.name || 'Sin Categoría';
   };
+
+  const allVisibleIds = inventory.map(p => p.id);
+  const isAllSelected = allVisibleIds.length > 0 && allVisibleIds.every(id => selectedIds.has(id));
   
   return (
     <>
-      <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg">
+      <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg relative">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-100 dark:bg-slate-800">
               <tr>
+                <th className="p-3 w-10 text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={isAllSelected}
+                      onChange={() => onToggleSelectAll(allVisibleIds)}
+                      className="h-5 w-5 rounded border-slate-300 text-accent focus:ring-accent cursor-pointer"
+                    />
+                </th>
                 <SortableHeader columnKey="name" title="Producto" requestSort={requestSort} sortConfig={sortConfig} />
                 <th className="p-3 text-sm font-semibold tracking-wide hidden sm:table-cell text-left">SKU</th>
                 <SortableHeader columnKey="supplier" title="Proveedor" requestSort={requestSort} sortConfig={sortConfig} />
@@ -162,10 +176,19 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {inventory.map(product => {
+                const isSelected = selectedIds.has(product.id);
                 return (
-                  <tr key={product.id} className={`transition-colors ${product.isDisabled ? 'bg-red-500/10 dark:bg-red-900/20 opacity-60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
-                    <td className="p-3">
-                      <div className="flex items-center space-x-3">
+                  <tr key={product.id} className={`transition-colors ${product.isDisabled ? 'bg-red-500/10 dark:bg-red-900/20 opacity-60' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'} ${isSelected ? 'bg-accent/5 dark:bg-accent/10 ring-1 ring-inset ring-accent/30' : ''}`}>
+                    <td className="p-3 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={isSelected}
+                          onChange={() => onToggleSelect(product.id)}
+                          className="h-5 w-5 rounded border-slate-300 text-accent focus:ring-accent cursor-pointer"
+                        />
+                    </td>
+                    <td className="p-3" onClick={() => onToggleSelect(product.id)}>
+                      <div className="flex items-center space-x-3 cursor-pointer">
                         <div className="w-10 h-10 rounded-md hidden sm:flex items-center justify-center flex-shrink-0 bg-slate-200 dark:bg-slate-700 overflow-hidden">
                           {product.imageUrl ? (
                               <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover rounded-md" />

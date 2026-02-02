@@ -22,10 +22,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.10.5',
+    date: '2024-06-16',
+    description: 'Acciones Masivas en Inventario',
+    isCurrent: true,
+    changes: [
+      'Selección Múltiple: Ahora puedes marcar varios productos usando casillas de verificación en la tabla de inventario.',
+      'Descontinuación Masiva: Nueva opción para deshabilitar múltiples productos seleccionados simultáneamente.',
+      'Barra de Acciones Flotante: Interfaz intuitiva que aparece al seleccionar elementos para facilitar la gestión de stock.',
+      'Sincronización Eficiente: Las actualizaciones masivas se reflejan en tiempo real en la base de datos.'
+    ]
+  },
+  {
     version: '2.10.4',
     date: '2024-06-15',
     description: 'Sincronización Total de Cambios',
-    isCurrent: true,
     changes: [
       'Integridad de Ventas: Al aprobar un cambio de producto, la factura original se actualiza automáticamente con los nuevos artículos.',
       'Precisión del Dashboard: El cálculo de ganancias, unidades vendidas y reportes por categoría ahora reflejan los cambios realizados.',
@@ -40,15 +51,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Detección de Inconsistencias: El sistema ahora advierte si un vendedor tuvo ventas en días donde no registró inicio de sesión.',
       'Control de Pago: Opción para decidir si se paga o no la jornada en días con ventas pero sin login registrado.',
       'Indicadores Visuales: Alertas resaltadas en la preparación de nómina para evitar pagos erróneos o identificar personal que no ficha entrada.'
-    ]
-  },
-  {
-    version: '2.10.2',
-    date: '2024-06-13',
-    description: 'Flexibilidad en Registro de Pagos',
-    changes: [
-      'Fecha de Registro Manual: Ahora puedes seleccionar la fecha exacta en la que se registra un pago de nómina o utilidad, permitiendo contabilizar pagos retroactivos.',
-      'Sincronización de Periodos: Mejora en la visualización de periodos de pago en el historial.',
     ]
   }
 ];

@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import { InventoryTable } from './InventoryTable';
 import CategoryManager from './CategoryManager';
-import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon, ChartBarIcon, ReceiptIcon, SettingsIcon, PackageIcon } from './Icons';
+import { SearchIcon, SwapIcon, UploadIcon, CrossIcon, DownloadIcon, AlertTriangleIcon, ChartBarIcon, ReceiptIcon, SettingsIcon, PackageIcon, PowerIcon, TrashIcon } from './Icons';
 import ProductHistoryModal from './ProductHistoryModal';
 import InventoryCostChart from './InventoryCostChart';
 import BulkAddProductsModal from './BulkAddProductsModal';
@@ -61,9 +61,60 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
   const [showOnlyDisabled, setShowOnlyDisabled] = useState(false);
   const [isFixModalOpen, setIsFixModalOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+    });
+  }, []);
+
+  const handleToggleSelectAll = useCallback((allVisibleIds: string[]) => {
+    setSelectedIds(prev => {
+        const isAllIn = allVisibleIds.every(id => prev.has(id));
+        const next = new Set(prev);
+        if (isAllIn) {
+            allVisibleIds.forEach(id => next.delete(id));
+        } else {
+            allVisibleIds.forEach(id => next.add(id));
+        }
+        return next;
+    });
+  }, []);
+
+  const handleBulkDiscontinue = async () => {
+    const selectedList = inventory.filter(p => selectedIds.has(p.id));
+    const productsWithStock = selectedList.filter(p => !p.isDisabled && p.stock > 0);
+    
+    if (productsWithStock.length > 0) {
+        alert(`No se pueden descontinuar ${productsWithStock.length} productos porque aún tienen stock disponible. Por favor, desmárcalos o ajusta su stock a cero.`);
+        return;
+    }
+
+    if (!window.confirm(`¿Seguro que deseas descontinuar los ${selectedIds.size} productos seleccionados?`)) return;
+
+    try {
+        const promises = Array.from(selectedIds).map(id => {
+            const p = inventory.find(item => item.id === id);
+            if (p && !p.isDisabled) {
+                return onUpdateProduct({ ...p, isDisabled: true });
+            }
+            return Promise.resolve();
+        });
+        await Promise.all(promises);
+        setSelectedIds(new Set());
+        alert('Productos descontinuados correctamente.');
+    } catch (e) {
+        console.error(e);
+        alert('Error al realizar la actualización masiva.');
+    }
+  };
 
   const inconsistentProducts = useMemo(() => {
     return inventory.filter(p => p.isDisabled && p.stock > 0);
@@ -350,7 +401,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
 
   return (
     <>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6 relative">
         
         {/* Accesos Directos */}
         <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-2 rounded-2xl flex flex-wrap gap-2 sticky top-[68px] z-30 shadow-lg">
@@ -523,7 +574,35 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             requestSort={requestSort}
             sortConfig={sortConfig}
             isAdmin={isAdmin}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={handleToggleSelectAll}
         />
+
+        {/* BARRA DE ACCIONES MASIVAS FLOTANTE */}
+        {selectedIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-white dark:bg-slate-900 border-2 border-accent rounded-full px-6 py-4 shadow-2xl animate-slide-up flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                    <span className="bg-accent text-white font-black rounded-full h-8 w-8 flex items-center justify-center text-sm shadow-md">{selectedIds.size}</span>
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tight">Productos seleccionados</span>
+                </div>
+                <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleBulkDiscontinue}
+                        className="bg-red-500 text-white font-black py-2 px-5 rounded-full hover:bg-red-600 transition-all flex items-center gap-2 shadow-lg shadow-red-500/20 active:scale-95 text-xs uppercase"
+                    >
+                        <PowerIcon className="w-4 h-4" /> Descontinuar
+                    </button>
+                    <button 
+                        onClick={() => setSelectedIds(new Set())}
+                        className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-bold text-xs uppercase tracking-widest px-2"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        )}
 
         {/* Sección Inferior de Análisis y Gestión */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
