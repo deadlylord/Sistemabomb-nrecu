@@ -317,9 +317,9 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
 
       {previewImage && (
         <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4 animate-fade-in" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-2xl w-full aspect-square bg-white rounded-lg overflow-hidden border-4 border-accent shadow-2xl">
+          <div className="relative max-w-2xl w-full aspect-square bg-white rounded-lg overflow-hidden border-4 border-accent shadow-2xl" onClick={e => e.stopPropagation()}>
             <img src={previewImage} alt="Preview" className="w-full h-full object-contain" />
-            <button className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full"><CrossIcon /></button>
+            <button onClick={() => setPreviewImage(null)} className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-accent transition-colors"><CrossIcon /></button>
           </div>
         </div>
       )}
