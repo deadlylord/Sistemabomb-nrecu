@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
@@ -400,11 +401,20 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         }
     });
 
-    allPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    allPayments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const filteredTransactions = paymentMethodFilter ? allPayments.filter(p => p.paymentMethod === paymentMethodFilter) : allPayments;
     const groupedTransactions: { [date: string]: { total: number; items: UnifiedTransaction[] } } = {};
     filteredTransactions.forEach(t => { const dateKey = new Date(t.date).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' }); if (!groupedTransactions[dateKey]) groupedTransactions[dateKey] = { total: 0, items: [] }; groupedTransactions[dateKey].total += t.amount; groupedTransactions[dateKey].items.push(t); });
-    return { totalsByMethod, commissionsByMethod, filteredTransactions, sortedGroups: Object.entries(groupedTransactions).sort((a, b) => new Date(b[1].items[0].date).getTime() - new Date(a[1].items[0].date).getTime()) };
+    
+    // Sort grouped transactions by date for the detailed report
+    const sortedGroups = Object.entries(groupedTransactions).sort((a, b) => {
+        // Use the date from the first item to compare effectively
+        const dateA = new Date(a[1].items[0].date).getTime();
+        const dateB = new Date(b[1].items[0].date).getTime();
+        return dateB - dateA; // Descending order (recent first)
+    });
+
+    return { totalsByMethod, commissionsByMethod, filteredTransactions, sortedGroups };
   }, [sales, layaways, allIncidents, inventory, isWithinRange, paymentMethodFilter]);
 
   const totalPeriodIncome = useMemo(() => Object.entries(detailedReportData.totalsByMethod).reduce((sum, [method, total]) => method !== 'Recaudo Sistecredito' ? sum + (total as number) : sum, 0), [detailedReportData.totalsByMethod]);
@@ -508,10 +518,56 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, isWithinRange]);
 
   const handleShareCurrentStore = async () => {
-    const { totalUnitsSold, totalProfit, averageTicketSize } = metricsForCurrentStore;
-    const paymentBreakdownText = Object.entries(detailedReportData.totalsByMethod).map(([method, total]) => { if (method === 'Recaudo Sistecredito') return null; const commission = detailedReportData.commissionsByMethod[method]; let line = ` • *${method}:* ${formatCOP(Number(total) || 0)}`; if (commission > 0) line += ` (desc. ${formatCOP(Number(commission))})`; return line; }).filter(Boolean).join('\n');
-    const summaryText = `*Resumen de Rendimiento - ${currentStore?.name || 'Tienda Actual'}*\n_Periodo: ${startDate} al ${endDate}_\n\n💰 *Ingresos Totales:* ${formatCOP(totalPeriodIncome)}\n📈 *Ganancia (Ventas Directas):* ${formatCOP(totalProfit)}\n🧾 *Ticket Promedio (Ventas Directas):* ${formatCOP(averageTicketSize)}\n📦 *Unidades Vendidas:* ${totalUnitsSold}${totalRecaudos > 0 ? `\n\n✳️ *Recaudos Sistecredito (Aparte):* ${formatCOP(totalRecaudos)}` : ''}\n\n------\n*Desglose de Ingresos:*\n${paymentBreakdownText}\n------\n\nInforme generado por Facturacion Bombon.`;
-    try { if (navigator.share) await navigator.share({ title: `Resumen de ${currentStore?.name || 'Tienda Actual'}`, text: summaryText }); else { await navigator.clipboard.writeText(summaryText); alert('Resumen copiado al portapeles.'); } } catch (error) { console.error('Error al compartir:', error); }
+    const { totalUnitsSold, totalProfit, averageTicketSize, totalDirectSalesValue } = metricsForCurrentStore;
+    
+    // 1. Detalle Diario Cronológico (Usando sortedGroups de detailedReportData)
+    // Mostramos cronología ascendente para el reporte compartido (del más antiguo al más reciente)
+    const dailyIncomeText = [...detailedReportData.sortedGroups]
+        .reverse() 
+        .map(([date, group]) => {
+            // Calculamos el neto diario directo (sin contar recaudos externos si se prefiere separar)
+            const dailyNet = group.items
+                .filter(i => i.type !== 'Recaudo Sistecredito')
+                .reduce((sum, item) => sum + item.amount, 0);
+            return ` • *${date}:* ${formatCOP(dailyNet)}`;
+        })
+        .join('\n');
+
+    // 2. Desglose por Método de Pago (Acumulado periodo)
+    const paymentBreakdownText = Object.entries(detailedReportData.totalsByMethod)
+        .map(([method, total]) => { 
+            if (method === 'Recaudo Sistecredito') return null; 
+            const commission = detailedReportData.commissionsByMethod[method]; 
+            let line = ` • *${method}:* ${formatCOP(Number(total) || 0)}`; 
+            if (commission > 0) line += ` (desc. ${formatCOP(Number(commission))})`; 
+            return line; 
+        })
+        .filter(Boolean)
+        .join('\n');
+
+    const summaryText = `*Resumen de Rendimiento - ${currentStore?.name || 'Tienda Actual'}*\n` +
+        `_Periodo: ${startDate} al ${endDate}_\n\n` +
+        `🗓 *DETALLE DIARIO (Ingresos Netos):*\n${dailyIncomeText}\n\n` +
+        `💰 *TOTALES POR MÉTODO (Periodo):*\n${paymentBreakdownText}\n\n` +
+        `📈 *INGRESOS TOTALES (VENTAS):* ${formatCOP(totalDirectSalesValue)}\n` +
+        `🧾 *TICKET PROMEDIO:* ${formatCOP(averageTicketSize)}\n` +
+        `📦 *UNIDADES VENDIDAS:* ${totalUnitsSold}\n\n` +
+        `-----------------------------------\n` +
+        `💵 *NETO TOTAL PERIODO:* *${formatCOP(totalPeriodIncome)}*` +
+        `${totalRecaudos > 0 ? `\n✳️ *RECAUDOS SISTECREDITO:* ${formatCOP(totalRecaudos)}` : ''}` +
+        `\n-----------------------------------\n\n` +
+        `_Informe generado por Street/Bombón POS._`;
+
+    try { 
+        if (navigator.share) {
+            await navigator.share({ title: `Reporte ${currentStore?.name}`, text: summaryText }); 
+        } else { 
+            await navigator.clipboard.writeText(summaryText); 
+            alert('Resumen detallado copiado al portapapeles.'); 
+        } 
+    } catch (error) { 
+        console.error('Error al compartir:', error); 
+    }
   };
 
   const scrollToSection = (id: string) => { const element = document.getElementById(id); if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' }); };

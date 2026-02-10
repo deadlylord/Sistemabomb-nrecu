@@ -1,3 +1,4 @@
+
 import { Product, Category, Seller, Role, View, Store, PaymentMethod, VersionLog } from './types';
 
 export const formatCOP = (amount: number): string => {
@@ -22,10 +23,30 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.10.7',
+    date: '2024-06-18',
+    description: 'Ajuste de Métricas en Reporte Compartido',
+    isCurrent: true,
+    changes: [
+      'Sustitución de Métrica: Se eliminó el campo "GANANCIA TOTAL" del reporte compartido para evitar confusiones operativas.',
+      'Nueva Métrica de Ventas: Ahora se incluye "INGRESOS TOTALES (VENTAS)" para reflejar el volumen bruto facturado en el periodo seleccionado.',
+      'Consistencia de Datos: El reporte compartido mantiene la integridad de los desgloses diarios y recaudos externos.'
+    ]
+  },
+  {
+    version: '2.10.6',
+    date: '2024-06-17',
+    description: 'Reportes Detallados para Compartir',
+    changes: [
+      'Desglose Diario: Al compartir el informe de pagos por periodos, ahora se incluye un resumen día por día.',
+      'Saldos Totales: El mensaje compartido ahora separa claramente los ingresos por ventas de los recaudos externos.',
+      'Formato Profesional: Mejora en la visualización de los datos enviados por WhatsApp para facilitar la lectura del administrador.'
+    ]
+  },
+  {
     version: '2.10.5',
     date: '2024-06-16',
     description: 'Acciones Masivas en Inventario',
-    isCurrent: true,
     changes: [
       'Selección Múltiple: Ahora puedes marcar varios productos usando casillas de verificación en la tabla de inventario.',
       'Descontinuación Masiva: Nueva opción para deshabilitar múltiples productos seleccionados simultáneamente.',
@@ -41,16 +62,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Integridad de Ventas: Al aprobar un cambio de producto, la factura original se actualiza automáticamente con los nuevos artículos.',
       'Precisión del Dashboard: El cálculo de ganancias, unidades vendidas y reportes por categoría ahora reflejan los cambios realizados.',
       'Trazabilidad de Inventario: Mejora en la persistencia de datos durante el proceso de reversión y salida de prendas por garantía o cambio.'
-    ]
-  },
-  {
-    version: '2.10.3',
-    date: '2024-06-14',
-    description: 'Auditoría de Sesión en Nómina',
-    changes: [
-      'Detección de Inconsistencias: El sistema ahora advierte si un vendedor tuvo ventas en días donde no registró inicio de sesión.',
-      'Control de Pago: Opción para decidir si se paga o no la jornada en días con ventas pero sin login registrado.',
-      'Indicadores Visuales: Alertas resaltadas en la preparación de nómina para evitar pagos erróneos o identificar personal que no ficha entrada.'
     ]
   }
 ];
