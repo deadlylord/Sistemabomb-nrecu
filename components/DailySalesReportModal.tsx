@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Seller, PaymentMethod, DailyNote, Layaway, Incident, IncidentType } from '../types';
 import { formatCOP } from '../constants';
@@ -39,8 +40,6 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
     const dateString = e.target.value;
     if (dateString) {
       const [year, month, day] = dateString.split('-').map(Number);
-      // Create a new Date object in the user's local timezone.
-      // Set time to noon to avoid any weird DST/timezone-boundary issues.
       setReportDate(new Date(year, month - 1, day, 12, 0, 0));
     }
   };
@@ -56,8 +55,6 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
 
     return (dateString: string) => {
         if (!dateString) return false;
-        // The dateString from the database is an ISO string (UTC).
-        // .getTime() gives the UTC epoch milliseconds, which is what we need for a direct comparison.
         const transactionTimestamp = new Date(dateString).getTime();
         return transactionTimestamp >= startTimestamp && transactionTimestamp <= endTimestamp;
     };
@@ -84,7 +81,6 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         .filter(i => {
             const isIncomeType = i.adjustmentType === 'income' || i.type === IncidentType.RECAUDO;
             if (!isIncomeType) return false;
-            // If a payment method is specified, it MUST be cash. If not specified (legacy), assume it's a cash transaction.
             return i.paymentMethod ? i.paymentMethod === PaymentMethod.Efectivo : true;
         })
         .reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0);
@@ -93,7 +89,6 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         .filter(i => i.adjustmentType === 'expense')
         .reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0);
 
-    // --- Per-Seller Breakdown Logic (for display purposes) ---
     const reportBySeller = sellers.reduce((acc, seller) => {
         acc[seller.name] = {
             totalCashSales: 0,
@@ -117,7 +112,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
                     .filter(p => p.method === PaymentMethod.Efectivo)
                     .reduce((sum, p) => sum + p.amount, 0);
                 sellerReport.totalCashSales += cashAmount;
-            } else if (sale.paymentMethod === PaymentMethod.Efectivo) { // Fallback for legacy
+            } else if (sale.paymentMethod === PaymentMethod.Efectivo) { 
                 sellerReport.totalCashSales += sale.totalAmount;
             }
         }
@@ -148,7 +143,6 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         })
         .map(([sellerName, data]) => ({ sellerName, ...(data as { totalCashSales: number, totalCashLayaways: number, totalUnitsSold: number }) }));
 
-    // --- Direct Grand Total Calculation (for accuracy) ---
     const grandTotalCashSales = allTodaysSales
       .filter(sale => !sale.layawayId)
       .reduce((total, sale) => {
@@ -157,7 +151,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
           cashInThisSale = sale.payments
             .filter(p => p.method === PaymentMethod.Efectivo)
             .reduce((sum, p) => sum + p.amount, 0);
-        } else if (sale.paymentMethod === PaymentMethod.Efectivo) { // Legacy fallback
+        } else if (sale.paymentMethod === PaymentMethod.Efectivo) {
           cashInThisSale = sale.totalAmount;
         }
         return total + cashInThisSale;
@@ -226,11 +220,11 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
 
   return (
     <div 
-      className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-0 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-3xl h-[90vh] flex flex-col"
+        className="bg-white dark:bg-secondary rounded-none sm:rounded-2xl shadow-2xl p-6 w-full max-w-3xl h-full sm:h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex flex-col sm:flex-row justify-between sm:items-center">
@@ -375,7 +369,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
 
         <button
           onClick={onClose}
-          className="w-full mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light font-bold py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+          className="w-full mt-6 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-text-light font-bold py-3 px-4 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors uppercase tracking-widest text-xs"
         >
           Cerrar
         </button>

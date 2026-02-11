@@ -23,45 +23,26 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '2.10.7',
-    date: '2024-06-18',
-    description: 'Ajuste de Métricas en Reporte Compartido',
+    version: '2.11.3',
+    date: '2024-06-22',
+    description: 'Navegación Desktop por Hover e Inteligencia Global',
     isCurrent: true,
     changes: [
-      'Sustitución de Métrica: Se eliminó el campo "GANANCIA TOTAL" del reporte compartido para evitar confusiones operativas.',
-      'Nueva Métrica de Ventas: Ahora se incluye "INGRESOS TOTALES (VENTAS)" para reflejar el volumen bruto facturado en el periodo seleccionado.',
-      'Consistencia de Datos: El reporte compartido mantiene la integridad de los desgloses diarios y recaudos externos.'
+      'Menú por Hover: Despliegue automático de categorías al pasar el mouse, optimizando la velocidad operativa en PC.',
+      'Recuperación Búsqueda Global: El icono de tienda (lupa) vuelve a estar visible para alternar entre stock local y de todas las sedes.',
+      'Indicadores de Estado Global: Resaltado visual cuando el Modo Global está activo para evitar confusiones de inventario.',
+      'UX de Navegación Refinada: Añadido buffer de salida en menús para evitar cierres accidentales al mover el puntero.',
+      'Visibilidad Directa de Abonos: Los abonos y novedades se mantienen en el primer nivel del menú de Ventas.'
     ]
   },
   {
-    version: '2.10.6',
-    date: '2024-06-17',
-    description: 'Reportes Detallados para Compartir',
+    version: '2.11.2',
+    date: '2024-06-21',
+    description: 'Barra de Navegación Desktop Optimizada',
     changes: [
-      'Desglose Diario: Al compartir el informe de pagos por periodos, ahora se incluye un resumen día por día.',
-      'Saldos Totales: El mensaje compartido ahora separa claramente los ingresos por ventas de los recaudos externos.',
-      'Formato Profesional: Mejora en la visualización de los datos enviados por WhatsApp para facilitar la lectura del administrador.'
-    ]
-  },
-  {
-    version: '2.10.5',
-    date: '2024-06-16',
-    description: 'Acciones Masivas en Inventario',
-    changes: [
-      'Selección Múltiple: Ahora puedes marcar varios productos usando casillas de verificación en la tabla de inventario.',
-      'Descontinuación Masiva: Nueva opción para deshabilitar múltiples productos seleccionados simultáneamente.',
-      'Barra de Acciones Flotante: Interfaz intuitiva que aparece al seleccionar elementos para facilitar la gestión de stock.',
-      'Sincronización Eficiente: Las actualizaciones masivas se reflejan en tiempo real en la base de datos.'
-    ]
-  },
-  {
-    version: '2.10.4',
-    date: '2024-06-15',
-    description: 'Sincronización Total de Cambios',
-    changes: [
-      'Integridad de Ventas: Al aprobar un cambio de producto, la factura original se actualiza automáticamente con los nuevos artículos.',
-      'Precisión del Dashboard: El cálculo de ganancias, unidades vendidas y reportes por categoría ahora reflejan los cambios realizados.',
-      'Trazabilidad de Inventario: Mejora en la persistencia de datos durante el proceso de reversión y salida de prendas por garantía o cambio.'
+      'Menú Desplegable Horizontal: Ahora en PC las categorías se muestran en una barra superior con dropdowns rápidos.',
+      'Descripciones en Menú: Se añadieron textos explicativos a cada opción de navegación para mayor claridad.',
+      'Organización de Ventas: Abonos y Novedades ahora son ítems de primer nivel dentro del grupo de Ventas.'
     ]
   }
 ];

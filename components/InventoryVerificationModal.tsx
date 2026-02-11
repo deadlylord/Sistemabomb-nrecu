@@ -80,7 +80,6 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
       if (!currentStore || !isAdmin) return;
       const newValue = e.target.checked;
       
-      // Update local state first for immediate UI response
       setLocalHideDetailed(newValue);
       
       const updatedStore = { 
@@ -92,7 +91,6 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           await onUpdateStoreSettings(updatedStore);
       } catch (error) {
           console.error("Failed to update store settings:", error);
-          // Rollback local state if DB update fails
           setLocalHideDetailed(!newValue);
       }
   };
@@ -140,40 +138,41 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     onClose();
   };
 
-  // Visibility logic uses local reactive state
   const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-4 sm:p-6 w-full max-w-2xl h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-          <div className="flex justify-between items-start border-b-2 border-accent/30 pb-2 mb-4">
-              <h2 className="text-2xl font-bold text-accent">Verificación y Apertura de Caja</h2>
-              <button onClick={onClose} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon /></button>
+      <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={onClose}>
+        <div className="bg-white dark:bg-secondary rounded-none sm:rounded-2xl shadow-xl p-4 sm:p-6 w-full max-w-2xl h-full sm:h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex justify-between items-start border-b-2 border-accent/30 pb-4 mb-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-accent tracking-tighter uppercase">Inventario y Apertura</h2>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Revisión de stock antes de iniciar jornada</p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon className="w-6 h-6"/></button>
           </div>
           
           <div className="mb-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                      <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Vendedor (Obligatorio)</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <label className="block text-[10px] font-black text-gray-500 dark:text-text-dark uppercase tracking-widest mb-2">Vendedor Responsable</label>
+                      <div className="flex flex-wrap gap-2">
                       {sellers.filter(seller => !seller.isDisabled).map(seller => (
-                          <button key={seller.id} onClick={() => setSelectedSeller(seller.name)} className={`p-3 rounded-lg font-semibold transition-colors text-sm ${selectedSeller === seller.name ? 'bg-accent text-white ring-2 ring-accent-hover' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>{seller.name}</button>
+                          <button key={seller.id} onClick={() => setSelectedSeller(seller.name)} className={`px-4 py-2 rounded-xl font-black transition-all text-xs uppercase tracking-tighter ${selectedSeller === seller.name ? 'bg-accent text-white shadow-lg shadow-accent/30 scale-105' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500'}`}>{seller.name}</button>
                       ))}
                     </div>
                   </div>
                    <div>
-                      <label htmlFor="cashBase" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Base de Caja (Opcional)</label>
-                       <input type="number" id="cashBase" value={cashBase} onChange={e => setCashBase(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-bold" placeholder="Ej: 100.000" min="0" />
+                      <label htmlFor="cashBase" className="block text-[10px] font-black text-gray-500 dark:text-text-dark uppercase tracking-widest mb-1">Base de Efectivo en Caja</label>
+                       <input type="number" id="cashBase" value={cashBase} onChange={e => setCashBase(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-accent rounded-xl p-3 outline-none font-black text-lg transition-all" placeholder="Ej: 100.000" min="0" />
                    </div>
               </div>
 
-              {/* ADMIN CONTROL: Hide Magnifying Glasses */}
               {isAdmin && (
-                  <div className="flex items-center justify-between p-3 bg-accent/5 rounded-lg border border-accent/20">
+                  <div className="flex items-center justify-between p-3 bg-accent/5 rounded-xl border border-accent/20">
                       <div className="flex items-center gap-2">
                           <EyeIcon className="w-5 h-5 text-accent" />
-                          <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Ocultar lupas de verificación a vendedores</span>
+                          <span className="text-[11px] font-black text-gray-700 dark:text-gray-200 uppercase tracking-tight">Ocultar lupas detalladas a vendedores</span>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input 
@@ -188,41 +187,42 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
               )}
           </div>
 
-          <div className="flex-grow overflow-y-auto pr-2">
+          <div className="flex-grow overflow-y-auto pr-2 scrollbar-hide">
             <table className="w-full text-left">
-              <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10">
+              <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10 rounded-xl overflow-hidden">
                 <tr>
-                  <th className="p-3 text-sm font-semibold tracking-wide">Categoría</th>
-                  {isDetailedVerificationVisible && <th className="p-3 text-sm font-semibold tracking-wide text-center">Detalle</th>}
-                  <th className="p-3 text-sm font-semibold tracking-wide text-center">Conteo Físico</th>
-                  <th className="p-3 text-sm font-semibold tracking-wide text-center">Estado</th>
+                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Categoría</th>
+                  {isDetailedVerificationVisible && <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Detalle</th>}
+                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Conteo Físico</th>
+                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Estado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {categoryTotals.map(category => {
                   const physicalCountStr = counts[category.id];
                   const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : null;
                   const difference = physicalCount !== null ? physicalCount - category.totalStock : null;
                   return (
-                    <tr key={category.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors h-16">
+                    <tr key={category.id} className="hover:bg-accent/5 transition-colors h-16 group">
                       <td className="p-2">
-                          <p className="font-bold text-sm sm:text-base">{category.name}</p>
+                          <p className="font-black text-sm uppercase tracking-tight text-gray-700 dark:text-gray-200">{category.name}</p>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase">Sist: {category.totalStock}</p>
                       </td>
                       {isDetailedVerificationVisible && (
                         <td className="p-2 text-center">
-                            <button onClick={() => openDetailedVerification(category)} className="p-2 text-accent bg-accent/10 rounded-full hover:bg-accent hover:text-white transition-all shadow-sm" title="Verificar por marca / producto"><EyeIcon className="w-5 h-5" /></button>
+                            <button onClick={() => openDetailedVerification(category)} className="p-2.5 text-accent bg-accent/10 rounded-xl hover:bg-accent hover:text-white transition-all shadow-sm" title="Verificar por marca / producto"><EyeIcon className="w-5 h-5" /></button>
                         </td>
                       )}
                       <td className="p-2 text-center">
-                        <input type="number" min="0" value={counts[category.id] || ''} onChange={(e) => handleCountChange(category.id, e.target.value)} className="w-20 sm:w-24 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md p-2 text-center font-bold focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
+                        <input type="number" min="0" value={counts[category.id] || ''} onChange={(e) => handleCountChange(category.id, e.target.value)} className="w-20 bg-white dark:bg-gray-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-2 text-center font-black text-base focus:ring-2 focus:ring-accent focus:border-accent outline-none shadow-inner" placeholder="0" />
                       </td>
                       <td className="p-2 text-center">
                          <div className="flex justify-center">
                              {difference === 0 && physicalCount !== null ? (
-                                 <span className="text-green-500 bg-green-500/10 p-1 rounded-full"><CheckIcon className="w-5 h-5" /></span>
+                                 <span className="text-green-500 bg-green-500/10 p-2 rounded-full"><CheckIcon className="w-5 h-5" /></span>
                              ) : difference !== 0 && physicalCount !== null ? (
-                                 <span className="text-red-500 bg-red-500/10 p-1 rounded-full" title={`Dif: ${difference}`}><CrossIcon className="w-5 h-5" /></span>
-                             ) : <span className="text-gray-400">-</span>}
+                                 <span className="text-red-500 bg-red-500/10 p-2 rounded-full font-black text-xs" title={`Dif: ${difference}`}>{difference > 0 ? `+${difference}` : difference}</span>
+                             ) : <span className="text-gray-300 dark:text-gray-700">--</span>}
                          </div>
                       </td>
                     </tr>
@@ -232,10 +232,10 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
             </table>
           </div>
           <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t-2 border-accent/30 pt-4">
-              <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center space-x-2 font-bold"><span>Cerrar</span></button>
-              <button onClick={handleSubmit} className={`px-6 py-2 ${isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover'} text-white font-bold rounded-md shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95`}>
-                  <CheckIcon className="w-5 h-5" />
-                  <span>{isAdmin ? 'Guardar y Aplicar Inventario' : 'Guardar para Revisión'}</span>
+              <button onClick={onClose} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center font-black text-xs uppercase tracking-widest text-gray-500">Cerrar</button>
+              <button onClick={handleSubmit} className={`px-10 py-4 ${isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover'} text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest text-sm`}>
+                  <CheckIcon className="w-6 h-6" />
+                  <span>{isAdmin ? 'Guardar y Aplicar Stock' : 'Enviar para Revisión'}</span>
               </button>
           </div>
         </div>

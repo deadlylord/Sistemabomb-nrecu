@@ -1,7 +1,13 @@
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Seller, Store, Role, Incident, IncidentStatus } from '../types';
-import { StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon } from './Icons';
+// Added CheckIcon to imports to fix "Cannot find name 'CheckIcon'" error
+import { 
+  StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, 
+  ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, 
+  SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon, MenuIcon, CrossIcon, 
+  LogoutIcon, ChevronDownIcon, SparklesIcon, ShoppingCartIcon, PackageIcon, CheckIcon
+} from './Icons';
 import { APP_VERSIONS } from '../constants';
 
 interface HeaderProps {
@@ -23,172 +29,434 @@ interface HeaderProps {
   onOpenVersionHistory: () => void;
 }
 
-const navItems = [
-    { view: View.DASHBOARD, label: 'Dashboard', icon: DashboardIcon },
-    { view: View.POS, label: 'Punto de Venta', icon: StoreIcon },
-    { view: View.INVENTORY, label: 'Inventario', icon: InventoryIcon },
-    { view: View.INVENTORY_TRANSFER, label: 'Traslados', icon: SwapIcon },
-    { view: View.PURCHASES, label: 'Compras', icon: TruckIcon },
-    { view: View.SELLERS, label: 'Vendedores', icon: UsersIcon },
-    { view: View.STORES, label: 'Tiendas', icon: BuildingStorefrontIcon },
-    { view: View.LAYAWAY, label: 'Abonos', icon: ReceiptIcon },
-    { view: View.CUSTOMERS, label: 'Clientes', icon: ContactIcon },
-    { view: View.INCIDENTS, label: 'Novedades', icon: AlertTriangleIcon },
-    { view: View.PAYROLL, label: 'Nómina', icon: DollarIcon },
-    { view: View.ACCOUNTING, label: 'Contabilidad', icon: ChartPieIcon },
-    { view: View.STOCK_TAKE_HISTORY, label: 'Historial Conteos', icon: ClipboardListIcon },
-    { view: View.ROLE_MANAGER, label: 'Gestionar Roles', icon: ShieldCheckIcon },
-    { view: View.SETTINGS, label: 'Ajustes', icon: SettingsIcon },
-];
+interface NavItem {
+    view: View;
+    label: string;
+    description: string;
+    icon: React.FC<{ className?: string }>;
+}
 
-const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory }) => {
-  const commonButtonClasses = "px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-300 rounded-lg flex items-center space-x-1.5";
-  const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
-  const inactiveButtonClasses = "bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
+interface NavGroup {
+    id: string;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    color: string;
+    items: NavItem[];
+}
+
+const Header: React.FC<HeaderProps> = ({ 
+  currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
+  userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
+  onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory 
+}) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
+  const [activeDesktopGroup, setActiveDesktopGroup] = useState<string | null>(null);
+  const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set(['ops']));
+  
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const storeMenuRef = useRef<HTMLDivElement>(null);
+  const leaveTimeoutRef = useRef<number | null>(null);
 
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
-
   const currentVersion = useMemo(() => APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0', []);
 
-  // Filtrado inteligente de navegación
-  const availableNavItems = navItems.filter(item => {
-      // Regla especial: La contabilidad SOLO la ve el admin y se fuerza su visibilidad
-      if (item.view === View.ACCOUNTING) return isAdmin;
-      
-      // Para el resto, verificar los permisos del rol
-      return userPermissions.includes(item.view);
-  });
-  
+  const groups: NavGroup[] = useMemo(() => [
+    {
+        id: 'ops',
+        label: 'Ventas',
+        icon: ShoppingCartIcon,
+        color: 'text-blue-500',
+        items: [
+            { view: View.POS, label: 'Punto de Venta', description: 'Facturación rápida y caja', icon: StoreIcon },
+            { view: View.LAYAWAY, label: 'Abonos y Apartados', description: 'Gestionar pagos pendientes', icon: ReceiptIcon },
+            { view: View.INCIDENTS, label: 'Novedades / Cambios', description: 'Garantías, daños y cambios', icon: AlertTriangleIcon },
+            { view: View.CUSTOMERS, label: 'Mis Clientes', description: 'Directorio y fidelización', icon: ContactIcon },
+        ]
+    },
+    {
+        id: 'inv',
+        label: 'Inventario',
+        icon: PackageIcon,
+        color: 'text-orange-500',
+        items: [
+            { view: View.INVENTORY, label: 'Stock Actual', description: 'Consulta y ajustes de stock', icon: InventoryIcon },
+            { view: View.PURCHASES, label: 'Entrada Mercancía', description: 'Registrar compras al lote', icon: TruckIcon },
+            { view: View.INVENTORY_TRANSFER, label: 'Traslados', description: 'Mover stock entre sedes', icon: SwapIcon },
+            { view: View.STOCK_TAKE_HISTORY, label: 'Conteos Físicos', description: 'Auditorías de inventario', icon: ClipboardListIcon },
+        ]
+    },
+    {
+        id: 'admin',
+        label: 'Gestión',
+        icon: DashboardIcon,
+        color: 'text-purple-500',
+        items: [
+            { view: View.DASHBOARD, label: 'Dashboard Métricas', description: 'Gráficos y rendimiento', icon: DashboardIcon },
+            { view: View.ACCOUNTING, label: 'Contabilidad IA', description: 'Gastos, PyG y Auditoría', icon: ChartPieIcon },
+            { view: View.PAYROLL, label: 'Nómina y Pagos', description: 'Comisiones de vendedores', icon: DollarIcon },
+            { view: View.SELLERS, label: 'Vendedores', description: 'Gestión de personal', icon: UsersIcon },
+            { view: View.STORES, label: 'Sedes', description: 'Ajustes de sucursales', icon: BuildingStorefrontIcon },
+            { view: View.ROLE_MANAGER, label: 'Permisos', description: 'Configuración de seguridad', icon: ShieldCheckIcon },
+            { view: View.SETTINGS, label: 'Ajustes', description: 'Opciones del sistema', icon: SettingsIcon },
+        ]
+    }
+  ], []);
+
+  const filteredGroups = useMemo(() => {
+    return groups.map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+            if (item.view === View.ACCOUNTING) return isAdmin;
+            return userPermissions.includes(item.view);
+        })
+    })).filter(group => group.items.length > 0);
+  }, [groups, userPermissions, isAdmin]);
+
+  const handleMouseEnter = (groupId: string) => {
+    if (leaveTimeoutRef.current) window.clearTimeout(leaveTimeoutRef.current);
+    setActiveDesktopGroup(groupId);
+  };
+
+  const handleMouseLeave = () => {
+    leaveTimeoutRef.current = window.setTimeout(() => {
+        setActiveDesktopGroup(null);
+    }, 200);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) setIsUserDropdownOpen(false);
+      if (storeMenuRef.current && !storeMenuRef.current.contains(target)) setIsStoreDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const pendingCount = useMemo(() => {
     return incidents.filter(i => 
       [IncidentStatus.DAÑADO_REPORTADO, IncidentStatus.CAMBIO_SOLICITADO, IncidentStatus.TRASLADO_SOLICITADO, IncidentStatus.WARRANTY_ACTIVE].includes(i.status)
     ).length;
   }, [incidents]);
 
+  const toggleMobileGroup = (groupId: string) => {
+    setExpandedMobileGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(groupId)) next.delete(groupId);
+        else next.add(groupId);
+        return next;
+    });
+  };
+
+  const NavButton: React.FC<{ item: NavItem, isMobile?: boolean }> = ({ item, isMobile = false }) => {
+    const isActive = currentView === item.view;
+    const Icon = item.icon;
+    
+    return (
+      <button
+        onClick={() => {
+          setCurrentView(item.view);
+          setIsMobileMenuOpen(false);
+          setActiveDesktopGroup(null);
+        }}
+        className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all duration-200 group text-left
+          ${isActive 
+            ? 'bg-accent/10 text-accent shadow-sm' 
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+          }`}
+      >
+        <div className={`p-2 rounded-lg transition-colors ${isActive ? 'bg-accent text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="flex-grow min-w-0">
+          <p className="text-sm font-bold leading-none">{item.label}</p>
+          {!isMobile && <p className="text-[10px] text-slate-500 mt-1 truncate">{item.description}</p>}
+        </div>
+        {item.view === View.INCIDENTS && pendingCount > 0 && (
+            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center bg-red-500 text-white text-[10px] font-black rounded-full shadow-sm">
+                {pendingCount}
+            </span>
+        )}
+      </button>
+    );
+  };
+
   return (
-    <header className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 p-2 sticky top-0 z-50">
-      <div className="container mx-auto flex justify-between items-center">
-        <div className="flex items-center space-x-3">
-            <div className="text-center sm:text-left">
-              <div className="flex items-center gap-2">
-                  <h1 className="text-md sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                    Facturación Street/ <span className="text-accent">Bombón</span>
-                  </h1>
-                  <button 
-                    onClick={onOpenVersionHistory}
-                    className="text-[9px] font-black bg-accent/10 text-accent px-1.5 py-0.5 rounded border border-accent/20 hover:bg-accent hover:text-white transition-all active:scale-90"
-                    title="Ver historial de cambios"
-                  >
-                    v{currentVersion}
-                  </button>
-              </div>
-               <div className="mt-1 flex items-center gap-4">
-                {isAdmin ? (
-                  <div className="relative inline-block">
-                    <select
-                      value={currentStore?.id}
-                      onChange={(e) => onSwitchStore(e.target.value)}
-                      className={`bg-transparent text-accent font-bold text-base border-2 rounded-md py-0 pl-2 pr-8 focus:ring-0 appearance-none cursor-pointer h-[29.5px] transition-all ${isGlobalMode ? 'border-yellow-400 shadow-md shadow-yellow-400/30' : 'border-accent'}`}
-                      aria-label="Cambiar de tienda"
+    <>
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 h-16 fixed top-0 left-0 right-0 z-[100] shadow-sm">
+        <div className="container mx-auto h-full px-4 flex items-center justify-between gap-4">
+          
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+            >
+              <MenuIcon className="w-6 h-6" />
+            </button>
+
+            <div className="flex items-center gap-2 group select-none">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-accent/20 group-hover:rotate-6 transition-transform">BS</div>
+                <h1 className="hidden sm:block text-lg font-black tracking-tighter text-slate-900 dark:text-white uppercase">
+                  STREET<span className="text-accent">BOMBÓN</span>
+                </h1>
+            </div>
+          </div>
+
+          <nav className="hidden lg:flex items-center gap-2 h-full">
+            {filteredGroups.map(group => {
+                const isOpen = activeDesktopGroup === group.id;
+                const GroupIcon = group.icon;
+                const hasActiveItem = group.items.some(i => i.view === currentView);
+
+                return (
+                    <div 
+                        key={group.id} 
+                        className="relative h-full flex items-center"
+                        onMouseEnter={() => handleMouseEnter(group.id)}
+                        onMouseLeave={handleMouseLeave}
                     >
-                      {stores.map(store => (
-                        <option key={store.id} value={store.id} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-normal text-base">
-                          {store.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-accent">
-                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                        <button 
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black transition-all
+                                ${isOpen || hasActiveItem ? 'text-accent bg-accent/5' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                        >
+                            <GroupIcon className="w-4 h-4" />
+                            {group.label}
+                            <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isOpen && (
+                            <div className="absolute top-[calc(100%-8px)] left-0 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-2 animate-fade-in z-50">
+                                <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">{group.label}</p>
+                                <div className="space-y-1">
+                                    {group.items.map(item => (
+                                        <NavButton key={item.view} item={item} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+          </nav>
+
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+             
+             {isAdmin && (
+                <button 
+                  onClick={onToggleGlobalMode}
+                  className={`p-2 rounded-xl border transition-all relative group
+                    ${isGlobalMode 
+                      ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-400/20 scale-105' 
+                      : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-accent'
+                    }`}
+                  title={isGlobalMode ? "Modo Global Activo: Viendo todas las sedes" : "Activar Búsqueda Global"}
+                >
+                  <BuildingStorefrontIcon className="w-5 h-5" />
+                  {isGlobalMode && (
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-yellow-400"></span>
+                      </span>
+                  )}
+                </button>
+             )}
+
+             <div className="relative hidden md:block" ref={storeMenuRef}>
+                <button 
+                  onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                  className={`flex items-center gap-3 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition-all ${isAdmin ? 'hover:border-accent cursor-pointer' : 'cursor-default'}`}
+                >
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight max-w-[120px] truncate">{currentStore?.name || 'Sede'}</span>
+                  {isAdmin && <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${isStoreDropdownOpen ? 'rotate-180' : ''}`} />}
+                </button>
+
+                {isStoreDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1">
+                    <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambiar Sede</p>
+                    {stores.map(store => (
+                      <button
+                        key={store.id}
+                        onClick={() => {
+                          onSwitchStore(store.id);
+                          setIsStoreDropdownOpen(false);
+                        }}
+                        className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-bold transition-all
+                          ${currentStore?.id === store.id 
+                            ? 'bg-accent/10 text-accent' 
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      >
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
+                        {store.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+            </div>
+
+             {pendingCount > 0 && (
+                <button 
+                  onClick={onOpenBriefing}
+                  className="relative p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-110 transition-all"
+                >
+                  <AlertTriangleIcon className="w-5 h-5" />
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-600 text-[9px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-bounce">
+                    {pendingCount}
+                  </span>
+                </button>
+             )}
+
+             <div className="relative" ref={userMenuRef}>
+                <button 
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center gap-2 p-1 pl-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-accent transition-all group"
+                >
+                  <div className="hidden sm:block text-right pr-1">
+                    <p className="text-[10px] font-black text-slate-900 dark:text-white leading-none truncate max-w-[80px]">{currentUser.name}</p>
+                    <p className="text-[8px] text-accent uppercase font-bold tracking-widest">{isAdmin ? 'Admin' : 'Vendedor'}</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-xs shadow-md shadow-accent/20 group-hover:scale-105 transition-transform">
+                    {currentUser.name.charAt(0)}
+                  </div>
+                </button>
+
+                {isUserDropdownOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in divide-y dark:divide-slate-800">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase mb-1">Sesión Activa</p>
+                        <p className="text-sm font-black text-gray-900 dark:text-white truncate">{currentUser.name}</p>
+                        <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
+                    </div>
+                    
+                    <div className="p-2 space-y-1">
+                      <button onClick={toggleTheme} className="flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                        <div className="flex items-center gap-3">
+                          {theme === 'dark' ? <SunIcon className="w-4 h-4 text-yellow-500" /> : <MoonIcon className="w-4 h-4" />}
+                          Modo {theme === 'dark' ? 'Claro' : 'Oscuro'}
+                        </div>
+                      </button>
+                      <button onClick={() => { onOpenVersionHistory(); setIsUserDropdownOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                        <SparklesIcon className="w-4 h-4 text-accent" />
+                        Versión v{currentVersion}
+                      </button>
+                    </div>
+
+                    <div className="p-2">
+                      <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-black text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
+                        <LogoutIcon className="w-5 h-5" />
+                        CERRAR SESIÓN
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  currentStore && <p className="text-base font-bold text-accent">{currentStore.name}</p>
                 )}
-                {isAdmin && (
-                    <label htmlFor="globalModeToggle" className="hidden sm:flex items-center cursor-pointer">
-                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Búsqueda Global</span>
-                        <div className="relative">
-                            <input
-                                type="checkbox"
-                                id="globalModeToggle"
-                                className="sr-only"
-                                checked={isGlobalMode}
-                                onChange={onToggleGlobalMode}
-                            />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${isGlobalMode ? 'bg-yellow-400' : 'bg-slate-200 dark:bg-slate-700'}`}></div>
-                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isGlobalMode ? 'translate-x-4' : ''}`}></div>
-                        </div>
-                    </label>
-                )}
+             </div>
+          </div>
+        </div>
+      </header>
+
+      {isMobileMenuOpen && (
+        <>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] animate-fade-in" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="fixed top-0 left-0 bottom-0 w-80 bg-white dark:bg-slate-900 z-[201] shadow-2xl animate-slide-right flex flex-col">
+            <div className="p-6 bg-gradient-to-br from-accent to-purple-600 text-white flex justify-between items-center relative overflow-hidden">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-lg">BS</div>
+                <div>
+                  <p className="font-black text-lg leading-tight uppercase">Menú Principal</p>
+                  <p className="text-white/60 text-[10px] font-bold tracking-[0.2em] uppercase">v{currentVersion}</p>
+                </div>
               </div>
+              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all active:scale-90 relative z-10">
+                <CrossIcon className="w-6 h-6" />
+              </button>
             </div>
-            <div className="hidden lg:flex items-center space-x-2 flex-wrap bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl">
-              {availableNavItems.map(({ view, label, icon: Icon }) => (
-                 <button
-                    key={view}
-                    onClick={() => setCurrentView(view)}
-                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
-                    aria-label={label}
-                >
-                    <Icon className="w-4 h-4" />
-                    <span className="hidden xl:inline">{label}</span>
-                </button>
-              ))}
+
+            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+              
+              {/* SELECTOR DE SEDE MÓVIL (Solo Admin) */}
+              {isAdmin && (
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Cambiar de Tienda</p>
+                      <div className="grid grid-cols-1 gap-2">
+                          {stores.map(store => (
+                              <button
+                                  key={store.id}
+                                  onClick={() => {
+                                      onSwitchStore(store.id);
+                                      setIsMobileMenuOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full p-3 rounded-xl transition-all border-2
+                                      ${currentStore?.id === store.id 
+                                          ? 'bg-white dark:bg-slate-800 border-accent shadow-md' 
+                                          : 'bg-transparent border-transparent text-slate-500'}`}
+                              >
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
+                                      <span className={`text-sm font-black uppercase ${currentStore?.id === store.id ? 'text-slate-900 dark:text-white' : ''}`}>{store.name}</span>
+                                  </div>
+                                  {currentStore?.id === store.id && <CheckIcon className="w-5 h-5 text-accent" />}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              {filteredGroups.map(group => {
+                const isExpanded = expandedMobileGroups.has(group.id);
+                const GroupIcon = group.icon;
+                
+                return (
+                    <div key={group.id} className="space-y-1">
+                        <button 
+                            onClick={() => toggleMobileGroup(group.id)}
+                            className={`flex items-center justify-between w-full p-4 rounded-2xl transition-all ${isExpanded ? 'bg-slate-100 dark:bg-slate-800/50 mb-2' : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 ${group.color}`}>
+                                    <GroupIcon className="w-5 h-5" />
+                                </div>
+                                <span className="font-black text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">{group.label}</span>
+                            </div>
+                            <ChevronDownIcon className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        {isExpanded && (
+                            <div className="pl-4 pr-1 space-y-1 animate-fade-in border-l-2 border-slate-100 dark:border-slate-800 ml-6">
+                                {group.items.map(item => (
+                                    <NavButton key={item.view} item={item} isMobile />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+              })}
             </div>
-        </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-3">
-           {/* Notification Bell */}
-           {pendingCount > 0 && (
-             <button 
-                onClick={onOpenBriefing}
-                className="relative p-2 rounded-full text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 transition-all animate-pulse"
-                title="Ver novedades pendientes"
-             >
-                <AlertTriangleIcon className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
-                    {pendingCount}
-                </span>
-             </button>
-           )}
+            <div className="p-6 border-t dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <button onClick={onLogout} className="w-full flex items-center justify-center gap-3 py-4 bg-red-500 text-white font-black rounded-2xl shadow-lg shadow-red-500/20 active:scale-95 transition-all uppercase tracking-[0.2em] text-[10px]">
+                <LogoutIcon className="w-5 h-5" />
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
-           <div className="hidden sm:block text-right">
-                <p className="font-bold text-sm text-slate-800 dark:text-white">{currentUser.name}</p>
-                <button onClick={onLogout} className="text-xs text-accent hover:underline">
-                  Cerrar Sesión
-                </button>
-           </div>
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-400" /> : <MoonIcon className="w-5 h-5 text-slate-700" />}
-          </button>
-          <button onClick={onLogout} className="sm:hidden p-2 rounded-full text-red-500 bg-red-500/10" aria-label="Logout">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-          </button>
-        </div>
-      </div>
-       <div className="lg:hidden container mx-auto mt-2 overflow-x-auto pb-2 scrollbar-hide">
-           <nav className="flex items-center space-x-1 sm:space-x-2 bg-slate-200/50 dark:bg-slate-800/50 p-1 rounded-xl w-max">
-            {availableNavItems.map(({ view, label, icon: Icon }) => (
-                 <button
-                    key={view}
-                    onClick={() => setCurrentView(view)}
-                    className={`${commonButtonClasses} ${currentView === view ? activeButtonClasses : inactiveButtonClasses.replace('bg-white/50', 'bg-transparent').replace('dark:bg-slate-800/60', 'dark:bg-transparent')}`}
-                    aria-label={label}
-                >
-                    <Icon className="w-4 h-4" />
-                    <span className="whitespace-nowrap">{label}</span>
-                </button>
-              ))}
-           </nav>
-       </div>
-    </header>
+      <div className="h-16"></div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes slide-right {
+          from { transform: translateX(-100%); }
+          to { transform: translateX(0); }
+        }
+        .animate-slide-right {
+          animation: slide-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}} />
+    </>
   );
 };
 
