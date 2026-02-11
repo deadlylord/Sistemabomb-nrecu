@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { CartItem, PaymentMethod, Seller, Customer, Payment } from '../types';
 import { TrashIcon, PlusIcon, MinusIcon, PauseIcon, TagIcon, TruckIcon } from './Icons';
@@ -65,7 +64,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         if (phone.length === 10) {
             const foundCustomer = customers.find(c => c.phone === phone);
             if (foundCustomer) {
-              setCustomerName(toTitleCase(foundCustomer.name));
+              setCustomerName(foundCustomer.name);
             }
         }
     }
@@ -77,8 +76,9 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
       alert("El número de celular debe tener exactamente 10 dígitos.");
       return;
     }
-    if (customerName.trim() && customerPhone.trim() && invoiceNumber.trim() && layawaySeller && paymentMethod && amount > 0) {
-      onCreateLayaway(customerName, customerPhone, invoiceNumber, layawaySeller, { amount, method: paymentMethod }, saleDate, isPreOrder, layawayDescription);
+    const finalName = toTitleCase(customerName.trim());
+    if (finalName && customerPhone.trim() && invoiceNumber.trim() && layawaySeller && paymentMethod && amount > 0) {
+      onCreateLayaway(finalName, customerPhone, invoiceNumber, layawaySeller, { amount, method: paymentMethod }, saleDate, isPreOrder, layawayDescription);
       setIsLayawayModalOpen(false);
       setCustomerName('');
       setCustomerPhone('');
@@ -213,11 +213,11 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                   Procesar Venta
                 </button>
                 <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => onHoldSale()} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                    <button onClick={() => onHoldSale()} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <PauseIcon />
                         <span>En Espera</span>
                     </button>
-                    <button onClick={() => handleLayawayClick(false)} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                    <button onClick={() => handleLayawayClick(false)} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <TagIcon />
                         <span>Crear Abono</span>
                     </button>
@@ -290,7 +290,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                         type="text"
                         id="customerName"
                         value={customerName}
-                        onChange={e => setCustomerName(toTitleCase(e.target.value))}
+                        onChange={e => setCustomerName(e.target.value)}
+                        onBlur={() => setCustomerName(prev => toTitleCase(prev))}
                         className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                         placeholder="Ej: Ana Pérez"
                         required

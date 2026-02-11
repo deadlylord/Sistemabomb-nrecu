@@ -57,6 +57,7 @@ const Header: React.FC<HeaderProps> = ({
   const [activeDesktopGroup, setActiveDesktopGroup] = useState<string | null>(null);
   const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set(['ops']));
   
+  // Para el carrusel de grupos en móvil
   const [previewGroupIndex, setPreviewGroupIndex] = useState<number>(-1);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -84,12 +85,12 @@ const Header: React.FC<HeaderProps> = ({
     },
     {
         id: 'inv',
-        label: 'Inventario',
+        label: 'Inventarios',
         icon: PackageIcon,
         color: 'text-orange-500',
         items: [
-            { view: View.INVENTORY, label: 'Stock Actual', description: 'Consulta y ajustes de stock', icon: InventoryIcon },
-            { view: View.PURCHASES, label: 'Entrada Mercancía', description: 'Registrar compras al lote', icon: TruckIcon },
+            { view: View.INVENTORY, label: 'Existencias', description: 'Consulta y ajustes de stock', icon: InventoryIcon },
+            { view: View.PURCHASES, label: 'Compras', description: 'Registrar compras al lote', icon: TruckIcon },
             { view: View.INVENTORY_TRANSFER, label: 'Traslados', description: 'Mover stock entre sedes', icon: SwapIcon },
             { view: View.STOCK_TAKE_HISTORY, label: 'Conteos Físicos', description: 'Auditorías de inventario', icon: ClipboardListIcon },
         ]
@@ -125,15 +126,16 @@ const Header: React.FC<HeaderProps> = ({
     return filteredGroups.findIndex(group => group.items.some(item => item.view === currentView));
   }, [currentView, filteredGroups]);
 
+  // Al abrir el dropdown móvil, sincronizar el índice de previsualización
   useEffect(() => {
     if (isMobileGroupDropdownOpen) {
-        setPreviewGroupIndex(currentGroupIndex);
+        setPreviewGroupIndex(currentGroupIndex === -1 ? 0 : currentGroupIndex);
     }
   }, [isMobileGroupDropdownOpen, currentGroupIndex]);
 
   const displayedGroup = useMemo(() => {
-    if (previewGroupIndex === -1) return filteredGroups[currentGroupIndex];
-    return filteredGroups[previewGroupIndex] || filteredGroups[currentGroupIndex];
+    if (previewGroupIndex === -1) return filteredGroups[currentGroupIndex === -1 ? 0 : currentGroupIndex];
+    return filteredGroups[previewGroupIndex] || filteredGroups[0];
   }, [filteredGroups, currentGroupIndex, previewGroupIndex]);
 
   const navigateGroup = (direction: 'prev' | 'next', e: React.MouseEvent) => {
@@ -141,8 +143,9 @@ const Header: React.FC<HeaderProps> = ({
     const len = filteredGroups.length;
     if (len === 0) return;
     setPreviewGroupIndex(prev => {
-        if (direction === 'next') return (prev + 1) % len;
-        return (prev - 1 + len) % len;
+        const currentIdx = prev === -1 ? (currentGroupIndex === -1 ? 0 : currentGroupIndex) : prev;
+        if (direction === 'next') return (currentIdx + 1) % len;
+        return (currentIdx - 1 + len) % len;
     });
   };
 
@@ -232,9 +235,10 @@ const Header: React.FC<HeaderProps> = ({
               <MenuIcon className="w-6 h-6" />
             </button>
 
+            {/* LOGO BS: Ahora con onClick asegurado para escritorio */}
             <div 
               onClick={() => isAdmin && setCurrentView(View.DASHBOARD)}
-              className={`flex items-center gap-2 group select-none ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+              className={`flex items-center gap-2 group select-none pointer-events-auto ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
               title={isAdmin ? "Ir al Dashboard" : "Logo BS"}
             >
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-accent/20 group-hover:rotate-6 transition-transform">BS</div>
@@ -244,35 +248,42 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* ESPACIO CENTRAL MÓVIL Y TABLET: Selector de Grupo y Tienda */}
+          {/* ESPACIO CENTRAL MÓVIL Y TABLET: Selector de Grupo con Flechas */}
           <div className="flex-grow lg:hidden flex flex-col items-center justify-center min-w-0">
             <div className="relative" ref={groupMenuRef}>
-              <button 
-                onClick={() => setIsMobileGroupDropdownOpen(!isMobileGroupDropdownOpen)}
-                className="flex items-center gap-1.5 px-3 py-1 bg-accent/5 dark:bg-accent/10 rounded-lg transition-all active:scale-95"
-              >
-                <span className="text-[11px] font-black text-accent uppercase tracking-[0.15em] truncate">
-                  {filteredGroups[currentGroupIndex]?.label || 'Menú'}
-                </span>
-                <ChevronDownIcon className={`w-3.5 h-3.5 text-accent transition-transform duration-300 ${isMobileGroupDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
+              <div className="flex items-center gap-1 bg-accent/5 dark:bg-accent/10 rounded-lg p-1">
+                {/* Flecha Izquierda */}
+                <button 
+                  onClick={(e) => navigateGroup('prev', e)}
+                  className="p-1 text-accent/50 hover:text-accent transition-colors"
+                >
+                  <ChevronLeftIcon className="w-4 h-4" />
+                </button>
+                
+                <button 
+                  onClick={() => setIsMobileGroupDropdownOpen(!isMobileGroupDropdownOpen)}
+                  className="flex items-center gap-1.5 px-2 py-0.5 transition-all active:scale-95"
+                >
+                  <span className="text-[10px] font-black text-accent uppercase tracking-[0.1em] truncate max-w-[100px]">
+                    {displayedGroup?.label || 'Menú'}
+                  </span>
+                  <ChevronDownIcon className={`w-3.5 h-3.5 text-accent transition-transform duration-300 ${isMobileGroupDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Flecha Derecha */}
+                <button 
+                  onClick={(e) => navigateGroup('next', e)}
+                  className="p-1 text-accent/50 hover:text-accent transition-colors"
+                >
+                  <ChevronRightIcon className="w-4 h-4" />
+                </button>
+              </div>
 
               {isMobileGroupDropdownOpen && displayedGroup && (
                 <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[120]">
-                  <div className="flex items-center justify-between px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                    <button 
-                        onClick={(e) => navigateGroup('prev', e)}
-                        className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-accent transition-colors"
-                    >
-                        <ChevronLeftIcon className="w-5 h-5" />
-                    </button>
+                  {/* Título del grupo actual dentro del desplegable */}
+                  <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
                     <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
-                    <button 
-                        onClick={(e) => navigateGroup('next', e)}
-                        className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-accent transition-colors"
-                    >
-                        <ChevronRightIcon className="w-5 h-5" />
-                    </button>
                   </div>
 
                   <div className="space-y-1">
@@ -285,7 +296,7 @@ const Header: React.FC<HeaderProps> = ({
             </div>
             
             {isAdmin && (
-              <div className="relative mt-0.5" ref={mobileStoreMenuRef}>
+              <div className="relative mt-1" ref={mobileStoreMenuRef}>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setIsMobileStoreDropdownOpen(!isMobileStoreDropdownOpen); }}
                   className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 transition-all active:scale-95"

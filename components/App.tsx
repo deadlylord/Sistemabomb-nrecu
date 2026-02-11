@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
@@ -19,7 +20,8 @@ import {
   Query,
   WriteBatch,
   arrayUnion,
-  runTransaction
+  runTransaction,
+  orderBy
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory } from '../types';
@@ -41,7 +43,7 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP } from '../constants';
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
@@ -121,7 +123,6 @@ const App: React.FC = () => {
 
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
-  // Chat de Contabilidad Sincronizado
   const [accountingChatHistory, setAccountingChatHistory] = useState<any[]>([]);
 
   const handleToggleProductVerification = (productId: string) => {
@@ -350,7 +351,6 @@ const App: React.FC = () => {
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('purchases'), setPurchases);
             
-            // Listener para chat de contabilidad de esta sede
             const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
             unsubscribers.push(onSnapshot(chatRef, (doc) => {
               if (doc.exists()) {
@@ -801,7 +801,6 @@ const App: React.FC = () => {
             if (incident.status !== IncidentStatus.CAMBIO_SOLICITADO) return;
             newStatus = IncidentStatus.CAMBIO_PROCESADO;
             
-            // 1. Actualización de Inventario
             incident.returnedItems?.forEach(item => { 
                 batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); 
                 const exchangeInLogRef = doc(collection(db, 'productHistory'));
@@ -833,14 +832,12 @@ const App: React.FC = () => {
                 batch.set(exchangeOutLogRef, exchangeOutLog);
             });
 
-            // 2. Actualización de la Venta Original para mantener consistencia en Dashboard
             if (incident.originalSaleId) {
                 const originalSale = allSales.find(s => s.id === incident.originalSaleId) || sales.find(s => s.id === incident.originalSaleId);
                 if (originalSale) {
                     const saleRef = doc(db, 'sales', originalSale.id);
                     let updatedItems = [...originalSale.items];
                     
-                    // Procesar devoluciones en la factura
                     incident.returnedItems?.forEach(ret => {
                         const idx = updatedItems.findIndex(i => i.id === ret.productId);
                         if (idx !== -1) {
@@ -849,13 +846,11 @@ const App: React.FC = () => {
                         }
                     });
 
-                    // Procesar nuevos productos en la factura
                     incident.takenItems?.forEach(taken => {
                         const idx = updatedItems.findIndex(i => i.id === taken.productId);
                         if (idx !== -1) {
                             updatedItems[idx].quantity += taken.quantity;
                         } else {
-                            // Reconstruir CartItem desde los datos del incidente
                             updatedItems.push({
                                 id: taken.productId,
                                 name: taken.productName,
@@ -930,7 +925,6 @@ const App: React.FC = () => {
       if (!currentUser) return;
       const batch = writeBatch(db);
 
-      // 1. Revertir stock del abono original si afectaba inventario
       if (originalLayaway.status === 'active' || originalLayaway.status === 'completed') {
           originalLayaway.items.forEach(item => {
               const productRef = doc(db, 'inventory', item.id);
@@ -938,13 +932,11 @@ const App: React.FC = () => {
           });
       }
 
-      // 2. Restar stock del abono actualizado si afecta inventario
       if (updatedLayaway.status === 'active' || updatedLayaway.status === 'completed') {
           updatedLayaway.items.forEach(item => {
               const productRef = doc(db, 'inventory', item.id);
               batch.update(productRef, { stock: increment(-item.quantity) });
 
-              // Registrar en historial para cada producto
               const logRef = doc(collection(db, 'productHistory'));
               const log: ProductHistoryLog = {
                   id: logRef.id,
@@ -960,9 +952,7 @@ const App: React.FC = () => {
           });
       }
 
-      // 3. Actualizar documento del abono
       batch.set(doc(db, 'layaways', updatedLayaway.id), updatedLayaway);
-
       await batch.commit();
   };
 
@@ -975,7 +965,6 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       const layawayRef = doc(db, 'layaways', layawayId);
       
-      // Solo devolver stock si el abono realmente lo había restado (encargos no restan stock)
       if (layaway.status === 'active' || layaway.status === 'completed') {
           layaway.items.forEach(item => {
               const productRef = doc(db, 'inventory', item.id);
@@ -1062,7 +1051,6 @@ const App: React.FC = () => {
       });
 
       batch.delete(doc(db, 'sales', saleId));
-
       await batch.commit();
   };
 
@@ -1109,12 +1097,40 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>) => {
+  const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>, systemStockSnapshot: Record<string, number>) => {
     if (!currentStoreId || !currentUser) return;
+    
     const draftId = `${categoryId}_${currentStoreId}`;
     const draftRef = doc(db, 'pendingDetailedVerifications', draftId);
-    const draftData: PendingDetailedVerification = { id: draftId, categoryId, storeId: currentStoreId, counts, lastUpdatedBy: currentUser.name, updatedAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    
+    const draftData: PendingDetailedVerification = { 
+        id: draftId, 
+        categoryId, 
+        storeId: currentStoreId, 
+        counts, 
+        lastUpdatedBy: currentUser.name, 
+        updatedAt: now 
+    };
     await setDoc(draftRef, draftData);
+
+    const historyRef = doc(collection(db, 'detailedVerificationHistory'));
+    
+    const historicalCounts: Record<string, { physical: number; system: number }> = {};
+    Object.keys(systemStockSnapshot).forEach(pid => {
+        historicalCounts[pid] = {
+            physical: counts[pid] !== undefined ? counts[pid] : 0, 
+            system: systemStockSnapshot[pid] || 0
+        };
+    });
+
+    await setDoc(historyRef, {
+        ...draftData,
+        id: historyRef.id,
+        draftId: draftId,
+        counts: historicalCounts, 
+        updatedAt: now 
+    });
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {

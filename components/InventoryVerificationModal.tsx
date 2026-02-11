@@ -13,7 +13,7 @@ interface InventoryVerificationModalProps {
   currentStore?: Store;
   onClose: () => void;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => void;
-  onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>) => Promise<void>;
+  onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
 }
@@ -140,6 +140,18 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
 
+  const handleSaveDraftWithSnapshot = async (catId: string, productCounts: Record<string, number>) => {
+      // Tomamos una "foto" del stock del sistema actual para estos productos
+      const systemSnapshot: Record<string, number> = {};
+      inventory
+        .filter(p => p.categoryId === catId && !p.isDisabled)
+        .forEach(p => {
+            systemSnapshot[p.id] = p.stock;
+        });
+      
+      await onSaveDetailedDraft(catId, productCounts, systemSnapshot);
+  };
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={onClose}>
@@ -249,7 +261,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           initialCounts={detailedCounts[activeCategoryForDetails.id] || {}}
           onApplyCounts={(productCounts) => handleApplyDetailedCountsFromModal(activeCategoryForDetails.id, productCounts)}
           isAdmin={isAdmin}
-          onSaveDraft={(counts) => onSaveDetailedDraft(activeCategoryForDetails.id, counts)}
+          onSaveDraft={(counts) => handleSaveDraftWithSnapshot(activeCategoryForDetails.id, counts)}
           onApplyAdjustments={(counts) => onApplyDetailedVerification(activeCategoryForDetails.id, counts)}
           storeId={inventory[0]?.storeId || ''}
         />

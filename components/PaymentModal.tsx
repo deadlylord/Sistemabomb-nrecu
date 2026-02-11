@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { PaymentMethod, Seller, Customer, Payment } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
@@ -30,18 +29,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
   const isFullyPaid = remainingAmount <= 0;
 
   useEffect(() => {
-    // This effect resets the modal's core state ONLY when the cart total changes,
-    // which signifies a new or fundamentally different transaction.
     setPayments([]);
     setSelectedSeller('');
-    // Use initialCustomerInfo if provided (for resumed sales), otherwise clear customer fields.
     setCustomerName(initialCustomerInfo?.name || '');
     setCustomerPhone(initialCustomerInfo?.phone || '');
   }, [total, initialCustomerInfo]);
 
   useEffect(() => {
-    // This effect ensures the amount input field is correctly populated
-    // whenever the modal is open or the remaining amount changes.
     if (isOpen) {
       if (remainingAmount > 0) {
         setAmountInput(remainingAmount.toFixed(0));
@@ -51,7 +45,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }
   }, [isOpen, remainingAmount]);
 
-
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const phone = e.target.value.replace(/[^0-9]/g, '');
     if (phone.length <= 10) {
@@ -59,7 +52,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         if (phone.length === 10) {
             const foundCustomer = customers.find(c => c.phone === phone);
             if (foundCustomer) {
-              setCustomerName(toTitleCase(foundCustomer.name));
+              setCustomerName(foundCustomer.name);
             }
         }
     }
@@ -94,7 +87,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       return;
     }
     
-    const finalCustomerName = customerName.trim() || 'Cliente Mostrador';
+    const finalCustomerName = toTitleCase(customerName.trim() || 'Cliente Mostrador');
     const finalCustomerPhone = customerPhone.trim() || 'N/A';
     
     if (finalCustomerPhone !== 'N/A' && finalCustomerPhone.length !== 10) {
@@ -119,7 +112,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
   };
 
   const handleHold = () => {
-    const finalCustomerName = customerName.trim() || 'Cliente Mostrador';
+    const finalCustomerName = toTitleCase(customerName.trim() || 'Cliente Mostrador');
     const finalCustomerPhone = customerPhone.trim() || 'N/A';
     if (!selectedSeller) {
         alert("Por favor, selecciona un vendedor para poner la venta en espera.");
@@ -155,9 +148,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         </div>
 
         <div className="flex-grow grid md:grid-cols-2 gap-6 py-4 overflow-y-auto">
-          {/* Columna Izquierda: Entradas y Acciones */}
           <div className="flex flex-col gap-4">
-             {/* Info Vendedor y Cliente */}
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Vendedor (Obligatorio)</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -171,12 +162,18 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             <div className="border-t pt-4">
               <h3 className="text-lg font-bold text-center text-accent/80 mb-2">Datos del Cliente (Opcional)</h3>
               <div className="space-y-3">
-                 <input type="tel" value={customerPhone} onChange={handlePhoneChange} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" placeholder="Celular (10 dígitos)" maxLength={10}/>
-                 <input type="text" value={customerName} onChange={e => setCustomerName(toTitleCase(e.target.value))} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" placeholder="Nombre Cliente"/>
+                 <input type="tel" value={customerPhone} onChange={handlePhoneChange} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md border outline-none focus:ring-2 focus:ring-accent" placeholder="Celular (10 dígitos)" maxLength={10}/>
+                 <input 
+                    type="text" 
+                    value={customerName} 
+                    onChange={e => setCustomerName(e.target.value)} 
+                    onBlur={() => setCustomerName(prev => toTitleCase(prev))}
+                    className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md border outline-none focus:ring-2 focus:ring-accent" 
+                    placeholder="Nombre Cliente"
+                 />
               </div>
             </div>
             
-            {/* Agregar Pago */}
             {!isFullyPaid && (
               <div className="border-t pt-4">
                 <h3 className="text-lg font-bold text-center text-accent/80 mb-2">Agregar Pago</h3>
@@ -200,7 +197,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             )}
           </div>
           
-          {/* Columna Derecha: Resumen */}
           <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg flex flex-col">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Resumen de Pago</h3>
             <div className="flex-grow space-y-2 overflow-y-auto">
