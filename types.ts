@@ -1,3 +1,4 @@
+
 export enum ProductChangeType {
   SALE = 'Venta',
   RETURN = 'Devolución (Venta Editada)',
@@ -28,6 +29,22 @@ export interface VersionLog {
   description: string;
   changes: string[];
   isCurrent?: boolean;
+}
+
+export interface FinancialRecord {
+  id: string;
+  date: string; // ISO String
+  storeId: string;
+  accountType: 'cash' | 'qr' | 'bank';
+  amount: number; // Positivo para ingresos, negativo para egresos
+  type: 'income_sales' | 'income_manual' | 'expense' | 'transfer' | 'adjustment';
+  description: string;
+  category?: string;
+  subCategory?: string;
+  registeredBy: string;
+  relatedRecordId?: string; 
+  isConfirmed?: boolean;
+  debtStoreId?: string; // ID del local que debe este dinero o al que pertenece el movimiento
 }
 
 export interface PendingDetailedVerification {
@@ -177,6 +194,7 @@ export enum View {
   INCIDENTS = 'incidents',
   ROLE_MANAGER = 'role_manager',
   ACCOUNTING = 'accounting',
+  FINANCIAL_RECONCILIATION = 'financial_reconciliation',
 }
 
 export enum PaymentMethod {

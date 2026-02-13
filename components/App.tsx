@@ -52,6 +52,7 @@ import { InventoryVerificationModal } from './InventoryVerificationModal';
 import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
 import SmartAccountantView from './SmartAccountantView';
 import VersionHistoryModal from './VersionHistoryModal';
+import FinancialReconciliationView from './FinancialReconciliationView';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -359,6 +360,12 @@ const App: React.FC = () => {
                 setAccountingChatHistory([]);
               }
             }));
+            break;
+        case View.FINANCIAL_RECONCILIATION:
+            attach(storeSpecificQuery('sales'), setSales);
+            attach(storeSpecificQuery('layaways'), setLayaways);
+            attach(storeSpecificQuery('expenses'), setExpenses);
+            attach(storeSpecificQuery('incidents'), setIncidents);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
@@ -1594,6 +1601,16 @@ const App: React.FC = () => {
             chatMessages={accountingChatHistory}
             onUpdateChatMessages={handleUpdateAccountingChat}
           />
+        )}
+        {currentView === View.FINANCIAL_RECONCILIATION && (
+            <FinancialReconciliationView 
+                stores={stores} 
+                sales={sales} 
+                layaways={layaways} 
+                expenses={expenses}
+                incidents={incidents}
+                currentUser={currentUser}
+            />
         )}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
