@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType } from '../types';
 import { formatCOP } from '../constants';
-import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon } from './Icons';
+import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from './Icons';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 
@@ -50,6 +50,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
 
   // Added years useMemo to fix "Cannot find name 'years'" error
   const years = useMemo(() => {
@@ -101,12 +102,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [records, selectedMonth, selectedYear]);
 
   const interStoreBalances = useMemo(() => {
-      const balances: Record<string, { total: number, cash: number, qr: number, bank: number }> = {};
+      const balances: Record<string, { total: number, cash: number, qr: number, bank: number, storeId: string }> = {};
       records.forEach(r => {
           if (r.debtStoreId) {
               const otherStoreId = r.debtStoreId;
               if (!balances[otherStoreId]) {
-                  balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0 };
+                  balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0, storeId: otherStoreId };
               }
               const amountToFlip = -r.amount; 
               balances[otherStoreId].total += amountToFlip;
@@ -117,6 +118,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       });
       return Object.entries(balances).map(([otherStoreId, stats]) => ({
           otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
+          storeId: otherStoreId,
           ...stats
       })).filter(s => Math.abs(s.total) > 0.1);
   }, [records, stores]);
@@ -217,6 +219,86 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         isSplit: false
     };
     setManualEntries([...manualEntries, newEntry]);
+  };
+
+  const handlePreFillPayment = (targetStoreId: string, amount: number) => {
+      const newEntry: ManualEntry = {
+        tempId: Math.random().toString(36).substr(2, 9),
+        date: new Date().toISOString().split('T')[0],
+        amount: (-amount).toString(), // Gasto negativo
+        otherAmount: '',
+        description: `Pago deuda`,
+        accountType: activeTab,
+        subCategory: 'Cruce Sedes',
+        debtStoreId: targetStoreId,
+        isSplit: false
+    };
+    setManualEntries([newEntry]);
+    setShowAddModal(true);
+  };
+
+  const handleSettleDebt = async (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType) => {
+      if (!targetStoreId) {
+          alert("Error: No se identificó la tienda destino.");
+          return;
+      }
+      if (amount <= 0) return;
+      
+      const accountLabel = sourceAccount === 'cash' ? 'Efectivo' : (sourceAccount === 'qr' ? 'Bancolombia' : 'Otros Bancos');
+      const confirmMsg = `¿Confirmas el pago de ${formatCOP(amount)} desde ${accountLabel} para saldar la deuda con ${targetStoreName}?`;
+      
+      if (!window.confirm(confirmMsg)) return;
+
+      try {
+          const batch = writeBatch(db);
+          const activeStoreName = stores.find(s => s.id === activeStoreId)?.name || 'Local Actual';
+          const date = new Date().toISOString().split('T')[0];
+
+          // 1. Registro de Egreso en la tienda actual (Paga)
+          const mainRef = doc(collection(db, 'financialRecords'));
+          const mainRecord: FinancialRecord = {
+              id: mainRef.id,
+              date: date,
+              storeId: activeStoreId,
+              accountType: sourceAccount,
+              amount: -amount,
+              type: 'expense',
+              description: `Pago de deuda a ${targetStoreName}`,
+              subCategory: 'Cruce Sedes',
+              registeredBy: currentUser.name,
+              isConfirmed: true,
+              debtStoreId: targetStoreId
+          };
+
+          // 2. Registro de Ingreso en la tienda destino (Recibe)
+          const mirrorRef = doc(collection(db, 'financialRecords'));
+          const mirrorRecord: FinancialRecord = {
+              id: mirrorRef.id,
+              date: date,
+              storeId: targetStoreId,
+              accountType: sourceAccount, // Asumimos que entra al mismo tipo de cuenta por defecto
+              amount: amount,
+              type: 'income_manual',
+              description: `Pago recibido de ${activeStoreName}`,
+              subCategory: 'Cruce Sedes',
+              registeredBy: `${currentUser.name} (vía ${activeStoreName})`,
+              isConfirmed: true,
+              debtStoreId: activeStoreId,
+              relatedRecordId: mainRef.id
+          };
+          
+          // Vincular registros
+          mainRecord.relatedRecordId = mirrorRef.id;
+
+          batch.set(mainRef, mainRecord);
+          batch.set(mirrorRef, mirrorRecord);
+
+          await batch.commit();
+          alert("Pago registrado exitosamente.");
+      } catch (error) {
+          console.error("Error settling debt:", error);
+          alert("Hubo un error al registrar el pago.");
+      }
   };
 
   const parseInputToNumber = (val: string) => val.replace(/[^0-9-]/g, '');
@@ -340,9 +422,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 subCategory: e.subCategory || 'Manual',
                 registeredBy: currentUser.name,
                 isConfirmed: true,
-                debtStoreId: e.debtStoreId || undefined,
-                relatedRecordId: mirrorRef?.id || undefined
             };
+
+            // Conditionally add optional fields to avoid undefined values in Firestore
+            if (e.debtStoreId) {
+                newRecord.debtStoreId = e.debtStoreId;
+            }
+            if (mirrorRef) {
+                newRecord.relatedRecordId = mirrorRef.id;
+            }
+
             batch.set(mainRef, newRecord);
 
             if (mirrorRef && e.debtStoreId) {
@@ -386,6 +475,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const { amountString, ...recordToSave } = editingRecord;
       // Eliminar propiedad runtime para que no se guarde
       if ('saldo' in recordToSave) delete (recordToSave as any).saldo;
+      
+      // Cleanup optional fields that might be undefined from state
+      if (recordToSave.debtStoreId === undefined) delete recordToSave.debtStoreId;
+      if (recordToSave.relatedRecordId === undefined) delete recordToSave.relatedRecordId;
 
       const amountVal = parseFloat(amountString || '0');
       recordToSave.amount = amountVal;
@@ -489,6 +582,19 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 {Math.abs(item.qr) > 0 && <p className="text-[10px] font-bold">Bancolombia: <span className={item.qr > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.qr)}</span></p>}
                                 {Math.abs(item.bank) > 0 && <p className="text-[10px] font-bold">Otros: <span className={item.bank > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.bank)}</span></p>}
                             </div>
+                            {item.total < 0 && (
+                                <div className="mt-3 pt-3 border-t-2 border-dashed border-red-200 dark:border-red-900/50">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Saldar Deuda:</p>
+                                        <button onClick={() => handlePreFillPayment(item.storeId, Math.abs(item.total))} className="text-[10px] text-accent font-bold hover:underline">Otro valor...</button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash')} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[10px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm hover:bg-green-50">EFECTIVO</button>
+                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr')} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[10px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm hover:bg-blue-50">QR</button>
+                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'bank')} className="flex-1 bg-white dark:bg-gray-800 text-purple-600 text-[10px] font-black py-1.5 rounded-lg border border-purple-200 shadow-sm hover:bg-purple-50">BANCOS</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )) : <p className="text-sm text-gray-400 italic">No hay préstamos ni pagos pendientes entre locales.</p>}
                 </div>
@@ -528,10 +634,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-4">
                 <div className="bg-white dark:bg-secondary p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full max-h-[800px]">
-                    <div className="mb-4">
-                        <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-                            <HistoryIcon className="w-4 h-4 text-accent" /> Cargas del Sistema
-                        </h3>
+                    <div className="mb-4 flex flex-col gap-2">
+                        <button 
+                            onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)}
+                            className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors w-full"
+                        >
+                            <HistoryIcon className="w-4 h-4 text-accent" /> 
+                            Cargas del Sistema
+                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        
                         <div className="flex gap-2">
                              <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-xs font-bold outline-none">
                                 {monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -542,27 +654,29 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         </div>
                     </div>
                     
-                    <div className="space-y-3 overflow-y-auto pr-2 scrollbar-hide">
-                        {dailySystemTotals.map((item) => {
-                            const isCashConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
-                            const isQrConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
-                            return (
-                                <div key={item.date} className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl space-y-3">
-                                    <div className="flex justify-between items-center border-b dark:border-gray-700 pb-2">
-                                        <p className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-tighter">{item.date}</p>
+                    {isSystemLoadsOpen && (
+                        <div className="space-y-3 overflow-y-auto pr-2 scrollbar-hide animate-fade-in">
+                            {dailySystemTotals.map((item) => {
+                                const isCashConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
+                                const isQrConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
+                                return (
+                                    <div key={item.date} className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl space-y-3">
+                                        <div className="flex justify-between items-center border-b dark:border-gray-700 pb-2">
+                                            <p className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-tighter">{item.date}</p>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <div><p className="text-[9px] font-black text-gray-400 uppercase">Efectivo:</p><p className={`text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
+                                            <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? <CheckIcon className="w-3 h-3" /> : 'CONCILIAR'}</button>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <div><p className="text-[9px] font-black text-gray-400 uppercase">QR (Bancolombia):</p><p className={`text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
+                                            <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? <CheckIcon className="w-3 h-3" /> : 'CONCILIAR'}</button>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center">
-                                        <div><p className="text-[9px] font-black text-gray-400 uppercase">Efectivo:</p><p className={`text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
-                                        <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? <CheckIcon className="w-3 h-3" /> : 'CONCILIAR'}</button>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <div><p className="text-[9px] font-black text-gray-400 uppercase">QR (Bancolombia):</p><p className={`text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
-                                        <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? <CheckIcon className="w-3 h-3" /> : 'CONCILIAR'}</button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
 
