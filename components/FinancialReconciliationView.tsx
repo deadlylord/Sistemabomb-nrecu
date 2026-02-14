@@ -29,6 +29,13 @@ interface ManualEntry {
     isSplit?: boolean;
 }
 
+interface PaymentSummaryData {
+    targetStoreId: string;
+    targetStoreName: string;
+    amount: number;
+    sourceAccount: AccountType;
+}
+
 // Mapeo para categorización automática
 const AUTO_CATEGORIES: Record<string, string[]> = {
     'Servicios': ['luz', 'agua', 'gas', 'internet', 'claro', 'tigo', 'movistar', 'energia', 'vanti', 'acueducto'],
@@ -51,6 +58,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
+  const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
+  const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
   // Added years useMemo to fix "Cannot find name 'years'" error
   const years = useMemo(() => {
@@ -102,26 +112,42 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [records, selectedMonth, selectedYear]);
 
   const interStoreBalances = useMemo(() => {
-      const balances: Record<string, { total: number, cash: number, qr: number, bank: number, storeId: string }> = {};
+      const balances: Record<string, { total: number, cash: number, qr: number, bank: number, storeId: string, history: FinancialRecord[] }> = {};
+      
       records.forEach(r => {
           if (r.debtStoreId) {
               const otherStoreId = r.debtStoreId;
               if (!balances[otherStoreId]) {
-                  balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0, storeId: otherStoreId };
+                  balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0, storeId: otherStoreId, history: [] };
               }
               const amountToFlip = -r.amount; 
               balances[otherStoreId].total += amountToFlip;
+              balances[otherStoreId].history.push(r);
+
               if (r.accountType === 'cash') balances[otherStoreId].cash += amountToFlip;
               else if (r.accountType === 'qr') balances[otherStoreId].qr += amountToFlip;
               else if (r.accountType === 'bank') balances[otherStoreId].bank += amountToFlip;
           }
       });
+
       return Object.entries(balances).map(([otherStoreId, stats]) => ({
           otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
           storeId: otherStoreId,
-          ...stats
+          ...stats,
+          // Sort history by date descending
+          history: stats.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       })).filter(s => Math.abs(s.total) > 0.1);
   }, [records, stores]);
+
+  const globalDebtsSummary = useMemo(() => {
+      let toCollect = 0;
+      let toPay = 0;
+      interStoreBalances.forEach(b => {
+          if (b.total > 0) toCollect += b.total;
+          else toPay += Math.abs(b.total);
+      });
+      return { toCollect, toPay };
+  }, [interStoreBalances]);
 
   const dailySystemTotals = useMemo(() => {
     const totalsMap = new Map<string, { cash: number, qr: number, bank: number, date: string, details: string[] }>();
@@ -221,33 +247,35 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     setManualEntries([...manualEntries, newEntry]);
   };
 
-  const handlePreFillPayment = (targetStoreId: string, amount: number) => {
-      const newEntry: ManualEntry = {
-        tempId: Math.random().toString(36).substr(2, 9),
-        date: new Date().toISOString().split('T')[0],
-        amount: (-amount).toString(), // Gasto negativo
-        otherAmount: '',
-        description: `Pago deuda`,
-        accountType: activeTab,
-        subCategory: 'Cruce Sedes',
-        debtStoreId: targetStoreId,
-        isSplit: false
-    };
-    setManualEntries([newEntry]);
-    setShowAddModal(true);
+  const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType) => {
+      setPaymentSummary({
+          targetStoreId,
+          targetStoreName,
+          amount,
+          sourceAccount
+      });
   };
 
-  const handleSettleDebt = async (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType) => {
-      if (!targetStoreId) {
-          alert("Error: No se identificó la tienda destino.");
-          return;
-      }
-      if (amount <= 0) return;
-      
-      const accountLabel = sourceAccount === 'cash' ? 'Efectivo' : (sourceAccount === 'qr' ? 'Bancolombia' : 'Otros Bancos');
-      const confirmMsg = `¿Confirmas el pago de ${formatCOP(amount)} desde ${accountLabel} para saldar la deuda con ${targetStoreName}?`;
-      
-      if (!window.confirm(confirmMsg)) return;
+  const handlePreFillPayment = (targetStoreId: string, amountToPay: number) => {
+      const targetStore = stores.find(s => s.id === targetStoreId);
+      const newEntry: ManualEntry = {
+          tempId: Math.random().toString(36).substr(2, 9),
+          date: new Date().toISOString().split('T')[0],
+          amount: (-amountToPay).toString(), // Suggest full payment (expense)
+          otherAmount: '',
+          description: `Pago deuda a ${targetStore?.name || 'Sede'}`,
+          accountType: activeTab,
+          subCategory: 'Cruce Sedes',
+          debtStoreId: targetStoreId,
+          isSplit: false
+      };
+      setManualEntries([newEntry]);
+      setShowAddModal(true);
+  };
+
+  const handleConfirmSettlement = async () => {
+      if (!paymentSummary) return;
+      const { targetStoreId, targetStoreName, amount, sourceAccount } = paymentSummary;
 
       try {
           const batch = writeBatch(db);
@@ -294,7 +322,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           batch.set(mirrorRef, mirrorRecord);
 
           await batch.commit();
-          alert("Pago registrado exitosamente.");
+          setPaymentSummary(null);
       } catch (error) {
           console.error("Error settling debt:", error);
           alert("Hubo un error al registrar el pago.");
@@ -559,45 +587,92 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-secondary p-5 rounded-2xl shadow-md border border-accent/20">
-                <h3 className="text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2 mb-4">
-                    <SwapIcon className="w-5 h-5" /> Deudas y Créditos Inter-Sedes
-                </h3>
-                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 scrollbar-hide">
-                    {interStoreBalances.length > 0 ? interStoreBalances.map((item, idx) => (
-                        <div key={idx} className={`p-4 rounded-xl border flex flex-col justify-between ${item.total > 0 ? 'bg-green-50 dark:bg-green-900/10 border-green-200' : 'bg-red-50 dark:bg-red-900/10 border-red-200'}`}>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-[10px] font-black text-gray-500 uppercase">Cruce con:</p>
-                                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase">{item.otherStoreName}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Balance Neto:</p>
-                                    <p className={`text-lg font-black ${item.total > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {item.total > 0 ? 'TE DEBE' : 'DEBES'} {formatCOP(Math.abs(item.total))}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
-                                {Math.abs(item.cash) > 0 && <p className="text-[10px] font-bold">Efectivo: <span className={item.cash > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.cash)}</span></p>}
-                                {Math.abs(item.qr) > 0 && <p className="text-[10px] font-bold">Bancolombia: <span className={item.qr > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.qr)}</span></p>}
-                                {Math.abs(item.bank) > 0 && <p className="text-[10px] font-bold">Otros: <span className={item.bank > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.bank)}</span></p>}
-                            </div>
-                            {item.total < 0 && (
-                                <div className="mt-3 pt-3 border-t-2 border-dashed border-red-200 dark:border-red-900/50">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Saldar Deuda:</p>
-                                        <button onClick={() => handlePreFillPayment(item.storeId, Math.abs(item.total))} className="text-[10px] text-accent font-bold hover:underline">Otro valor...</button>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash')} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[10px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm hover:bg-green-50">EFECTIVO</button>
-                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr')} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[10px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm hover:bg-blue-50">QR</button>
-                                        <button onClick={() => handleSettleDebt(item.storeId, item.otherStoreName, Math.abs(item.total), 'bank')} className="flex-1 bg-white dark:bg-gray-800 text-purple-600 text-[10px] font-black py-1.5 rounded-lg border border-purple-200 shadow-sm hover:bg-purple-50">BANCOS</button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )) : <p className="text-sm text-gray-400 italic">No hay préstamos ni pagos pendientes entre locales.</p>}
+                <div 
+                    onClick={() => setIsDebtsSectionOpen(!isDebtsSectionOpen)}
+                    className="flex justify-between items-center cursor-pointer mb-4 group"
+                >
+                    <h3 className="text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                        <SwapIcon className="w-5 h-5" /> Deudas y Créditos Inter-Sedes
+                    </h3>
+                    <div className="flex items-center gap-3">
+                        {globalDebtsSummary.toCollect > 0 && (
+                            <span className="text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
+                                +{formatCOP(globalDebtsSummary.toCollect)}
+                            </span>
+                        )}
+                        {globalDebtsSummary.toPay > 0 && (
+                            <span className="text-[10px] font-bold text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">
+                                -{formatCOP(globalDebtsSummary.toPay)}
+                            </span>
+                        )}
+                        <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform ${isDebtsSectionOpen ? 'rotate-180' : ''} group-hover:text-accent`} />
+                    </div>
                 </div>
+                
+                {isDebtsSectionOpen && (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide animate-fade-in">
+                        {interStoreBalances.length > 0 ? interStoreBalances.map((item, idx) => (
+                            <div key={idx} className={`p-4 rounded-xl border flex flex-col justify-between ${item.total > 0 ? 'bg-green-50 dark:bg-green-900/10 border-green-200' : 'bg-red-50 dark:bg-red-900/10 border-red-200'}`}>
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-500 uppercase">Cruce con:</p>
+                                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase">{item.otherStoreName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Balance Neto:</p>
+                                        <p className={`text-lg font-black ${item.total > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {item.total > 0 ? 'TE DEBE' : 'DEBES'} {formatCOP(Math.abs(item.total))}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                                    {Math.abs(item.cash) > 0 && <p className="text-[10px] font-bold">Efectivo: <span className={item.cash > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.cash)}</span></p>}
+                                    {Math.abs(item.qr) > 0 && <p className="text-[10px] font-bold">Bancolombia: <span className={item.qr > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.qr)}</span></p>}
+                                    {Math.abs(item.bank) > 0 && <p className="text-[10px] font-bold">Otros: <span className={item.bank > 0 ? 'text-green-600' : 'text-red-500'}>{formatCOP(item.bank)}</span></p>}
+                                </div>
+                                
+                                {/* Transaction History Expander */}
+                                <div className="mt-2">
+                                    <button 
+                                        onClick={() => setExpandedDebtStoreId(expandedDebtStoreId === item.storeId ? null : item.storeId)}
+                                        className="text-[9px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 w-full justify-center pt-1 border-t border-gray-100 dark:border-gray-700"
+                                    >
+                                        {expandedDebtStoreId === item.storeId ? 'Ocultar Detalles' : 'Ver Detalles'}
+                                        <ChevronDownIcon className={`w-3 h-3 transition-transform ${expandedDebtStoreId === item.storeId ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    
+                                    {expandedDebtStoreId === item.storeId && (
+                                        <div className="mt-2 space-y-1 bg-white/50 dark:bg-black/20 p-2 rounded-lg animate-fade-in">
+                                            {item.history.slice(0, 5).map(record => (
+                                                <div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0">
+                                                    <span className="text-gray-600 dark:text-gray-400 truncate max-w-[60%]">{record.description}</span>
+                                                    <span className={`font-bold ${record.amount < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {record.amount < 0 ? '+' : ''}{formatCOP(Math.abs(record.amount))} 
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            {item.history.length > 5 && <p className="text-[8px] text-center text-gray-400 italic">... y {item.history.length - 5} más</p>}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {item.total < 0 && (
+                                    <div className="mt-3 pt-3 border-t-2 border-dashed border-red-200 dark:border-red-900/50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Saldar Deuda:</p>
+                                            <button onClick={() => handlePreFillPayment(item.storeId, Math.abs(item.total))} className="text-[10px] text-accent font-bold hover:underline">Otro valor...</button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash')} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[10px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm hover:bg-green-50">EFECTIVO</button>
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr')} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[10px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm hover:bg-blue-50">QR</button>
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'bank')} className="flex-1 bg-white dark:bg-gray-800 text-purple-600 text-[10px] font-black py-1.5 rounded-lg border border-purple-200 shadow-sm hover:bg-purple-50">BANCOS</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )) : <p className="text-sm text-gray-400 italic">No hay préstamos ni pagos pendientes entre locales.</p>}
+                    </div>
+                )}
             </div>
 
             <div className="bg-white dark:bg-secondary p-5 rounded-2xl shadow-md border border-accent/20">
@@ -630,6 +705,45 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 </div>
             </div>
         </div>
+
+        {/* PAYMENT SUMMARY MODAL */}
+        {paymentSummary && (
+            <div className="fixed inset-0 bg-black/60 z-[220] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-accent/20 flex flex-col">
+                    <div className="p-4 bg-accent text-white flex justify-between items-center">
+                        <h3 className="text-lg font-black uppercase tracking-widest flex items-center gap-2">
+                            <CheckIcon className="w-6 h-6" /> Confirmar Pago
+                        </h3>
+                        <button onClick={() => setPaymentSummary(null)}><CrossIcon className="w-6 h-6" /></button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div className="text-center">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Estás pagando a</p>
+                            <p className="text-2xl font-black text-gray-800 dark:text-white uppercase">{paymentSummary.targetStoreName}</p>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-gray-500 uppercase">Monto:</span>
+                                <span className="text-xl font-black text-accent">{formatCOP(paymentSummary.amount)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-500 uppercase">Sale de:</span>
+                                <span className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase bg-white dark:bg-gray-700 px-2 py-1 rounded border">
+                                    {paymentSummary.sourceAccount === 'cash' ? 'Caja Efectivo' : (paymentSummary.sourceAccount === 'qr' ? 'Bancolombia' : 'Bancos')}
+                                </span>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 text-center italic">
+                            Se registrará un gasto en tu local y un ingreso en {paymentSummary.targetStoreName}.
+                        </p>
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => setPaymentSummary(null)} className="flex-1 py-3 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold text-xs uppercase">Cancelar</button>
+                            <button onClick={handleConfirmSettlement} className="flex-1 py-3 rounded-xl bg-green-600 text-white font-bold text-xs uppercase hover:bg-green-700 shadow-lg">Confirmar Pago</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-4">
@@ -733,7 +847,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         </div>
 
-        {/* MODAL DE EDICIÓN INDIVIDUAL */}
+        {/* MODAL DE EDICIÓN INDIVIDUAL (Existing) */}
         {editingRecord && (
             <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-accent/20 flex flex-col">
