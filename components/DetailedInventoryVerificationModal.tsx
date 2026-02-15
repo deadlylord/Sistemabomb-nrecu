@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, PendingDetailedVerification } from '../types';
 import { SearchIcon, CrossIcon, CheckIcon, PackageIcon, EyeIcon, HistoryIcon, TrashIcon, ChevronDownIcon, AlertTriangleIcon, PlusCircleIcon } from './Icons';
@@ -81,7 +80,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
           const historyData = historySnap.docs
             .map(d => ({ ...d.data(), id: d.id } as any))
             // Fix: Cast updatedAt to any to resolve unknown type error during sorting
-            .sort((a, b) => new Date(b.updatedAt as any).getTime() - new Date(a.updatedAt as any).getTime())
+            // @fix: Changed cast to string to resolve 'unknown' to 'string' assignment error.
+            .sort((a, b) => new Date(b.updatedAt as string).getTime() - new Date(a.updatedAt as string).getTime())
             .slice(0, 15);
           setHistoryList(historyData);
       }
@@ -268,8 +268,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     <HistoryIcon className="w-6 h-6 animate-spin-slow" />
                     <div>
                         <p className="text-xs font-black uppercase tracking-widest leading-none">MODO AUDITORÍA DE SNAPSHOT</p>
-                        {/* Fix: Cast updatedAt to any to avoid unknown type error when formatting date */}
-                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {auditModeEntry.lastUpdatedBy} el {new Date(auditModeEntry.updatedAt as any).toLocaleString()}</p>
+                        {/* Fix: Cast updatedAt to string to avoid unknown type error when formatting date */}
+                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {auditModeEntry.lastUpdatedBy} el {new Date(auditModeEntry.updatedAt as string).toLocaleString()}</p>
                     </div>
                 </div>
                 <button onClick={() => setAuditModeEntry(null)} className="bg-white text-orange-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-gray-100 transition-all shadow-md active:scale-95">Regresar al Borrador Actual</button>
@@ -342,8 +342,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                         <div key={entry.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col group hover:border-accent transition-all cursor-pointer" onClick={() => handleAuditHistory(entry)}>
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    {/* Fix: Cast updatedAt to any to resolve unknown type error when formatting date in history map */}
-                                    <p className="text-xs font-black text-accent uppercase leading-none">{new Date(entry.updatedAt as any).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                                    {/* Fix: Cast updatedAt to string to resolve unknown type error when formatting date in history map */}
+                                    <p className="text-xs font-black text-accent uppercase leading-none">{new Date(entry.updatedAt as string).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Vendedor: {entry.lastUpdatedBy}</p>
                                 </div>
                                 <button 
