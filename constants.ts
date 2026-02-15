@@ -23,26 +23,25 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '2.11.3',
-    date: '2024-06-22',
-    description: 'Navegación Desktop por Hover e Inteligencia Global',
+    version: '2.11.7',
+    date: '2024-06-26',
+    description: 'Optimización de Sesión y Notificaciones',
     isCurrent: true,
     changes: [
-      'Menú por Hover: Despliegue automático de categorías al pasar el mouse, optimizando la velocidad operativa en PC.',
-      'Recuperación Búsqueda Global: El icono de tienda (lupa) vuelve a estar visible para alternar entre stock local y de todas las sedes.',
-      'Indicadores de Estado Global: Resaltado visual cuando el Modo Global está activo para evitar confusiones de inventario.',
-      'UX de Navegación Refinada: Añadido buffer de salida en menús para evitar cierres accidentales al mover el puntero.',
-      'Visibilidad Directa de Abonos: Los abonos y novedades se mantienen en el primer nivel del menú de Ventas.'
+      'Briefing Diario para Admins: La notificación de tareas pendientes ahora solo aparece una vez al día para administradores.',
+      'Persistencia de Sede: Corregido error en el cambio de sede; ahora la selección se guarda y aplica correctamente.',
+      'Estabilidad de Header: Mejorada la respuesta táctil del selector de sede en dispositivos móviles.'
     ]
   },
   {
-    version: '2.11.2',
-    date: '2024-06-21',
-    description: 'Barra de Navegación Desktop Optimizada',
+    version: '2.11.6',
+    date: '2024-06-25',
+    description: 'Saldos Iniciales y Gastos Cruzados Inteligentes',
     changes: [
-      'Menú Desplegable Horizontal: Ahora en PC las categorías se muestran en una barra superior con dropdowns rápidos.',
-      'Descripciones en Menú: Se añadieron textos explicativos a cada opción de navegación para mayor claridad.',
-      'Organización de Ventas: Abonos y Novedades ahora son ítems de primer nivel dentro del grupo de Ventas.'
+      'Visualización de Saldos Iniciales: Acceso directo y fila de apertura en el libro mayor.',
+      'Gastos Cruzados: Ahora puedes asignar la categoría real del gasto (ej. Arriendo) a la sede beneficiaria sin duplicar egresos.',
+      'Refuerzo Visual: Banner de sede activa más prominente y avisos de contexto en formularios.',
+      'Cálculo de Saldo Físico: Mejora en la precisión sumando el inicial de cuenta al historial.'
     ]
   }
 ];
@@ -71,6 +70,7 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
+    initialBalances: { cash: 0, qr: 0, bank: 0 }
   },
   {
     id: '2',
@@ -89,6 +89,7 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
+    initialBalances: { cash: 0, qr: 0, bank: 0 }
   },
   {
     id: '3',
@@ -107,162 +108,23 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
+    initialBalances: { cash: 0, qr: 0, bank: 0 }
   },
 ];
 
 export const INITIAL_CATEGORIES: Category[] = [
   { id: '1', name: "Blusas y Bodys" },
-  { id: '2', name: "Busos y Chaquetas" },
-  { id: '3', name: "Jeans" },
-  { id: '4', name: "Pantalones" },
-  { id: '5', name: "Vestidos short" },
+  { id: '2', name: "Pantalones y Jeans" },
+  { id: '3', name: "Accesorios" }
 ];
 
 export const INITIAL_ROLES: Role[] = [
-  {
-    id: '1',
-    name: "Administrator",
-    permissions: [
-      View.DASHBOARD,
-      View.POS, 
-      View.INVENTORY, 
-      View.INVENTORY_TRANSFER, 
-      View.LAYAWAY, 
-      View.PURCHASES, 
-      View.SELLERS, 
-      View.STORES, 
-      View.CUSTOMERS, 
-      View.STOCK_TAKE_HISTORY, 
-      View.PAYROLL,
-      View.SETTINGS, 
-      View.INCIDENTS,
-      View.ROLE_MANAGER,
-      View.ACCOUNTING
-    ],
-  },
-  {
-    id: '2',
-    name: "Vendedor",
-    permissions: [
-      View.POS,
-      View.LAYAWAY,
-      View.CUSTOMERS,
-      View.DASHBOARD,
-      View.STOCK_TAKE_HISTORY,
-      View.INCIDENTS,
-    ],
-  },
+  { id: '1', name: 'Administrator', permissions: Object.values(View) },
+  { id: '2', name: 'Vendedor', permissions: [View.POS, View.LAYAWAY, View.INCIDENTS, View.CUSTOMERS, View.INVENTORY, View.PURCHASES] }
 ];
 
 export const INITIAL_SELLERS: Seller[] = [
-  { id: '1', name: "Paula", password: "123", roleId: '1', storeId: '1' },
-  { id: '2', name: "Lucía", password: "123", roleId: '2', storeId: '2' },
-  { id: '3', name: "Carlos", password: "123", roleId: '2', storeId: '3' },
+  { id: '1', name: 'admin', password: 'admin', roleId: '1', storeId: '1', isDisabled: false }
 ];
 
-export const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    sku: "BLU-PRI-01",
-    name: "Blusa 'Primavera'",
-    description: "Una blusa floral fresca y ligera, perfecta para cualquier ocasión.",
-    price: 85990,
-    cost: 55000,
-    stock: 25,
-    imageUrl: "",
-    categoryId: '1',
-    supplier: "ModaCo",
-    storeId: '1', // Divino
-  },
-  {
-    id: '2',
-    sku: "CHA-REB-02",
-    name: "Chaqueta de Jean 'Rebelde'",
-    description: "Chaqueta de jean clásica con un toque moderno y desgastado.",
-    price: 119990,
-    cost: 90000,
-    stock: 15,
-    imageUrl: "",
-    categoryId: '2',
-    supplier: "Textiles SAS",
-    storeId: '1', // Divino
-  },
-  {
-    id: '3',
-    sku: "JEA-SKI-03",
-    name: "Jeans 'Skinny Fit'",
-    description: "Jeans ajustados de tiro alto que realzan la figura.",
-    price: 110000,
-    cost: 75000,
-    stock: 40,
-    imageUrl: "",
-    categoryId: '3',
-    supplier: "DenimPro",
-    storeId: '2', // Metro
-  },
-  {
-    id: '4',
-    sku: "PAN-EJE-04",
-    name: "Pantalón 'Ejecutivo'",
-    description: "Pantalón de tela formal, ideal para la oficina o eventos.",
-    price: 98500,
-    cost: 70000,
-    stock: 20,
-    imageUrl: "",
-    categoryId: '4',
-    supplier: "ModaCo",
-    storeId: '2', // Metro
-  },
-  {
-    id: '5',
-    sku: "VES-VER-05",
-    name: "Vestido Corto 'Verano'",
-    description: "Vestido corto y fresco con estampado veraniego.",
-    price: 95000,
-    cost: 60000,
-    stock: 30,
-    imageUrl: "",
-    categoryId: '5',
-    supplier: "Estilos Frescos",
-    storeId: '1', // Divino
-  },
-  {
-    id: '6',
-    sku: "BOD-SEN-06",
-    name: "Body de Encaje 'Sensual'",
-    description: "Body de encaje negro, elegante y atrevido.",
-    price: 75500,
-    cost: 45000,
-    stock: 22,
-    imageUrl: "",
-    categoryId: '1',
-    supplier: "ModaCo",
-    storeId: '2', // Metro
-  },
-  {
-    id: '7',
-    sku: "BUS-CON-07",
-    name: "Buso Tejido 'Confort'",
-    description: "Buso de tejido suave, perfecto para un día frío.",
-    price: 105000,
-    cost: 80000,
-    stock: 18,
-    imageUrl: "",
-    categoryId: '2',
-    supplier: "Textiles SAS",
-    storeId: '3', // Centro Comercial
-  },
-  {
-    id: '8',
-    sku: "JEA-MOM-08",
-    name: "Jean 'Mom Fit'",
-    description: "Jean estilo 'mom fit' de corte retro y cómodo.",
-    price: 115000,
-    cost: 78000,
-    stock: 35,
-    imageUrl: "",
-    categoryId: '3',
-    supplier: "DenimPro",
-    storeId: '3', // Centro Comercial
-  }
-];
+export const INITIAL_PRODUCTS: Product[] = [];

@@ -45,6 +45,7 @@ export interface FinancialRecord {
   relatedRecordId?: string; 
   isConfirmed?: boolean;
   debtStoreId?: string; // ID del local que debe este dinero o al que pertenece el movimiento
+  affectsCashBalance?: boolean; // Si es false, el registro existe para deuda y stats pero no resta/suma al saldo de caja
 }
 
 export interface PendingDetailedVerification {
@@ -86,6 +87,11 @@ export interface Store {
   imageCompressionQuality?: 'high' | 'medium' | 'low';
   accentColorsUpdated?: boolean;
   hideDetailedVerificationForSellers?: boolean;
+  initialBalances?: {
+    cash: number;
+    qr: number;
+    bank: number;
+  };
 }
 
 export interface InventoryTransfer {

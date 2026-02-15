@@ -138,6 +138,11 @@ const App: React.FC = () => {
   const handleClearVerifications = useCallback(() => {
       setVerifiedProducts(new Set());
   }, []);
+
+  const handleSwitchStore = (id: string) => {
+    setCurrentStoreId(id);
+    localStorage.setItem('currentStoreId', id);
+  };
   
   const currentStore = useMemo(() => {
     const store = stores.find(s => s.id === currentStoreId);
@@ -378,12 +383,28 @@ const App: React.FC = () => {
       ).length;
 
       const pendingPreOrdersCount = layaways.filter(l => l.status === 'pre-order').length;
-      
-      if (pendingIncidentsCount > 0 || pendingPreOrdersCount > 0) {
-        setIsBriefingModalOpen(true);
+      const totalPending = pendingIncidentsCount + pendingPreOrdersCount;
+
+      if (totalPending > 0) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const lastShownDate = localStorage.getItem(`lastBriefingDate_${currentUser.id}`);
+
+        if (isAdmin) {
+            if (lastShownDate !== todayStr) {
+                setIsBriefingModalOpen(true);
+            } else {
+                // Ya se mostró hoy para este admin
+                setHasShownBriefing(true);
+            }
+        } else {
+            // Vendedores lo ven siempre que inicien sesión y haya pendientes
+            setIsBriefingModalOpen(true);
+        }
+      } else {
+        setHasShownBriefing(true);
       }
     }
-  }, [currentUser, incidents, layaways, hasShownBriefing]);
+  }, [currentUser, incidents, layaways, hasShownBriefing, isAdmin]);
 
   useEffect(() => {
     if (!isAppReady || stores.length === 0) return;
@@ -1547,7 +1568,7 @@ const App: React.FC = () => {
   const handleLogin = (sellerName: string, passwordAttempt: string) => {
     const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
     if (seller && seller.password.trim() === passwordAttempt.trim()) {
-      setCurrentUser(seller); setCurrentStoreId(seller.storeId); localStorage.setItem('currentStoreId', seller.storeId);
+      setCurrentUser(seller); handleSwitchStore(seller.storeId);
       const sellerRole = roles.find(role => role.id === seller.roleId);
       if (sellerRole && sellerRole.name.toLowerCase() === 'vendedor') setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
@@ -1562,9 +1583,9 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={setCurrentStoreId} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
       <main className="container mx-auto p-4 pb-20 lg:pb-4">
-        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={setCurrentStoreId} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} />}
+        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
@@ -1610,6 +1631,7 @@ const App: React.FC = () => {
                 expenses={expenses}
                 incidents={incidents}
                 currentUser={currentUser}
+                onNavigate={setCurrentView}
             />
         )}
       </main>
@@ -1637,6 +1659,10 @@ const App: React.FC = () => {
         onClose={() => {
             setIsBriefingModalOpen(false);
             setHasShownBriefing(true);
+            if (currentUser) {
+              const todayStr = new Date().toISOString().split('T')[0];
+              localStorage.setItem(`lastBriefingDate_${currentUser.id}`, todayStr);
+            }
         }}
         incidents={incidents}
         layaways={layaways}

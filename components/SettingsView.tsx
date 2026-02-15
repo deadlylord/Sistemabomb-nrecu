@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Store, Seller, Role, Product, Category } from '../types';
-import { CheckIcon, DownloadIcon } from './Icons';
+import { CheckIcon, DownloadIcon, DollarIcon, BuildingStorefrontIcon } from './Icons';
 import { compressImage } from '../services/storageService';
 import { db } from '../firebase';
 
@@ -39,6 +39,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     if (!localSettings) return;
     const { name, value, type } = e.target;
+    
+    if (name.startsWith('initialBalance_')) {
+        const key = name.split('_')[1] as 'cash' | 'qr' | 'bank';
+        setLocalSettings(prev => prev ? ({
+            ...prev,
+            initialBalances: {
+                ...(prev.initialBalances || { cash: 0, qr: 0, bank: 0 }),
+                [key]: parseFloat(value) || 0
+            }
+        }) : null);
+        return;
+    }
+
     if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
         setLocalSettings(prev => prev ? ({...prev, [name]: checked }) : null);
@@ -244,7 +257,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
               />
             </div>
           </div>
-           <div>
+
+          <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Saldos Iniciales (Conciliación)</h3>
+          <p className="text-xs text-gray-500 italic -mt-4">Define el capital inicial con el que comienza el libro mayor para cada cuenta en esta sede.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2"><DollarIcon className="w-3 h-3"/> Caja Efectivo</label>
+                <input 
+                    type="number" 
+                    name="initialBalance_cash"
+                    value={localSettings.initialBalances?.cash || 0}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="0"
+                />
+             </div>
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2"><BuildingStorefrontIcon className="w-3 h-3 text-blue-500"/> Bancolombia (QR)</label>
+                <input 
+                    type="number" 
+                    name="initialBalance_qr"
+                    value={localSettings.initialBalances?.qr || 0}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="0"
+                />
+             </div>
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2"><BuildingStorefrontIcon className="w-3 h-3 text-purple-500"/> Otros Bancos</label>
+                <input 
+                    type="number" 
+                    name="initialBalance_bank"
+                    value={localSettings.initialBalances?.bank || 0}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="0"
+                />
+             </div>
+          </div>
+
+           <div className="pt-4 border-t-2 border-gray-200 dark:border-gray-700">
             <label htmlFor="nextInvoiceNumber" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Próximo Número de Factura</label>
             <input
               type="number"

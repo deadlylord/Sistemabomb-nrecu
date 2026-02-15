@@ -49,19 +49,14 @@ const Header: React.FC<HeaderProps> = ({
   userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
   onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory 
 }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [isMobileGroupDropdownOpen, setIsMobileGroupDropdownOpen] = useState(false);
-  const [activeDesktopGroup, setActiveDesktopGroup] = useState<string | null>(null);
-  const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set(['ops']));
-  
   const [previewGroupIndex, setPreviewGroupIndex] = useState<number>(-1);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const storeMenuRef = useRef<HTMLDivElement>(null);
   const groupMenuRef = useRef<HTMLDivElement>(null);
-  const leaveTimeoutRef = useRef<number | null>(null);
 
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
@@ -144,17 +139,6 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const handleMouseEnter = (groupId: string) => {
-    if (leaveTimeoutRef.current) window.clearTimeout(leaveTimeoutRef.current);
-    setActiveDesktopGroup(groupId);
-  };
-
-  const handleMouseLeave = () => {
-    leaveTimeoutRef.current = window.setTimeout(() => {
-        setActiveDesktopGroup(null);
-    }, 200);
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -172,15 +156,6 @@ const Header: React.FC<HeaderProps> = ({
     ).length;
   }, [incidents]);
 
-  const toggleMobileGroup = (groupId: string) => {
-    setExpandedMobileGroups(prev => {
-        const next = new Set(prev);
-        if (next.has(groupId)) next.delete(groupId);
-        else next.add(groupId);
-        return next;
-    });
-  };
-
   const NavButton: React.FC<{ item: NavItem, isMobile?: boolean }> = ({ item, isMobile = false }) => {
     const isActive = currentView === item.view;
     const Icon = item.icon;
@@ -189,17 +164,15 @@ const Header: React.FC<HeaderProps> = ({
       <button
         onClick={() => {
           setCurrentView(item.view);
-          setIsMobileMenuOpen(false);
           setIsMobileGroupDropdownOpen(false);
-          setActiveDesktopGroup(null);
         }}
-        className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all duration-200 group text-left
+        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left
           ${isActive 
             ? 'bg-accent/10 text-accent shadow-sm' 
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
       >
-        <div className={`p-2 rounded-lg transition-colors ${isActive ? 'bg-accent text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+        <div className={`p-2.5 rounded-lg transition-colors ${isActive ? 'bg-accent text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-grow min-w-0">
@@ -218,82 +191,34 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <>
       <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 h-16 fixed top-0 left-0 right-0 z-[100] shadow-sm">
-        <div className="container mx-auto h-full px-4 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="container mx-auto h-full px-4 flex items-center justify-between gap-1">
           
-          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+          {/* IZQUIERDA: SELECTOR DE TIENDA */}
+          <div className="flex items-center flex-shrink-0" ref={storeMenuRef}>
             <button 
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+              className="w-10 h-10 rounded-xl flex items-center justify-center border-2 shadow-sm active:scale-90 transition-all bg-white dark:bg-slate-800"
+              style={{ borderColor: currentStore?.accentColor || 'var(--color-accent)' }}
             >
-              <MenuIcon className="w-6 h-6" />
+              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
             </button>
 
-            <div 
-              onClick={() => isAdmin && setCurrentView(View.DASHBOARD)}
-              className={`flex items-center gap-2 group select-none pointer-events-auto ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
-              title={isAdmin ? "Ir al Dashboard" : "Logo BS"}
-            >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-accent/20 group-hover:rotate-6 transition-transform">BS</div>
-                <h1 className="hidden sm:block text-lg font-black tracking-tighter text-slate-900 dark:text-white uppercase">
-                  STREET<span className="text-accent">BOMBÓN</span>
-                </h1>
-            </div>
-          </div>
-
-          <div className="flex-grow lg:hidden flex flex-col items-center justify-center min-w-0">
-            <div className="relative w-full px-2" ref={groupMenuRef}>
-              <div className="flex items-center gap-1 justify-center bg-slate-100 dark:bg-slate-800/60 p-1 rounded-full border border-slate-200 dark:border-slate-700/50">
-                {filteredGroups.map((group, idx) => {
-                  const isCurrent = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx;
-                  const GroupIcon = group.icon;
-                  return (
-                    <button 
-                      key={group.id}
-                      onClick={() => handleMobileGroupClick(idx)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-300 relative
-                        ${isCurrent 
-                          ? 'bg-accent text-white shadow-lg shadow-accent/30 scale-105 z-10' 
-                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                    >
-                      <GroupIcon className={`w-3.5 h-3.5 ${isCurrent ? 'text-white' : ''}`} />
-                      <span className="text-[10px] font-black uppercase tracking-tighter truncate">
-                        {group.label}
-                      </span>
-                      {isCurrent && isMobileGroupDropdownOpen && (
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-white rounded-full"></div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {isMobileGroupDropdownOpen && displayedGroup && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[120]">
-                  <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                    <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
-                  </div>
-
-                  <div className="space-y-1">
-                    {displayedGroup.items.map(item => (
-                      <NavButton key={item.view} item={item} isMobile />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {isAdmin && (
-              <div className="flex items-center gap-1 mt-1.5 overflow-x-auto scrollbar-hide px-2 w-full justify-center pb-1">
+            {isStoreDropdownOpen && isAdmin && (
+              <div className="absolute top-16 left-4 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+                <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                 {stores.map(store => (
                   <button
                     key={store.id}
-                    onClick={() => onSwitchStore(store.id)}
-                    className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-tighter transition-all flex items-center gap-1.5 border flex-shrink-0
+                    onClick={() => {
+                      onSwitchStore(store.id);
+                      setIsStoreDropdownOpen(false);
+                    }}
+                    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-bold transition-all
                       ${currentStore?.id === store.id 
-                        ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
-                        : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-accent/50'}`}
+                        ? 'bg-accent/10 text-accent' 
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
                   >
-                    <div className={`w-1.5 h-1.5 rounded-full ${currentStore?.id === store.id ? 'bg-white' : ''}`} style={{ backgroundColor: currentStore?.id === store.id ? undefined : store.accentColor }}></div>
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
                     {store.name}
                   </button>
                 ))}
@@ -301,145 +226,89 @@ const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          <nav className="hidden lg:flex items-center gap-2 h-full">
-            {filteredGroups.map(group => {
-                const isOpen = activeDesktopGroup === group.id;
+          {/* CENTRO: LOS TRES MENÚS CENTRADOS (MÁS GRANDES) */}
+          <div className="flex-grow flex items-center justify-center min-w-0" ref={groupMenuRef}>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-full border border-slate-200 dark:border-slate-700/50 shadow-inner">
+              {filteredGroups.map((group, idx) => {
+                const isCurrent = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx;
                 const GroupIcon = group.icon;
-                const hasActiveItem = group.items.some(i => i.view === currentView);
-
                 return (
-                    <div 
-                        key={group.id} 
-                        className="relative h-full flex items-center"
-                        onMouseEnter={() => handleMouseEnter(group.id)}
-                        onMouseLeave={handleMouseLeave}
-                    >
-                        <button 
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black transition-all
-                                ${isOpen || hasActiveItem ? 'text-accent bg-accent/5' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-                        >
-                            <GroupIcon className="w-4 h-4" />
-                            {group.label}
-                            <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {isOpen && (
-                            <div className="absolute top-[calc(100%-8px)] left-0 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-2 animate-fade-in z-50">
-                                <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">{group.label}</p>
-                                <div className="space-y-1">
-                                    {group.items.map(item => (
-                                        <NavButton key={item.view} item={item} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                  <button 
+                    key={group.id}
+                    onClick={() => handleMobileGroupClick(idx)}
+                    className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-full transition-all duration-300 relative
+                      ${isCurrent 
+                        ? 'bg-accent text-white shadow-lg scale-105 z-10' 
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                  >
+                    <GroupIcon className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${isCurrent ? 'text-white' : ''}`} />
+                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tighter truncate max-w-[65px] sm:max-w-none">
+                      {group.label}
+                    </span>
+                  </button>
                 );
-            })}
-          </nav>
+              })}
+            </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-             
+            {/* Dropdown de sub-vistas (Más ancho para optimizar espacio) */}
+            {isMobileGroupDropdownOpen && displayedGroup && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
+                <div className="flex items-center justify-center px-2 py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
+                  <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
+                </div>
+                <div className="space-y-1">
+                  {displayedGroup.items.map(item => (
+                    <NavButton key={item.view} item={item} isMobile />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DERECHA: NOTIFICACIONES Y PERFIL */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
              {isAdmin && (
                 <button 
                   onClick={onToggleGlobalMode}
-                  className={`p-2 rounded-xl border transition-all relative group
-                    ${isGlobalMode 
-                      ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-400/20 scale-105' 
-                      : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-accent'
-                    }`}
-                  title={isGlobalMode ? "Modo Global Activo: Viendo todas las sedes" : "Activar Búsqueda Global"}
+                  className={`p-2 rounded-xl border transition-all ${isGlobalMode ? 'bg-yellow-400 border-yellow-500 text-slate-900' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
                 >
                   <BuildingStorefrontIcon className="w-5 h-5" />
-                  {isGlobalMode && (
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-yellow-400"></span>
-                      </span>
-                  )}
                 </button>
              )}
 
-             <div className="relative hidden lg:block" ref={storeMenuRef}>
-                <button 
-                  onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-                  className={`flex items-center gap-3 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition-all ${isAdmin ? 'hover:border-accent cursor-pointer' : 'cursor-default'}`}
-                >
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
-                  <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight max-w-[120px] truncate">{currentStore?.name || 'Sede'}</span>
-                  {isAdmin && <ChevronDownIcon className={`w-4 h-4 text-slate-400 transition-transform ${isStoreDropdownOpen ? 'rotate-180' : ''}`} />}
-                </button>
-
-                {isStoreDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1">
-                    <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambiar Sede</p>
-                    {stores.map(store => (
-                      <button
-                        key={store.id}
-                        onClick={() => {
-                          onSwitchStore(store.id);
-                          setIsStoreDropdownOpen(false);
-                        }}
-                        className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-bold transition-all
-                          ${currentStore?.id === store.id 
-                            ? 'bg-accent/10 text-accent' 
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                      >
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
-                        {store.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-            </div>
-
              {pendingCount > 0 && (
-                <button 
-                  onClick={onOpenBriefing}
-                  className="relative p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-110 transition-all"
-                >
+                <button onClick={onOpenBriefing} className="relative p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
                   <AlertTriangleIcon className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-600 text-[9px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-bounce">
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-600 text-[9px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
                     {pendingCount}
                   </span>
                 </button>
              )}
 
              <div className="relative" ref={userMenuRef}>
-                <button 
-                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                  className="flex items-center gap-2 p-1 pl-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-accent transition-all group"
-                >
-                  <div className="hidden sm:block text-right pr-1">
-                    <p className="text-[10px] font-black text-slate-900 dark:text-white leading-none truncate max-w-[80px]">{currentUser.name}</p>
-                    <p className="text-[8px] text-accent uppercase font-bold tracking-widest">{isAdmin ? 'Admin' : 'Vendedor'}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-xs shadow-md shadow-accent/20 group-hover:scale-105 transition-transform">
+                <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center gap-2 p-1 pl-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                  <div className="w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-xs">
                     {currentUser.name.charAt(0)}
                   </div>
                 </button>
 
                 {isUserDropdownOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in divide-y dark:divide-slate-800">
+                  <div className="absolute top-12 right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in z-[200]">
                     <div className="p-4 bg-slate-50 dark:bg-slate-800/50">
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase mb-1">Sesión Activa</p>
                         <p className="text-sm font-black text-gray-900 dark:text-white truncate">{currentUser.name}</p>
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
-                    
                     <div className="p-2 space-y-1">
-                      <button onClick={toggleTheme} className="flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
-                        <div className="flex items-center gap-3">
-                          {theme === 'dark' ? <SunIcon className="w-4 h-4 text-yellow-500" /> : <MoonIcon className="w-4 h-4" />}
-                          Modo {theme === 'dark' ? 'Claro' : 'Oscuro'}
-                        </div>
+                      <button onClick={toggleTheme} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                        {theme === 'dark' ? <SunIcon className="w-4 h-4 text-yellow-500" /> : <MoonIcon className="w-4 h-4" />}
+                        Modo {theme === 'dark' ? 'Claro' : 'Oscuro'}
                       </button>
                       <button onClick={() => { onOpenVersionHistory(); setIsUserDropdownOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                         <SparklesIcon className="w-4 h-4 text-accent" />
                         Versión v{currentVersion}
                       </button>
                     </div>
-
                     <div className="p-2">
                       <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-black text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
                         <LogoutIcon className="w-5 h-5" />
@@ -452,105 +321,7 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </header>
-
-      {isMobileMenuOpen && (
-        <>
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] animate-fade-in" onClick={() => setIsMobileMenuOpen(false)}></div>
-          <div className="fixed top-0 left-0 bottom-0 w-80 bg-white dark:bg-slate-900 z-[201] shadow-2xl animate-slide-right flex flex-col">
-            <div className="p-6 bg-gradient-to-br from-accent to-purple-600 text-white flex justify-between items-center relative overflow-hidden">
-              <div className="flex items-center gap-3 relative z-10">
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-lg">BS</div>
-                <div>
-                  <p className="font-black text-lg leading-tight uppercase">Menú Principal</p>
-                  <p className="text-white/60 text-[10px] font-bold tracking-[0.2em] uppercase">v{currentVersion}</p>
-                </div>
-              </div>
-              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all active:scale-90 relative z-10">
-                <CrossIcon className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
-              
-              {isAdmin && (
-                  <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Cambiar de Tienda</p>
-                      <div className="grid grid-cols-1 gap-2">
-                          {stores.map(store => (
-                              <button
-                                  key={store.id}
-                                  onClick={() => {
-                                      onSwitchStore(store.id);
-                                      setIsMobileMenuOpen(false);
-                                  }}
-                                  className={`flex items-center justify-between w-full p-3 rounded-xl transition-all border-2
-                                      ${currentStore?.id === store.id 
-                                          ? 'bg-white dark:bg-slate-800 border-accent shadow-md' 
-                                          : 'bg-transparent border-transparent text-slate-500'}`}
-                              >
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
-                                      <span className={`text-sm font-black uppercase ${currentStore?.id === store.id ? 'text-slate-900 dark:text-white' : ''}`}>{store.name}</span>
-                                  </div>
-                                  {currentStore?.id === store.id && <CheckIcon className="w-5 h-5 text-accent" />}
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-              )}
-
-              {filteredGroups.map(group => {
-                const isExpanded = expandedMobileGroups.has(group.id);
-                const GroupIcon = group.icon;
-                
-                return (
-                    <div key={group.id} className="space-y-1">
-                        <button 
-                            onClick={() => toggleMobileGroup(group.id)}
-                            className={`flex items-center justify-between w-full p-4 rounded-2xl transition-all ${isExpanded ? 'bg-slate-100 dark:bg-slate-800/50 mb-2' : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'}`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 ${group.color}`}>
-                                    <GroupIcon className="w-5 h-5" />
-                                </div>
-                                <span className="font-black text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">{group.label}</span>
-                            </div>
-                            <ChevronDownIcon className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                        </button>
-                        
-                        {isExpanded && (
-                            <div className="pl-4 pr-1 space-y-1 animate-fade-in border-l-2 border-slate-100 dark:border-slate-800 ml-6">
-                                {group.items.map(item => (
-                                    <NavButton key={item.view} item={item} isMobile />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                );
-              })}
-            </div>
-
-            <div className="p-6 border-t dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-              <button onClick={onLogout} className="w-full flex items-center justify-center gap-3 py-4 bg-red-500 text-white font-black rounded-2xl shadow-lg shadow-red-500/20 active:scale-95 transition-all uppercase tracking-[0.2em] text-[10px]">
-                <LogoutIcon className="w-5 h-5" />
-                Cerrar Sesión
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
       <div className="h-16"></div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes slide-right {
-          from { transform: translateX(-100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slide-right {
-          animation: slide-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-      `}} />
     </>
   );
 };
