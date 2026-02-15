@@ -218,7 +218,9 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                     <tr key={category.id} className="hover:bg-accent/5 transition-colors h-16 group">
                       <td className="p-2">
                           <p className="font-black text-sm uppercase tracking-tight text-gray-700 dark:text-gray-200">{category.name}</p>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">Sist: {category.totalStock}</p>
+                          {isAdmin && (
+                            <p className="text-[10px] text-gray-400 font-bold uppercase">Sist: {category.totalStock}</p>
+                          )}
                       </td>
                       {isDetailedVerificationVisible && (
                         <td className="p-2 text-center">
@@ -230,10 +232,12 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                       </td>
                       <td className="p-2 text-center">
                          <div className="flex justify-center">
-                             {difference === 0 && physicalCount !== null ? (
-                                 <span className="text-green-500 bg-green-500/10 p-2 rounded-full"><CheckIcon className="w-5 h-5" /></span>
-                             ) : difference !== 0 && physicalCount !== null ? (
-                                 <span className="text-red-500 bg-red-500/10 p-2 rounded-full font-black text-xs" title={`Dif: ${difference}`}>{difference > 0 ? `+${difference}` : difference}</span>
+                             {physicalCount !== null ? (
+                                 difference === 0 ? (
+                                     <span className="text-green-500 bg-green-500/10 p-2 rounded-full" title="Correcto"><CheckIcon className="w-5 h-5" /></span>
+                                 ) : (
+                                     <span className="text-red-500 bg-red-500/10 p-2 rounded-full" title="Error en conteo"><CrossIcon className="w-5 h-5" /></span>
+                                 )
                              ) : <span className="text-gray-300 dark:text-gray-700">--</span>}
                          </div>
                       </td>

@@ -296,7 +296,9 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                 )}
             </div>
             <div className="flex flex-wrap items-center gap-3 mt-1.5">
-               <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Sistema: {totalSystem} uds | Físico: {totalPhysical} uds</p>
+               <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">
+                   {isAdmin ? `Sistema: ${totalSystem} uds | ` : ''}Físico: {totalPhysical} uds
+               </p>
                {!auditModeEntry && draftInfo && (
                  <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2 py-0.5 rounded-lg text-[9px] font-black border border-yellow-500/20">
                    <CheckIcon className="w-3 h-3" />
@@ -413,14 +415,16 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                 <th className="p-3 cursor-pointer hover:text-accent transition-colors text-[10px] font-black uppercase text-gray-400" onClick={() => handleSort('supplier')}>
                   Marca {sortConfig.key === 'supplier' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-3 text-center cursor-pointer hover:text-accent transition-colors text-[10px] font-black uppercase text-gray-400" onClick={() => handleSort('stock')}>
-                  Sist {sortConfig.key === 'stock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                </th>
+                {isAdmin && (
+                  <th className="p-3 text-center cursor-pointer hover:text-accent transition-colors text-[10px] font-black uppercase text-gray-400" onClick={() => handleSort('stock')}>
+                    Sist {sortConfig.key === 'stock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                )}
                 <th className="p-3 text-center cursor-pointer hover:text-accent transition-colors text-[10px] font-black uppercase text-gray-400" onClick={() => handleSort('physical')}>
                   Físico {sortConfig.key === 'physical' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
                 <th className="p-3 text-center cursor-pointer hover:text-accent transition-colors text-[10px] font-black uppercase text-gray-400" onClick={() => handleSort('difference')}>
-                  Dif {sortConfig.key === 'difference' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  Estado {sortConfig.key === 'difference' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                 </th>
               </tr>
             </thead>
@@ -453,7 +457,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                       <p className="text-[9px] font-mono text-slate-500 uppercase">{product.sku}</p>
                     </td>
                     <td className="p-3 text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">{product.supplier || 'N/A'}</td>
-                    <td className={`p-3 text-center font-black ${auditModeEntry ? 'text-blue-500' : 'text-slate-400'}`}>{systemStock}</td>
+                    {isAdmin && <td className={`p-3 text-center font-black ${auditModeEntry ? 'text-blue-500' : 'text-slate-400'}`}>{systemStock}</td>}
                     <td className="p-3 text-center">
                       {auditModeEntry ? (
                           <span className="font-black text-sm">{physical}</span>
@@ -461,7 +465,17 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                           <input type="number" min="0" value={localCounts[product.id] || ''} onChange={e => handleCountChange(product.id, e.target.value)} className="w-16 sm:w-20 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-lg p-1.5 text-center font-black text-sm focus:ring-2 focus:ring-accent focus:border-accent outline-none" />
                       )}
                     </td>
-                    <td className={`p-3 text-center font-black text-sm ${diff === 0 ? 'text-green-500' : 'text-red-500'}`}>{diff > 0 ? `+${diff}` : diff}</td>
+                    <td className="p-3 text-center">
+                        <div className="flex justify-center">
+                             {physical > 0 || localCounts[product.id] !== undefined ? (
+                                 diff === 0 ? (
+                                     <span className="text-green-500 bg-green-500/10 p-2 rounded-full" title="Correcto"><CheckIcon className="w-4 h-4" /></span>
+                                 ) : (
+                                     <span className="text-red-500 bg-red-500/10 p-2 rounded-full" title="Incorrecto"><CrossIcon className="w-4 h-4" /></span>
+                                 )
+                             ) : <span className="text-gray-300 dark:text-gray-700">--</span>}
+                        </div>
+                    </td>
                   </tr>
                 );
               })}
