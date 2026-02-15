@@ -196,14 +196,14 @@ const Header: React.FC<HeaderProps> = ({
     return (
       <button
         onClick={() => setCurrentView(item.view)}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all group whitespace-nowrap
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all group whitespace-nowrap
           ${isActive 
-            ? 'bg-accent text-white shadow-lg shadow-accent/20 scale-105' 
+            ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105' 
             : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
       >
         <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-accent'}`} />
-        <span className="text-[11px] font-black uppercase tracking-tighter">{item.shortLabel}</span>
+        <span className="text-[11px] font-black uppercase tracking-tight">{item.shortLabel}</span>
         {item.view === View.INCIDENTS && pendingCount > 0 && (
             <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[8px] font-black ${isActive ? 'bg-white text-accent' : 'bg-red-500 text-white animate-pulse'}`}>
                 {pendingCount}
@@ -215,26 +215,26 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 fixed top-0 left-0 right-0 z-[100] shadow-sm flex flex-col transition-all duration-300">
+      <header className="bg-white/85 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 fixed top-0 left-0 right-0 z-[100] shadow-sm flex items-center h-16 transition-all duration-300">
         
-        {/* FILA SUPERIOR: Branding, Sedes y Usuario */}
-        <div className="container mx-auto h-16 px-4 flex items-center justify-between gap-4">
+        <div className="container mx-auto px-4 flex items-center justify-between gap-4">
           
+          {/* LEFT: Sede Selector */}
           <div className="flex items-center gap-4 flex-shrink-0" ref={storeMenuRef}>
             <button 
               onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-              className="px-3 py-2 rounded-xl flex items-center gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800"
-              style={{ borderColor: currentStore?.accentColor || 'var(--color-accent)' }}
+              className="px-3 py-2 rounded-xl flex items-center gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+              style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
             >
-              <div className="w-4 h-4 rounded-full shadow-inner" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
+              <div className="w-3 h-3 rounded-full shadow-inner" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
               <span className="hidden sm:inline text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
                 {currentStore?.name}
               </span>
-              {isAdmin && <ChevronDownIcon className="w-4 h-4 text-slate-400" />}
+              {isAdmin && <ChevronDownIcon className="w-3 h-3 text-slate-400" />}
             </button>
 
             {isStoreDropdownOpen && isAdmin && (
-              <div className="absolute top-16 left-4 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+              <div className="absolute top-14 left-4 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
                 <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                 {stores.map(store => (
                   <button
@@ -256,24 +256,62 @@ const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
+          {/* CENTER: Menu (Replaces Logo) */}
           <div className="flex-grow flex items-center justify-center overflow-hidden">
-             <div className="flex items-center gap-2 lg:scale-110">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32" className="drop-shadow-lg">
-                  <defs>
-                    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#ff007f" stopOpacity="1" />
-                      <stop offset="100%" stopColor="#00aaff" stopOpacity="1" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="50" cy="50" r="50" fill="url(#headerGrad)"/>
-                  <text x="50" y="65" fontFamily="Arial" fontSize="50" fontWeight="bold" fill="white" textAnchor="middle">BS</text>
-                </svg>
-                <h1 className="text-sm sm:text-lg font-serif font-bold text-slate-800 dark:text-text-light tracking-tight truncate">
-                    <span className="text-blue-500">Street</span>/<span className="text-accent">Bombón</span>
-                </h1>
+             
+             {/* Desktop Navigation */}
+             <nav className="hidden lg:flex items-center gap-4 overflow-x-auto scrollbar-hide py-1">
+                {filteredGroups.map((group) => (
+                    <div key={group.id} className="flex items-center gap-2 px-2 border-r border-slate-200 dark:border-slate-700 last:border-0">
+                        <div className="flex items-center gap-1">
+                            {group.items.map(item => (
+                                <DesktopNavButton key={item.view} item={item} />
+                            ))}
+                        </div>
+                    </div>
+                ))}
+             </nav>
+
+             {/* Mobile Navigation */}
+             <div className="lg:hidden flex items-center justify-center w-full overflow-x-auto scrollbar-hide" ref={groupMenuRef}>
+                 <div className="flex items-center gap-1 p-1">
+                    {filteredGroups.map((group, idx) => {
+                        const isCurrent = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx;
+                        const GroupIcon = group.icon;
+                        return (
+                        <button 
+                            key={group.id}
+                            onClick={() => handleMobileGroupClick(idx)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-300 flex-shrink-0
+                            ${isCurrent 
+                                ? 'bg-accent text-white shadow-md' 
+                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                        >
+                            <GroupIcon className={`w-4 h-4 ${isCurrent ? 'text-white' : ''}`} />
+                            <span className="text-[10px] font-black uppercase tracking-tighter">
+                            {group.label}
+                            </span>
+                        </button>
+                        );
+                    })}
+                </div>
+                {isMobileGroupDropdownOpen && displayedGroup && (
+                    <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
+                        <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
+                        </div>
+                        <div className="space-y-1">
+                            {displayedGroup.items.map(item => (
+                                <NavButton key={item.view} item={item} isMobile />
+                            ))}
+                        </div>
+                    </div>
+                )}
              </div>
+
           </div>
 
+          {/* RIGHT: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
              {isAdmin && (
                 <button 
@@ -281,14 +319,14 @@ const Header: React.FC<HeaderProps> = ({
                   title="Modo Multisede"
                   className={`p-2 rounded-xl border transition-all ${isGlobalMode ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
                 >
-                  <BuildingStorefrontIcon className="w-5 h-5" />
+                  <BuildingStorefrontIcon className="w-4 h-4" />
                 </button>
              )}
 
              {pendingCount > 0 && (
                 <button onClick={onOpenBriefing} className="relative p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-105 transition-all">
-                  <AlertTriangleIcon className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-600 text-[9px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                  <AlertTriangleIcon className="w-4 h-4" />
+                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-red-600 text-[8px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
                     {pendingCount}
                   </span>
                 </button>
@@ -330,70 +368,8 @@ const Header: React.FC<HeaderProps> = ({
              </div>
           </div>
         </div>
-
-        {/* FILA INFERIOR: Navegación Expandida (Desktop) / Selectores (Mobile) */}
-        <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
-            <div className="container mx-auto px-4 overflow-x-auto scrollbar-hide">
-                
-                {/* VISTA DESKTOP (Expandida) */}
-                <nav className="hidden lg:flex items-center py-2 gap-4">
-                    {filteredGroups.map((group, gIdx) => (
-                        <div key={group.id} className="flex items-center gap-2 pr-4 border-r border-slate-200 dark:border-slate-800 last:border-0">
-                            <div className="flex flex-col flex-shrink-0 mr-2 opacity-40">
-                                <group.icon className="w-3 h-3 mx-auto" />
-                                <span className="text-[8px] font-black uppercase text-center tracking-tighter">{group.label}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                {group.items.map(item => (
-                                    <DesktopNavButton key={item.view} item={item} />
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </nav>
-
-                {/* VISTA MÓVIL (Pills) */}
-                <div className="lg:hidden flex items-center justify-center h-14 py-2" ref={groupMenuRef}>
-                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-full border border-slate-200 dark:border-slate-700/50 shadow-inner">
-                        {filteredGroups.map((group, idx) => {
-                            const isCurrent = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx;
-                            const GroupIcon = group.icon;
-                            return (
-                            <button 
-                                key={group.id}
-                                onClick={() => handleMobileGroupClick(idx)}
-                                className={`flex items-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-full transition-all duration-300 relative
-                                ${isCurrent 
-                                    ? 'bg-accent text-white shadow-lg scale-105 z-10' 
-                                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                            >
-                                <GroupIcon className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${isCurrent ? 'text-white' : ''}`} />
-                                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-tighter truncate max-w-[65px] sm:max-w-none">
-                                {group.label}
-                                </span>
-                            </button>
-                            );
-                        })}
-                    </div>
-
-                    {isMobileGroupDropdownOpen && displayedGroup && (
-                    <div className="absolute top-32 left-1/2 -translate-x-1/2 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
-                        <div className="flex items-center justify-center px-2 py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                        <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
-                        </div>
-                        <div className="space-y-1">
-                        {displayedGroup.items.map(item => (
-                            <NavButton key={item.view} item={item} isMobile />
-                        ))}
-                        </div>
-                    </div>
-                    )}
-                </div>
-
-            </div>
-        </div>
       </header>
-      <div className="h-32 lg:h-28"></div>
+      <div className="h-20 lg:h-20"></div>
     </>
   );
 };
