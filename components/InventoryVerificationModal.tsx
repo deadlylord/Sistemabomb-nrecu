@@ -141,7 +141,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
 
   const handleSaveDraftWithSnapshot = async (catId: string, productCounts: Record<string, number>) => {
-      // Tomamos una "foto" del stock del sistema actual para estos productos
+      // Tomamos una "foto" del stock del sistema actual para todos los productos de la categoría
       const systemSnapshot: Record<string, number> = {};
       inventory
         .filter(p => p.categoryId === catId && !p.isDisabled)

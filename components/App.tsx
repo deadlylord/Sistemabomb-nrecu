@@ -393,11 +393,9 @@ const App: React.FC = () => {
             if (lastShownDate !== todayStr) {
                 setIsBriefingModalOpen(true);
             } else {
-                // Ya se mostró hoy para este admin
                 setHasShownBriefing(true);
             }
         } else {
-            // Vendedores lo ven siempre que inicien sesión y haya pendientes
             setIsBriefingModalOpen(true);
         }
       } else {
@@ -1125,7 +1123,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>, systemStockSnapshot: Record<string, number>) => {
+  const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => {
     if (!currentStoreId || !currentUser) return;
     
     const draftId = `${categoryId}_${currentStoreId}`;
@@ -1137,6 +1135,7 @@ const App: React.FC = () => {
         categoryId, 
         storeId: currentStoreId, 
         counts, 
+        systemSnapshot, // Guardamos la foto del sistema al momento de guardar
         lastUpdatedBy: currentUser.name, 
         updatedAt: now 
     };
@@ -1145,10 +1144,10 @@ const App: React.FC = () => {
     const historyRef = doc(collection(db, 'detailedVerificationHistory'));
     
     const historicalCounts: Record<string, { physical: number; system: number }> = {};
-    Object.keys(systemStockSnapshot).forEach(pid => {
+    Object.keys(systemSnapshot).forEach(pid => {
         historicalCounts[pid] = {
             physical: counts[pid] !== undefined ? counts[pid] : 0, 
-            system: systemStockSnapshot[pid] || 0
+            system: systemSnapshot[pid] || 0
         };
     });
 

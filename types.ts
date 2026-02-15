@@ -53,6 +53,7 @@ export interface PendingDetailedVerification {
   categoryId: string;
   storeId: string;
   counts: Record<string, number>; // productId -> physicalCount
+  systemSnapshot?: Record<string, number>; // productId -> systemCount at time of save
   lastUpdatedBy: string;
   updatedAt: string;
 }
