@@ -217,24 +217,24 @@ const Header: React.FC<HeaderProps> = ({
     <>
       <header className="bg-white/85 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 fixed top-0 left-0 right-0 z-[100] shadow-sm flex items-center h-16 transition-all duration-300">
         
-        <div className="container mx-auto px-4 flex items-center justify-between gap-4">
+        <div className="container mx-auto px-2 sm:px-4 flex items-center justify-between gap-1 sm:gap-4">
           
           {/* LEFT: Sede Selector */}
-          <div className="flex items-center gap-4 flex-shrink-0" ref={storeMenuRef}>
+          <div className="flex items-center gap-1 sm:gap-4 flex-shrink-0" ref={storeMenuRef}>
             <button 
               onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-              className="px-3 py-2 rounded-xl flex items-center gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+              className="px-1.5 py-1.5 sm:px-3 sm:py-2 rounded-xl flex items-center gap-1.5 sm:gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
               style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
             >
-              <div className="w-3 h-3 rounded-full shadow-inner" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
-              <span className="hidden sm:inline text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
+              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
                 {currentStore?.name}
               </span>
-              {isAdmin && <ChevronDownIcon className="w-3 h-3 text-slate-400" />}
+              {isAdmin && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
             </button>
 
             {isStoreDropdownOpen && isAdmin && (
-              <div className="absolute top-14 left-4 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+              <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
                 <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                 {stores.map(store => (
                   <button
@@ -282,13 +282,13 @@ const Header: React.FC<HeaderProps> = ({
                         <button 
                             key={group.id}
                             onClick={() => handleMobileGroupClick(idx)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-300 flex-shrink-0
+                            className={`flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full transition-all duration-300 flex-shrink-0
                             ${isCurrent 
                                 ? 'bg-accent text-white shadow-md' 
                                 : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
                         >
-                            <GroupIcon className={`w-4 h-4 ${isCurrent ? 'text-white' : ''}`} />
-                            <span className="text-[10px] font-black uppercase tracking-tighter">
+                            <GroupIcon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isCurrent ? 'text-white' : ''}`} />
+                            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-tighter">
                             {group.label}
                             </span>
                         </button>
@@ -296,9 +296,9 @@ const Header: React.FC<HeaderProps> = ({
                     })}
                 </div>
                 {isMobileGroupDropdownOpen && displayedGroup && (
-                    <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
+                    <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-[90vw] sm:w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
                         <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                            <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
+                            <span className="text-[9px] sm:text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
                         </div>
                         <div className="space-y-1">
                             {displayedGroup.items.map(item => (
@@ -317,27 +317,27 @@ const Header: React.FC<HeaderProps> = ({
                 <button 
                   onClick={onToggleGlobalMode}
                   title="Modo Multisede"
-                  className={`p-2 rounded-xl border transition-all ${isGlobalMode ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                  className={`p-1.5 sm:p-2 rounded-xl border transition-all ${isGlobalMode ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
                 >
-                  <BuildingStorefrontIcon className="w-4 h-4" />
+                  <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
              )}
 
              {pendingCount > 0 && (
-                <button onClick={onOpenBriefing} className="relative p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-105 transition-all">
-                  <AlertTriangleIcon className="w-4 h-4" />
-                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-red-600 text-[8px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                <button onClick={onOpenBriefing} className="relative p-1.5 sm:p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-105 transition-all">
+                  <AlertTriangleIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="absolute -top-1 -right-1 h-3 sm:h-3.5 w-3 sm:w-3.5 bg-red-600 text-[7px] sm:text-[8px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
                     {pendingCount}
                   </span>
                 </button>
              )}
 
              <div className="relative" ref={userMenuRef}>
-                <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center gap-2 p-1 pl-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:shadow-md transition-all">
-                  <div className="w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-xs shadow-inner">
+                <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center gap-1 sm:gap-2 p-0.5 sm:p-1 pl-1.5 sm:pl-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:shadow-md transition-all">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-[10px] sm:text-xs shadow-inner">
                     {currentUser.name.charAt(0)}
                   </div>
-                  <ChevronDownIcon className={`w-3 h-3 text-slate-400 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDownIcon className={`w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {isUserDropdownOpen && (
