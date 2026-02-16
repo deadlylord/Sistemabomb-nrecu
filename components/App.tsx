@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
@@ -387,6 +386,7 @@ const App: React.FC = () => {
 
       if (totalPending > 0) {
         const todayStr = new Date().toISOString().split('T')[0];
+        // Fix: Changed from setItem to getItem to correctly retrieve the stored date and avoid comparing void to string.
         const lastShownDate = localStorage.getItem(`lastBriefingDate_${currentUser.id}`);
 
         if (isAdmin) {
@@ -1532,6 +1532,10 @@ const App: React.FC = () => {
       const paidAt = payrollData.paidAt || new Date().toISOString();
       await setDoc(newRef, { ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId });
   };
+
+  const handleDeletePayroll = async (payrollId: string) => {
+      await deleteDoc(doc(db, 'payrollHistory', payrollId));
+  };
   
   const handleBulkAddCustomers = async (newCustomers: any[]) => {
       if (!currentStoreId) return;
@@ -1597,7 +1601,7 @@ const App: React.FC = () => {
         }} onDeleteStore={handleDeleteStore} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} currentUser={currentUser} currentStore={currentStore} />}
+        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
         {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
 import { formatCOP } from '../constants';
@@ -10,6 +11,7 @@ interface PayrollViewProps {
   loginHistory: LoginRecord[];
   payrollHistory: PayrollRecord[];
   onSavePayroll: (payrollData: Omit<PayrollRecord, 'id' | 'paidAt' | 'paidBy' | 'storeId'>) => Promise<void>;
+  onDeletePayroll: (payrollId: string) => Promise<void>;
   currentUser: Seller;
   currentStore: Store | undefined;
 }
@@ -109,7 +111,7 @@ const PayrollReceiptModal: React.FC<{
     );
 };
 
-const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, currentUser, currentStore }) => {
+const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, onDeletePayroll, currentUser, currentStore }) => {
   const [selectedSeller, setSelectedSeller] = useState('');
   const [isManualName, setIsManualName] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -452,6 +454,17 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     }
   };
 
+  const handleDeleteHistory = async (id: string) => {
+    if (window.confirm("¿Seguro que deseas eliminar este registro de pago permanentemente?")) {
+        try {
+            await onDeletePayroll(id);
+            alert("Registro eliminado.");
+        } catch (error) {
+            alert("Error al eliminar el registro.");
+        }
+    }
+  };
+
   const filteredHistory = useMemo(() => {
     const lowerCaseSearchTerm = historySearchTerm.toLowerCase();
     return [...payrollHistory]
@@ -775,8 +788,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                             <p className="text-sm text-gray-500 dark:text-text-dark">Periodo: {record.period}</p>
                             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-tighter">Registrado el {new Date(record.paidAt).toLocaleString()} por {record.paidBy}</p>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-right">
+                        <div className="flex items-center gap-2">
+                            <div className="text-right mr-2">
                                 <p className="text-2xl font-black text-accent">{formatCOP(record.totalToPay)}</p>
                             </div>
                             <button 
@@ -785,6 +798,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                                 title="Reenviar Comprobante"
                             >
                                 <WhatsAppIcon className="w-5 h-5"/>
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); handleDeleteHistory(record.id); }} 
+                                className="p-2 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"
+                                title="Eliminar Registro"
+                            >
+                                <TrashIcon className="w-5 h-5"/>
                             </button>
                         </div>
                     </div>
