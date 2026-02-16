@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
@@ -386,7 +387,6 @@ const App: React.FC = () => {
 
       if (totalPending > 0) {
         const todayStr = new Date().toISOString().split('T')[0];
-        // Fix: Changed from setItem to getItem to correctly retrieve the stored date and avoid comparing void to string.
         const lastShownDate = localStorage.getItem(`lastBriefingDate_${currentUser.id}`);
 
         if (isAdmin) {
@@ -1635,6 +1635,7 @@ const App: React.FC = () => {
                 incidents={incidents}
                 currentUser={currentUser}
                 onNavigate={setCurrentView}
+                onAddExpense={handleAddExpense}
             />
         )}
       </main>

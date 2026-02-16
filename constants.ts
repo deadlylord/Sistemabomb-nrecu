@@ -23,10 +23,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.8',
+    date: '2024-06-27',
+    description: 'Integración Conciliación -> Contabilidad IA',
+    isCurrent: true,
+    changes: [
+      'Acceso Directo a Contabilidad: Añadido botón en el resumen de gastos por categoría para exportar totales directamente al módulo de Contabilidad IA.',
+      'Sincronización de Gastos: Ahora puedes registrar los acumulados del libro mayor en el PyG con un solo clic.',
+      'Refinamiento de UI: Mejora en la visualización de la lista de gastos en el módulo de conciliación para dispositivos móviles.'
+    ]
+  },
+  {
     version: '2.11.7',
     date: '2024-06-26',
     description: 'Optimización de Sesión y Notificaciones',
-    isCurrent: true,
     changes: [
       'Briefing Diario para Admins: La notificación de tareas pendientes ahora solo aparece una vez al día para administradores.',
       'Persistencia de Sede: Corregido error en el cambio de sede; ahora la selección se guarda y aplica correctamente.',
