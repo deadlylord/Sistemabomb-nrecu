@@ -79,8 +79,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
           const historySnap = await getDocs(historyQuery);
           const historyData = historySnap.docs
             .map(d => ({ ...d.data(), id: d.id } as any))
-            // Fix: Cast explicitly to any/string to ensure compatibility with new Date() constructor and avoid 'unknown' type errors.
-            .sort((a: any, b: any) => new Date(b.updatedAt as string).getTime() - new Date(a.updatedAt as string).getTime())
+            // Explicitly cast to any to ensure compatibility with new Date() constructor and avoid 'unknown' type errors.
+            .sort((a: any, b: any) => new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime())
             .slice(0, 15);
           setHistoryList(historyData);
       }
@@ -110,16 +110,16 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
 
       if (sortConfig.key === 'physical') {
         if (auditModeEntry) {
-            aVal = auditModeEntry.counts[a.id]?.physical || 0;
-            bVal = auditModeEntry.counts[b.id]?.physical || 0;
+            aVal = (auditModeEntry as any).counts[a.id]?.physical || 0;
+            bVal = (auditModeEntry as any).counts[b.id]?.physical || 0;
         } else {
             aVal = parseInt(localCounts[a.id] || '0', 10);
             bVal = parseInt(localCounts[b.id] || '0', 10);
         }
       } else if (sortConfig.key === 'difference') {
         if (auditModeEntry) {
-            const aSnap = auditModeEntry.counts[a.id] || { system: 0, physical: 0 };
-            const bSnap = auditModeEntry.counts[b.id] || { system: 0, physical: 0 };
+            const aSnap = (auditModeEntry as any).counts[a.id] || { system: 0, physical: 0 };
+            const bSnap = (auditModeEntry as any).counts[b.id] || { system: 0, physical: 0 };
             aVal = aSnap.physical - aSnap.system;
             bVal = bSnap.physical - bSnap.system;
         } else {
@@ -130,8 +130,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
         }
       } else if (sortConfig.key === 'stock') {
         if (auditModeEntry) {
-            aVal = auditModeEntry.counts[a.id]?.system || 0;
-            bVal = auditModeEntry.counts[b.id]?.system || 0;
+            aVal = (auditModeEntry as any).counts[a.id]?.system || 0;
+            bVal = (auditModeEntry as any).counts[b.id]?.system || 0;
         } else {
             aVal = a.stock;
             bVal = b.stock;
@@ -245,14 +245,14 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
 
   const totalPhysical = useMemo(() => {
       if (auditModeEntry) {
-          return Object.values(auditModeEntry.counts).reduce((sum: number, val: any) => sum + (val.physical || 0), 0);
+          return Object.values((auditModeEntry as any).counts).reduce((sum: number, val: any) => sum + (val.physical || 0), 0);
       }
       return products.reduce((sum, p) => sum + (parseInt(localCounts[p.id] || '0', 10)), 0);
   }, [products, localCounts, auditModeEntry]);
 
   const totalSystem = useMemo(() => {
       if (auditModeEntry) {
-          return Object.values(auditModeEntry.counts).reduce((sum: number, val: any) => sum + (val.system || 0), 0);
+          return Object.values((auditModeEntry as any).counts).reduce((sum: number, val: any) => sum + (val.system || 0), 0);
       }
       return products.reduce((sum, p) => sum + p.stock, 0);
   }, [products, auditModeEntry]);
@@ -267,8 +267,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     <HistoryIcon className="w-6 h-6 animate-spin-slow" />
                     <div>
                         <p className="text-xs font-black uppercase tracking-widest leading-none">MODO AUDITORÍA DE SNAPSHOT</p>
-                        {/* Fix: Explicitly cast 'updatedAt' as string to satisfy Date constructor and fix 'unknown' type errors. */}
-                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {auditModeEntry.lastUpdatedBy} el {new Date(auditModeEntry.updatedAt as string).toLocaleString()}</p>
+                        {/* Explicitly cast 'updatedAt' as string to satisfy Date constructor and avoid 'unknown' type errors. */}
+                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date(String((auditModeEntry as any).updatedAt)).toLocaleString()}</p>
                     </div>
                 </div>
                 <button onClick={() => setAuditModeEntry(null)} className="bg-white text-orange-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-gray-100 transition-all shadow-md active:scale-95">Regresar al Borrador Actual</button>
@@ -329,7 +329,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {historyList.length > 0 ? historyList.map((entry) => {
+                    {historyList.length > 0 ? historyList.map((entry: any) => {
                         let snapPhys = 0; let snapSyst = 0;
                         Object.values(entry.counts).forEach((val: any) => {
                             snapPhys += (val.physical || 0);
@@ -341,6 +341,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                         <div key={entry.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col group hover:border-accent transition-all cursor-pointer" onClick={() => handleAuditHistory(entry)}>
                             <div className="flex justify-between items-start mb-3">
                                 <div>
+                                    {/* Explicitly cast entry and updatedAt to handle unknown type errors in map and property access. */}
                                     <p className="text-xs font-black text-accent uppercase leading-none">{new Date(String(entry.updatedAt)).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Vendedor: {entry.lastUpdatedBy}</p>
                                 </div>
@@ -440,7 +441,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                 let physical = parseInt(physicalStr, 10);
                 
                 if (auditModeEntry) {
-                    const snap = auditModeEntry.counts[product.id] || { system: 0, physical: 0 };
+                    // Explicitly cast auditModeEntry to any to access counts and system snapshot when in audit mode.
+                    const snap = (auditModeEntry as any).counts[product.id] || { system: 0, physical: 0 };
                     systemStock = snap.system;
                     physical = snap.physical;
                     physicalStr = physical.toString();
