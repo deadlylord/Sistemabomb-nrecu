@@ -80,6 +80,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
           const historyData = historySnap.docs
             .map(d => ({ ...d.data(), id: d.id } as any))
             // Explicitly cast to any to ensure compatibility with new Date() constructor and avoid 'unknown' type errors.
+            // FIX: Explicitly cast updatedAt to string to avoid "unknown" type error in new Date()
             .sort((a: any, b: any) => new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime())
             .slice(0, 15);
           setHistoryList(historyData);
@@ -442,7 +443,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                 
                 if (auditModeEntry) {
                     // Explicitly cast auditModeEntry to any to access counts and system snapshot when in audit mode.
-                    const snap = (auditModeEntry as any).counts[product.id] || { system: 0, physical: 0 };
+                    const snap = ((auditModeEntry as any).counts as Record<string, any>)[product.id] || { system: 0, physical: 0 };
                     systemStock = snap.system;
                     physical = snap.physical;
                     physicalStr = physical.toString();

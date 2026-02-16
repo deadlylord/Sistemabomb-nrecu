@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View } from '../types';
 import { formatCOP } from '../constants';
@@ -39,7 +38,7 @@ interface PaymentSummaryData {
     debtReferenceDates: string; 
 }
 
-const AUTO_CATEGORIES: Record<string, string[]> = {
+const STATIC_CATEGORIES: Record<string, string[]> = {
     'Servicios': ['luz', 'agua', 'gas', 'internet', 'claro', 'tigo', 'movistar', 'energia', 'vanti', 'acueducto'],
     'Local/Arriendo': ['arriendo', 'canon', 'administracion', 'local', 'alquiler'],
     'Personal': ['nomina', 'sueldo', 'pago', 'bono', 'comision', 'auxilio'],
@@ -93,11 +92,53 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     return () => unsubscribe();
   }, [activeStoreId]);
 
+  // Mapa de aprendizaje basado en el historial
+  const learnedKnowledge = useMemo(() => {
+    const directMap: Record<string, string> = {};
+    const keywordWeight: Record<string, Record<string, number>> = {};
+
+    records.forEach(r => {
+        if (!r.subCategory || r.subCategory === 'Cierre Diario' || r.subCategory === 'Manual') return;
+        
+        const desc = r.description.toLowerCase().trim();
+        // 1. Mapa directo: Esta descripción exacta -> Esta categoría
+        directMap[desc] = r.subCategory;
+
+        // 2. Mapa de palabras: Dividir descripción para encontrar palabras clave frecuentes
+        const words = desc.split(/\s+/).filter(w => w.length > 3);
+        words.forEach(word => {
+            if (!keywordWeight[word]) keywordWeight[word] = {};
+            keywordWeight[word][r.subCategory] = (keywordWeight[word][r.subCategory] || 0) + 1;
+        });
+    });
+
+    return { directMap, keywordWeight };
+  }, [records]);
+
   const autoCategorize = (desc: string): string => {
-      const lowerDesc = desc.toLowerCase();
-      for (const [cat, keywords] of Object.entries(AUTO_CATEGORIES)) {
+      const lowerDesc = desc.toLowerCase().trim();
+      if (!lowerDesc) return '';
+
+      // Prioridad 1: Coincidencia exacta histórica
+      if (learnedKnowledge.directMap[lowerDesc]) {
+          return learnedKnowledge.directMap[lowerDesc];
+      }
+
+      // Prioridad 2: Coincidencia por palabras aprendidas (la categoría más frecuente para esa palabra)
+      const words = lowerDesc.split(/\s+/).filter(w => w.length > 3);
+      for (const word of words) {
+          if (learnedKnowledge.keywordWeight[word]) {
+              const bestCat = Object.entries(learnedKnowledge.keywordWeight[word])
+                  .sort((a, b) => b[1] - a[1])[0][0];
+              return bestCat;
+          }
+      }
+
+      // Prioridad 3: Base estática (keywords hardcoded)
+      for (const [cat, keywords] of Object.entries(STATIC_CATEGORIES)) {
           if (keywords.some(k => lowerDesc.includes(k))) return cat;
       }
+
       return 'Otros';
   };
 
@@ -108,7 +149,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
       records.forEach(r => {
           const d = new Date(r.date);
-          if (d >= startOfMonth && d <= endOfMonth && r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
+          // FIX: Compare Date object timestamps using getTime() to avoid arithmetic operation type error
+          if (d.getTime() >= startOfMonth.getTime() && d.getTime() <= endOfMonth.getTime() && r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
               const cat = r.subCategory || 'Sin Categoría';
               stats[cat] = (stats[cat] || 0) + Math.abs(r.amount);
           }
@@ -178,7 +220,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     const processPayment = (p: Payment) => {
         const pDate = new Date(p.date);
-        if (pDate < startOfMonth || pDate > endOfMonth) return;
+        // FIX: Compare Date object timestamps using getTime() to avoid arithmetic operation type error
+        if (pDate.getTime() < startOfMonth.getTime() || pDate.getTime() > endOfMonth.getTime()) return;
         const dateStr = p.date.split('T')[0];
         const existing = getExisting(dateStr);
         if (p.method === PaymentMethod.Efectivo) existing.cash += (Number(p.amount) || 0);
@@ -200,7 +243,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     expenses.filter(e => e.storeId === activeStoreId && !e.isRecurring).forEach(expense => {
         const d = new Date(expense.date);
-        if (d < startOfMonth || d > endOfMonth) return;
+        // FIX: Compare Date object timestamps using getTime() to avoid arithmetic operation type error
+        if (d.getTime() < startOfMonth.getTime() || d.getTime() > endOfMonth.getTime()) return;
         const dateStr = expense.date.split('T')[0];
         const existing = getExisting(dateStr);
         existing.cash -= (Number(expense.amount) || 0);
@@ -210,7 +254,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
         const d = new Date(incident.createdAt);
-        if (d < startOfMonth || d > endOfMonth) return;
+        // FIX: Compare Date object timestamps using getTime() to avoid arithmetic operation type error
+        if (d.getTime() < startOfMonth.getTime() || d.getTime() > endOfMonth.getTime()) return;
         const dateStr = incident.createdAt.split('T')[0];
         const existing = getExisting(dateStr);
         const amount = Number(incident.adjustmentAmount);
@@ -410,9 +455,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 finalValue = parseInputToNumber(value);
             }
             const updated = { ...e, [field]: finalValue };
-            if (field === 'description' && !e.subCategory) {
-                updated.subCategory = autoCategorize(value);
-                updated.mirrorCategory = updated.subCategory;
+            
+            // Aplicar aprendizaje automático si se cambia la descripción
+            if (field === 'description') {
+                const suggestedCat = autoCategorize(value);
+                if (suggestedCat) {
+                    updated.subCategory = suggestedCat;
+                    updated.mirrorCategory = suggestedCat;
+                }
             }
             return updated;
         }
@@ -445,6 +495,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const mainRef = doc(collection(db, 'financialRecords'));
         const mirrorRef = e.debtStoreId ? doc(collection(db, 'financialRecords')) : null;
 
+        // Si es préstamo a otra sede, mantenemos la categoría del gasto real (ej: Arriendo)
+        // Pero marcamos internamente que hubo deuda
+        const finalSubCategory = e.debtStoreId && e.subCategory !== 'Cruce Sedes' && !e.subCategory 
+            ? 'Préstamo a Sede' 
+            : e.subCategory || 'Manual';
+
         const mainRecord: FinancialRecord = {
             id: mainRef.id,
             date: dateTime,
@@ -453,7 +509,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             amount: totalAmountVal,
             type: type as any,
             description: e.description,
-            subCategory: e.debtStoreId && e.subCategory !== 'Cruce Sedes' ? 'Préstamo a Sede' : e.subCategory || 'Manual',
+            subCategory: finalSubCategory,
             registeredBy: currentUser.name,
             isConfirmed: true,
             affectsCashBalance: true, 
@@ -669,32 +725,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             <p className="text-[9px] font-bold uppercase italic">Sin gastos</p>
                         </div>
                     )}
-                </div>
-            </div>
-        </div>
-
-        {/* SALDOS INICIALES */}
-        <div className="bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-3 sm:mb-4">
-                <h3 className="text-[9px] sm:text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                    <DollarIcon className="w-4 h-4 sm:w-5 h-5 text-accent" /> Apertura de Sede
-                </h3>
-                {isAdmin && (
-                    <button onClick={() => onNavigate && onNavigate(View.SETTINGS)} className="text-[8px] sm:text-[10px] font-black text-accent uppercase hover:underline">Ajustar</button>
-                )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700 flex justify-between sm:block items-center">
-                    <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase">Efectivo Inicial</p>
-                    <p className="text-base sm:text-xl font-black text-gray-700 dark:text-white">{formatCOP(activeStore?.initialBalances?.cash || 0)}</p>
-                </div>
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 flex justify-between sm:block items-center">
-                    <p className="text-[8px] sm:text-[10px] font-black text-blue-400 uppercase">QR Inicial</p>
-                    <p className="text-base sm:text-xl font-black text-blue-600 dark:text-blue-400">{formatCOP(activeStore?.initialBalances?.qr || 0)}</p>
-                </div>
-                <div className="p-3 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-100 dark:border-purple-900/30 flex justify-between sm:block items-center">
-                    <p className="text-[8px] sm:text-[10px] font-black text-purple-400 uppercase">Otros Inicial</p>
-                    <p className="text-base sm:text-xl font-black text-purple-600 dark:text-purple-400">{formatCOP(activeStore?.initialBalances?.bank || 0)}</p>
                 </div>
             </div>
         </div>
