@@ -23,10 +23,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.9',
+    date: '2024-06-28',
+    description: 'Corrección de Lógica de Gastos en Conciliación',
+    isCurrent: true,
+    changes: [
+      'Separación de Flujos: Los gastos registrados en el módulo de Contabilidad IA ya no afectan el arqueo diario de caja en conciliación.',
+      'Enfoque Operativo: Ahora la conciliación diaria se basa únicamente en ventas y novedades de caja, evitando descuadres por registros contables retroactivos.'
+    ]
+  },
+  {
     version: '2.11.8',
     date: '2024-06-27',
     description: 'Integración Conciliación -> Contabilidad IA',
-    isCurrent: true,
     changes: [
       'Acceso Directo a Contabilidad: Añadido botón en el resumen de gastos por categoría para exportar totales directamente al módulo de Contabilidad IA.',
       'Sincronización de Gastos: Ahora puedes registrar los acumulados del libro mayor en el PyG con un solo clic.',
@@ -41,17 +50,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Briefing Diario para Admins: La notificación de tareas pendientes ahora solo aparece una vez al día para administradores.',
       'Persistencia de Sede: Corregido error en el cambio de sede; ahora la selección se guarda y aplica correctamente.',
       'Estabilidad de Header: Mejorada la respuesta táctil del selector de sede en dispositivos móviles.'
-    ]
-  },
-  {
-    version: '2.11.6',
-    date: '2024-06-25',
-    description: 'Saldos Iniciales y Gastos Cruzados Inteligentes',
-    changes: [
-      'Visualización de Saldos Iniciales: Acceso directo y fila de apertura en el libro mayor.',
-      'Gastos Cruzados: Ahora puedes asignar la categoría real del gasto (ej. Arriendo) a la sede beneficiaria sin duplicar egresos.',
-      'Refuerzo Visual: Banner de sede activa más prominente y avisos de contexto en formularios.',
-      'Cálculo de Saldo Físico: Mejora en la precisión sumando el inicial de cuenta al historial.'
     ]
   }
 ];

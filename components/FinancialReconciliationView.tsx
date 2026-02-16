@@ -152,7 +152,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const d = new Date(r.date);
           if (d.getTime() >= startOfMonth.getTime() && d.getTime() <= endOfMonth.getTime() && r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
               const cat = r.subCategory || 'Sin Categoría';
-              // FIX: Explicitly check for potentially undefined Record access when performing arithmetic operations to resolve left/right-hand side type error.
               const currentTotal = stats[cat] || 0;
               stats[cat] = currentTotal + Math.abs(r.amount);
           }
@@ -195,10 +194,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
           storeId: otherStoreId,
           ...stats,
-          history: stats.history.sort((a, b) => {
+          history: stats.history.sort((a: any, b: any) => {
+              // FIX: Explicitly type sort parameters as any and cast return variables to satisfy subtraction type requirements.
               const timeA = new Date(a.date).getTime();
               const timeB = new Date(b.date).getTime();
-              return timeB - timeA || b.id.localeCompare(a.id);
+              return (timeB as number) - (timeA as number) || (b.id as string).localeCompare(a.id as string);
           })
       })).filter(s => Math.abs(s.total) > 0.1);
   }, [records, stores]);
@@ -244,15 +244,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         payments.forEach(processPayment);
     });
 
-    expenses.filter(e => e.storeId === activeStoreId && !e.isRecurring).forEach(expense => {
-        const d = new Date(expense.date);
-        if (d.getTime() < startOfMonth.getTime() || d.getTime() > endOfMonth.getTime()) return;
-        const dateStr = expense.date.split('T')[0];
-        const existing = getExisting(dateStr);
-        existing.cash -= (Number(expense.amount) || 0);
-        existing.details.push(`Gasto: ${expense.description} (-${formatCOP(expense.amount)})`);
-        totalsMap.set(dateStr, existing);
-    });
+    // NOTE: Removed subtraction of accountant expenses from daily cash flow as per request
+    // This allows daily totals to reflect only actual cash drawer activity.
 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
         const d = new Date(incident.createdAt);
@@ -271,7 +264,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     });
 
     return Array.from(totalsMap.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [sales, layaways, expenses, incidents, activeStoreId, selectedMonth, selectedYear]);
+  }, [sales, layaways, incidents, activeStoreId, selectedMonth, selectedYear]);
 
   const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType) => {
     const recordId = `daily_auto_${activeStoreId}_${accountType}_${dateStr}`;
@@ -1023,7 +1016,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         {/* MODAL CONFIRMACIÓN LIQUIDACIÓN DEUDA */}
         {paymentSummary && (
              <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-accent/20">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-sm overflow-hidden border border-accent/20">
                     <div className="p-6 text-center space-y-4">
                         <div className="w-16 h-16 bg-accent/10 text-accent rounded-full flex items-center justify-center mx-auto mb-2">
                             <CheckIcon className="w-10 h-10" />
