@@ -23,10 +23,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.13',
+    date: '2024-07-02',
+    description: 'Mejora en Validación de Conciliación',
+    isCurrent: true,
+    changes: [
+      'Alertas de Campos Vacíos: El sistema ahora notifica explícitamente si falta el monto o la descripción en un movimiento manual.',
+      'Integridad de Datos: Se bloquea el procesamiento de lotes si existen filas incompletas para evitar errores contables.'
+    ]
+  },
+  {
     version: '2.11.12',
     date: '2024-07-01',
     description: 'Refinamiento de Gastos Cruzados entre Sedes',
-    isCurrent: true,
     changes: [
       'Dualidad de Categorías: Al prestar para un gasto, el local que paga registra "Préstamo a Sede" y el local deudor registra la categoría real (ej. Luz).',
       'Corrección de Signos: Los gastos pagados por otras sedes ahora aparecen correctamente como saldos negativos (deudas) en el local beneficiado.',
@@ -49,15 +58,6 @@ export const APP_VERSIONS: VersionLog[] = [
     changes: [
       'Claridad en Intercambios: Diferenciación visual explicita entre deudas por pagar (Rojo) y cuentas por cobrar (Verde).',
       'Acciones Contextuales: Los botones de pago solo aparecen en las tarjetas de deuda activa para evitar errores.'
-    ]
-  },
-  {
-    version: '2.11.9',
-    date: '2024-06-28',
-    description: 'Corrección de Lógica de Gastos en Conciliación',
-    changes: [
-      'Separación de Flujos: Los gastos registrados en el módulo de Contabilidad IA ya no afectan el arqueo diario de caja en conciliación.',
-      'Enfoque Operativo: Ahora la conciliación diaria se basa únicamente en ventas y novedades de caja, evitando descuadres por registros contables retroactivos.'
     ]
   }
 ];

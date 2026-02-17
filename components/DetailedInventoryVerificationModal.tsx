@@ -270,8 +270,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     <HistoryIcon className="w-6 h-6 animate-spin-slow" />
                     <div>
                         <p className="text-xs font-black uppercase tracking-widest leading-none">MODO AUDITORÍA DE SNAPSHOT</p>
-                        {/* FIX: Use String() wrapper and handle potential null/undefined for Date constructor to avoid type errors. */}
-                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date(String(auditModeEntry.updatedAt || '')).toLocaleString()}</p>
+                        {/* FIX: Explicitly cast the date property to string to avoid TypeScript 'unknown' errors when initializing new Date objects. */}
+                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date(String((auditModeEntry as any).updatedAt || '')).toLocaleString()}</p>
                     </div>
                 </div>
                 <button onClick={() => setAuditModeEntry(null)} className="bg-white text-orange-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-gray-100 transition-all shadow-md active:scale-95">Regresar al Borrador Actual</button>
@@ -344,7 +344,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                         <div key={entry.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col group hover:border-accent transition-all cursor-pointer" onClick={() => handleAuditHistory(entry)}>
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    {/* FIX: Use String() wrapper and handle potential null/undefined for Date constructor to avoid type errors. */}
+                                    {/* FIX: Explicitly cast 'updatedAt' from historical entries to string to avoid TypeScript error about 'unknown' arguments. */}
                                     <p className="text-xs font-black text-accent uppercase leading-none">{new Date(String(entry.updatedAt || '')).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Vendedor: {entry.lastUpdatedBy}</p>
                                 </div>

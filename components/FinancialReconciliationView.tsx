@@ -477,12 +477,28 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleSaveManualEntries = async () => {
-    const validEntries = manualEntries.filter(e => e.amount && e.description);
-    if (validEntries.length === 0) return;
+    if (manualEntries.length === 0) {
+        alert("Agrega al menos un movimiento antes de procesar.");
+        return;
+    }
+
+    // Validar que todas las filas tengan monto y descripción
+    const incompleteEntry = manualEntries.find(e => !e.amount.trim() || !e.description.trim());
+    if (incompleteEntry) {
+        if (!incompleteEntry.amount.trim() && !incompleteEntry.description.trim()) {
+            alert("Hay una fila vacía. Por favor, llénala o elimínala antes de procesar.");
+        } else if (!incompleteEntry.amount.trim()) {
+            alert(`Falta ingresar el MONTO para el movimiento: "${incompleteEntry.description}"`);
+        } else {
+            alert(`Falta ingresar la DESCRIPCIÓN para el movimiento de: ${formatCOP(parseFloat(incompleteEntry.amount))}`);
+        }
+        return;
+    }
+
     const batch = writeBatch(db);
     const activeStoreName = activeStore?.name || 'Local Actual';
 
-    validEntries.forEach(e => {
+    manualEntries.forEach(e => {
         const totalAmountVal = parseFloat(e.amount);
         const type = totalAmountVal < 0 ? 'expense' : 'income_manual';
         const dateTime = `${e.date}T${e.time}:00`;
@@ -490,9 +506,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const mainRef = doc(collection(db, 'financialRecords'));
         const mirrorRef = e.debtStoreId ? doc(collection(db, 'financialRecords')) : null;
 
-        // Lógica de Categorías Dual:
-        // El local que PAGA (Main) registra siempre como "Préstamo a Sede" para su control interno.
-        // El local que DEBE (Mirror) registra la categoría real (Servicios, Arriendo, etc.) para que aparezca en sus estadísticas.
         const mainSubCategory = (e.debtStoreId && e.subCategory !== 'Cruce Sedes') 
             ? 'Préstamo a Sede' 
             : (e.subCategory || 'Manual');
@@ -516,8 +529,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         batch.set(mainRef, mainRecord);
 
         if (mirrorRef && e.debtStoreId) {
-            // El monto del espejo es el mismo que el principal (negativo) si es un gasto asumido.
-            // Excepto si es una liquidación de deuda (Cruce Sedes), donde se invierte para saldar.
             const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
             const mirrorRecord: FinancialRecord = {
                 id: mirrorRef.id,
@@ -527,7 +538,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 amount: mirrorAmount,
                 type: mirrorAmount < 0 ? 'expense' : 'income_manual',
                 description: `${e.description} (Asumido por ${activeStoreName})`,
-                subCategory: e.subCategory || 'Varios', // Usamos la categoría real aquí
+                subCategory: e.subCategory || 'Varios', 
                 registeredBy: `${currentUser.name} (vía ${activeStoreName})`,
                 isConfirmed: true,
                 debtStoreId: activeStoreId,
@@ -537,6 +548,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             batch.set(mirrorRef, mirrorRecord);
         }
     });
+    
     await batch.commit();
     setShowAddModal(false);
     setManualEntries([]);
@@ -915,12 +927,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             <input type="date" value={entry.date} onChange={e => handleUpdateEntryField(entry.tempId, 'date', e.target.value)} className="flex-grow bg-transparent text-center font-bold text-xs outline-none" />
                                             <button onClick={() => adjustEntryDate(entry.tempId, 1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent rotate-180"/></button>
                                         </div>
+                                        {/* FIX: Corrected use of handleUpdateEntryField to handle time changes instead of the missing handleUpdateTimes function. */}
                                         <input type="time" value={entry.time} onChange={e => handleUpdateEntryField(entry.tempId, 'time', e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] text-center outline-none" />
                                     </div>
 
                                     <div className="col-span-1 w-full">
                                         <label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Cuenta</label>
-                                        <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent">
+                                        <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent">
                                             <option value="cash">Efec</option>
                                             <option value="qr">QR</option>
                                             <option value="bank">Otro</option>
@@ -987,7 +1000,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         {/* MODAL EDICIÓN MEJORADO */}
         {editingRecord && (
              <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-accent/20">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-lg overflow-hidden border border-accent/20">
                     <div className="p-4 bg-accent text-white flex justify-between items-center">
                         <h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3>
                         <button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button>
