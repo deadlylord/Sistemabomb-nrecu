@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View } from '../types';
 import { formatCOP } from '../constants';
@@ -175,11 +176,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               
               const b = balances[otherStoreId]!;
 
-              // Lógica de Saldos:
-              // Si r.amount es NEGATIVO (Gasto/Salida): Yo presté dinero -> Es una cuenta por COBRAR (+).
-              // Si r.amount es POSITIVO (Ingreso/Entrada): Me prestaron dinero -> Es una cuenta por PAGAR (-).
-              // netImpact es el efecto sobre mi "Activo" (cuánto me deben).
-              const netImpact = -r.amount; 
+              // Lógica de Impacto:
+              // 1. Si soy quien registró el préstamo o liquidación (Cat: "Préstamo a Sede" o "Cruce Sedes"):
+              //    Si el monto es NEGATIVO (pagué), me deben -> Impacto positivo (+).
+              // 2. Si es un registro espejo (Cat: cualquier otra como "Servicios"):
+              //    Si el monto es NEGATIVO (un tercero pagó por mí), yo debo -> Impacto negativo (-).
+              const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes')
+                ? -r.amount
+                : r.amount;
 
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
@@ -382,7 +386,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const activeStoreName = activeStore?.name || 'Local Actual';
           const nowIso = new Date().toISOString();
 
-          // I am paying. So I register an Expense (-).
+          // Yo pago: Registro un Gasto (-)
           const mainRef = doc(collection(db, 'financialRecords'));
           const mainRecord: FinancialRecord = {
               id: mainRef.id,
@@ -399,7 +403,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               affectsCashBalance: true
           };
 
-          // The other store receives Money. So they register an Income (+).
+          // La otra sede recibe: Registro un Ingreso (+)
           const mirrorRef = doc(collection(db, 'financialRecords'));
           const mirrorRecord: FinancialRecord = {
               id: mirrorRef.id,
@@ -448,19 +452,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             }
             const updated = { ...e, [field]: finalValue };
 
-            // AUTO-FILL CATEGORY IF DEBT STORE IS SELECTED
-            if (field === 'debtStoreId' && value) {
-                updated.subCategory = 'Préstamo a Sede';
-                updated.mirrorCategory = 'Préstamo a Sede';
-                // Only default description if empty
-                if (!updated.description) updated.description = 'Préstamo a Sede';
-            }
-
+            // Sugerir categoría automática basada en descripción
             if (field === 'description') {
                 const suggestedCat = autoCategorize(value);
                 if (suggestedCat) {
                     updated.subCategory = suggestedCat;
-                    updated.mirrorCategory = suggestedCat;
                 }
             }
             return updated;
@@ -494,9 +490,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const mainRef = doc(collection(db, 'financialRecords'));
         const mirrorRef = e.debtStoreId ? doc(collection(db, 'financialRecords')) : null;
 
-        const finalSubCategory = e.debtStoreId && e.subCategory !== 'Cruce Sedes' && !e.subCategory 
+        // Lógica de Categorías Dual:
+        // El local que PAGA (Main) registra siempre como "Préstamo a Sede" para su control interno.
+        // El local que DEBE (Mirror) registra la categoría real (Servicios, Arriendo, etc.) para que aparezca en sus estadísticas.
+        const mainSubCategory = (e.debtStoreId && e.subCategory !== 'Cruce Sedes') 
             ? 'Préstamo a Sede' 
-            : e.subCategory || 'Manual';
+            : (e.subCategory || 'Manual');
 
         const mainRecord: FinancialRecord = {
             id: mainRef.id,
@@ -506,7 +505,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             amount: totalAmountVal,
             type: type as any,
             description: e.description,
-            subCategory: finalSubCategory,
+            subCategory: mainSubCategory,
             registeredBy: currentUser.name,
             isConfirmed: true,
             affectsCashBalance: true, 
@@ -517,6 +516,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         batch.set(mainRef, mainRecord);
 
         if (mirrorRef && e.debtStoreId) {
+            // El monto del espejo es el mismo que el principal (negativo) si es un gasto asumido.
+            // Excepto si es una liquidación de deuda (Cruce Sedes), donde se invierte para saldar.
             const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
             const mirrorRecord: FinancialRecord = {
                 id: mirrorRef.id,
@@ -525,8 +526,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 accountType: e.accountType as any,
                 amount: mirrorAmount,
                 type: mirrorAmount < 0 ? 'expense' : 'income_manual',
-                description: `${e.description} (Vía ${activeStoreName})`,
-                subCategory: e.mirrorCategory || e.subCategory || 'Varios',
+                description: `${e.description} (Asumido por ${activeStoreName})`,
+                subCategory: e.subCategory || 'Varios', // Usamos la categoría real aquí
                 registeredBy: `${currentUser.name} (vía ${activeStoreName})`,
                 isConfirmed: true,
                 debtStoreId: activeStoreId,
@@ -687,6 +688,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                             <span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span>
                                                         </div>
                                                         <span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>
+                                                        {record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}
                                                     </div>
                                                     <span className={`font-black shrink-0 ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                         {impact > 0 ? '+' : ''}{formatCOP(impact)} 
