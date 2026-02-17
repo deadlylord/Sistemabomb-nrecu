@@ -1,5 +1,4 @@
 
-
 import { Product, Category, Seller, Role, View, Store, PaymentMethod, VersionLog } from './types';
 
 export const formatCOP = (amount: number): string => {
@@ -24,10 +23,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.11',
+    date: '2024-06-30',
+    description: 'Corrección de Lógica de Deudas entre Sedes',
+    isCurrent: true,
+    changes: [
+      'Contabilidad Dual: Se corrigió el signo de los registros espejo para que la deuda se asigne correctamente al local que no puso el dinero.',
+      'Sincronización de Botones: Los botones de pago ahora aparecen únicamente en el local deudor como corresponde.'
+    ]
+  },
+  {
     version: '2.11.10',
     date: '2024-06-29',
     description: 'Mejora Visual en Conciliación de Deudas',
-    isCurrent: true,
     changes: [
       'Claridad en Intercambios: Diferenciación visual explicita entre deudas por pagar (Rojo) y cuentas por cobrar (Verde).',
       'Acciones Contextuales: Los botones de pago solo aparecen en las tarjetas de deuda activa para evitar errores.'
@@ -50,16 +58,6 @@ export const APP_VERSIONS: VersionLog[] = [
       'Acceso Directo a Contabilidad: Añadido botón en el resumen de gastos por categoría para exportar totales directamente al módulo de Contabilidad IA.',
       'Sincronización de Gastos: Ahora puedes registrar los acumulados del libro mayor en el PyG con un solo clic.',
       'Refinamiento de UI: Mejora en la visualización de la lista de gastos en el módulo de conciliación para dispositivos móviles.'
-    ]
-  },
-  {
-    version: '2.11.7',
-    date: '2024-06-26',
-    description: 'Optimización de Sesión y Notificaciones',
-    changes: [
-      'Briefing Diario para Admins: La notificación de tareas pendientes ahora solo aparece una vez al día para administradores.',
-      'Persistencia de Sede: Corregido error en el cambio de sede; ahora la selección se guarda y aplica correctamente.',
-      'Estabilidad de Header: Mejorada la respuesta táctil del selector de sede en dispositivos móviles.'
     ]
   }
 ];

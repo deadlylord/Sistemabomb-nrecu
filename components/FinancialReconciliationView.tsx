@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View } from '../types';
 import { formatCOP } from '../constants';
@@ -176,9 +177,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               const b = balances[otherStoreId]!;
 
               // Lógica de Saldos:
-              // Si r.amount es NEGATIVO (Gasto/Salida): Yo presté dinero -> Es una cuenta por COBRAR (+).
-              // Si r.amount es POSITIVO (Ingreso/Entrada): Me prestaron dinero -> Es una cuenta por PAGAR (-).
-              // netImpact es el efecto sobre mi "Activo" (cuánto me deben).
+              // El monto del registro refleja el flujo del dinero en el local actual.
+              // Si amount < 0 (Gasto): Yo pagué -> Me deben -> Impacto positivo (+).
+              // Si amount > 0 (Ingreso): Recibí dinero de ellos/por ellos -> Yo debo -> Impacto negativo (-).
               const netImpact = -r.amount; 
 
               b.total += netImpact;
@@ -382,7 +383,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const activeStoreName = activeStore?.name || 'Local Actual';
           const nowIso = new Date().toISOString();
 
-          // I am paying. So I register an Expense (-).
+          // Yo pago: Registro un Gasto (-)
           const mainRef = doc(collection(db, 'financialRecords'));
           const mainRecord: FinancialRecord = {
               id: mainRef.id,
@@ -399,7 +400,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               affectsCashBalance: true
           };
 
-          // The other store receives Money. So they register an Income (+).
+          // La otra sede recibe: Registro un Ingreso (+)
           const mirrorRef = doc(collection(db, 'financialRecords'));
           const mirrorRecord: FinancialRecord = {
               id: mirrorRef.id,
@@ -517,7 +518,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         batch.set(mainRef, mainRecord);
 
         if (mirrorRef && e.debtStoreId) {
-            const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
+            // CRÍTICO: El monto espejo SIEMPRE debe ser el inverso para que la deuda sea coherente.
+            // Si yo presto 100 (-100 en mi caja), el otro recibe 100 (+100 en su deuda/cuenta espejo).
+            const mirrorAmount = -totalAmountVal;
             const mirrorRecord: FinancialRecord = {
                 id: mirrorRef.id,
                 date: dateTime,
