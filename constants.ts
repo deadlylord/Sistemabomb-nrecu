@@ -1,4 +1,5 @@
 
+
 import { Product, Category, Seller, Role, View, Store, PaymentMethod, VersionLog } from './types';
 
 export const formatCOP = (amount: number): string => {
@@ -23,10 +24,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.10',
+    date: '2024-06-29',
+    description: 'Mejora Visual en Conciliación de Deudas',
+    isCurrent: true,
+    changes: [
+      'Claridad en Intercambios: Diferenciación visual explicita entre deudas por pagar (Rojo) y cuentas por cobrar (Verde).',
+      'Acciones Contextuales: Los botones de pago solo aparecen en las tarjetas de deuda activa para evitar errores.'
+    ]
+  },
+  {
     version: '2.11.9',
     date: '2024-06-28',
     description: 'Corrección de Lógica de Gastos en Conciliación',
-    isCurrent: true,
     changes: [
       'Separación de Flujos: Los gastos registrados en el módulo de Contabilidad IA ya no afectan el arqueo diario de caja en conciliación.',
       'Enfoque Operativo: Ahora la conciliación diaria se basa únicamente en ventas y novedades de caja, evitando descuadres por registros contables retroactivos.'

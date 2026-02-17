@@ -80,7 +80,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
           const historyData = historySnap.docs
             .map(d => ({ ...d.data(), id: d.id } as any))
             // Explicitly cast to string to ensure compatibility with new Date() constructor.
-            .sort((a: any, b: any) => new Date(b.updatedAt as string).getTime() - new Date(a.updatedAt as string).getTime())
+            .sort((a: any, b: any) => new Date(String(a.updatedAt)).getTime() - new Date(String(b.updatedAt)).getTime())
             .slice(0, 15);
           setHistoryList(historyData);
       }
@@ -201,8 +201,9 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
       await onSaveDraft(counts);
       onApplyCounts(localCounts);
       onClose();
-    } catch (e: any) {
-      alert("Error al guardar: " + (e instanceof Error ? e.message : String(e)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert("Error al guardar: " + msg);
     } finally {
       setIsSaving(false);
     }
@@ -236,8 +237,9 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
       await onApplyAdjustments(counts);
       onApplyCounts(localCounts);
       onClose();
-    } catch (e: any) {
-      alert("Error al aplicar cambios: " + (e instanceof Error ? e.message : String(e)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert("Error al aplicar cambios: " + msg);
     } finally {
       setIsSaving(false);
     }
@@ -268,7 +270,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     <div>
                         <p className="text-xs font-black uppercase tracking-widest leading-none">MODO AUDITORÍA DE SNAPSHOT</p>
                         {/* FIX: Explicitly cast updatedAt to string when passing to new Date() to avoid type errors. */}
-                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date((auditModeEntry as any).updatedAt as string).toLocaleString()}</p>
+                        <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date(String((auditModeEntry as any).updatedAt)).toLocaleString()}</p>
                     </div>
                 </div>
                 <button onClick={() => setAuditModeEntry(null)} className="bg-white text-orange-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-gray-100 transition-all shadow-md active:scale-95">Regresar al Borrador Actual</button>

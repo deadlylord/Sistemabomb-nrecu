@@ -75,7 +75,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [showAddModal, setShowAddModal] = useState(false);
   const [manualEntries, setManualEntries] = useState<ManualEntry[]>([]);
   
-  const [editingRecord, setEditingRecord] = useState<(FinancialRecord & { amountString?: string, timeString?: string }) | null>(null);
+  // Modificado para incluir dateString para edición directa
+  const [editingRecord, setEditingRecord] = useState<(FinancialRecord & { amountString?: string, timeString?: string, dateString?: string }) | null>(null);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -130,7 +131,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       for (const word of words) {
           if (learnedKnowledge.keywordWeight[word]) {
               const bestCat = Object.entries(learnedKnowledge.keywordWeight[word])
-                  .sort((a, b) => b[1] - a[1])[0][0];
+                  .sort((a: [string, number], b: [string, number]) => b[1] - a[1])[0][0];
               return bestCat;
           }
       }
@@ -158,7 +159,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       });
 
       return Object.entries(stats)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
         .map(([name, value]) => ({ name, value }));
   }, [records, selectedMonth, selectedYear]);
 
@@ -174,12 +175,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               
               const b = balances[otherStoreId]!;
 
-              let netImpact = 0;
-              if (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') {
-                  netImpact = -r.amount; 
-              } else {
-                  netImpact = r.amount; 
-              }
+              // Lógica de Saldos:
+              // Si r.amount es NEGATIVO (Gasto/Salida): Yo presté dinero -> Es una cuenta por COBRAR (+).
+              // Si r.amount es POSITIVO (Ingreso/Entrada): Me prestaron dinero -> Es una cuenta por PAGAR (-).
+              // netImpact es el efecto sobre mi "Activo" (cuánto me deben).
+              const netImpact = -r.amount; 
 
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
@@ -194,10 +194,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
           storeId: otherStoreId,
           ...stats,
-          history: stats.history.sort((a, b) => {
-              const timeA = new Date(a.date).getTime();
-              const timeB = new Date(b.date).getTime();
-              return timeB - timeA || b.id.localeCompare(a.id);
+          history: stats.history.sort((a: any, b: any) => {
+              const timeA = new Date(a.date || '').getTime();
+              const timeB = new Date(b.date || '').getTime();
+              return (Number(timeB) - Number(timeA)) || String(b.id).localeCompare(String(a.id));
           })
       })).filter(s => Math.abs(s.total) > 0.1);
   }, [records, stores]);
@@ -242,9 +242,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
         payments.forEach(processPayment);
     });
-
-    // NOTE: Removed subtraction of accountant expenses from daily cash flow as per request
-    // This allows daily totals to reflect only actual cash drawer activity.
 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
         const d = new Date(incident.createdAt);
@@ -385,6 +382,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const activeStoreName = activeStore?.name || 'Local Actual';
           const nowIso = new Date().toISOString();
 
+          // I am paying. So I register an Expense (-).
           const mainRef = doc(collection(db, 'financialRecords'));
           const mainRecord: FinancialRecord = {
               id: mainRef.id,
@@ -393,7 +391,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               accountType: sourceAccount,
               amount: -amount,
               type: 'expense',
-              description: `Saldar deuda de ref. ${debtReferenceDates} con ${targetStoreName}`,
+              description: `Pago deuda de ref. ${debtReferenceDates} a ${targetStoreName}`,
               subCategory: 'Cruce Sedes',
               registeredBy: currentUser.name,
               isConfirmed: true,
@@ -401,6 +399,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               affectsCashBalance: true
           };
 
+          // The other store receives Money. So they register an Income (+).
           const mirrorRef = doc(collection(db, 'financialRecords'));
           const mirrorRecord: FinancialRecord = {
               id: mirrorRef.id,
@@ -448,6 +447,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 finalValue = parseInputToNumber(value);
             }
             const updated = { ...e, [field]: finalValue };
+
+            // AUTO-FILL CATEGORY IF DEBT STORE IS SELECTED
+            if (field === 'debtStoreId' && value) {
+                updated.subCategory = 'Préstamo a Sede';
+                updated.mirrorCategory = 'Préstamo a Sede';
+                // Only default description if empty
+                if (!updated.description) updated.description = 'Préstamo a Sede';
+            }
+
             if (field === 'description') {
                 const suggestedCat = autoCategorize(value);
                 if (suggestedCat) {
@@ -538,19 +546,26 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     setEditingRecord({
         ...record,
         amountString: record.amount.toString(),
-        timeString: time ? time.slice(0, 5) : '12:00'
+        timeString: time ? time.slice(0, 5) : '12:00',
+        dateString: date
     });
   };
 
   const handleUpdateSingleRecord = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!editingRecord) return;
-      const { amountString, timeString, ...recordToSave } = editingRecord;
+      
+      const { amountString, timeString, dateString, ...recordToSave } = editingRecord;
       if ('saldo' in recordToSave) delete (recordToSave as any).saldo;
+      
       const amountVal = parseFloat(amountString || '0');
-      const [datePart] = recordToSave.date.split('T');
-      recordToSave.date = `${datePart}T${timeString}:00`;
+      
+      // Construir la nueva fecha completa
+      const dateTime = `${dateString || new Date().toISOString().split('T')[0]}T${timeString || '12:00'}:00`;
+      
+      recordToSave.date = dateTime;
       recordToSave.amount = amountVal;
+      
       const recordRef = doc(db, 'financialRecords', recordToSave.id);
       await setDoc(recordRef, recordToSave, { merge: true });
       setEditingRecord(null);
@@ -560,14 +575,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     if (window.confirm("¿Seguro que deseas eliminar este registro del libro?")) {
         await deleteDoc(doc(db, 'financialRecords', id));
     }
-  };
-
-  const adjustEditingDate = (days: number) => {
-      if (!editingRecord) return;
-      const [datePart] = editingRecord.date.split('T');
-      const d = new Date(datePart + 'T12:00:00');
-      d.setDate(d.getDate() + days);
-      setEditingRecord({ ...editingRecord, date: d.toISOString().split('T')[0] + 'T' + (editingRecord.timeString || '12:00') + ':00' });
   };
 
   const handleExportCategoryToAccounting = (name: string, value: number) => {
@@ -647,8 +654,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 uppercase truncate">{item.otherStoreName}</p>
                                     </div>
                                     <div className="text-right shrink-0">
+                                        <p className={`text-[10px] sm:text-xs font-bold uppercase mb-0.5 ${item.total > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                            {item.total > 0 ? 'PAGO PENDIENTE (POR COBRAR)' : 'DEUDA A PAGAR'}
+                                        </p>
                                         <p className={`text-sm sm:text-lg font-black ${item.total > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {item.total > 0 ? 'COBRA' : 'PAGA'} {formatCOP(Math.abs(item.total))}
+                                            {formatCOP(Math.abs(item.total))}
                                         </p>
                                     </div>
                                 </div>
@@ -690,8 +700,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 {item.total < 0 && (
                                     <div className="mt-2 pt-2 border-t-2 border-dashed border-red-200 dark:border-red-900/50">
                                         <div className="flex gap-1.5">
-                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm">EFECTIVO</button>
-                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm">QR</button>
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm">PAGAR EFECTIVO</button>
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm">PAGAR QR</button>
                                         </div>
                                     </div>
                                 )}
@@ -972,40 +982,84 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         )}
         
-        {/* MODAL EDICIÓN SIMPLE */}
+        {/* MODAL EDICIÓN MEJORADO */}
         {editingRecord && (
              <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-accent/20">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-accent/20">
                     <div className="p-4 bg-accent text-white flex justify-between items-center">
-                        <h3 className="font-bold">Editar Movimiento</h3>
-                        <button onClick={() => setEditingRecord(null)}><CrossIcon/></button>
+                        <h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3>
+                        <button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button>
                     </div>
                     <form onSubmit={handleUpdateSingleRecord} className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-2">
-                             <div className="col-span-2">
-                                <label className="text-xs font-bold text-gray-400 uppercase">Descripción</label>
-                                <input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border font-bold outline-none" />
+                        <div className="grid grid-cols-2 gap-4">
+                             {/* Fecha y Hora */}
+                             <div className="col-span-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label>
+                                <input 
+                                    type="date" 
+                                    value={editingRecord.dateString} 
+                                    onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} 
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"
+                                />
                             </div>
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase">Monto $</label>
-                                <input type="number" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border font-bold outline-none" />
+                            <div className="col-span-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label>
+                                <input 
+                                    type="time" 
+                                    value={editingRecord.timeString} 
+                                    onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} 
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" 
+                                />
                             </div>
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 uppercase">Hora</label>
-                                <input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border font-bold outline-none" />
+
+                            {/* Cuenta y Monto */}
+                            <div className="col-span-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label>
+                                <select 
+                                    value={editingRecord.accountType} 
+                                    onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} 
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent"
+                                >
+                                    <option value="cash">Efectivo</option>
+                                    <option value="qr">QR</option>
+                                    <option value="bank">Banco / Otro</option>
+                                </select>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label>
+                                <input 
+                                    type="number" 
+                                    value={editingRecord.amountString} 
+                                    onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} 
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" 
+                                />
+                            </div>
+
+                            {/* Categoría y Descripción */}
+                            <div className="col-span-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label>
+                                <input 
+                                    type="text" 
+                                    value={editingRecord.subCategory} 
+                                    onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} 
+                                    className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" 
+                                    placeholder="Ej: SERVICIOS, NOMINA..."
+                                />
                             </div>
                             <div className="col-span-2">
-                                <label className="text-xs font-bold text-gray-400 uppercase block mb-1">Fecha</label>
-                                <div className="flex gap-2">
-                                    <button type="button" onClick={() => adjustEditingDate(-1)} className="flex-1 bg-gray-100 dark:bg-gray-800 p-2 rounded-lg border hover:bg-accent/10 transition-colors"><ChevronLeftIcon className="mx-auto"/></button>
-                                    <span className="flex-[2] text-center p-2 font-mono font-bold text-accent">{editingRecord.date.split('T')[0]}</span>
-                                    <button type="button" onClick={() => adjustEditingDate(1)} className="flex-1 bg-gray-100 dark:bg-gray-800 p-2 rounded-lg border hover:bg-accent/10 transition-colors"><ChevronLeftIcon className="mx-auto rotate-180"/></button>
-                                </div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label>
+                                <input 
+                                    type="text" 
+                                    value={editingRecord.description} 
+                                    onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} 
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" 
+                                />
                             </div>
                         </div>
-                        <div className="flex gap-2 pt-4">
-                            <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold">Cancelar</button>
-                            <button type="submit" className="flex-1 bg-accent text-white font-bold p-3 rounded-xl shadow-lg">Guardar</button>
+
+                        <div className="flex gap-2 pt-4 border-t dark:border-gray-700">
+                            <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
+                            <button type="submit" className="flex-1 bg-accent text-white font-black p-3 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-xs">Guardar Cambios</button>
                         </div>
                     </form>
                 </div>
