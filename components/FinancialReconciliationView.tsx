@@ -194,11 +194,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
           storeId: otherStoreId,
           ...stats,
-          history: stats.history.sort((a: any, b: any) => {
-              // FIX: Explicitly type sort parameters as any and cast return variables to satisfy subtraction type requirements.
+          history: stats.history.sort((a, b) => {
               const timeA = new Date(a.date).getTime();
               const timeB = new Date(b.date).getTime();
-              return (timeB as number) - (timeA as number) || (b.id as string).localeCompare(a.id as string);
+              return timeB - timeA || b.id.localeCompare(a.id);
           })
       })).filter(s => Math.abs(s.total) > 0.1);
   }, [records, stores]);
@@ -503,7 +502,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             registeredBy: currentUser.name,
             isConfirmed: true,
             affectsCashBalance: true, 
-            debtStoreId: e.debtStoreId || undefined
+            ...(e.debtStoreId ? { debtStoreId: e.debtStoreId } : {})
         };
 
         if (mirrorRef) mainRecord.relatedRecordId = mirrorRef.id;
@@ -771,7 +770,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 const isCashConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
                                 const isQrConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
                                 return (
-                                    <div key={item.date} className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl space-y-2.5">
+                                    <div key={item.date} className="p-3 sm:p-4 bg-gray-5 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl space-y-2.5">
                                         <p className="text-[9px] sm:text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-tighter border-b dark:border-gray-700 pb-1">{item.date}</p>
                                         <div className="flex justify-between items-center">
                                             <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">EFEC:</p><p className={`text-xs sm:text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
