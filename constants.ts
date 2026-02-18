@@ -23,10 +23,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.14',
+    date: '2024-07-03',
+    description: 'Fluidez en Conciliación por Lotes',
+    isCurrent: true,
+    changes: [
+      'Herencia de Fechas: Al añadir filas en lote, heredan la fecha del registro anterior para agilizar ingresos retroactivos.',
+      'Duplicación de Filas: Botón para clonar registros en el lote, útil para gastos recurrentes o similares.',
+      'Optimización Móvil: Teclado numérico automático en campos de montos y saldos.'
+    ]
+  },
+  {
     version: '2.11.13',
     date: '2024-07-02',
     description: 'Mejora en Validación de Conciliación',
-    isCurrent: true,
     changes: [
       'Alertas de Campos Vacíos: El sistema ahora notifica explícitamente si falta el monto o la descripción en un movimiento manual.',
       'Integridad de Datos: Se bloquea el procesamiento de lotes si existen filas incompletas para evitar errores contables.'

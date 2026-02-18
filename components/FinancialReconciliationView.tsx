@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
-import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon } from './Icons';
+import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon } from './Icons';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 
@@ -322,12 +322,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [filteredRecords, initialBalanceValue]);
 
   const handleAddRow = () => {
-    const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5);
+    const lastEntry = manualEntries[manualEntries.length - 1];
+    const date = lastEntry ? lastEntry.date : new Date().toISOString().split('T')[0];
+    const time = lastEntry ? lastEntry.time : new Date().toTimeString().slice(0, 5);
+
     setManualEntries([...manualEntries, {
         tempId: Math.random().toString(36).substr(2, 9),
-        date: new Date().toISOString().split('T')[0],
-        time: currentTime,
+        date: date,
+        time: time,
         amount: '',
         description: '',
         accountType: activeTab,
@@ -338,7 +340,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }]);
   };
 
-  // ADD: Function to initiate a settlement between stores
+  const handleDuplicateRow = (tempId: string) => {
+    const entryToClone = manualEntries.find(e => e.tempId === tempId);
+    if (!entryToClone) return;
+    
+    setManualEntries([...manualEntries, {
+        ...entryToClone,
+        tempId: Math.random().toString(36).substr(2, 9),
+    }]);
+  };
+
+  // Function to initiate a settlement between stores
   const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType, history: FinancialRecord[]) => {
       const dates = [...new Set(history.map(h => h.date.split('T')[0]))].sort().join(', ');
       setPaymentSummary({
@@ -430,7 +442,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     setShowAddModal(false); setManualEntries([]);
   };
 
-  // ADD: Function to open a single record for editing
+  // Function to open a single record for editing
   const handleOpenEdit = (record: FinancialRecord) => {
       const datePart = record.date.split('T')[0];
       const timePart = record.date.split('T')[1]?.slice(0, 5) || '12:00';
@@ -670,9 +682,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Cuenta</label><select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent"><option value="cash">Efec</option><option value="qr">QR</option><option value="bank">Otro</option></select></div>
                                     <div className="col-span-2 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Descripción</label><input type="text" value={entry.description} onChange={e => handleUpdateEntryField(entry.tempId, 'description', e.target.value)} placeholder="Concepto..." className="w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-bold text-xs focus:border-accent" /></div>
                                     <div className="col-span-2 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Categoría</label><input type="text" value={entry.subCategory} onChange={e => handleUpdateEntryField(entry.tempId, 'subCategory', e.target.value)} placeholder="Ej: Servicios..." className="w-full bg-accent/5 dark:bg-accent/10 p-2.5 rounded-xl border border-accent/20 outline-none font-black text-[9px] uppercase text-accent" /></div>
-                                    <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Valor</label><input type="text" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-xs text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} /></div>
+                                    <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Valor</label><input type="text" inputMode="decimal" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-xs text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} /></div>
                                     <div className="col-span-3 w-full border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-3 md:pt-0 md:pl-4"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1 mb-1 block">¿Pago por otro local?</label><select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-2 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400"><option value="">No es préstamo</option>{stores.filter(s => s.id !== activeStoreId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>{entry.debtStoreId && (<div className="mt-2 space-y-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-2 rounded-xl border border-yellow-100"><div className="flex items-center gap-2"><p className="text-[7px] font-black uppercase text-gray-500 leading-tight">¿Restar de caja física en la otra sede de inmediato?</p><label className="relative inline-flex items-center cursor-pointer scale-75 shrink-0"><input type="checkbox" checked={entry.affectsMirrorBalance} onChange={e => handleUpdateEntryField(entry.tempId, 'affectsMirrorBalance', e.target.checked)} className="sr-only peer" /><div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div></label></div></div>)}</div>
-                                    <div className="col-span-1 hidden md:flex justify-center"><button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500 transition-all"><TrashIcon className="w-5 h-5" /></button></div></div>
+                                    <div className="col-span-1 hidden md:flex justify-center items-center gap-2">
+                                        <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 text-gray-300 hover:text-accent transition-all" title="Duplicar registro"><CopyIcon className="w-5 h-5" /></button>
+                                        <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500 transition-all" title="Eliminar registro"><TrashIcon className="w-5 h-5" /></button>
+                                    </div></div>
                                 )})}
                         </div>
                         <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
@@ -687,7 +702,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-lg overflow-hidden border border-accent/20">
                     <div className="p-4 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button></div>
                     <form onSubmit={handleUpdateSingleRecord} className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option><option value="bank">Banco / Otro</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
+                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option><option value="bank">Banco / Otro</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
                         <div className="flex gap-2 pt-4 border-t dark:border-gray-700"><button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button><button type="submit" className="flex-1 bg-accent text-white font-black p-3 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-xs">Guardar Cambios</button></div>
                     </form>
                 </div>
