@@ -23,10 +23,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.15',
+    date: '2024-07-04',
+    description: 'Reportes y Filtros Avanzados en Conciliación',
+    isCurrent: true,
+    changes: [
+      'Pestaña de Ingresos: Nueva vista resumida de ingresos por categoría en el panel mensual.',
+      'Filtro Cruzado: Al tocar gastos o ingresos en el resumen, la tabla se filtra automáticamente.',
+      'Rango de Fechas: Filtro de fecha "Desde/Hasta" integrado en el libro mayor.',
+      'Fila de Totales: Visualización automática de sumatorias al final de la tabla según los filtros aplicados.'
+    ]
+  },
+  {
     version: '2.11.14',
     date: '2024-07-03',
     description: 'Fluidez en Conciliación por Lotes',
-    isCurrent: true,
     changes: [
       'Herencia de Fechas: Al añadir filas en lote, heredan la fecha del registro anterior para agilizar ingresos retroactivos.',
       'Duplicación de Filas: Botón para clonar registros en el lote, útil para gastos recurrentes o similares.',
@@ -40,34 +51,6 @@ export const APP_VERSIONS: VersionLog[] = [
     changes: [
       'Alertas de Campos Vacíos: El sistema ahora notifica explícitamente si falta el monto o la descripción en un movimiento manual.',
       'Integridad de Datos: Se bloquea el procesamiento de lotes si existen filas incompletas para evitar errores contables.'
-    ]
-  },
-  {
-    version: '2.11.12',
-    date: '2024-07-01',
-    description: 'Refinamiento de Gastos Cruzados entre Sedes',
-    changes: [
-      'Dualidad de Categorías: Al prestar para un gasto, el local que paga registra "Préstamo a Sede" y el local deudor registra la categoría real (ej. Luz).',
-      'Corrección de Signos: Los gastos pagados por otras sedes ahora aparecen correctamente como saldos negativos (deudas) en el local beneficiado.',
-      'Sincronización Inteligente: Mejora en el cálculo de impacto neto para diferenciar entre préstamos activos y gastos operativos asumidos.'
-    ]
-  },
-  {
-    version: '2.11.11',
-    date: '2024-06-30',
-    description: 'Corrección de Lógica de Deudas entre Sedes',
-    changes: [
-      'Contabilidad Dual: Se corrigió el signo de los registros espejo para que la deuda se asigne correctamente al local que no puso el dinero.',
-      'Sincronización de Botones: Los botones de pago ahora aparecen únicamente en el local deudor como corresponde.'
-    ]
-  },
-  {
-    version: '2.11.10',
-    date: '2024-06-29',
-    description: 'Mejora Visual en Conciliación de Deudas',
-    changes: [
-      'Claridad en Intercambios: Diferenciación visual explicita entre deudas por pagar (Rojo) y cuentas por cobrar (Verde).',
-      'Acciones Contextuales: Los botones de pago solo aparecen en las tarjetas de deuda activa para evitar errores.'
     ]
   }
 ];

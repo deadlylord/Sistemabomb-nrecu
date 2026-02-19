@@ -78,6 +78,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Filtros de fecha adicionales para la tabla principal
+  const [ledgerStartDate, setLedgerStartDate] = useState('');
+  const [ledgerEndDate, setLedgerEndDate] = useState('');
+
+  // Filtro de tipo de movimiento (Ingreso / Egreso) sincronizado con las pestañas de resumen
+  const [financeTypeFilter, setFinanceTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [summaryActiveTab, setSummaryActiveTab] = useState<'expense' | 'income'>('expense');
+
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -151,20 +159,32 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       return 'Otros';
   };
 
-  const categoryExpensesStats = useMemo(() => {
-      const stats: Record<string, number> = {};
+  const categoryStats = useMemo(() => {
+      const expenseStats: Record<string, number> = {};
+      const incomeStats: Record<string, number> = {};
       const startOfMonth = new Date(selectedYear, selectedMonth, 1);
       const endOfMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+
       records.forEach(r => {
           const d = new Date(r.date);
-          if (d.getTime() >= startOfMonth.getTime() && d.getTime() <= endOfMonth.getTime() && r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
+          if (d.getTime() >= startOfMonth.getTime() && d.getTime() <= endOfMonth.getTime()) {
               const cat = r.subCategory || 'Sin Categoría';
-              stats[cat] = (stats[cat] || 0) + Math.abs(r.amount);
+              if (r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
+                expenseStats[cat] = (expenseStats[cat] || 0) + Math.abs(r.amount);
+              } else if (r.amount > 0 && r.subCategory !== 'Cruce Sedes') {
+                incomeStats[cat] = (incomeStats[cat] || 0) + r.amount;
+              }
           }
       });
-      return Object.entries(stats)
+
+      const transform = (stats: Record<string, number>) => Object.entries(stats)
         .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
         .map(([name, value]) => ({ name, value }));
+
+      return {
+          expenses: transform(expenseStats),
+          incomes: transform(incomeStats)
+      };
   }, [records, selectedMonth, selectedYear]);
 
   const interStoreBalances = useMemo(() => {
@@ -303,23 +323,59 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     return records.filter(r => {
         const matchesAccount = r.accountType === activeTab;
         const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) || (r.subCategory && r.subCategory.toLowerCase().includes(searchTerm.toLowerCase()));
-        return matchesAccount && matchesSearch;
+        
+        // Filtro de rango de fechas
+        const rDate = new Date(r.date);
+        const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00') : null;
+        const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59') : null;
+        const matchesDate = (!start || rDate >= start) && (!end || rDate <= end);
+
+        // Filtro de tipo (Ingreso / Egreso)
+        let matchesType = true;
+        if (financeTypeFilter === 'income') matchesType = r.amount > 0;
+        else if (financeTypeFilter === 'expense') matchesType = r.amount < 0;
+
+        return matchesAccount && matchesSearch && matchesDate && matchesType;
     });
-  }, [records, activeTab, searchTerm]);
+  }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter]);
 
   const currentBalance = useMemo(() => {
-      const recordsSum = filteredRecords.filter(r => r.affectsCashBalance !== false).reduce((sum, r) => sum + r.amount, 0);
+      // El saldo real se calcula siempre sobre TODOS los registros de la cuenta para ser consistente
+      const recordsSum = records
+        .filter(r => r.accountType === activeTab && r.affectsCashBalance !== false)
+        .reduce((sum, r) => sum + r.amount, 0);
       return initialBalanceValue + recordsSum;
-  }, [filteredRecords, initialBalanceValue]);
+  }, [records, activeTab, initialBalanceValue]);
+
+  // Totales visibles (para el pie de tabla)
+  const visibleTotals = useMemo(() => {
+    return filteredRecords.reduce((acc, r) => {
+        if (r.amount > 0) acc.income += r.amount;
+        else acc.expense += Math.abs(r.amount);
+        acc.net += r.amount;
+        return acc;
+    }, { income: 0, expense: 0, net: 0 });
+  }, [filteredRecords]);
 
   const recordsWithBalance = useMemo(() => {
     const sorted = [...filteredRecords].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
     let runningBalance = initialBalanceValue;
-    return sorted.map(r => {
-        if (r.affectsCashBalance !== false) runningBalance += r.amount;
-        return { ...r, saldo: runningBalance };
-    }).reverse(); 
-  }, [filteredRecords, initialBalanceValue]);
+    
+    // Para mostrar el saldo dinámico, necesitamos calcularlo basado en el historial completo de la cuenta
+    // no solo en los filtrados, o de lo contrario el saldo "salta" visualmente.
+    const accountHistory = records
+        .filter(r => r.accountType === activeTab)
+        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
+
+    const balanceMap = new Map<string, number>();
+    let rolling = initialBalanceValue;
+    accountHistory.forEach(r => {
+        if (r.affectsCashBalance !== false) rolling += r.amount;
+        balanceMap.set(r.id, rolling);
+    });
+
+    return filteredRecords.map(r => ({ ...r, saldo: balanceMap.get(r.id) || 0 })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
+  }, [filteredRecords, records, activeTab, initialBalanceValue]);
 
   const handleAddRow = () => {
     const lastEntry = manualEntries[manualEntries.length - 1];
@@ -350,7 +406,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }]);
   };
 
-  // Function to initiate a settlement between stores
   const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType, history: FinancialRecord[]) => {
       const dates = [...new Set(history.map(h => h.date.split('T')[0]))].sort().join(', ');
       setPaymentSummary({
@@ -442,7 +497,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     setShowAddModal(false); setManualEntries([]);
   };
 
-  // Function to open a single record for editing
   const handleOpenEdit = (record: FinancialRecord) => {
       const datePart = record.date.split('T')[0];
       const timePart = record.date.split('T')[1]?.slice(0, 5) || '12:00';
@@ -474,6 +528,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           alert("Gasto exportado exitosamente. Lo verás reflejado en el reporte PyG.");
       }
   };
+
+  const handleFilterBySummary = (type: 'income' | 'expense', catName: string | null) => {
+      setFinanceTypeFilter(type);
+      setSearchTerm(catName || '');
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-0">
@@ -537,13 +596,72 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 )}
             </div>
 
-            <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-accent/20">
-                <h3 className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2 mb-3"><ChartBarIcon className="w-4 h-4 sm:w-5 h-5" /> Gastos Mensuales</h3>
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 scrollbar-hide">
-                    {categoryExpensesStats.length > 0 ? categoryExpensesStats.map((cat, idx) => {
-                        const percentage = (cat.value / (categoryExpensesStats[0].value || 1)) * 100;
-                        return (<div key={idx} className="space-y-0.5 group"><div className="flex justify-between items-center text-[9px] sm:text-[11px] font-bold uppercase tracking-tight"><span className="text-gray-600 dark:text-gray-300 truncate max-w-[150px]">{cat.name}</span><div className="flex items-center gap-2"><span className="text-accent">{formatCOP(cat.value)}</span><button onClick={() => handleExportCategoryToAccounting(cat.name, cat.value)} className="p-1 bg-accent/10 text-accent rounded hover:bg-accent hover:text-white transition-all opacity-0 group-hover:opacity-100" title="Añadir a Contabilidad IA"><SparklesIcon className="w-3 h-3" /></button></div></div><div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden"><div className="bg-accent h-full rounded-full transition-all duration-1000" style={{ width: `${percentage}%` }}></div></div></div>);
-                    }) : <div className="flex flex-col items-center justify-center py-8 opacity-20"><TagIcon className="w-8 h-8 mb-1" /><p className="text-[9px] font-bold uppercase italic">Sin gastos</p></div>}
+            <div className="bg-white dark:bg-secondary rounded-2xl shadow-md border border-accent/20 overflow-hidden flex flex-col">
+                <div className="flex bg-gray-50 dark:bg-gray-800 p-1 border-b dark:border-gray-700">
+                    <button 
+                        onClick={() => setSummaryActiveTab('expense')}
+                        className={`flex-1 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-lg transition-all ${summaryActiveTab === 'expense' ? 'bg-white dark:bg-gray-700 text-red-500 shadow-sm' : 'text-gray-400'}`}
+                    >
+                        Gastos Mensuales
+                    </button>
+                    <button 
+                        onClick={() => setSummaryActiveTab('income')}
+                        className={`flex-1 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest rounded-lg transition-all ${summaryActiveTab === 'income' ? 'bg-white dark:bg-gray-700 text-green-500 shadow-sm' : 'text-gray-400'}`}
+                    >
+                        Ingresos Mensuales
+                    </button>
+                </div>
+                
+                <div className="p-4 sm:p-5 flex-grow">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                            {summaryActiveTab === 'expense' ? <ChartBarIcon className="w-4 h-4" /> : <PlusCircleIcon className="w-4 h-4" />}
+                            Resumen de {summaryActiveTab === 'expense' ? 'Gastos' : 'Ingresos'}
+                        </h3>
+                        <button 
+                            onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', null)}
+                            className="text-[9px] font-black text-gray-400 uppercase hover:text-accent underline"
+                        >
+                            Ver Todo
+                        </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-hide animate-fade-in">
+                        {categoryStats[summaryActiveTab === 'expense' ? 'expenses' : 'incomes'].length > 0 ? categoryStats[summaryActiveTab === 'expense' ? 'expenses' : 'incomes'].map((cat, idx) => {
+                            const maxVal = categoryStats[summaryActiveTab === 'expense' ? 'expenses' : 'incomes'][0].value;
+                            const percentage = (cat.value / maxVal) * 100;
+                            const colorClass = summaryActiveTab === 'expense' ? 'bg-red-500' : 'bg-green-500';
+                            const textColorClass = summaryActiveTab === 'expense' ? 'text-red-500' : 'text-green-500';
+
+                            return (
+                                <div key={idx} className="space-y-0.5 group cursor-pointer" onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', cat.name)}>
+                                    <div className="flex justify-between items-center text-[9px] sm:text-[11px] font-bold uppercase tracking-tight">
+                                        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[150px]">{cat.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={textColorClass}>{formatCOP(cat.value)}</span>
+                                            {summaryActiveTab === 'expense' && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleExportCategoryToAccounting(cat.name, cat.value); }}
+                                                    className="p-1 bg-accent/10 text-accent rounded hover:bg-accent hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                                                    title="Añadir a Contabilidad IA"
+                                                >
+                                                    <SparklesIcon className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                                        <div className={`${colorClass} h-full rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
+                                    </div>
+                                </div>
+                            );
+                        }) : (
+                            <div className="flex flex-col items-center justify-center py-8 opacity-20">
+                                <TagIcon className="w-8 h-8 mb-1" />
+                                <p className="text-[9px] font-bold uppercase italic">Sin registros</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -638,34 +756,120 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 </div>
 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col min-h-[500px]">
-                    <div className="p-4 border-b dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50 dark:bg-gray-900/50">
-                        <div className="relative w-full sm:w-64">
-                            <input type="text" placeholder="Filtrar libro..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white dark:bg-gray-800 border-2 border-transparent focus:border-accent rounded-xl py-2 px-10 outline-none text-xs sm:text-sm font-bold shadow-inner" />
-                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 h-5" />
+                    <div className="p-4 border-b dark:border-slate-800 flex flex-col gap-4 bg-gray-50 dark:bg-gray-900/50">
+                        {/* Filtros Superiores del Libro */}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="relative w-full md:w-64">
+                                <input type="text" placeholder="Filtrar libro..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white dark:bg-gray-800 border-2 border-transparent focus:border-accent rounded-xl py-2 px-10 outline-none text-xs sm:text-sm font-bold shadow-inner" />
+                                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 h-5" />
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full md:w-auto">
+                                <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-inner flex-grow">
+                                    <input type="date" value={ledgerStartDate} onChange={e => setLedgerStartDate(e.target.value)} className="bg-transparent text-[10px] sm:text-xs font-bold outline-none uppercase w-full" />
+                                    <span className="text-gray-300">|</span>
+                                    <input type="date" value={ledgerEndDate} onChange={e => setLedgerEndDate(e.target.value)} className="bg-transparent text-[10px] sm:text-xs font-bold outline-none uppercase w-full" />
+                                </div>
+                                <button onClick={() => { setLedgerStartDate(''); setLedgerEndDate(''); setSearchTerm(''); setFinanceTypeFilter('all'); }} className="p-2 text-gray-400 hover:text-red-500" title="Limpiar filtros"><CrossIcon className="w-5 h-5" /></button>
+                            </div>
                         </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 w-full sm:w-auto">
-                            <div className="text-left sm:text-right">
-                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Real</p>
-                                <p className={`text-sm sm:text-xl font-black ${currentBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(currentBalance)}</p>
+
+                        {/* Totales Rápidos de la Vista Filtrada */}
+                        <div className="flex justify-between items-center">
+                            <div className="flex gap-4">
+                                <button 
+                                    onClick={() => setFinanceTypeFilter(financeTypeFilter === 'income' ? 'all' : 'income')}
+                                    className={`flex flex-col px-3 py-1 rounded-xl transition-all border ${financeTypeFilter === 'income' ? 'bg-green-500 text-white border-green-600 shadow-md' : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700'}`}
+                                >
+                                    <span className="text-[8px] font-black uppercase opacity-80">Visible Ingresos</span>
+                                    <span className="text-xs font-black">{formatCOP(visibleTotals.income)}</span>
+                                </button>
+                                <button 
+                                    onClick={() => setFinanceTypeFilter(financeTypeFilter === 'expense' ? 'all' : 'expense')}
+                                    className={`flex flex-col px-3 py-1 rounded-xl transition-all border ${financeTypeFilter === 'expense' ? 'bg-red-500 text-white border-red-600 shadow-md' : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700'}`}
+                                >
+                                    <span className="text-[8px] font-black uppercase opacity-80">Visible Gastos</span>
+                                    <span className="text-xs font-black">{formatCOP(visibleTotals.expense)}</span>
+                                </button>
+                            </div>
+
+                            <div className="text-right">
+                                <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Saldo Real Cuenta</p>
+                                <p className={`text-sm sm:text-xl font-black leading-none ${currentBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(currentBalance)}</p>
                             </div>
                             <button onClick={() => { handleAddRow(); setShowAddModal(true); }} className="p-2.5 sm:p-3 bg-accent text-white rounded-xl shadow-lg hover:scale-105 transition-all"><PlusCircleIcon className="w-5 h-5 sm:w-6 h-6" /></button>
                         </div>
                     </div>
+                    
                     <div className="flex-grow overflow-x-auto">
                         <table className="w-full text-left border-collapse text-[10px] sm:text-xs">
                             <thead><tr className="bg-gray-100 dark:bg-gray-800 text-[8px] sm:text-[10px] font-black uppercase text-gray-500 border-b dark:border-gray-700"><th className="p-3 sm:p-4">Fecha</th><th className="p-3 sm:p-4">Concepto</th><th className="p-3 sm:p-4">Cat.</th><th className="p-3 sm:p-4 text-right">Monto</th><th className="p-3 sm:p-4 text-right">Saldo</th><th className="p-3 sm:p-4 w-8"></th></tr></thead>
                             <tbody className="divide-y dark:divide-gray-800">
-                                <tr className="bg-accent/5 font-black italic"><td className="p-3 sm:p-4 text-gray-400">---</td><td className="p-3 sm:p-4 text-accent uppercase tracking-widest">Saldo Inicial Apertura</td><td className="p-3 sm:p-4 text-gray-400">APERTURA</td><td className="p-3 sm:p-4 text-right">{formatCOP(initialBalanceValue)}</td><td className="p-3 sm:p-4 text-right bg-accent/10">{formatCOP(initialBalanceValue)}</td><td className="p-3 sm:p-4"></td></tr>
+                                {(!ledgerStartDate || new Date(ledgerStartDate) <= new Date(records[records.length-1]?.date || Date.now())) && searchTerm === '' && financeTypeFilter === 'all' && (
+                                    <tr className="bg-accent/5 font-black italic">
+                                        <td className="p-3 sm:p-4 text-gray-400">---</td>
+                                        <td className="p-3 sm:p-4 text-accent uppercase tracking-widest">Saldo Inicial Apertura</td>
+                                        <td className="p-3 sm:p-4 text-gray-400">APERTURA</td>
+                                        <td className="p-3 sm:p-4 text-right">{formatCOP(initialBalanceValue)}</td>
+                                        <td className="p-3 sm:p-4 text-right bg-accent/10">{formatCOP(initialBalanceValue)}</td>
+                                        <td className="p-3 sm:p-4"></td>
+                                    </tr>
+                                )}
                                 {recordsWithBalance.map(record => (
-                                    <tr key={record.id} className={`hover:bg-accent/5 transition-colors group ${record.affectsCashBalance === false ? 'opacity-50 italic' : ''}`}><td className="p-3 sm:p-4 font-mono text-gray-500 whitespace-nowrap"><div className="flex flex-col"><span>{record.date.split('T')[0]}</span><span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.split('T')[1]?.slice(0, 5) || '--:--'}</span></div></td><td className="p-3 sm:p-4"><div className="flex items-center gap-1.5 sm:gap-2"><p className="font-bold text-gray-800 dark:text-gray-200 uppercase truncate max-w-[120px] sm:max-w-none">{record.description}</p>{record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}</div><p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p></td><td className="p-3 sm:p-4 uppercase font-black text-[8px] sm:text-[9px] text-gray-500 truncate max-w-[60px]">{record.subCategory || 'Varios'}</td><td className={`p-3 sm:p-4 text-right font-black ${record.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{record.amount >= 0 ? '+' : ''}{formatCOP(record.amount)}</td><td className="p-3 sm:p-4 text-right font-black bg-accent/5">{record.affectsCashBalance !== false ? formatCOP(record.saldo) : '--'}</td><td className="p-3 sm:p-4 text-center"><div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => handleOpenEdit(record)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4" /></button><button onClick={() => handleDeleteRecord(record.id)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button></div></td></tr>
+                                    <tr key={record.id} className={`hover:bg-accent/5 transition-colors group ${record.affectsCashBalance === false ? 'opacity-50 italic' : ''}`}>
+                                        <td className="p-3 sm:p-4 font-mono text-gray-500 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <span>{record.date.split('T')[0]}</span>
+                                                <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.split('T')[1]?.slice(0, 5) || '--:--'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="p-3 sm:p-4">
+                                            <div className="flex items-center gap-1.5 sm:gap-2">
+                                                <p className="font-bold text-gray-800 dark:text-gray-200 uppercase truncate max-w-[120px] sm:max-w-none">{record.description}</p>
+                                                {record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}
+                                            </div>
+                                            <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
+                                        </td>
+                                        <td className="p-3 sm:p-4 uppercase font-black text-[8px] sm:text-[9px] text-gray-500 truncate max-w-[60px]">{record.subCategory || 'Varios'}</td>
+                                        <td className={`p-3 sm:p-4 text-right font-black ${record.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                            {record.amount >= 0 ? '+' : ''}{formatCOP(record.amount)}
+                                        </td>
+                                        <td className="p-3 sm:p-4 text-right font-black bg-accent/5">
+                                            {record.affectsCashBalance !== false ? formatCOP(record.saldo) : '--'}
+                                        </td>
+                                        <td className="p-3 sm:p-4 text-center">
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => handleOpenEdit(record)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteRecord(record.id)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 ))}
                             </tbody>
+                            <tfoot className="bg-gray-50 dark:bg-gray-900 border-t-2 border-gray-200 dark:border-gray-700">
+                                <tr className="font-black">
+                                    <td className="p-3 sm:p-4 text-gray-400 uppercase text-[8px]">TOTALES VISIBLES</td>
+                                    <td className="p-3 sm:p-4">
+                                        <div className="flex gap-4 text-[9px] uppercase">
+                                            <span className="text-green-600">IN: {formatCOP(visibleTotals.income)}</span>
+                                            <span className="text-red-500">OUT: {formatCOP(visibleTotals.expense)}</span>
+                                        </div>
+                                    </td>
+                                    <td className="p-3 sm:p-4 text-right text-gray-400 uppercase text-[8px]">NETO:</td>
+                                    <td className={`p-3 sm:p-4 text-right ${visibleTotals.net >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                        {formatCOP(visibleTotals.net)}
+                                    </td>
+                                    <td className="p-3 sm:p-4"></td>
+                                    <td className="p-3 sm:p-4"></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
             </div>
         </div>
 
+        {/* MODAL INGRESOS MANUALES */}
         {showAddModal && (
             <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">

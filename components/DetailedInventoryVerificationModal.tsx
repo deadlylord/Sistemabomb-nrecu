@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, PendingDetailedVerification } from '../types';
 import { SearchIcon, CrossIcon, CheckIcon, PackageIcon, EyeIcon, HistoryIcon, TrashIcon, ChevronDownIcon, AlertTriangleIcon, PlusCircleIcon } from './Icons';
@@ -196,7 +195,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
     try {
       const counts: Record<string, number> = {};
       Object.entries(localCounts).forEach(([pid, val]) => {
-        const n = parseInt(val, 10);
+        // FIX: Explicitly cast 'val' as string to satisfy parseInt parameter requirements and fix the unknown type assignment error.
+        const n = parseInt(val as string, 10);
         // FIX: Ensured val is treated as string for parseInt
         if (!isNaN(n)) counts[pid] = n;
       });
@@ -234,7 +234,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
     try {
       const counts: Record<string, number> = {};
       Object.entries(localCounts).forEach(([pid, val]) => {
-        const n = parseInt(val, 10);
+        // FIX: Explicitly cast 'val' as string to satisfy parseInt parameter requirements and fix the unknown type assignment error.
+        const n = parseInt(val as string, 10);
         // FIX: Ensured val is treated as string for parseInt
         if (!isNaN(n)) counts[pid] = n;
       });
@@ -273,7 +274,6 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                     <HistoryIcon className="w-6 h-6 animate-spin-slow" />
                     <div>
                         <p className="text-xs font-black uppercase tracking-widest leading-none">MODO AUDITORÍA DE SNAPSHOT</p>
-                        {/* FIX: Explicitly convert updatedAt to string for new Date() call */}
                         <p className="text-[10px] font-bold opacity-80 mt-1">Estado guardado por {(auditModeEntry as any).lastUpdatedBy} el {new Date(String((auditModeEntry as any).updatedAt)).toLocaleString()}</p>
                     </div>
                 </div>
@@ -347,7 +347,6 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
                         <div key={entry.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col group hover:border-accent transition-all cursor-pointer" onClick={() => handleAuditHistory(entry)}>
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    {/* FIX: Explicitly convert entry.updatedAt to string for Date constructor */}
                                     <p className="text-xs font-black text-accent uppercase leading-none">{new Date(String(entry.updatedAt)).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}</p>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Vendedor: {entry.lastUpdatedBy}</p>
                                 </div>
