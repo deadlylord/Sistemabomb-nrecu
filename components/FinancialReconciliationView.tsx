@@ -98,6 +98,19 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [isEditingNames, setIsEditingNames] = useState(false);
   const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', bank: '' });
 
+  const getLocalDateString = (dateInput: string | Date) => {
+    if (!dateInput) return '';
+    if (typeof dateInput === 'string' && dateInput.length === 10 && dateInput.includes('-') && !dateInput.includes('T')) {
+        return dateInput;
+    }
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const activeStore = useMemo(() => stores.find(s => s.id === activeStoreId), [activeStoreId, stores]);
   const isAdmin = currentUser.roleId === '1';
 
@@ -234,7 +247,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     const processPayment = (p: Payment, type: 'Venta' | 'Abono', refId: string, customer: string) => {
         const pDate = new Date(p.date);
         if (pDate.getTime() < startOfMonth.getTime() || pDate.getTime() > endOfMonth.getTime()) return;
-        const dateStr = p.date.split('T')[0];
+        const dateStr = getLocalDateString(p.date);
         const existing = getExisting(dateStr);
         const amount = Number(p.amount) || 0;
         const time = p.date.split('T')[1]?.slice(0, 5) || '--:--';
@@ -274,7 +287,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
         const d = new Date(incident.createdAt);
         if (d.getTime() < startOfMonth.getTime() || d.getTime() > endOfMonth.getTime()) return;
-        const dateStr = incident.createdAt.split('T')[0];
+        const dateStr = getLocalDateString(incident.createdAt);
         const existing = getExisting(dateStr);
         const amount = Number(incident.adjustmentAmount);
         const isExpense = incident.adjustmentType === 'expense';
@@ -411,7 +424,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   const handleAddRow = () => {
     const lastEntry = manualEntries[manualEntries.length - 1];
-    const date = lastEntry ? lastEntry.date : new Date().toISOString().split('T')[0];
+    const date = lastEntry ? lastEntry.date : getLocalDateString(new Date());
     const time = lastEntry ? lastEntry.time : new Date().toTimeString().slice(0, 5);
 
     setManualEntries([...manualEntries, {
@@ -443,7 +456,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType, history: FinancialRecord[]) => {
-      const dates = [...new Set(history.map(h => h.date.split('T')[0]))].sort().join(', ');
+      const dates = [...new Set(history.map(h => getLocalDateString(h.date)))].sort().join(', ');
       setPaymentSummary({
           targetStoreId,
           targetStoreName,
@@ -498,7 +511,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           if (e.tempId === tempId) {
               const d = new Date(e.date + 'T12:00:00');
               d.setDate(d.getDate() + days);
-              return { ...e, date: d.toISOString().split('T')[0] };
+              return { ...e, date: getLocalDateString(d) };
           }
           return e;
       }));
@@ -534,8 +547,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleOpenEdit = (record: FinancialRecord) => {
-      const datePart = record.date.split('T')[0];
-      const timePart = record.date.split('T')[1]?.slice(0, 5) || '12:00';
+      const datePart = getLocalDateString(record.date);
+      const timePart = record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '12:00';
       setEditingRecord({
           ...record,
           amountString: record.amount.toString(),
@@ -549,7 +562,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const { amountString, timeString, dateString, ...recordToSave } = editingRecord;
       if ('saldo' in recordToSave) delete (recordToSave as any).saldo;
       const amountVal = parseFloat(amountString || '0');
-      const dateTime = `${dateString || new Date().toISOString().split('T')[0]}T${timeString || '12:00'}:00`;
+      const dateTime = `${dateString || getLocalDateString(new Date())}T${timeString || '12:00'}:00`;
       recordToSave.date = dateTime; recordToSave.amount = amountVal;
       await setDoc(doc(db, 'financialRecords', recordToSave.id), recordToSave, { merge: true });
       setEditingRecord(null);
@@ -676,7 +689,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                 const impact = (record as any).netImpact || 0;
                                                 const methodLabel = record.accountType === 'cash' ? 'EFEC' : (record.accountType === 'qr' ? 'QR' : 'BANCO');
                                                 const methodColor = record.accountType === 'cash' ? 'text-green-600 dark:text-green-400' : (record.accountType === 'qr' ? 'text-blue-500' : 'text-purple-500');
-                                                return (<div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center"><div className="flex flex-col min-w-0 pr-2"><div className="flex items-center gap-2"><span className="text-gray-400 font-black uppercase text-[7px]">{record.date.split('T')[0]}</span><span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span></div><span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>{record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}</div><span className={`font-black shrink-0 ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>{impact > 0 ? '+' : ''}{formatCOP(impact)}</span></div>)
+                                                return (<div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center"><div className="flex flex-col min-w-0 pr-2"><div className="flex items-center gap-2"><span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span><span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span></div><span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>{record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}</div><span className={`font-black shrink-0 ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>{impact > 0 ? '+' : ''}{formatCOP(impact)}</span></div>)
                                             })}
                                         </div>
                                     )}
@@ -919,8 +932,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     <tr key={record.id} className={`hover:bg-accent/5 transition-colors group ${record.affectsCashBalance === false ? 'opacity-50 italic' : ''}`}>
                                         <td className="p-3 sm:p-4 font-mono text-gray-500 whitespace-nowrap">
                                             <div className="flex flex-col">
-                                                <span>{record.date.split('T')[0]}</span>
-                                                <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.split('T')[1]?.slice(0, 5) || '--:--'}</span>
+                                                <span>{getLocalDateString(record.date)}</span>
+                                                <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
                                             </div>
                                         </td>
                                         <td className="p-3 sm:p-4">
