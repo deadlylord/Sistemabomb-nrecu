@@ -981,24 +981,76 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             {manualEntries.map((entry) => {
                                 const amountVal = parseFloat(entry.amount); const isExpense = amountVal < 0;
                                 return (
-                                <div key={entry.tempId} className={`flex flex-col md:grid md:grid-cols-12 gap-3 items-center bg-white dark:bg-gray-800 p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
-                                    <div className="w-full md:hidden flex justify-between items-center mb-2 pb-2 border-b border-gray-100 dark:border-gray-700">
+                                <div key={entry.tempId} className={`grid grid-cols-2 md:grid-cols-12 gap-2 md:gap-3 items-center bg-white dark:bg-gray-800 p-3 md:p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
+                                    <div className="col-span-2 md:hidden flex justify-between items-center mb-1 pb-1 border-b border-gray-100 dark:border-gray-700">
                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Movimiento #{manualEntries.indexOf(entry) + 1}</span>
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 bg-accent/10 text-accent rounded-xl" title="Duplicar"><CopyIcon className="w-5 h-5" /></button>
-                                            <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 bg-red-50 text-red-500 rounded-xl"><TrashIcon className="w-5 h-5" /></button>
+                                            <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-1.5 bg-accent/10 text-accent rounded-xl" title="Duplicar"><CopyIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-1.5 bg-red-50 text-red-500 rounded-xl"><TrashIcon className="w-4 h-4" /></button>
                                         </div>
                                     </div>
-                                    <div className="col-span-2 w-full space-y-1"><div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700"><button onClick={() => adjustEntryDate(entry.tempId, -1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent"/></button><input type="date" value={entry.date} onChange={e => handleUpdateEntryField(entry.tempId, 'date', e.target.value)} className="flex-grow bg-transparent text-center font-bold text-xs outline-none" /><button onClick={() => adjustEntryDate(entry.tempId, 1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent rotate-180"/></button></div><input type="time" value={entry.time} onChange={e => handleUpdateEntryField(entry.tempId, 'time', e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] text-center outline-none" /></div>
-                                    <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Cuenta</label><select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent"><option value="cash">Efec</option><option value="qr">QR</option><option value="bank">Otro</option></select></div>
-                                    <div className="col-span-2 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Descripción</label><input type="text" value={entry.description} onChange={e => handleUpdateEntryField(entry.tempId, 'description', e.target.value)} placeholder="Concepto..." className="w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-bold text-xs focus:border-accent" /></div>
-                                    <div className="col-span-2 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Categoría</label><input type="text" value={entry.subCategory} onChange={e => handleUpdateEntryField(entry.tempId, 'subCategory', e.target.value)} placeholder="Ej: Servicios..." className="w-full bg-accent/5 dark:bg-accent/10 p-2.5 rounded-xl border border-accent/20 outline-none font-black text-[9px] uppercase text-accent" /></div>
-                                    <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Valor</label><input type="text" inputMode="decimal" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-xs text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} /></div>
-                                    <div className="col-span-3 w-full border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-3 md:pt-0 md:pl-4"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1 mb-1 block">¿Pago por otro local?</label><select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-2 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400"><option value="">No es préstamo</option>{stores.filter(s => s.id !== activeStoreId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>{entry.debtStoreId && (<div className="mt-2 space-y-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-2 rounded-xl border border-yellow-100"><div className="flex items-center gap-2"><p className="text-[7px] font-black uppercase text-gray-500 leading-tight">¿Restar de caja física en la otra sede de inmediato?</p><label className="relative inline-flex items-center cursor-pointer scale-75 shrink-0"><input type="checkbox" checked={entry.affectsMirrorBalance} onChange={e => handleUpdateEntryField(entry.tempId, 'affectsMirrorBalance', e.target.checked)} className="sr-only peer" /><div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div></label></div></div>)}</div>
+                                    
+                                    <div className="col-span-2 md:col-span-2 w-full flex flex-row md:flex-col gap-1">
+                                        <div className="flex-grow flex items-center gap-1 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700">
+                                            <button onClick={() => adjustEntryDate(entry.tempId, -1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-3 h-3 text-accent"/></button>
+                                            <input type="date" value={entry.date} onChange={e => handleUpdateEntryField(entry.tempId, 'date', e.target.value)} className="flex-grow bg-transparent text-center font-bold text-[10px] outline-none" />
+                                            <button onClick={() => adjustEntryDate(entry.tempId, 1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-3 h-3 text-accent rotate-180"/></button>
+                                        </div>
+                                        <input type="time" value={entry.time} onChange={e => handleUpdateEntryField(entry.tempId, 'time', e.target.value)} className="w-20 md:w-full bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] text-center outline-none" />
+                                    </div>
+
+                                    <div className="col-span-1 md:col-span-1 w-full">
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Cuenta</label>
+                                        <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent">
+                                            <option value="cash">Efec</option>
+                                            <option value="qr">QR</option>
+                                            <option value="bank">Otro</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="col-span-1 md:hidden w-full">
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Valor</label>
+                                        <input type="text" inputMode="decimal" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-[11px] text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} />
+                                    </div>
+
+                                    <div className="col-span-2 md:col-span-2 w-full">
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Descripción</label>
+                                        <input type="text" value={entry.description} onChange={e => handleUpdateEntryField(entry.tempId, 'description', e.target.value)} placeholder="Concepto..." className="w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-bold text-[11px] focus:border-accent" />
+                                    </div>
+
+                                    <div className="col-span-2 md:col-span-2 w-full">
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Categoría</label>
+                                        <input type="text" value={entry.subCategory} onChange={e => handleUpdateEntryField(entry.tempId, 'subCategory', e.target.value)} placeholder="Ej: Servicios..." className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-xl border border-accent/20 outline-none font-black text-[10px] uppercase text-accent" />
+                                    </div>
+
+                                    <div className="hidden md:block col-span-1 w-full">
+                                        <input type="text" inputMode="decimal" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-xs text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} />
+                                    </div>
+
+                                    <div className="col-span-2 md:col-span-3 w-full border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-2 md:pt-0 md:pl-4">
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1 mb-0.5 block">¿Pago por otro local?</label>
+                                        <select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-1.5 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400">
+                                            <option value="">No es préstamo</option>
+                                            {stores.filter(s => s.id !== activeStoreId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                        {entry.debtStoreId && (
+                                            <div className="mt-1.5 space-y-1 bg-yellow-100/30 dark:bg-yellow-900/5 p-1.5 rounded-xl border border-yellow-100">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-[6px] font-black uppercase text-gray-500 leading-tight">¿Restar de caja física en la otra sede de inmediato?</p>
+                                                    <label className="relative inline-flex items-center cursor-pointer scale-75 shrink-0">
+                                                        <input type="checkbox" checked={entry.affectsMirrorBalance} onChange={e => handleUpdateEntryField(entry.tempId, 'affectsMirrorBalance', e.target.checked)} className="sr-only peer" />
+                                                        <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div className="col-span-1 hidden md:flex justify-center items-center gap-2">
                                         <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 text-gray-300 hover:text-accent transition-all" title="Duplicar registro"><CopyIcon className="w-5 h-5" /></button>
                                         <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500 transition-all" title="Eliminar registro"><TrashIcon className="w-5 h-5" /></button>
-                                    </div></div>
+                                    </div>
+                                </div>
                                 )})}
                         </div>
                         <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
