@@ -95,6 +95,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
+  const [isEditingNames, setIsEditingNames] = useState(false);
+  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', bank: '' });
+
   const activeStore = useMemo(() => stores.find(s => s.id === activeStoreId), [activeStoreId, stores]);
   const isAdmin = currentUser.roleId === '1';
 
@@ -304,11 +307,40 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     return Array.from(totalsMap.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [sales, layaways, incidents, activeStoreId, selectedMonth, selectedYear]);
 
+  const getAccountName = (type: AccountType): string => {
+    if (activeStore?.accountNames?.[type]) return activeStore.accountNames[type];
+    if (type === 'cash') return 'Efectivo';
+    if (type === 'qr') return 'Bancolombia (QR)';
+    return 'Bancos / Otros';
+  };
+
+  const handleOpenEditNames = () => {
+    setTempAccountNames({
+        cash: activeStore?.accountNames?.cash || 'Efectivo',
+        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)',
+        bank: activeStore?.accountNames?.bank || 'Bancos / Otros'
+    });
+    setIsEditingNames(true);
+  };
+
+  const handleSaveAccountNames = async () => {
+    if (!activeStoreId) return;
+    try {
+        await updateDoc(doc(db, 'stores', activeStoreId), {
+            accountNames: tempAccountNames
+        });
+        setIsEditingNames(false);
+    } catch (error) {
+        console.error("Error saving account names:", error);
+        alert("Error al guardar los nombres de las cuentas.");
+    }
+  };
+
   const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType) => {
     const recordId = `daily_auto_${activeStoreId}_${accountType}_${dateStr}`;
     const existing = records.find(r => r.id === recordId);
     if (existing) { alert("Este total diario ya fue conciliado."); return; }
-    let typeLabel = accountType === 'cash' ? "Efectivo" : (accountType === 'qr' ? "Bancolombia (QR)" : "Bancos / Otros");
+    let typeLabel = getAccountName(accountType);
     const dateTime = `${dateStr}T23:59:59`;
     const newRecord: FinancialRecord = { id: recordId, date: dateTime, storeId: activeStoreId, accountType: accountType as any, amount: amount, type: 'income_sales', description: `Cierre Diario ${typeLabel} (${dateStr})`, subCategory: 'Cierre Diario', registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: true };
     await setDoc(doc(db, 'financialRecords', recordId), newRecord);
@@ -397,13 +429,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleDuplicateRow = (tempId: string) => {
-    const entryToClone = manualEntries.find(e => e.tempId === tempId);
-    if (!entryToClone) return;
+    const index = manualEntries.findIndex(e => e.tempId === tempId);
+    if (index === -1) return;
     
-    setManualEntries([...manualEntries, {
+    const entryToClone = manualEntries[index];
+    const newEntries = [...manualEntries];
+    newEntries.splice(index + 1, 0, {
         ...entryToClone,
         tempId: Math.random().toString(36).substr(2, 9),
-    }]);
+    });
+    
+    setManualEntries(newEntries);
   };
 
   const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType, history: FinancialRecord[]) => {
@@ -536,6 +572,60 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-0">
+        {/* Modal de Edición de Nombres de Cuentas */}
+        {isEditingNames && (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-secondary w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-accent/20">
+                    <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+                        <h3 className="text-lg font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                            <SettingsIcon className="w-5 h-5" /> Nombres de Cuentas
+                        </h3>
+                        <button onClick={() => setIsEditingNames(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><CrossIcon className="w-6 h-6" /></button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">Personaliza los nombres de las cuentas para identificar mejor dónde llega el dinero en esta sede.</p>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Cuenta Efectivo</label>
+                                <input 
+                                    type="text" 
+                                    value={tempAccountNames.cash} 
+                                    onChange={e => setTempAccountNames({...tempAccountNames, cash: e.target.value})}
+                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
+                                    placeholder="Efectivo"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Cuenta QR (Bancolombia/Nequi)</label>
+                                <input 
+                                    type="text" 
+                                    value={tempAccountNames.qr} 
+                                    onChange={e => setTempAccountNames({...tempAccountNames, qr: e.target.value})}
+                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
+                                    placeholder="Bancolombia (QR)"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Otros Bancos / Tarjetas</label>
+                                <input 
+                                    type="text" 
+                                    value={tempAccountNames.bank} 
+                                    onChange={e => setTempAccountNames({...tempAccountNames, bank: e.target.value})}
+                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
+                                    placeholder="Bancos / Otros"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-4 flex gap-3">
+                            <button onClick={() => setIsEditingNames(false)} className="flex-1 py-3 text-[10px] font-black uppercase text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 transition-all">Cancelar</button>
+                            <button onClick={handleSaveAccountNames} className="flex-1 py-3 text-[10px] font-black uppercase text-white bg-accent rounded-xl shadow-lg shadow-accent/20 hover:scale-105 transition-all">Guardar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl shadow-lg border-b-8" style={{ borderBottomColor: activeStore?.accentColor || '#ff007f' }}>
             <div className="flex items-center gap-3 sm:gap-4">
@@ -547,8 +637,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     </p>
                 </div>
             </div>
-            <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
+            <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
                 {stores.map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
+                {isAdmin && (
+                    <button 
+                        onClick={handleOpenEditNames}
+                        className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
+                        title="Editar nombres de cuentas"
+                    >
+                        <SettingsIcon className="w-4 h-4" />
+                    </button>
+                )}
             </div>
         </div>
 
@@ -750,9 +849,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
             <div className="lg:col-span-8 space-y-4">
                 <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
-                    <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> EFECTIVO</button>
-                    <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> QR</button>
-                    <button onClick={() => setActiveTab('bank')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'bank' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> BANCOS</button>
+                    <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
+                    <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                    <button onClick={() => setActiveTab('bank')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'bank' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('bank')}</button>
                 </div>
 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col min-h-[500px]">
@@ -881,7 +980,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             {manualEntries.map((entry) => {
                                 const amountVal = parseFloat(entry.amount); const isExpense = amountVal < 0;
                                 return (
-                                <div key={entry.tempId} className={`flex flex-col md:grid md:grid-cols-12 gap-3 items-center bg-white dark:bg-gray-800 p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}><button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="absolute top-2 right-2 md:hidden p-2 text-gray-300 hover:text-red-500"><TrashIcon className="w-5 h-5" /></button>
+                                <div key={entry.tempId} className={`flex flex-col md:grid md:grid-cols-12 gap-3 items-center bg-white dark:bg-gray-800 p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
+                                    <div className="absolute top-2 right-2 md:hidden flex items-center gap-1">
+                                        <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 text-gray-300 hover:text-accent" title="Duplicar"><CopyIcon className="w-5 h-5" /></button>
+                                        <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500"><TrashIcon className="w-5 h-5" /></button>
+                                    </div>
                                     <div className="col-span-2 w-full space-y-1"><div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700"><button onClick={() => adjustEntryDate(entry.tempId, -1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent"/></button><input type="date" value={entry.date} onChange={e => handleUpdateEntryField(entry.tempId, 'date', e.target.value)} className="flex-grow bg-transparent text-center font-bold text-xs outline-none" /><button onClick={() => adjustEntryDate(entry.tempId, 1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent rotate-180"/></button></div><input type="time" value={entry.time} onChange={e => handleUpdateEntryField(entry.tempId, 'time', e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] text-center outline-none" /></div>
                                     <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Cuenta</label><select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent"><option value="cash">Efec</option><option value="qr">QR</option><option value="bank">Otro</option></select></div>
                                     <div className="col-span-2 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Descripción</label><input type="text" value={entry.description} onChange={e => handleUpdateEntryField(entry.tempId, 'description', e.target.value)} placeholder="Concepto..." className="w-full bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-bold text-xs focus:border-accent" /></div>

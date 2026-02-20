@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { PaymentMethod, Seller, Customer, Payment } from '../types';
+import { PaymentMethod, Seller, Customer, Payment, Store } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon } from './Icons';
 
@@ -14,9 +14,10 @@ interface PaymentModalProps {
   saleDate: Date;
   onHoldSale: (data: { customer: { name: string; phone: string }; sellerName: string; }) => void;
   initialCustomerInfo: {name: string, phone: string} | null;
+  currentStore: Store | undefined;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore }) => {
   const [payments, setPayments] = useState<Omit<Payment, 'date' | 'seller'>[]>([]);
   const [amountInput, setAmountInput] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -185,11 +186,22 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                   <div>
                     <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Método de Pago</label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {Object.values(PaymentMethod).map(method => (
-                        <button key={method} type="button" onClick={() => handleAddPayment(method)} className="p-3 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-text-light font-semibold rounded-lg hover:bg-accent hover:text-white transition-colors">
-                          {method}
-                        </button>
-                      ))}
+                      {Object.values(PaymentMethod).map(method => {
+                        let label = method;
+                        if (method === PaymentMethod.Efectivo && currentStore?.accountLabels?.cash) label = currentStore.accountLabels.cash as PaymentMethod;
+                        if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method) && currentStore?.accountLabels?.qr) {
+                            if (method === PaymentMethod.QR) label = currentStore.accountLabels.qr as PaymentMethod;
+                        }
+                        if ([PaymentMethod.Tarjeta, PaymentMethod.Sistecredito, PaymentMethod.Addi].includes(method) && currentStore?.accountLabels?.bank) {
+                            // if (method === PaymentMethod.Tarjeta) label = currentStore.accountLabels.bank as PaymentMethod;
+                        }
+                        
+                        return (
+                          <button key={method} type="button" onClick={() => handleAddPayment(method)} className="p-3 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-text-light font-semibold rounded-lg hover:bg-accent hover:text-white transition-colors text-xs">
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -203,7 +215,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
               {payments.length > 0 ? payments.map((p, index) => (
                 <div key={index} className="flex justify-between items-center bg-white dark:bg-secondary p-2 rounded-md">
                   <div>
-                    <p className="font-semibold">{p.method}</p>
+                    <p className="font-semibold text-xs">
+                        {p.method === PaymentMethod.Efectivo && currentStore?.accountLabels?.cash ? currentStore.accountLabels.cash : 
+                         (p.method === PaymentMethod.QR && currentStore?.accountLabels?.qr ? currentStore.accountLabels.qr : p.method)}
+                    </p>
                     <p className="text-sm font-bold text-accent">{formatCOP(p.amount)}</p>
                   </div>
                   <button onClick={() => handleRemovePayment(index)} className="text-gray-500 hover:text-red-500 p-1"><TrashIcon /></button>

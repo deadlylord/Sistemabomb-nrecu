@@ -160,6 +160,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
     return { 
         periodo: `${currentMonthName} ${selectedYear}`,
+        storeName: currentStore?.name,
+        accountLabels: currentStore?.accountLabels,
         totalRevenue, 
         monthlyCogs, 
         grossProfit, 

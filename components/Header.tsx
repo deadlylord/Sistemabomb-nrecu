@@ -61,7 +61,7 @@ const Header: React.FC<HeaderProps> = ({
 
   const adminRole = roles.find(r => r.name === 'Administrator');
   const isAdmin = currentUser.roleId === adminRole?.id;
-  const currentVersion = useMemo(() => APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0', []);
+  const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const groups: NavGroup[] = useMemo(() => [
     {

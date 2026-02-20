@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CartItem, PaymentMethod, Seller, Customer, Payment } from '../types';
+import { CartItem, PaymentMethod, Seller, Customer, Payment, Store } from '../types';
 import { TrashIcon, PlusIcon, MinusIcon, PauseIcon, TagIcon, TruckIcon } from './Icons';
 import PaymentModal from './PaymentModal';
 import { formatCOP, toTitleCase } from '../constants';
@@ -20,9 +20,10 @@ interface CartPanelProps {
   nextInvoiceNumber: number;
   isCartPulsing: boolean;
   initialCustomerInfo: {name: string, phone: string} | null;
+  currentStore: Store | undefined;
 }
 
-const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo }) => {
+const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore }) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isLayawayModalOpen, setIsLayawayModalOpen] = useState(false);
   const [isPreOrder, setIsPreOrder] = useState(false);
@@ -242,6 +243,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         saleDate={saleDate}
         onHoldSale={onHoldSale}
         initialCustomerInfo={initialCustomerInfo}
+        currentStore={currentStore}
       />
 
       {isLayawayModalOpen && (
@@ -348,9 +350,23 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                         required
                     >
                         <option value="" disabled>Selecciona un método</option>
-                        {Object.values(PaymentMethod).map(method => (
-                            <option key={method} value={method}>{method}</option>
-                        ))}
+                        {Object.values(PaymentMethod).map(method => {
+                            let label = method;
+                            if (method === PaymentMethod.Efectivo && currentStore?.accountLabels?.cash) label = currentStore.accountLabels.cash as PaymentMethod;
+                            if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method) && currentStore?.accountLabels?.qr) {
+                                // If it's one of the QR methods, we might want to show the custom QR label
+                                // But usually Nequi/Daviplata are specific. 
+                                // The user said "las cuentas dónde llegan los qr son de diferentes para cada local"
+                                // So maybe they want to rename Nequi/Daviplata too?
+                                // For now let's just use the QR label for the QR method.
+                                if (method === PaymentMethod.QR) label = currentStore.accountLabels.qr as PaymentMethod;
+                            }
+                            if ([PaymentMethod.Tarjeta, PaymentMethod.Sistecredito, PaymentMethod.Addi].includes(method) && currentStore?.accountLabels?.bank) {
+                                // Same for bank
+                            }
+                            
+                            return <option key={method} value={method}>{label}</option>;
+                        })}
                     </select>
                   </div>
                 </div>

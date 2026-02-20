@@ -23,10 +23,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.16',
+    date: '2024-07-05',
+    description: 'Optimización de Duplicación en Lote',
+    isCurrent: true,
+    changes: [
+      'Inserción Adyacente: Al duplicar un registro en el lote, el nuevo aparece inmediatamente debajo del original.',
+      'Acceso Móvil: Se habilitó el botón de duplicar en la vista móvil del ingreso por lote.'
+    ]
+  },
+  {
     version: '2.11.15',
     date: '2024-07-04',
     description: 'Reportes y Filtros Avanzados en Conciliación',
-    isCurrent: true,
     changes: [
       'Pestaña de Ingresos: Nueva vista resumida de ingresos por categoría en el panel mensual.',
       'Filtro Cruzado: Al tocar gastos o ingresos en el resumen, la tabla se filtra automáticamente.',
@@ -79,7 +88,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '2',
@@ -98,7 +108,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '3',
@@ -117,7 +128,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
 ];
 

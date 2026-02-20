@@ -335,6 +335,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             nextInvoiceNumber={props.nextInvoiceNumber}
             isCartPulsing={isCartPulsing}
             initialCustomerInfo={customerInfo}
+            currentStore={props.currentStore}
         />
     </div>
   );

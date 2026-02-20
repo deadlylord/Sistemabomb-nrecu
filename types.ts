@@ -93,6 +93,11 @@ export interface Store {
     qr: number;
     bank: number;
   };
+  accountNames?: {
+    cash: string;
+    qr: string;
+    bank: string;
+  };
 }
 
 export interface InventoryTransfer {

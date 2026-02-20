@@ -52,6 +52,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
         return;
     }
 
+    if (name.startsWith('accountName_')) {
+        const key = name.split('_')[1] as 'cash' | 'qr' | 'bank';
+        setLocalSettings(prev => prev ? ({
+            ...prev,
+            accountNames: {
+                ...(prev.accountNames || { cash: 'Efectivo', qr: 'Bancolombia (QR)', bank: 'Bancos / Otros' }),
+                [key]: value
+            }
+        }) : null);
+        return;
+    }
+
     if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
         setLocalSettings(prev => prev ? ({...prev, [name]: checked }) : null);
@@ -292,6 +304,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     onChange={handleSettingsChange}
                     className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
                     placeholder="0"
+                />
+             </div>
+          </div>
+
+          <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Nombres de Cuentas</h3>
+          <p className="text-xs text-gray-500 italic -mt-4">Personaliza cómo se llaman las cuentas en esta sede (ej: Nequi Local, QR Bancolombia, etc).</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2">Efectivo</label>
+                <input 
+                    type="text" 
+                    name="accountName_cash"
+                    value={localSettings.accountNames?.cash || 'Efectivo'}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="Efectivo"
+                />
+             </div>
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2">QR / Bancolombia</label>
+                <input 
+                    type="text" 
+                    name="accountName_qr"
+                    value={localSettings.accountNames?.qr || 'Bancolombia (QR)'}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="Bancolombia (QR)"
+                />
+             </div>
+             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2">Bancos / Otros</label>
+                <input 
+                    type="text" 
+                    name="accountName_bank"
+                    value={localSettings.accountNames?.bank || 'Bancos / Otros'}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="Bancos / Otros"
                 />
              </div>
           </div>
