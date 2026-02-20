@@ -736,18 +736,19 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <div key={idx} className="space-y-0.5 group cursor-pointer" onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', cat.name)}>
                                     <div className="flex justify-between items-center text-[9px] sm:text-[11px] font-bold uppercase tracking-tight">
                                         <span className="text-gray-600 dark:text-gray-300 truncate max-w-[150px]">{cat.name}</span>
-                                        <div className="flex items-center gap-2">
-                                            <span className={textColorClass}>{formatCOP(cat.value)}</span>
-                                            {summaryActiveTab === 'expense' && (
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleExportCategoryToAccounting(cat.name, cat.value); }}
-                                                    className="p-1 bg-accent/10 text-accent rounded hover:bg-accent hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                                                    title="Añadir a Contabilidad IA"
-                                                >
-                                                    <SparklesIcon className="w-3 h-3" />
-                                                </button>
-                                            )}
-                                        </div>
+                                            <div className="flex items-center gap-1">
+                                                <span className={textColorClass}>{formatCOP(cat.value)}</span>
+                                                {summaryActiveTab === 'expense' && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleExportCategoryToAccounting(cat.name, cat.value); }}
+                                                        className="p-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-white transition-all flex items-center gap-1 border border-accent/20"
+                                                        title="Añadir a Contabilidad IA"
+                                                    >
+                                                        <SparklesIcon className="w-3 h-3" />
+                                                        <span className="text-[7px] font-black uppercase hidden sm:inline">Exportar</span>
+                                                    </button>
+                                                )}
+                                            </div>
                                     </div>
                                     <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
                                         <div className={`${colorClass} h-full rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
@@ -981,9 +982,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 const amountVal = parseFloat(entry.amount); const isExpense = amountVal < 0;
                                 return (
                                 <div key={entry.tempId} className={`flex flex-col md:grid md:grid-cols-12 gap-3 items-center bg-white dark:bg-gray-800 p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
-                                    <div className="absolute top-2 right-2 md:hidden flex items-center gap-1">
-                                        <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 text-gray-300 hover:text-accent" title="Duplicar"><CopyIcon className="w-5 h-5" /></button>
-                                        <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500"><TrashIcon className="w-5 h-5" /></button>
+                                    <div className="w-full md:hidden flex justify-between items-center mb-2 pb-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Movimiento #{manualEntries.indexOf(entry) + 1}</span>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-2 bg-accent/10 text-accent rounded-xl" title="Duplicar"><CopyIcon className="w-5 h-5" /></button>
+                                            <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 bg-red-50 text-red-500 rounded-xl"><TrashIcon className="w-5 h-5" /></button>
+                                        </div>
                                     </div>
                                     <div className="col-span-2 w-full space-y-1"><div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700"><button onClick={() => adjustEntryDate(entry.tempId, -1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent"/></button><input type="date" value={entry.date} onChange={e => handleUpdateEntryField(entry.tempId, 'date', e.target.value)} className="flex-grow bg-transparent text-center font-bold text-xs outline-none" /><button onClick={() => adjustEntryDate(entry.tempId, 1)} className="p-1 hover:bg-accent/10 rounded"><ChevronLeftIcon className="w-4 h-4 text-accent rotate-180"/></button></div><input type="time" value={entry.time} onChange={e => handleUpdateEntryField(entry.tempId, 'time', e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 p-1.5 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] text-center outline-none" /></div>
                                     <div className="col-span-1 w-full"><label className="md:hidden text-[8px] font-black uppercase text-gray-400 ml-1">Cuenta</label><select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent"><option value="cash">Efec</option><option value="qr">QR</option><option value="bank">Otro</option></select></div>
