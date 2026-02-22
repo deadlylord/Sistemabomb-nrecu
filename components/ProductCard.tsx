@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Product } from '../types';
-import { CameraIcon, EditIcon, PackageIcon } from './Icons';
+import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon } from './Icons';
 import { formatCOP } from '../constants';
 
 interface ProductCardProps {
@@ -9,13 +9,14 @@ interface ProductCardProps {
   onAddToCart: (product: Product) => void;
   onEditImage: (product: Product) => void;
   onEditProduct: (product: Product) => void;
+  onShowPerformance: (product: Product) => void;
   isAdmin: boolean;
   justAddedProductId: string | null;
   isVerified: boolean;
   onToggleVerification: (productId: string) => void;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditImage, onEditProduct, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent adding to cart if an admin button or the checkbox was clicked
     if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.verification-checkbox-wrapper')) {
@@ -68,13 +69,23 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
               <CameraIcon className="w-4 h-4"/>
             </button>
             {isAdmin && (
-                <button
-                    onClick={(e) => { e.stopPropagation(); onEditProduct(product); }}
-                    className="p-1.5 bg-black/50 text-white rounded-full backdrop-blur-sm"
-                    aria-label={`Editar detalles de ${product.name}`}
-                >
-                    <EditIcon className="w-4 h-4"/>
-                </button>
+                <>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onEditProduct(product); }}
+                        className="p-1.5 bg-black/50 text-white rounded-full backdrop-blur-sm"
+                        aria-label={`Editar detalles de ${product.name}`}
+                    >
+                        <EditIcon className="w-4 h-4"/>
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onShowPerformance(product); }}
+                        className="p-1.5 bg-black/50 text-white rounded-full backdrop-blur-sm"
+                        aria-label={`Ver rendimiento de ${product.name}`}
+                        title="Ver Rendimiento"
+                    >
+                        <ChartBarIcon className="w-4 h-4 text-emerald-400"/>
+                    </button>
+                </>
             )}
         </div>
         
@@ -97,14 +108,24 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
 
       {/* Details */}
       <div className="p-2 flex-shrink-0">
-        <h3 className="font-bold text-sm text-slate-800 dark:text-text-light truncate" title={product.name}>{product.name}</h3>
+        <div className="flex justify-between items-start gap-1">
+            <h3 className="font-bold text-sm text-slate-800 dark:text-text-light truncate flex-grow" title={product.name}>{product.name}</h3>
+            {product.originalPrice && product.originalPrice > product.price && (
+                <span className="bg-orange-500 text-white text-[8px] font-black px-1 rounded uppercase tracking-tighter animate-pulse">Liquidación</span>
+            )}
+        </div>
         <div className="flex justify-between items-baseline mt-1">
           <p className="text-xs text-slate-500 dark:text-text-dark truncate">{product.supplier || 'Sin proveedor'}</p>
           <div className="flex items-baseline gap-2">
             <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
                 Stock: {product.stock}
             </span>
-            <p className="text-accent font-semibold text-base">{formatCOP(product.price)}</p>
+            <div className="flex flex-col items-end">
+              {product.originalPrice && product.originalPrice > product.price && (
+                <span className="text-[10px] text-slate-400 line-through leading-none">{formatCOP(product.originalPrice)}</span>
+              )}
+              <p className="text-accent font-semibold text-base leading-none">{formatCOP(product.price)}</p>
+            </div>
           </div>
         </div>
       </div>

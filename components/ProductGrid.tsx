@@ -8,13 +8,14 @@ interface ProductGridProps {
   onAddToCart: (product: Product) => void;
   onEditImage: (product: Product) => void;
   onEditProduct: (product: Product) => void;
+  onShowPerformance: (product: Product) => void;
   isAdmin: boolean;
   justAddedProductId: string | null;
   verifiedProducts: Set<string>;
   onToggleProductVerification: (productId: string) => void;
 }
 
-const ProductGrid: React.FC<ProductGridProps> = ({ products, onAddToCart, onEditImage, onEditProduct, isAdmin, justAddedProductId, verifiedProducts, onToggleProductVerification }) => {
+const ProductGrid: React.FC<ProductGridProps> = ({ products, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, verifiedProducts, onToggleProductVerification }) => {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {products.map(product => (
@@ -24,6 +25,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({ products, onAddToCart, onEdit
             onAddToCart={onAddToCart} 
             onEditImage={onEditImage} 
             onEditProduct={onEditProduct}
+            onShowPerformance={onShowPerformance}
             isAdmin={isAdmin}
             justAddedProductId={justAddedProductId}
             isVerified={verifiedProducts.has(product.id)}

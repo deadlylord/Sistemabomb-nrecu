@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
 import ProductGrid from './ProductGrid';
+import ProductPerformanceModal from './ProductPerformanceModal';
 import CartPanel from './CartPanel';
 import DailySalesReportModal from './DailySalesReportModal';
 import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
@@ -56,6 +57,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [editingProductDetails, setEditingProductDetails] = useState<Product | null>(null);
+  const [performanceProduct, setPerformanceProduct] = useState<Product | null>(null);
   const [saleDate, setSaleDate] = useState(new Date());
   const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
@@ -242,6 +244,16 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const filteredInventory = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
       const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
+      
+      // Pre-calculate performance map if admin and "All" category
+      let performanceMap: Record<string, number> = {};
+      if (isAdmin && !selectedCategoryId) {
+          props.sales.forEach(sale => {
+              sale.items.forEach(item => {
+                  performanceMap[item.id] = (performanceMap[item.id] || 0) + item.quantity;
+              });
+          });
+      }
   
       if (selectedCategoryId === NOVEDADES_CATEGORY_ID) {
           return newArrivalsInventory.filter(p => {
@@ -266,9 +278,17 @@ const PosView: React.FC<PosViewProps> = (props) => {
         .sort((a, b) => {
           if (a.stock > 0 && b.stock <= 0) return -1;
           if (a.stock <= 0 && b.stock > 0) return 1;
+          
+          // Sort by performance if admin and "All" category
+          if (isAdmin && !selectedCategoryId) {
+              const perfA = performanceMap[a.id] || 0;
+              const perfB = performanceMap[b.id] || 0;
+              if (perfA !== perfB) return perfB - perfA; // Higher performance first
+          }
+
           return a.name.localeCompare(b.name);
         });
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory]);
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
@@ -439,6 +459,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                         onAddToCart={handleAddToCartWithAnimation} 
                         onEditImage={setEditingProductImage}
                         onEditProduct={setEditingProductDetails}
+                        onShowPerformance={setPerformanceProduct}
                         isAdmin={isAdmin}
                         justAddedProductId={justAddedProductId}
                         verifiedProducts={props.verifiedProducts}
@@ -533,6 +554,16 @@ const PosView: React.FC<PosViewProps> = (props) => {
             onClose={() => setEditingProductDetails(null)}
             product={editingProductDetails}
             categories={props.categories}
+            onUpdateProduct={props.onUpdateProduct}
+        />
+      )}
+      {performanceProduct && (
+        <ProductPerformanceModal 
+            isOpen={!!performanceProduct}
+            onClose={() => setPerformanceProduct(null)}
+            product={performanceProduct}
+            sales={props.sales}
+            purchases={props.purchases}
             onUpdateProduct={props.onUpdateProduct}
         />
       )}
