@@ -61,8 +61,44 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
+  const [barcodeBuffer, setBarcodeBuffer] = useState('');
 
   const { onClearVerifications } = props;
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Si el foco está en un input o textarea, dejamos que el navegador lo maneje normalmente
+      // a menos que sea la tecla Enter, que podría ser el final de un escaneo.
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.length > 2) {
+          const product = props.inventory.find(p => p.sku === barcodeBuffer);
+          if (product && product.stock > 0 && !product.isDisabled) {
+            handleAddToCartWithAnimation(product);
+            setBarcodeBuffer('');
+            e.preventDefault();
+          }
+        }
+        setBarcodeBuffer('');
+      } else if (!isInput && e.key.length === 1) {
+        // Solo acumulamos si no estamos en un input para evitar duplicados
+        setBarcodeBuffer(prev => prev + e.key);
+        
+        // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
+        clearTimeout(timeout);
+        timeout = setTimeout(() => setBarcodeBuffer(''), 100);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(timeout);
+    };
+  }, [barcodeBuffer, props.inventory]);
 
   useEffect(() => {
     return () => {
@@ -353,6 +389,15 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 placeholder="Buscar por nombre o proveedor..."
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' && searchTerm.length > 2) {
+                                        const product = props.inventory.find(p => p.sku === searchTerm);
+                                        if (product && product.stock > 0 && !product.isDisabled) {
+                                            handleAddToCartWithAnimation(product);
+                                            setSearchTerm('');
+                                        }
+                                    }
+                                }}
                                 className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full py-2 px-4 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                             />
                             <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-slate-400">
