@@ -149,9 +149,20 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                             autoFocus
                         />
                     ) : (
-                        <p className="text-sm text-accent cursor-pointer" onClick={() => handlePriceClick(item)}>
-                            {formatCOP(item.price)}
-                        </p>
+                    <div className="flex flex-col items-start">
+                        <div className="flex items-baseline gap-2">
+                            <p className="text-sm text-accent cursor-pointer font-bold" onClick={() => handlePriceClick(item)}>
+                                {formatCOP(item.price)}
+                            </p>
+                            {/* @ts-ignore - basePrice added in App.tsx */}
+                            {item.basePrice && item.basePrice > item.price && (
+                                <span className="text-[10px] text-slate-400 line-through">{formatCOP(item.basePrice)}</span>
+                            )}
+                        </div>
+                        {item.discountPrice && item.discountPrice === item.price && (
+                            <span className="text-[10px] text-orange-500 font-black uppercase tracking-tighter animate-pulse">Liquidación</span>
+                        )}
+                    </div>
                     )}
                   </div>
                   <div className="flex items-center space-x-1.5">

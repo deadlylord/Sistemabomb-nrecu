@@ -11,10 +11,11 @@ interface ProductPerformanceModalProps {
     sales: Sale[];
     purchases: Purchase[];
     onUpdateProduct: (product: Product) => Promise<void>;
+    isAdmin: boolean;
 }
 
-const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpen, onClose, product, sales, purchases, onUpdateProduct }) => {
-    const [discountPrice, setDiscountPrice] = React.useState<number>(product.price);
+const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpen, onClose, product, sales, purchases, onUpdateProduct, isAdmin }) => {
+    const [discountValue, setDiscountValue] = React.useState<number>(product.discountPrice || product.price);
     const [isApplying, setIsApplying] = React.useState(false);
 
     const performance = useMemo(() => {
@@ -74,16 +75,15 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
     }, [product, sales, purchases]);
 
     const handleApplyDiscount = async () => {
-        if (discountPrice >= product.price) {
-            alert("El precio de descuento debe ser menor al precio actual.");
+        if (discountValue >= product.price) {
+            alert("El precio de descuento debe ser menor al precio original.");
             return;
         }
         setIsApplying(true);
         try {
             const updatedProduct: Product = {
                 ...product,
-                originalPrice: product.originalPrice || product.price,
-                price: discountPrice
+                discountPrice: discountValue
             };
             await onUpdateProduct(updatedProduct);
             onClose();
@@ -96,16 +96,12 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
     };
 
     const handleRemoveDiscount = async () => {
-        if (!product.originalPrice) return;
         setIsApplying(true);
         try {
             const updatedProduct: Product = {
-                ...product,
-                price: product.originalPrice,
-                originalPrice: undefined
+                ...product
             };
-            // @ts-ignore - originalPrice is optional but we want to remove it
-            delete updatedProduct.originalPrice;
+            delete updatedProduct.discountPrice;
             
             await onUpdateProduct(updatedProduct);
             onClose();
@@ -176,37 +172,39 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
                     </div>
 
                     {/* Financial Stats */}
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                                    <DollarIcon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                    {isAdmin && (
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg">
+                                        <DollarIcon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Ingresos Totales</span>
                                 </div>
-                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Ingresos Totales</span>
+                                <span className="font-black text-slate-800 dark:text-white">{formatCOP(performance.totalRevenue)}</span>
                             </div>
-                            <span className="font-black text-slate-800 dark:text-white">{formatCOP(performance.totalRevenue)}</span>
-                        </div>
 
-                        <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
-                                    <TrendingUpIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg">
+                                        <TrendingUpIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Utilidad Bruta</span>
                                 </div>
-                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Utilidad Bruta</span>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400">{formatCOP(performance.totalProfit)}</span>
                             </div>
-                            <span className="font-black text-emerald-600 dark:text-emerald-400">{formatCOP(performance.totalProfit)}</span>
-                        </div>
 
-                        <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
-                                    <TrendingUpIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
+                                        <TrendingUpIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Margen de Utilidad</span>
                                 </div>
-                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Margen de Utilidad</span>
+                                <span className="font-black text-purple-600 dark:text-purple-400">{performance.margin.toFixed(1)}%</span>
                             </div>
-                            <span className="font-black text-purple-600 dark:text-purple-400">{performance.margin.toFixed(1)}%</span>
                         </div>
-                    </div>
+                    )}
 
                     {/* Additional Info */}
                     <div className="grid grid-cols-2 gap-4">
@@ -231,47 +229,54 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
                     </div>
 
                     {/* Discount Section */}
-                    <div className="p-6 bg-orange-50 dark:bg-orange-900/10 rounded-3xl border border-orange-100 dark:border-orange-800/30 space-y-4">
-                        <div className="flex items-center gap-2">
-                            <TrendingDownIcon className="w-5 h-5 text-orange-500" />
-                            <h4 className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest">Gestionar Descuento (Liquidación)</h4>
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Nuevo Precio de Venta</label>
-                            <div className="flex gap-2">
-                                <input 
-                                    type="number" 
-                                    value={discountPrice}
-                                    onChange={(e) => setDiscountPrice(Number(e.target.value))}
-                                    className="flex-grow bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-800 rounded-xl px-4 py-2 font-black text-orange-600 outline-none focus:ring-2 focus:ring-orange-500"
-                                    placeholder="Precio rebajado..."
-                                />
-                                <button 
-                                    onClick={handleApplyDiscount}
-                                    disabled={isApplying}
-                                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all"
-                                >
-                                    {isApplying ? '...' : 'Aplicar'}
-                                </button>
+                    {isAdmin && (
+                        <div className="p-6 bg-orange-50 dark:bg-orange-900/10 rounded-3xl border border-orange-100 dark:border-orange-800/30 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <TrendingDownIcon className="w-5 h-5 text-orange-500" />
+                                <h4 className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest">Gestionar Descuento (Liquidación)</h4>
                             </div>
-                        </div>
-
-                        {product.originalPrice && (
-                            <div className="flex justify-between items-center pt-2 border-t border-orange-100 dark:border-orange-800/30">
-                                <div className="text-[10px] font-bold text-orange-600/60 dark:text-orange-400/60">
-                                    Precio Original: <span className="line-through">{formatCOP(product.originalPrice)}</span>
+                            
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Nuevo Precio de Venta</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="number" 
+                                        value={discountValue}
+                                        onChange={(e) => setDiscountValue(Number(e.target.value))}
+                                        className="flex-grow bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-800 rounded-xl px-4 py-2 font-black text-orange-600 outline-none focus:ring-2 focus:ring-orange-500"
+                                        placeholder="Precio rebajado..."
+                                    />
+                                    <button 
+                                        onClick={handleApplyDiscount}
+                                        disabled={isApplying}
+                                        className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all"
+                                    >
+                                        {isApplying ? '...' : 'Aplicar'}
+                                    </button>
                                 </div>
-                                <button 
-                                    onClick={handleRemoveDiscount}
-                                    disabled={isApplying}
-                                    className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors"
-                                >
-                                    Quitar Descuento
-                                </button>
+                                {discountValue < product.price && (
+                                    <p className="text-[10px] font-bold text-orange-600">
+                                        Descuento del {Math.round((1 - discountValue / product.price) * 100)}% ({formatCOP(product.price - discountValue)} menos)
+                                    </p>
+                                )}
                             </div>
-                        )}
-                    </div>
+
+                            {product.discountPrice && (
+                                <div className="flex justify-between items-center pt-2 border-t border-orange-100 dark:border-orange-800/30">
+                                    <div className="text-[10px] font-bold text-orange-600/60 dark:text-orange-400/60">
+                                        Precio Original: <span>{formatCOP(product.price)}</span>
+                                    </div>
+                                    <button 
+                                        onClick={handleRemoveDiscount}
+                                        disabled={isApplying}
+                                        className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors"
+                                    >
+                                        Quitar Descuento
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}

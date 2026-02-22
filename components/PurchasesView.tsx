@@ -848,11 +848,18 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                 const printWindow = window.open('', '_blank');
                                 if (!printWindow) return;
 
-                                const labelsHtml = Array.from({ length: labelQuantity }).map(() => `
+                                const labelsHtml = Array.from({ length: labelQuantity }).map((_, i) => `
                                     <div class="label">
                                         <div class="store-name">${stores.find(s => s.id === labelPurchase.storeId)?.name || 'Boutique'}</div>
                                         <div class="product-name">${product.name}</div>
-                                        <div class="sku-text">${product.sku}</div>
+                                        <svg class="barcode" 
+                                            jsbarcode-value="${product.sku}"
+                                            jsbarcode-format="CODE128"
+                                            jsbarcode-width="1.2"
+                                            jsbarcode-height="35"
+                                            jsbarcode-fontSize="10"
+                                            jsbarcode-margin="0"
+                                        ></svg>
                                         <div class="cipher">${cipherCode}</div>
                                     </div>
                                 `).join('');
@@ -861,6 +868,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                     <html>
                                         <head>
                                             <title>Imprimir Etiquetas</title>
+                                            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
                                             <style>
                                                 @page { size: 40mm 25mm; margin: 0; }
                                                 body { margin: 0; font-family: 'Courier New', Courier, monospace; }
@@ -875,11 +883,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                                     align-items: center;
                                                     text-align: center;
                                                     page-break-after: always;
-                                                    border: 0.1mm solid #eee;
                                                 }
                                                 .store-name { font-size: 6pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
-                                                .product-name { font-size: 8pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm; white-space: nowrap; overflow: hidden; width: 100%; }
-                                                .sku-text { font-size: 10pt; font-weight: 900; letter-spacing: 1px; margin: 1mm 0; }
+                                                .product-name { font-size: 7pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
+                                                .barcode { max-width: 38mm; height: auto; margin: 0.5mm 0; }
                                                 .cipher { font-size: 7pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
                                             </style>
                                         </head>
@@ -887,8 +894,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                             ${labelsHtml}
                                             <script>
                                                 window.onload = () => {
-                                                    window.print();
-                                                    window.close();
+                                                    JsBarcode(".barcode").init();
+                                                    setTimeout(() => {
+                                                        window.print();
+                                                        window.close();
+                                                    }, 500);
                                                 };
                                             </script>
                                         </body>

@@ -153,7 +153,7 @@ export interface Product {
   supplier?: string;
   storeId: string;
   isDisabled?: boolean;
-  originalPrice?: number;
+  discountPrice?: number;
 }
 
 export interface CartItem extends Product {

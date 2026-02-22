@@ -110,8 +110,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
       <div className="p-2 flex-shrink-0">
         <div className="flex justify-between items-start gap-1">
             <h3 className="font-bold text-sm text-slate-800 dark:text-text-light truncate flex-grow" title={product.name}>{product.name}</h3>
-            {product.originalPrice && product.originalPrice > product.price && (
-                <span className="bg-orange-500 text-white text-[8px] font-black px-1 rounded uppercase tracking-tighter animate-pulse">Liquidación</span>
+            {product.discountPrice && product.discountPrice < product.price && (
+                <div className="flex flex-col items-end gap-0.5">
+                    <span className="bg-orange-500 text-white text-[8px] font-black px-1 rounded uppercase tracking-tighter animate-pulse">Liquidación</span>
+                    <span className="text-[9px] font-black text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-1 rounded">
+                        {Math.round((1 - product.discountPrice / product.price) * 100)}% DCTO
+                    </span>
+                </div>
             )}
         </div>
         <div className="flex justify-between items-baseline mt-1">
@@ -121,10 +126,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
                 Stock: {product.stock}
             </span>
             <div className="flex flex-col items-end">
-              {product.originalPrice && product.originalPrice > product.price && (
-                <span className="text-[10px] text-slate-400 line-through leading-none">{formatCOP(product.originalPrice)}</span>
+              {product.discountPrice && product.discountPrice < product.price && (
+                <span className="text-[10px] text-slate-400 line-through leading-none">{formatCOP(product.price)}</span>
               )}
-              <p className="text-accent font-semibold text-base leading-none">{formatCOP(product.price)}</p>
+              <p className="text-accent font-semibold text-base leading-none">
+                {formatCOP(product.discountPrice && product.discountPrice < product.price ? product.discountPrice : product.price)}
+              </p>
             </div>
           </div>
         </div>

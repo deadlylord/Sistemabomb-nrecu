@@ -565,6 +565,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             sales={props.sales}
             purchases={props.purchases}
             onUpdateProduct={props.onUpdateProduct}
+            isAdmin={isAdmin}
         />
       )}
     </div>

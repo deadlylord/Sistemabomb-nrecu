@@ -31,10 +31,28 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.18',
+    date: '2024-07-06',
+    description: 'Mejoras en Visibilidad de Descuentos',
+    isCurrent: true,
+    changes: [
+      'Visualización en Carrito: Ahora los productos con descuento muestran su precio original tachado en el carrito.',
+      'Sincronización de Precios: Se aseguró que el precio de liquidación se aplique automáticamente al añadir al carrito.'
+    ]
+  },
+  {
+    version: '2.11.17',
+    date: '2024-07-05',
+    description: 'Gestión de Liquidación y Etiquetas',
+    changes: [
+      'Precios de Liquidación: Implementación de precios de descuento que no afectan el valor base del inventario.',
+      'Código de Barras: Actualización de etiquetas para incluir códigos de barras legibles por lectores.'
+    ]
+  },
+  {
     version: '2.11.16',
     date: '2024-07-05',
     description: 'Optimización de Duplicación en Lote',
-    isCurrent: true,
     changes: [
       'Inserción Adyacente: Al duplicar un registro en el lote, el nuevo aparece inmediatamente debajo del original.',
       'Acceso Móvil: Se habilitó el botón de duplicar en la vista móvil del ingreso por lote.'

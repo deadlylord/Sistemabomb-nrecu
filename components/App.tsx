@@ -469,10 +469,12 @@ const App: React.FC = () => {
   };
 
   const handleAddToCart = (product: Product) => {
+    const sellingPrice = (product.discountPrice && product.discountPrice < product.price) ? product.discountPrice : product.price;
     setActiveCart(prev => {
         const existing = prev.find(p => p.id === product.id);
         if (existing) return prev.map(p => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p);
-        return [...prev, { ...product, quantity: 1 }];
+        // @ts-ignore - adding basePrice for display purposes in cart
+        return [...prev, { ...product, price: sellingPrice, basePrice: product.price, quantity: 1 }];
     });
   };
 
