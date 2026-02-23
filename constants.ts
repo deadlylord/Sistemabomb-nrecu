@@ -31,10 +31,50 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.22',
+    date: '2024-07-07',
+    description: 'Persistencia de Descuentos y Precios Especiales',
+    isCurrent: true,
+    changes: [
+      'Persistencia: Se corrigió un error que impedía que los precios de descuento se guardaran correctamente en la base de datos.',
+      'Flexibilidad de Precios: Ahora es posible asignar precios especiales tanto mayores como menores al precio original desde el panel de rendimiento.',
+      'Indicadores Visuales: Se añadieron etiquetas dinámicas (OFERTA / PRECIO ESP.) para identificar productos con precios modificados.',
+      'Sincronización Total: El carrito ahora respeta siempre el precio especial definido, independientemente de si es mayor o menor.'
+    ]
+  },
+  {
+    version: '2.11.21',
+    date: '2024-07-07',
+    description: 'Mejoras en Sistema de Descuentos',
+    changes: [
+      'Categoría de Descuentos: Se añadió una nueva categoría virtual "Descuentos %" que agrupa todos los productos en oferta.',
+      'Indicadores Visuales: Se mejoró la visibilidad de los descuentos en las tarjetas de productos con etiquetas de "OFERTA" animadas.',
+      'Sincronización de Precios: Se optimizó la aplicación de precios de liquidación al añadir productos al carrito.'
+    ]
+  },
+  {
+    version: '2.11.20',
+    date: '2024-07-07',
+    description: 'Corrección Crítica Navegación Móvil',
+    changes: [
+      'Botón de Cierre: Se rediseñó el botón de cierre del carrito móvil con mayor contraste, tamaño y prioridad visual (z-index) para garantizar su accesibilidad.',
+      'Layout Móvil: Se optimizó el contenedor del carrito para evitar que el contenido oculte los controles de navegación.'
+    ]
+  },
+  {
+    version: '2.11.19',
+    date: '2024-07-07',
+    description: 'Correcciones en Carrito y Descuentos',
+    changes: [
+      'Cierre de Carrito: Se mejoró el botón de cerrar carrito en dispositivos móviles para mayor facilidad de uso.',
+      'Sincronización de Descuentos: Se corrigió un error donde el precio de liquidación no se actualizaba si el producto ya estaba en el carrito.',
+      'Tipado de Datos: Se optimizó la estructura interna para manejar precios base y descuentos de forma más robusta.'
+    ]
+  },
+  {
     version: '2.11.18',
     date: '2024-07-06',
     description: 'Mejoras en Visibilidad de Descuentos',
-    isCurrent: true,
     changes: [
       'Visualización en Carrito: Ahora los productos con descuento muestran su precio original tachado en el carrito.',
       'Sincronización de Precios: Se aseguró que el precio de liquidación se aplique automáticamente al añadir al carrito.'

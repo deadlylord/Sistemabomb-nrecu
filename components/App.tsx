@@ -21,7 +21,8 @@ import {
   WriteBatch,
   arrayUnion,
   runTransaction,
-  orderBy
+  orderBy,
+  deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory } from '../types';
@@ -469,11 +470,17 @@ const App: React.FC = () => {
   };
 
   const handleAddToCart = (product: Product) => {
-    const sellingPrice = (product.discountPrice && product.discountPrice < product.price) ? product.discountPrice : product.price;
+    const sellingPrice = product.discountPrice !== undefined ? product.discountPrice : product.price;
     setActiveCart(prev => {
         const existing = prev.find(p => p.id === product.id);
-        if (existing) return prev.map(p => p.id === product.id ? { ...p, quantity: p.quantity + 1 } : p);
-        // @ts-ignore - adding basePrice for display purposes in cart
+        if (existing) {
+            return prev.map(p => p.id === product.id ? { 
+                ...p, 
+                quantity: p.quantity + 1,
+                price: sellingPrice,
+                basePrice: product.price
+            } : p);
+        }
         return [...prev, { ...product, price: sellingPrice, basePrice: product.price, quantity: 1 }];
     });
   };
@@ -1275,7 +1282,8 @@ const App: React.FC = () => {
               price: updatedProduct.price,
               cost: updatedProduct.cost,
               supplier: updatedProduct.supplier,
-              isDisabled: updatedProduct.isDisabled
+              isDisabled: updatedProduct.isDisabled,
+              discountPrice: updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField()
           });
       } else {
           snapshot.docs.forEach(docSnap => {
@@ -1283,7 +1291,8 @@ const App: React.FC = () => {
                   name: updatedProduct.name, 
                   imageUrl: newImageUrl,
                   description: updatedProduct.description,
-                  categoryId: updatedProduct.categoryId
+                  categoryId: updatedProduct.categoryId,
+                  discountPrice: updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField()
               };
               
               if (docSnap.id === updatedProduct.id) {

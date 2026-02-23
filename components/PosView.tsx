@@ -156,17 +156,22 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
   const categoriesWithStock = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
+      const DESCUENTOS_CATEGORY_ID = 'descuentos';
       const novedadesCategory: Category = { id: NOVEDADES_CATEGORY_ID, name: '✨ Novedades' };
+      const descuentosCategory: Category = { id: DESCUENTOS_CATEGORY_ID, name: '🏷️ Descuentos %' };
   
       const stockedCategoryIds = new Set(
           props.inventory.filter(p => p.stock > 0 && !p.isDisabled).map(p => p.categoryId)
       );
       const regularCategories = props.categories.filter(cat => stockedCategoryIds.has(cat.id));
       
-      if (newArrivalsInventory.length > 0) {
-          return [novedadesCategory, ...regularCategories];
-      }
-      return regularCategories;
+      const hasDiscounts = props.inventory.some(p => p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled);
+      
+      const extraCategories: Category[] = [];
+      if (newArrivalsInventory.length > 0) extraCategories.push(novedadesCategory);
+      if (hasDiscounts) extraCategories.push(descuentosCategory);
+
+      return [...extraCategories, ...regularCategories];
     }, [props.inventory, props.categories, newArrivalsInventory]);
 
   const totalItems = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.quantity, 0), [props.activeCart]);
@@ -241,8 +246,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return `${year}-${month}-${day}`;
   };
 
-  const filteredInventory = useMemo(() => {
+    const filteredInventory = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
+      const DESCUENTOS_CATEGORY_ID = 'descuentos';
       const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
       
       // Pre-calculate performance map if admin and "All" category
@@ -262,6 +268,17 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
                   : true;
               return matchesSearch;
+          });
+      }
+
+      if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
+          return props.inventory.filter(p => {
+              const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
+              const matchesSearch = lowerCaseSearchTerm
+                  ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                  : true;
+              return matchesDiscount && matchesSearch;
           });
       }
   
@@ -495,17 +512,18 @@ const PosView: React.FC<PosViewProps> = (props) => {
       )}
 
       {isMobileCartOpen && (
-        <div className="lg:hidden fixed inset-0 bg-white/80 dark:bg-slate-950/90 backdrop-blur-md z-50 flex flex-col animate-slide-up">
-            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="lg:hidden fixed inset-0 bg-white dark:bg-slate-950 z-[100] flex flex-col animate-slide-up">
+            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-[110] shadow-sm">
                 <h2 className="text-xl font-bold text-accent">Tu Carrito</h2>
                 <button 
                     onClick={() => setIsMobileCartOpen(false)}
-                    className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
+                    className="p-3 -m-2 rounded-full bg-slate-100 dark:bg-slate-800 text-accent hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-all border border-slate-200 dark:border-slate-700"
+                    aria-label="Cerrar carrito"
                 >
-                    <CrossIcon />
+                    <CrossIcon className="w-7 h-7" />
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto">
+            <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-24">
                 <div className="p-4">
                     <CartAndActionsContent isMobile={true} />
                 </div>

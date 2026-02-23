@@ -75,10 +75,6 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
     }, [product, sales, purchases]);
 
     const handleApplyDiscount = async () => {
-        if (discountValue >= product.price) {
-            alert("El precio de descuento debe ser menor al precio original.");
-            return;
-        }
         setIsApplying(true);
         try {
             const updatedProduct: Product = {

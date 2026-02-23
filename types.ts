@@ -158,6 +158,7 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
+  basePrice?: number;
 }
 
 export interface HeldCart {

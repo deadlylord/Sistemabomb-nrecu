@@ -154,7 +154,6 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                             <p className="text-sm text-accent cursor-pointer font-bold" onClick={() => handlePriceClick(item)}>
                                 {formatCOP(item.price)}
                             </p>
-                            {/* @ts-ignore - basePrice added in App.tsx */}
                             {item.basePrice && item.basePrice > item.price && (
                                 <span className="text-[10px] text-slate-400 line-through">{formatCOP(item.basePrice)}</span>
                             )}
