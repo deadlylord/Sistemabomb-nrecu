@@ -246,11 +246,41 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return `${year}-${month}-${day}`;
   };
 
-    const filteredInventory = useMemo(() => {
+    const { filteredInventory, performanceTrends } = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
       const DESCUENTOS_CATEGORY_ID = 'descuentos';
       const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
       
+      // Calculate performance trends
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+      const trends: Record<string, 'up' | 'down' | 'stable'> = {};
+      const recentSalesMap: Record<string, number> = {};
+      const previousSalesMap: Record<string, number> = {};
+
+      props.sales.forEach(sale => {
+          const saleDate = new Date(sale.createdAt);
+          if (saleDate >= thirtyDaysAgo) {
+              sale.items.forEach(item => {
+                  recentSalesMap[item.id] = (recentSalesMap[item.id] || 0) + item.quantity;
+              });
+          } else if (saleDate >= sixtyDaysAgo) {
+              sale.items.forEach(item => {
+                  previousSalesMap[item.id] = (previousSalesMap[item.id] || 0) + item.quantity;
+              });
+          }
+      });
+
+      props.inventory.forEach(p => {
+          const recent = recentSalesMap[p.id] || 0;
+          const previous = previousSalesMap[p.id] || 0;
+          if (recent > previous) trends[p.id] = 'up';
+          else if (recent < previous) trends[p.id] = 'down';
+          else trends[p.id] = 'stable';
+      });
+
       // Pre-calculate performance map if admin and "All" category
       let performanceMap: Record<string, number> = {};
       if (isAdmin && !selectedCategoryId) {
@@ -261,18 +291,18 @@ const PosView: React.FC<PosViewProps> = (props) => {
           });
       }
   
+      let result: Product[] = [];
+
       if (selectedCategoryId === NOVEDADES_CATEGORY_ID) {
-          return newArrivalsInventory.filter(p => {
+          result = newArrivalsInventory.filter(p => {
               const matchesSearch = lowerCaseSearchTerm
                   ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
                     (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
                   : true;
               return matchesSearch;
           });
-      }
-
-      if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
-          return props.inventory.filter(p => {
+      } else if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
+          result = props.inventory.filter(p => {
               const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
               const matchesSearch = lowerCaseSearchTerm
                   ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
@@ -280,19 +310,20 @@ const PosView: React.FC<PosViewProps> = (props) => {
                   : true;
               return matchesDiscount && matchesSearch;
           });
+      } else {
+          result = props.inventory
+            .filter(p => {
+              if (p.isDisabled) return false;
+              const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
+              const matchesSearch = lowerCaseSearchTerm
+                ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
+                  (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                : true;
+              return matchesCategory && matchesSearch;
+            });
       }
-  
-      return props.inventory
-        .filter(p => {
-          if (p.isDisabled) return false;
-          const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
-          const matchesSearch = lowerCaseSearchTerm
-            ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-              (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
-            : true;
-          return matchesCategory && matchesSearch;
-        })
-        .sort((a, b) => {
+
+      const sortedResult = result.sort((a, b) => {
           if (a.stock > 0 && b.stock <= 0) return -1;
           if (a.stock <= 0 && b.stock > 0) return 1;
           
@@ -304,7 +335,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
           }
 
           return a.name.localeCompare(b.name);
-        });
+      });
+
+      return { filteredInventory: sortedResult, performanceTrends: trends };
   }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
@@ -473,6 +506,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
                     <ProductGrid 
                         products={filteredInventory} 
+                        performanceTrends={performanceTrends}
                         onAddToCart={handleAddToCartWithAnimation} 
                         onEditImage={setEditingProductImage}
                         onEditProduct={setEditingProductDetails}

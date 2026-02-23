@@ -155,7 +155,7 @@ export const INITIAL_STORES: Store[] = [
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
     initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '2',
@@ -175,7 +175,7 @@ export const INITIAL_STORES: Store[] = [
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
     initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '3',
@@ -195,7 +195,7 @@ export const INITIAL_STORES: Store[] = [
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
     initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountLabels: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
 ];
 

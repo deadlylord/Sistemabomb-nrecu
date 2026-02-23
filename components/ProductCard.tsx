@@ -1,11 +1,12 @@
 
 import React from 'react';
 import { Product } from '../types';
-import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon } from './Icons';
+import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon } from './Icons';
 import { formatCOP } from '../constants';
 
 interface ProductCardProps {
   product: Product;
+  performanceTrend?: 'up' | 'down' | 'stable';
   onAddToCart: (product: Product) => void;
   onEditImage: (product: Product) => void;
   onEditProduct: (product: Product) => void;
@@ -16,7 +17,7 @@ interface ProductCardProps {
   onToggleVerification: (productId: string) => void;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent adding to cart if an admin button or the checkbox was clicked
     if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.verification-checkbox-wrapper')) {
@@ -77,30 +78,45 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onEditI
                     >
                         <EditIcon className="w-4 h-4"/>
                     </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onShowPerformance(product); }}
-                        className="p-1.5 bg-black/50 text-white rounded-full backdrop-blur-sm"
-                        aria-label={`Ver rendimiento de ${product.name}`}
-                        title="Ver Rendimiento"
-                    >
-                        <ChartBarIcon className="w-4 h-4 text-emerald-400"/>
-                    </button>
                 </>
             )}
         </div>
-        
+
         {isAdmin && (
-            <div
-                onClick={handleCheckboxClick}
-                className="verification-checkbox-wrapper absolute top-1.5 right-1.5 z-20 h-7 w-7 flex items-center justify-center bg-black/30 rounded-full cursor-pointer backdrop-blur-sm group/check"
-                title="Marcar como verificado físicamente"
-            >
-                <input
-                    type="checkbox"
-                    checked={isVerified}
-                    readOnly 
-                    className="pointer-events-none h-4 w-4 rounded-full appearance-none border-2 border-white/70 bg-transparent transition-colors group-hover/check:border-white checked:bg-green-500 checked:border-green-500"
-                />
+            <div className="absolute top-1.5 right-1.5 z-20 flex flex-col items-end gap-1.5">
+                <button
+                    onClick={(e) => { e.stopPropagation(); onShowPerformance(product); }}
+                    className={`p-1.5 rounded-full backdrop-blur-md shadow-lg border transition-all duration-300 ${
+                        performanceTrend === 'up' 
+                            ? 'bg-emerald-500/90 border-emerald-400 text-white scale-110' 
+                            : performanceTrend === 'down'
+                            ? 'bg-rose-500/90 border-rose-400 text-white scale-90 opacity-80'
+                            : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                    }`}
+                    aria-label={`Ver rendimiento de ${product.name}`}
+                    title={`Rendimiento: ${performanceTrend === 'up' ? 'En aumento' : performanceTrend === 'down' ? 'En descenso' : 'Estable'}`}
+                >
+                    {performanceTrend === 'up' ? (
+                        <TrendingUpIcon className="w-4 h-4" />
+                    ) : performanceTrend === 'down' ? (
+                        <TrendingDownIcon className="w-4 h-4" />
+                    ) : (
+                        <ChartBarIcon className="w-4 h-4" />
+                    )}
+                </button>
+
+                <div
+                    onClick={handleCheckboxClick}
+                    className="verification-checkbox-wrapper h-7 w-7 flex items-center justify-center bg-black/30 rounded-full cursor-pointer backdrop-blur-sm group/check"
+                    title="Marcar como verificado físicamente"
+                >
+                    <input
+                        type="checkbox"
+                        checked={isVerified}
+                        readOnly 
+                        className="pointer-events-none h-4 w-4 rounded-full appearance-none border-2 border-white/70 bg-transparent transition-colors group-hover/check:border-white checked:bg-green-500 checked:border-green-500"
+                    />
+                </div>
             </div>
         )}
 

@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import { Product, Sale, Purchase } from '../types';
 import { CrossIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon, DollarIcon, PackageIcon, HistoryIcon } from './Icons';
 import { formatCOP } from '../constants';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface ProductPerformanceModalProps {
     isOpen: boolean;
@@ -61,6 +62,35 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
             return acc + (item?.quantity || 0);
         }, 0);
 
+        // Ventas mes a mes (últimos 6 meses)
+        const monthlyData: { month: string; units: number; revenue: number }[] = [];
+        const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const month = d.getMonth();
+            const year = d.getFullYear();
+            const monthLabel = `${monthNames[month]} ${year.toString().slice(-2)}`;
+            
+            const monthSales = productSales.filter(sale => {
+                const saleDate = new Date(sale.createdAt);
+                return saleDate.getMonth() === month && saleDate.getFullYear() === year;
+            });
+            
+            const units = monthSales.reduce((acc, sale) => {
+                const item = sale.items.find(i => i.id === product.id);
+                return acc + (item?.quantity || 0);
+            }, 0);
+
+            const revenue = monthSales.reduce((acc, sale) => {
+                const item = sale.items.find(i => i.id === product.id);
+                return acc + ((item?.quantity || 0) * (item?.price || 0));
+            }, 0);
+            
+            monthlyData.push({ month: monthLabel, units, revenue });
+        }
+
         return {
             totalUnitsSold,
             totalRevenue,
@@ -70,6 +100,7 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
             avgCost,
             recentUnitsSold,
             lastPurchaseDate,
+            monthlyData,
             margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
         };
     }, [product, sales, purchases]);
@@ -221,6 +252,52 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
                             <p className="text-xs font-black text-slate-700 dark:text-slate-300">
                                 {performance.lastPurchaseDate ? new Date(performance.lastPurchaseDate).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Sin compras'}
                             </p>
+                        </div>
+                    </div>
+
+                    {/* Monthly Sales Chart */}
+                    <div className="p-6 bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 mb-4">
+                            <TrendingUpIcon className="w-5 h-5 text-accent" />
+                            <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-widest">Ventas Mes a Mes (Unidades)</h4>
+                        </div>
+                        <div className="h-48 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={performance.monthlyData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis 
+                                        dataKey="month" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 10, fontWeight: 'bold' }} 
+                                        stroke="#94a3b8"
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 10, fontWeight: 'bold' }} 
+                                        stroke="#94a3b8"
+                                    />
+                                    <Tooltip 
+                                        cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                                        contentStyle={{ 
+                                            borderRadius: '12px', 
+                                            border: 'none', 
+                                            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                                            fontSize: '12px',
+                                            fontWeight: 'bold'
+                                        }}
+                                    />
+                                    <Bar dataKey="units" radius={[4, 4, 0, 0]}>
+                                        {performance.monthlyData.map((entry, index) => (
+                                            <Cell 
+                                                key={`cell-${index}`} 
+                                                fill={index === performance.monthlyData.length - 1 ? '#f43f5e' : '#94a3b8'} 
+                                            />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
 
