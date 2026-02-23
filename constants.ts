@@ -31,10 +31,19 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.23',
+    date: '2024-07-07',
+    description: 'Descuentos por Tienda',
+    isCurrent: true,
+    changes: [
+      'Segmentación: Ahora los descuentos aplicados a un producto son específicos de la tienda donde se configuran.',
+      'Independencia: Un mismo producto puede tener precio normal en una tienda y precio especial en otra.'
+    ]
+  },
+  {
     version: '2.11.22',
     date: '2024-07-07',
     description: 'Persistencia de Descuentos y Precios Especiales',
-    isCurrent: true,
     changes: [
       'Persistencia: Se corrigió un error que impedía que los precios de descuento se guardaran correctamente en la base de datos.',
       'Flexibilidad de Precios: Ahora es posible asignar precios especiales tanto mayores como menores al precio original desde el panel de rendimiento.',

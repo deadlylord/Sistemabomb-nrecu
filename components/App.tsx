@@ -1291,8 +1291,7 @@ const App: React.FC = () => {
                   name: updatedProduct.name, 
                   imageUrl: newImageUrl,
                   description: updatedProduct.description,
-                  categoryId: updatedProduct.categoryId,
-                  discountPrice: updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField()
+                  categoryId: updatedProduct.categoryId
               };
               
               if (docSnap.id === updatedProduct.id) {
@@ -1301,6 +1300,7 @@ const App: React.FC = () => {
                   updateData.cost = updatedProduct.cost;
                   updateData.supplier = updatedProduct.supplier;
                   updateData.isDisabled = updatedProduct.isDisabled;
+                  updateData.discountPrice = updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField();
               }
               batch.update(docSnap.ref, updateData);
           });
