@@ -782,20 +782,54 @@ const App: React.FC = () => {
     const createdAt = incidentDate || new Date().toISOString();
     let initialStatus: IncidentStatus;
     switch(data.type) {
-        case IncidentType.CASH_ADJUSTMENT: case IncidentType.RECAUDO: case IncidentType.ADDITIONAL_INCOME: case IncidentType.NEGATIVE_STOCK_SALE: initialStatus = IncidentStatus.REGISTRADO; break;
+        case IncidentType.CASH_ADJUSTMENT: initialStatus = IncidentStatus.PENDIENTE_APROBACION; break;
+        case IncidentType.RECAUDO: initialStatus = IncidentStatus.REGISTRADO; break;
+        case IncidentType.ADDITIONAL_INCOME: case IncidentType.NEGATIVE_STOCK_SALE: initialStatus = IncidentStatus.REGISTRADO; break;
         case IncidentType.DAMAGED: initialStatus = IncidentStatus.DAÑADO_REPORTADO; break;
         case IncidentType.PRODUCT_EXCHANGE: initialStatus = IncidentStatus.CAMBIO_SOLICITADO; break;
         case IncidentType.INVENTORY_TRANSFER_REQUEST: initialStatus = IncidentStatus.TRASLADO_SOLICITADO; break;
         case IncidentType.WARRANTY: initialStatus = IncidentStatus.WARRANTY_ACTIVE; break;
         default: throw new Error(`Unhandled incident type for status initialization: ${data.type}`);
     }
-    const newIncident: Incident = { ...incidentData, id: newIncidentRef.id, status: initialStatus, createdAt: createdAt, sellerName: currentUser.name, storeId: currentStoreId };
+    const newIncident: Incident = { 
+        ...incidentData, 
+        id: newIncidentRef.id, 
+        status: initialStatus, 
+        createdAt: createdAt, 
+        sellerName: currentUser.name, 
+        storeId: currentStoreId,
+        history: [{
+            status: initialStatus,
+            changedBy: currentUser.name,
+            timestamp: new Date().toISOString(),
+            notes: 'Registro inicial de la novedad'
+        }]
+    };
     if (newIncident.type === IncidentType.PRODUCT_EXCHANGE && surplusPaid && surplusPaid > 0 && surplusPaymentMethod) {
         newIncident.adjustmentAmount = surplusPaid;
         newIncident.paymentMethod = surplusPaymentMethod;
         const adjustmentRef = doc(collection(db, 'incidents'));
         newIncident.relatedIncidentId = adjustmentRef.id;
-        const adjustmentIncident: Incident = { id: adjustmentRef.id, type: IncidentType.CASH_ADJUSTMENT, status: IncidentStatus.REGISTRADO, description: `Excedente pagado (${surplusPaymentMethod}) por cambio de factura #${newIncident.originalSaleInvoiceNumber}`, createdAt: createdAt, sellerName: currentUser.name, storeId: currentStoreId, adjustmentAmount: surplusPaid, adjustmentType: 'income', customerName: newIncident.customerName, customerPhone: newIncident.customerPhone, paymentMethod: surplusPaymentMethod };
+        const adjustmentIncident: Incident = { 
+            id: adjustmentRef.id, 
+            type: IncidentType.CASH_ADJUSTMENT, 
+            status: IncidentStatus.PENDIENTE_APROBACION, 
+            description: `Excedente pagado (${surplusPaymentMethod}) por cambio de factura #${newIncident.originalSaleInvoiceNumber}`, 
+            createdAt: createdAt, 
+            sellerName: currentUser.name, 
+            storeId: currentStoreId, 
+            adjustmentAmount: surplusPaid, 
+            adjustmentType: 'income', 
+            customerName: newIncident.customerName, 
+            customerPhone: newIncident.customerPhone, 
+            paymentMethod: surplusPaymentMethod,
+            history: [{
+                status: IncidentStatus.PENDIENTE_APROBACION,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                notes: 'Registro automático por excedente en cambio'
+            }]
+        };
         batch.set(adjustmentRef, adjustmentIncident);
     }
     batch.set(newIncidentRef, newIncident);
@@ -913,9 +947,26 @@ const App: React.FC = () => {
                 await handleInventoryTransfer({ fromStoreId: incident.fromStoreId, toStoreId: incident.toStoreId, productId: incident.productId, quantity: incident.quantity, sellerName: incident.sellerName }, batch);
             }
             break;
+          case IncidentType.CASH_ADJUSTMENT:
+            if (incident.status !== IncidentStatus.PENDIENTE_APROBACION) return;
+            newStatus = IncidentStatus.REGISTRADO;
+            break;
           default: return;
         }
-        batch.update(incidentRef, { status: newStatus, resolutionDate: new Date().toISOString() });
+        const updatedHistory = [
+            ...(incident.history || []),
+            {
+                status: newStatus,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                notes: 'Novedad aprobada y procesada'
+            }
+        ];
+        batch.update(incidentRef, { 
+            status: newStatus, 
+            resolutionDate: new Date().toISOString(),
+            history: updatedHistory
+        });
         await batch.commit();
     } catch (error: any) { console.error("Error approving incident:", error); alert(`Error al aprobar: ${error.message}`); }
   };
@@ -945,10 +996,40 @@ const App: React.FC = () => {
             batch.set(repairLogRef, repairLog);
         }
     }
-    if (newStatus) { batch.update(incidentRef, { status: newStatus, resolutionDate: new Date().toISOString() }); await batch.commit(); }
+    if (newStatus) { 
+        const updatedHistory = [
+            ...(incident.history || []),
+            {
+                status: newStatus,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                notes: 'Novedad resuelta/finalizada'
+            }
+        ];
+        batch.update(incidentRef, { 
+            status: newStatus, 
+            resolutionDate: new Date().toISOString(),
+            history: updatedHistory
+        }); 
+        await batch.commit(); 
+    }
   };
 
-  const handleUpdateIncident = async (incident: Incident) => { await setDoc(doc(db, 'incidents', incident.id), incident, { merge: true }); };
+  const handleUpdateIncident = async (incident: Incident) => { 
+    const existingIncident = incidents.find(i => i.id === incident.id);
+    if (existingIncident && existingIncident.status !== incident.status) {
+        incident.history = [
+            ...(incident.history || []),
+            {
+                status: incident.status,
+                changedBy: currentUser?.name || 'Sistema',
+                timestamp: new Date().toISOString(),
+                notes: 'Estado actualizado manualmente por administrador'
+            }
+        ];
+    }
+    await setDoc(doc(db, 'incidents', incident.id), incident, { merge: true }); 
+  };
 
   const handleDeleteIncident = async (incidentId: string) => {
       if (window.confirm('¿Eliminar novedad permanentemente?')) {
@@ -1103,7 +1184,7 @@ const App: React.FC = () => {
               const product = inventory.find(p => p.id === pid);
               if (product) {
                 batch.update(productRef, { stock: count });
-                const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste de inventario vía conteo físico a ${count} unidades.`);
+                const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste de inventario vía conteo físico a ${count} unidades (antes: ${product.stock}).`);
                 batch.set(doc(db, 'productHistory', log.id), log);
               }
           });
@@ -1122,7 +1203,7 @@ const App: React.FC = () => {
             const product = inventory.find(p => p.id === pid);
             if (product) {
               batch.update(productRef, { stock: count });
-              const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste diferido de inventario (Conteo del ${new Date(stockTake.createdAt).toLocaleDateString()}) a ${count} unidades.`);
+              const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste diferido de inventario (Conteo del ${new Date(stockTake.createdAt).toLocaleDateString()}) a ${count} unidades (antes: ${product.stock}).`);
               batch.set(doc(db, 'productHistory', log.id), log);
             }
         });

@@ -265,7 +265,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   }, [products, auditModeEntry]);
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-0 sm:p-4 animate-fade-in">
       <div className="bg-white dark:bg-secondary rounded-none sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[95vh] flex flex-col overflow-hidden border border-accent/20" onClick={e => e.stopPropagation()}>
         
         {auditModeEntry && (

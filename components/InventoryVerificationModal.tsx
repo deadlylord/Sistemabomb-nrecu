@@ -154,7 +154,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-0 sm:p-4 animate-fade-in" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-0 sm:p-4 animate-fade-in">
         <div className="bg-white dark:bg-secondary rounded-none sm:rounded-2xl shadow-xl p-4 sm:p-6 w-full max-w-2xl h-full sm:h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="flex justify-between items-start border-b-2 border-accent/30 pb-4 mb-4">
               <div>

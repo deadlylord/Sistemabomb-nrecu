@@ -31,10 +31,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.24',
+    date: '2024-07-07',
+    description: 'Herramientas de Auditoría de Inventario',
+    isCurrent: true,
+    changes: [
+      'Auditoría: Se añadió una columna de "Stock Final" en el historial de productos que calcula el balance retroactivo para detectar errores.',
+      'Diagnóstico: El historial ahora muestra el ID único del documento para ayudar a identificar productos duplicados con el mismo nombre.',
+      'Transparencia: Se incluyeron notas de auditoría para guiar a los administradores en la resolución de discrepancias físicas vs sistema.'
+    ]
+  },
+  {
     version: '2.11.23',
     date: '2024-07-07',
     description: 'Descuentos por Tienda',
-    isCurrent: true,
     changes: [
       'Segmentación: Ahora los descuentos aplicados a un producto son específicos de la tienda donde se configuran.',
       'Independencia: Un mismo producto puede tener precio normal en una tienda y precio especial en otra.'

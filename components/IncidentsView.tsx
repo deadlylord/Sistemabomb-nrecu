@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
-import { PlusCircleIcon, CheckIcon, SwapIcon, SearchIcon, EditIcon, TrashIcon, CrossIcon } from './Icons';
+import { PlusCircleIcon, CheckIcon, SwapIcon, SearchIcon, EditIcon, TrashIcon, CrossIcon, HistoryIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
 import { formatCOP } from '../constants';
 import EditIncidentModal from './EditIncidentModal';
@@ -27,7 +27,9 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditExchangeModalOpen, setIsEditExchangeModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const [historyIncident, setHistoryIncident] = useState<Incident | null>(null);
   const [filter, setFilter] = useState<IncidentStatus | 'ALL'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -62,6 +64,11 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
     }
   };
 
+  const handleHistoryClick = (incident: Incident) => {
+    setHistoryIncident(incident);
+    setIsHistoryModalOpen(true);
+  };
+
   const getStoreName = (storeId?: string) => {
     if (!storeId) return 'N/A';
     return stores.find(s => s.id === storeId)?.name || 'Desconocido';
@@ -71,6 +78,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
     const baseClasses = "px-3 py-1 text-xs font-bold rounded-full";
     switch (status) {
         case IncidentStatus.REGISTRADO: return `${baseClasses} bg-gray-500/20 text-gray-300`;
+        case IncidentStatus.PENDIENTE_APROBACION: return `${baseClasses} bg-orange-500/20 text-orange-300 animate-pulse`;
         case IncidentStatus.DAÑADO_REPORTADO: return `${baseClasses} bg-yellow-500/20 text-yellow-300`;
         case IncidentStatus.CAMBIO_SOLICITADO: return `${baseClasses} bg-yellow-500/20 text-yellow-300`;
         case IncidentStatus.TRASLADO_SOLICITADO: return `${baseClasses} bg-yellow-500/20 text-yellow-300`;
@@ -207,6 +215,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                     IncidentStatus.DAÑADO_REPORTADO,
                     IncidentStatus.CAMBIO_SOLICITADO,
                     IncidentStatus.TRASLADO_SOLICITADO,
+                    IncidentStatus.PENDIENTE_APROBACION,
                   ].includes(incident.status);
 
                   const canBeResolved = [
@@ -238,6 +247,11 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                             <button onClick={() => onResolveIncident(incident.id)} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Marcar como Resuelto"}>
                               <SwapIcon />
                             </button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => handleHistoryClick(incident)} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title="Ver Historial de Cambios">
+                            <HistoryIcon />
+                          </button>
                         )}
                         <button onClick={() => handleEditClick(incident)} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors" title="Editar Novedad">
                           <EditIcon />
@@ -288,6 +302,51 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
             sales={sales}
             onUpdateIncident={onUpdateIncident}
           />
+      )}
+
+      {isAdmin && isHistoryModalOpen && historyIncident && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4" onClick={() => setIsHistoryModalOpen(false)}>
+          <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl p-6 w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+              <h3 className="text-xl font-bold text-accent">Historial de Cambios</h3>
+              <button onClick={() => setIsHistoryModalOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-white">
+                <CrossIcon />
+              </button>
+            </div>
+            <div className="flex-grow overflow-y-auto space-y-4 pr-2">
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg mb-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Novedad</p>
+                <p className="text-sm font-bold text-accent">{historyIncident.type}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{historyIncident.description}</p>
+              </div>
+              
+              <div className="relative border-l-2 border-accent/30 ml-3 space-y-6 pb-2">
+                {historyIncident.history && historyIncident.history.length > 0 ? (
+                  historyIncident.history.map((entry, idx) => (
+                    <div key={idx} className="relative pl-6">
+                      <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-accent border-2 border-white dark:border-secondary"></div>
+                      <div className="flex flex-col">
+                        <div className="flex justify-between items-start">
+                          <span className="text-sm font-bold text-gray-800 dark:text-text-light">{entry.status}</span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400">{new Date(entry.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">Por: <span className="font-semibold text-accent">{entry.changedBy}</span></p>
+                        {entry.notes && <p className="text-xs italic text-gray-500 dark:text-gray-500 mt-1 bg-gray-100 dark:bg-gray-900/50 p-1.5 rounded">{entry.notes}</p>}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="pl-6 py-4 text-center text-gray-500 dark:text-gray-400 italic text-sm">
+                    No hay registros históricos para esta novedad.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button onClick={() => setIsHistoryModalOpen(false)} className="px-6 py-2 bg-accent text-white rounded-lg font-bold">Cerrar</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

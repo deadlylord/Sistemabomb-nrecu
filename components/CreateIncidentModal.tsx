@@ -330,15 +330,23 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={handleOverlayClick}>
-      <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col relative">
+        <button 
+          onClick={handleClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          <CrossIcon className="w-6 h-6" />
+        </button>
         <h2 className="text-2xl font-bold text-accent mb-4">Crear Novedad</h2>
         <form onSubmit={handleSubmit} id="incident-form" className="flex-grow overflow-y-auto pr-2 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Tipo de Novedad</label>
               <select value={type} onChange={e => setType(e.target.value as IncidentType)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md">
-                {Object.values(IncidentType).map(t => <option key={t} value={t}>{t}</option>)}
+                {Object.values(IncidentType)
+                  .filter(t => t !== IncidentType.ADDITIONAL_INCOME && t !== IncidentType.NEGATIVE_STOCK_SALE)
+                  .map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             {(isAdmin && (type === IncidentType.RECAUDO || type === IncidentType.CASH_ADJUSTMENT || type === IncidentType.ADDITIONAL_INCOME)) && (

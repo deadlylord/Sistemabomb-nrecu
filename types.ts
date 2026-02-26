@@ -336,6 +336,7 @@ export enum IncidentType {
 
 export enum IncidentStatus {
   REGISTRADO = 'Registrado',
+  PENDIENTE_APROBACION = 'Pendiente de Aprobación',
   DAÑADO_REPORTADO = 'Dañado Reportado',
   CAMBIO_SOLICITADO = 'Cambio Solicitado',
   TRASLADO_SOLICITADO = 'Traslado Solicitado',
@@ -384,6 +385,12 @@ export interface Incident {
   toStoreId?: string;
   quantity?: number;
   deadline?: string;
+  history?: {
+    status: IncidentStatus;
+    changedBy: string;
+    timestamp: string; // ISO string
+    notes?: string;
+  }[];
 }
 
 export interface Expense {

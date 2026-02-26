@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sale, Seller, PaymentMethod, DailyNote, Layaway, Incident, IncidentType } from '../types';
+import { Sale, Seller, PaymentMethod, DailyNote, Layaway, Incident, IncidentType, IncidentStatus } from '../types';
 import { formatCOP } from '../constants';
 import { PlusCircleIcon } from './Icons';
 
@@ -74,7 +74,8 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
     
     const todaysCashAdjustments = incidents.filter(i => 
         isWithinDay(i.createdAt) &&
-        (i.type === IncidentType.CASH_ADJUSTMENT || i.type === IncidentType.RECAUDO)
+        (i.type === IncidentType.CASH_ADJUSTMENT || i.type === IncidentType.RECAUDO) &&
+        i.status !== IncidentStatus.PENDIENTE_APROBACION
     );
 
     const incomeAdjustments = todaysCashAdjustments
