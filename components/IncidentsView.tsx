@@ -151,6 +151,13 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                     <p className="text-xs text-gray-400">Desde: {getStoreName(incident.fromStoreId)} → Hacia: {getStoreName(incident.toStoreId)}</p>
                 </div>
               )
+          case IncidentType.INVENTORY_INCONSISTENCY:
+              return (
+                <div>
+                    <p className="font-bold text-red-500">Descuadre Detectado</p>
+                    <p className="text-xs text-gray-400">Revisar reporte de inventario</p>
+                </div>
+              )
           default:
               return null;
       }

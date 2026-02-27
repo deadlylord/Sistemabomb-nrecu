@@ -789,6 +789,7 @@ const App: React.FC = () => {
         case IncidentType.PRODUCT_EXCHANGE: initialStatus = IncidentStatus.CAMBIO_SOLICITADO; break;
         case IncidentType.INVENTORY_TRANSFER_REQUEST: initialStatus = IncidentStatus.TRASLADO_SOLICITADO; break;
         case IncidentType.WARRANTY: initialStatus = IncidentStatus.WARRANTY_ACTIVE; break;
+        case IncidentType.INVENTORY_INCONSISTENCY: initialStatus = IncidentStatus.REGISTRADO; break;
         default: throw new Error(`Unhandled incident type for status initialization: ${data.type}`);
     }
     const newIncident: Incident = { 
@@ -1178,6 +1179,30 @@ const App: React.FC = () => {
       const newRef = doc(collection(db, 'stockTakes'));
       const stockTake: StockTake = { ...stockTakeData, id: newRef.id, createdAt: new Date().toISOString(), storeId: currentStoreId, isApplied: applyNow };
       batch.set(newRef, stockTake);
+      
+      // Check for inconsistencies (differences in category counts)
+      const inconsistencies = stockTake.verification.filter(v => v.difference !== 0);
+      if (inconsistencies.length > 0 && !isAdmin) {
+          const incidentRef = doc(collection(db, 'incidents'));
+          const details = inconsistencies.map(v => `${v.categoryName}: ${v.difference > 0 ? '+' : ''}${v.difference} prendas`).join(', ');
+          const newIncident: Incident = {
+              id: incidentRef.id,
+              type: IncidentType.INVENTORY_INCONSISTENCY,
+              status: IncidentStatus.REGISTRADO,
+              description: `Inconsistencia detectada en conteo físico por categorías. Diferencias: ${details}`,
+              createdAt: stockTake.createdAt,
+              sellerName: currentUser.name,
+              storeId: currentStoreId,
+              history: [{
+                  status: IncidentStatus.REGISTRADO,
+                  changedBy: 'Sistema (Automático)',
+                  timestamp: new Date().toISOString(),
+                  notes: `Novedad generada automáticamente por descuadre en inventario reportado por ${currentUser.name}`
+              }]
+          };
+          batch.set(incidentRef, newIncident);
+      }
+
       if (applyNow && stockTake.productCounts) {
           Object.entries(stockTake.productCounts).forEach(([pid, count]) => {
               const productRef = doc(db, 'inventory', pid);

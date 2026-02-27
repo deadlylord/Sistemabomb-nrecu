@@ -12,7 +12,7 @@ interface InventoryVerificationModalProps {
   isAdmin: boolean;
   currentStore?: Store;
   onClose: () => void;
-  onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => void;
+  onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => Promise<void>;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
@@ -36,6 +36,8 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const [selectedSeller, setSelectedSeller] = useState('');
   const [cashBase, setCashBase] = useState('');
   const [activeCategoryForDetails, setActiveCategoryForDetails] = useState<Category | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Local reactive state for the toggle to ensure immediate UI feedback
   const [localHideDetailed, setLocalHideDetailed] = useState(!!currentStore?.hideDetailedVerificationForSellers);
@@ -52,6 +54,8 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
         setDetailedCounts({});
         setSelectedSeller('');
         setCashBase('');
+        setIsSaving(false);
+        setSaveSuccess(false);
     }
   }, [isOpen]);
 
@@ -101,41 +105,52 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     setCounts(prev => ({ ...prev, [catId]: sum.toString() }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedSeller) {
       alert("Por favor, selecciona el vendedor que realiza la verificación.");
       return;
     }
 
-    const verificationData = categoryTotals.map(cat => {
-      const physicalCountStr = counts[cat.id];
-      const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : 0;
-      return {
-        categoryId: cat.id,
-        categoryName: cat.name,
-        systemStock: cat.totalStock,
-        physicalCount: isNaN(physicalCount) ? 0 : physicalCount,
-        difference: (isNaN(physicalCount) ? 0 : physicalCount) - cat.totalStock,
-      };
-    });
-
-    const flattenedProductCounts: Record<string, number> = {};
-    Object.values(detailedCounts).forEach(catCounts => {
-      Object.entries(catCounts).forEach(([pid, val]) => {
-        const num = parseInt(val, 10);
-        if (!isNaN(num)) flattenedProductCounts[pid] = num;
+    setIsSaving(true);
+    try {
+      const verificationData = categoryTotals.map(cat => {
+        const physicalCountStr = counts[cat.id];
+        const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : 0;
+        return {
+          categoryId: cat.id,
+          categoryName: cat.name,
+          systemStock: cat.totalStock,
+          physicalCount: isNaN(physicalCount) ? 0 : physicalCount,
+          difference: (isNaN(physicalCount) ? 0 : physicalCount) - cat.totalStock,
+        };
       });
-    });
-    
-    onSaveStockTake({
-        seller: selectedSeller,
-        cashBase: cashBase ? parseFloat(cashBase) : undefined,
-        verification: verificationData,
-        productCounts: flattenedProductCounts,
-        isApplied: isAdmin 
-    }, isAdmin);
 
-    onClose();
+      const flattenedProductCounts: Record<string, number> = {};
+      Object.values(detailedCounts).forEach(catCounts => {
+        Object.entries(catCounts).forEach(([pid, val]) => {
+          const num = parseInt(val, 10);
+          if (!isNaN(num)) flattenedProductCounts[pid] = num;
+        });
+      });
+      
+      await onSaveStockTake({
+          seller: selectedSeller,
+          cashBase: cashBase ? parseFloat(cashBase) : undefined,
+          verification: verificationData,
+          productCounts: flattenedProductCounts,
+          isApplied: isAdmin 
+      }, isAdmin);
+
+      setSaveSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } catch (error) {
+      console.error("Error saving stock take:", error);
+      alert("Error al guardar la verificación.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
@@ -248,10 +263,16 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
             </table>
           </div>
           <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t-2 border-accent/30 pt-4">
-              <button onClick={onClose} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center font-black text-xs uppercase tracking-widest text-gray-500">Cerrar</button>
-              <button onClick={handleSubmit} className={`px-10 py-4 ${isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover'} text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest text-sm`}>
-                  <CheckIcon className="w-6 h-6" />
-                  <span>{isAdmin ? 'Guardar y Aplicar Stock' : 'Enviar para Revisión'}</span>
+              <button onClick={onClose} disabled={isSaving} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center font-black text-xs uppercase tracking-widest text-gray-500 disabled:opacity-50">Cerrar</button>
+              <button onClick={handleSubmit} disabled={isSaving || saveSuccess} className={`px-10 py-4 ${saveSuccess ? 'bg-green-500' : (isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover')} text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest text-sm disabled:opacity-70`}>
+                  {isSaving ? (
+                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : saveSuccess ? (
+                    <CheckIcon className="w-6 h-6" />
+                  ) : (
+                    <CheckIcon className="w-6 h-6" />
+                  )}
+                  <span>{saveSuccess ? '¡Guardado con éxito!' : isSaving ? 'Guardando...' : (isAdmin ? 'Guardar y Aplicar Stock' : 'Enviar para Revisión')}</span>
               </button>
           </div>
         </div>

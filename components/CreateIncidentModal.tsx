@@ -345,7 +345,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
               <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Tipo de Novedad</label>
               <select value={type} onChange={e => setType(e.target.value as IncidentType)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md">
                 {Object.values(IncidentType)
-                  .filter(t => t !== IncidentType.ADDITIONAL_INCOME && t !== IncidentType.NEGATIVE_STOCK_SALE)
+                  .filter(t => t !== IncidentType.ADDITIONAL_INCOME && t !== IncidentType.NEGATIVE_STOCK_SALE && t !== IncidentType.INVENTORY_INCONSISTENCY)
                   .map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>

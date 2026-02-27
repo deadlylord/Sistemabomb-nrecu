@@ -332,6 +332,7 @@ export enum IncidentType {
   INVENTORY_TRANSFER_REQUEST = 'Solicitud de Traslado',
   RECAUDO = 'Recaudo',
   NEGATIVE_STOCK_SALE = 'Venta con Stock Negativo',
+  INVENTORY_INCONSISTENCY = 'Inconsistencia de Inventario',
 }
 
 export enum IncidentStatus {
