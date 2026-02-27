@@ -31,10 +31,22 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.25',
+    date: '2026-02-26',
+    description: 'Auditoría de Novedades y Control de Inventario',
+    isCurrent: true,
+    changes: [
+      'Historial de Novedades: Implementación de un sistema de auditoría que registra cada cambio de estado, responsable y fecha en las novedades.',
+      'Privacidad de Auditoría: Se restringió el acceso al historial de novedades únicamente para usuarios con rol de Administrador.',
+      'Control de Inconsistencias: Sistema automático que genera novedades de tipo "Inconsistencia de Inventario" al detectar descuadres en los conteos físicos.',
+      'Alertas en Dashboard: Se añadió una tarjeta de alerta dinámica y un badge indicador en el botón de verificación para notificar descuadres al administrador.',
+      'Feedback de Usuario: Mejora en la experiencia del vendedor con indicadores de carga y mensajes de confirmación al guardar inventarios.'
+    ]
+  },
+  {
     version: '2.11.24',
     date: '2024-07-07',
     description: 'Herramientas de Auditoría de Inventario',
-    isCurrent: true,
     changes: [
       'Auditoría: Se añadió una columna de "Stock Final" en el historial de productos que calcula el balance retroactivo para detectar errores.',
       'Diagnóstico: El historial ahora muestra el ID único del documento para ayudar a identificar productos duplicados con el mismo nombre.',
