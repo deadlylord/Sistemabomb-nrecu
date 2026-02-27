@@ -31,10 +31,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.27',
+    date: '2026-02-27',
+    description: 'Corrección en Alertas de Inventario',
+    isCurrent: true,
+    changes: [
+      'Sincronización en Tiempo Real: Se corrigió un error que impedía que las inconsistencias de inventario se detectaran en tiempo real en el Dashboard.',
+      'Lógica de Alerta Refinada: El sistema ahora verifica tanto el último conteo físico como las novedades pendientes, asegurando que la notificación sea precisa por local.',
+      'Persistencia de Datos: Se optimizó la carga de reportes de inventario para que el administrador vea las alertas inmediatamente sin necesidad de recargar la página.'
+    ]
+  },
+  {
     version: '2.11.26',
     date: '2026-02-26',
     description: 'Optimización de Auditoría y Control de Acceso',
-    isCurrent: true,
     changes: [
       'Auto-desactivación de Lupas: La visibilidad detallada para vendedores ahora se desactiva automáticamente cada día, requiriendo activación manual diaria por el administrador.',
       'Relocalización de Alertas: La alerta de descuadre se movió junto al botón de verificación para una respuesta más rápida.',

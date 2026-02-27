@@ -300,6 +300,7 @@ const App: React.FC = () => {
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
             attach(storeSpecificQuery('purchases'), setPurchases);
+            attach(storeSpecificQuery('stockTakes'), setStockTakes);
             break;
         case View.POS:
             attach(storeInventoryQuery, setInventory);

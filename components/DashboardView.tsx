@@ -159,24 +159,54 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   }, [currentUser, roles]);
 
   const latestStockTakeInconsistency = useMemo(() => {
-    if (!allStockTakes || allStockTakes.length === 0) return null;
+    const pendingIncidents = allIncidents.filter(i => 
+        i.type === IncidentType.INVENTORY_INCONSISTENCY && 
+        i.status === IncidentStatus.REGISTRADO &&
+        i.storeId === currentStore?.id
+    );
+
+    if (!allStockTakes || allStockTakes.length === 0) {
+        // Fallback to incidents if no stock takes are loaded yet
+        if (pendingIncidents.length > 0) {
+            return {
+                count: pendingIncidents.length,
+                date: pendingIncidents[0].createdAt,
+                seller: pendingIncidents[0].sellerName,
+                isFromIncident: true
+            };
+        }
+        return null;
+    }
     
     // Filter by current store and sort by date
-    const storeStockTakes = allStockTakes
+    const storeStockTakes = [...allStockTakes]
         .filter(st => st.storeId === currentStore?.id)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
-    if (storeStockTakes.length === 0) return null;
+    if (storeStockTakes.length === 0) {
+        if (pendingIncidents.length > 0) {
+            return {
+                count: pendingIncidents.length,
+                date: pendingIncidents[0].createdAt,
+                seller: pendingIncidents[0].sellerName,
+                isFromIncident: true
+            };
+        }
+        return null;
+    }
     
     const latest = storeStockTakes[0];
     const inconsistencies = latest.verification.filter(v => v.difference !== 0);
     
+    // If the latest stock take is clean, we don't show the alert even if there are old incidents
+    // as requested: "solo tenga en cuenta el último conteo"
     return inconsistencies.length > 0 ? {
         count: inconsistencies.length,
         date: latest.createdAt,
-        seller: latest.seller
+        seller: latest.seller,
+        isFromIncident: false
     } : null;
-  }, [allStockTakes, currentStore?.id]);
+  }, [allStockTakes, currentStore?.id, allIncidents]);
 
   const today = new Date();
   const [startDate, setStartDate] = useState(toYYYYMMDD(today));
@@ -595,10 +625,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   const scrollToSection = (id: string) => { const element = document.getElementById(id); if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   
-  const activeInconsistencies = useMemo(() => {
-    return allIncidents.filter(i => i.type === IncidentType.INVENTORY_INCONSISTENCY && i.status === IncidentStatus.REGISTRADO).length;
-  }, [allIncidents]);
-
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Top Control Panel */}
