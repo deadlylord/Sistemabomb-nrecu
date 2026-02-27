@@ -31,10 +31,21 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '2.11.26',
+    date: '2026-02-26',
+    description: 'Optimización de Auditoría y Control de Acceso',
+    isCurrent: true,
+    changes: [
+      'Auto-desactivación de Lupas: La visibilidad detallada para vendedores ahora se desactiva automáticamente cada día, requiriendo activación manual diaria por el administrador.',
+      'Relocalización de Alertas: La alerta de descuadre se movió junto al botón de verificación para una respuesta más rápida.',
+      'Lógica de Alerta Optimizada: El indicador de descuadre ahora solo considera el último conteo realizado, evitando alertas por errores ya corregidos.',
+      'Navegación Directa: La alerta de inventario ahora redirige directamente al historial de conteos físicos para facilitar la revisión.'
+    ]
+  },
+  {
     version: '2.11.25',
     date: '2026-02-26',
     description: 'Auditoría de Novedades y Control de Inventario',
-    isCurrent: true,
     changes: [
       'Historial de Novedades: Implementación de un sistema de auditoría que registra cada cambio de estado, responsable y fecha en las novedades.',
       'Privacidad de Auditoría: Se restringió el acceso al historial de novedades únicamente para usuarios con rol de Administrador.',

@@ -40,13 +40,22 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Local reactive state for the toggle to ensure immediate UI feedback
-  const [localHideDetailed, setLocalHideDetailed] = useState(!!currentStore?.hideDetailedVerificationForSellers);
+  const [localHideDetailed, setLocalHideDetailed] = useState(true);
 
   useEffect(() => {
     if (currentStore) {
-        setLocalHideDetailed(!!currentStore.hideDetailedVerificationForSellers);
+        const today = new Date().toISOString().split('T')[0];
+        const isEnabledToday = currentStore.detailedVerificationEnabledDate === today;
+        
+        // If it's enabled today, we follow hideDetailedVerificationForSellers (which would be false if admin enabled it)
+        // If it's NOT enabled today, we force hide it (true)
+        if (isEnabledToday) {
+            setLocalHideDetailed(!!currentStore.hideDetailedVerificationForSellers);
+        } else {
+            setLocalHideDetailed(true);
+        }
     }
-  }, [currentStore?.hideDetailedVerificationForSellers]);
+  }, [currentStore?.hideDetailedVerificationForSellers, currentStore?.detailedVerificationEnabledDate]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -83,12 +92,14 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const handleToggleMagnifyingGlasses = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!currentStore || !isAdmin) return;
       const newValue = e.target.checked;
+      const today = new Date().toISOString().split('T')[0];
       
       setLocalHideDetailed(newValue);
       
       const updatedStore = { 
           ...currentStore, 
-          hideDetailedVerificationForSellers: newValue 
+          hideDetailedVerificationForSellers: newValue,
+          detailedVerificationEnabledDate: newValue ? currentStore.detailedVerificationEnabledDate : today
       };
       
       try {

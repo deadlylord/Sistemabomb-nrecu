@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase } from '../types';
+import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, StockTake } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
 import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
@@ -29,6 +29,7 @@ interface DashboardViewProps {
   purchases: Purchase[];
   allSales: Sale[];
   allInventory: Product[];
+  allStockTakes: StockTake[];
 }
 
 interface UnifiedTransaction {
@@ -149,9 +150,34 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
-    onOpenVerification, purchases, allSales, allInventory, categories
+    onOpenVerification, purchases, allSales, allInventory, categories, allStockTakes
   } = props;
-  
+
+  const isAdmin = useMemo(() => {
+    const adminRole = roles.find(r => r.name === 'Administrator');
+    return currentUser.roleId === adminRole?.id;
+  }, [currentUser, roles]);
+
+  const latestStockTakeInconsistency = useMemo(() => {
+    if (!allStockTakes || allStockTakes.length === 0) return null;
+    
+    // Filter by current store and sort by date
+    const storeStockTakes = allStockTakes
+        .filter(st => st.storeId === currentStore?.id)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    if (storeStockTakes.length === 0) return null;
+    
+    const latest = storeStockTakes[0];
+    const inconsistencies = latest.verification.filter(v => v.difference !== 0);
+    
+    return inconsistencies.length > 0 ? {
+        count: inconsistencies.length,
+        date: latest.createdAt,
+        seller: latest.seller
+    } : null;
+  }, [allStockTakes, currentStore?.id]);
+
   const today = new Date();
   const [startDate, setStartDate] = useState(toYYYYMMDD(today));
   const [endDate, setEndDate] = useState(toYYYYMMDD(today));
@@ -177,9 +203,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [aiQueryResult, setAiQueryResult] = useState('');
   const [isAiQueryLoading, setIsAiQueryLoading] = useState(false);
 
-  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
-  
   const calculateSaleProfit = (transaction: UnifiedSaleTransaction): number => {
     const itemsArray = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
     const rawProfit = itemsArray.reduce((sum, item) => {
@@ -594,40 +617,27 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
-                <button onClick={onOpenVerification} className="relative px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
-                    <ClipboardListIcon className="w-4 h-4" />
-                    <span>Verificar Inventario</span>
-                    {activeInconsistencies > 0 && (
-                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white dark:border-secondary animate-bounce shadow-lg" title={`${activeInconsistencies} inconsistencias pendientes`}>
-                            {activeInconsistencies}
-                        </span>
+                <div className="flex items-center gap-2">
+                    <button onClick={onOpenVerification} className="relative px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
+                        <ClipboardListIcon className="w-4 h-4" />
+                        <span>Verificar Inventario</span>
+                    </button>
+
+                    {isAdmin && latestStockTakeInconsistency && (
+                        <div 
+                            onClick={() => onNavigate(View.STOCK_TAKE_HISTORY)}
+                            className="flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-red-600 transition-all animate-pulse shadow-lg shadow-red-500/30"
+                            title={`Último conteo por ${latestStockTakeInconsistency.seller} tiene descuadres`}
+                        >
+                            <AlertTriangleIcon className="w-4 h-4" />
+                            <span className="text-xs font-black uppercase tracking-tighter">Descuadre Detectado</span>
+                        </div>
                     )}
-                </button>
+                </div>
             </div>
             <div className="flex items-center gap-2"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>
         </div>
       </div>
-
-      {/* Inventory Inconsistency Alert */}
-      {isAdmin && activeInconsistencies > 0 && (
-        <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between animate-pulse shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="bg-red-500 text-white p-2 rounded-lg">
-              <AlertTriangleIcon className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-red-800 dark:text-red-200 font-black uppercase tracking-tight">Alerta de Inventario</h3>
-              <p className="text-red-600 dark:text-red-400 text-xs font-bold">Se han detectado {activeInconsistencies} descuadres en los conteos físicos recientes.</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => onNavigate(View.INCIDENTS)}
-            className="px-4 py-2 bg-red-600 text-white font-black rounded-lg text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-md shadow-red-600/20"
-          >
-            Ver Novedades
-          </button>
-        </div>
-      )}
 
       {/* AI Insights Widget */}
       <div className="w-full transition-all duration-300 ease-in-out">

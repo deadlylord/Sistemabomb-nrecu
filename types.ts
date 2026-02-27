@@ -88,6 +88,7 @@ export interface Store {
   imageCompressionQuality?: 'high' | 'medium' | 'low';
   accentColorsUpdated?: boolean;
   hideDetailedVerificationForSellers?: boolean;
+  detailedVerificationEnabledDate?: string; // ISO date string (YYYY-MM-DD)
   initialBalances?: {
     cash: number;
     qr: number;
