@@ -76,6 +76,16 @@ const attachFirestoreListener = <T extends { id: string }>(query: Query, setter:
   return unsubscribe;
 };
 
+const cleanObject = (obj: any) => {
+  const newObj = { ...obj };
+  Object.keys(newObj).forEach(key => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    }
+  });
+  return newObj;
+};
+
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -540,7 +550,7 @@ const App: React.FC = () => {
 
             savedSale = newSale;
 
-            transaction.set(saleRef, newSale);
+            transaction.set(saleRef, cleanObject(newSale));
 
             activeCart.forEach(item => {
                 const productRef = doc(db, 'inventory', item.id);
@@ -641,7 +651,7 @@ const App: React.FC = () => {
                 description,
             };
 
-            transaction.set(layawayRef, newLayaway);
+            transaction.set(layawayRef, cleanObject(newLayaway));
 
             if (!isPreOrder) {
                 activeCart.forEach(item => {
@@ -832,9 +842,9 @@ const App: React.FC = () => {
                 notes: 'Registro automático por excedente en cambio'
             }]
         };
-        batch.set(adjustmentRef, adjustmentIncident);
+        batch.set(adjustmentRef, cleanObject(adjustmentIncident));
     }
-    batch.set(newIncidentRef, newIncident);
+    batch.set(newIncidentRef, cleanObject(newIncident));
     await batch.commit();
     if (newIncident.type === IncidentType.RECAUDO) { setLastRecaudo(newIncident); setShowRecaudoReceipt(true); }
   };
@@ -1070,7 +1080,7 @@ const App: React.FC = () => {
           });
       }
 
-      batch.set(doc(db, 'layaways', updatedLayaway.id), updatedLayaway);
+      batch.set(doc(db, 'layaways', updatedLayaway.id), cleanObject(updatedLayaway));
       await batch.commit();
   };
 
@@ -1122,7 +1132,7 @@ const App: React.FC = () => {
       });
 
       const saleRef = doc(db, 'sales', updatedSale.id);
-      batch.set(saleRef, updatedSale);
+      batch.set(saleRef, cleanObject(updatedSale));
 
       if (updatedSale.items.length > 0) {
           const logRef = doc(collection(db, 'productHistory'));
@@ -1178,7 +1188,7 @@ const App: React.FC = () => {
       if (!currentStoreId || !currentUser) return;
       const batch = writeBatch(db);
       const newRef = doc(collection(db, 'stockTakes'));
-      const stockTake: StockTake = { ...stockTakeData, id: newRef.id, createdAt: new Date().toISOString(), storeId: currentStoreId, isApplied: applyNow };
+      const stockTake: StockTake = cleanObject({ ...stockTakeData, id: newRef.id, createdAt: new Date().toISOString(), storeId: currentStoreId, isApplied: applyNow });
       batch.set(newRef, stockTake);
       
       // Check for inconsistencies (differences in category counts)
@@ -1255,7 +1265,7 @@ const App: React.FC = () => {
         lastUpdatedBy: currentUser.name, 
         updatedAt: now 
     };
-    await setDoc(draftRef, draftData);
+    await setDoc(draftRef, cleanObject(draftData));
 
     const historyRef = doc(collection(db, 'detailedVerificationHistory'));
     
@@ -1267,13 +1277,13 @@ const App: React.FC = () => {
         };
     });
 
-    await setDoc(historyRef, {
+    await setDoc(historyRef, cleanObject({
         ...draftData,
         id: historyRef.id,
         draftId: draftId,
         counts: historicalCounts, 
         updatedAt: now 
-    });
+    }));
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {
@@ -1346,7 +1356,7 @@ const App: React.FC = () => {
               }
           } else {
               const newRef = doc(collection(db, 'inventory'));
-              batch.set(newRef, { 
+              batch.set(newRef, cleanObject({ 
                   ...newProductData, 
                   description: existingDescription,
                   categoryId: existingCategoryId,
@@ -1355,7 +1365,7 @@ const App: React.FC = () => {
                   imageUrl, 
                   storeId, 
                   isDisabled: false 
-              });
+              }));
           }
       });
       await batch.commit();
@@ -1443,7 +1453,7 @@ const App: React.FC = () => {
           const newRef = doc(collection(db, 'inventory'));
           const namePrefix = p.name.substring(0, 3).toUpperCase();
           const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-          batch.set(newRef, { ...p, id: newRef.id, sku, storeId, isDisabled: false });
+          batch.set(newRef, cleanObject({ ...p, id: newRef.id, sku, storeId, isDisabled: false }));
       });
       await batch.commit();
   };
@@ -1509,7 +1519,7 @@ const App: React.FC = () => {
                 const namePrefix = inputName.substring(0, 3).toUpperCase();
                 const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
                 
-                batch.set(newProductRef, {
+                batch.set(newProductRef, cleanObject({
                     id: productId,
                     name: inputName,
                     categoryId: globalCategoryId,
@@ -1522,11 +1532,11 @@ const App: React.FC = () => {
                     imageUrl: globalImage,
                     description: globalDesc,
                     isDisabled: false
-                });
+                }));
             }
 
             const purchaseRef = doc(collection(db, 'purchases'));
-            batch.set(purchaseRef, {
+            batch.set(purchaseRef, cleanObject({
                 id: purchaseRef.id,
                 productId: productId,
                 productName: inputName,
@@ -1536,7 +1546,7 @@ const App: React.FC = () => {
                 supplier: entry.supplier,
                 createdAt: new Date().toISOString(),
                 storeId: storeId
-            });
+            }));
 
             const logRef = doc(collection(db, 'productHistory'));
             const log = {
@@ -1631,7 +1641,7 @@ const App: React.FC = () => {
   const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
 
   const handleAddStore = async (name: string) => { const newRef = doc(collection(db, 'stores')); await setDoc(newRef, { id: newRef.id, name, nextInvoiceNumber: 1, accentColor: '#000000', accentColorHover: '#333333' }); };
-  const handleUpdateStore = async (updatedStore: Store) => await updateDoc(doc(db, 'stores', updatedStore.id), updatedStore as any);
+  const handleUpdateStore = async (updatedStore: Store) => await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string) => { const newRef = doc(collection(db, 'sellers')); await setDoc(newRef, { id: newRef.id, name, password, roleId, storeId, isDisabled: false }); };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string) => {
@@ -1642,13 +1652,13 @@ const App: React.FC = () => {
   const handleDeleteSeller = async (id: string) => { if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
   const handleToggleSellerStatus = async (id: string) => { const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
   const handleAddRole = async (name: string) => { const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [] }); };
-  const handleUpdateRole = async (updatedRole: Role) => await setDoc(doc(db, 'roles', updatedRole.id), updatedRole);
+  const handleUpdateRole = async (updatedRole: Role) => await setDoc(doc(db, 'roles', updatedRole.id), cleanObject(updatedRole));
   
   const handleSavePayroll = async (payrollData: any) => {
       if (!currentStoreId || !currentUser) return;
       const newRef = doc(collection(db, 'payrollHistory'));
       const paidAt = payrollData.paidAt || new Date().toISOString();
-      await setDoc(newRef, { ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId });
+      await setDoc(newRef, cleanObject({ ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId }));
   };
 
   const handleDeletePayroll = async (payrollId: string) => {
@@ -1660,7 +1670,7 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       newCustomers.forEach(c => {
           const newRef = doc(collection(db, 'customers'));
-          batch.set(newRef, { ...c, id: newRef.id, storeId: currentStoreId, createdAt: new Date().toISOString() });
+          batch.set(newRef, cleanObject({ ...c, id: newRef.id, storeId: currentStoreId, createdAt: new Date().toISOString() }));
       });
       await batch.commit();
   };

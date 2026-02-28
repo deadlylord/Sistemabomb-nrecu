@@ -72,6 +72,16 @@ const STATIC_CATEGORIES: Record<string, string[]> = {
     'Otros': []
 };
 
+const cleanObject = (obj: any) => {
+  const newObj = { ...obj };
+  Object.keys(newObj).forEach(key => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    }
+  });
+  return newObj;
+};
+
 const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
   const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || stores[0]?.id || '');
   const [records, setRecords] = useState<FinancialRecord[]>([]);
@@ -536,10 +546,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const mainSubCategory = (e.debtStoreId && e.subCategory !== 'Cruce Sedes') ? 'Préstamo a Sede' : (e.subCategory || 'Manual');
         const mainRecord: FinancialRecord = { id: mainRef.id, date: dateTime, storeId: activeStoreId, accountType: e.accountType as any, amount: totalAmountVal, type: totalAmountVal < 0 ? 'expense' : 'income_manual', description: e.description, subCategory: mainSubCategory, registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: true, ...(e.debtStoreId ? { debtStoreId: e.debtStoreId } : {}) };
         if (mirrorRef) mainRecord.relatedRecordId = mirrorRef.id;
-        batch.set(mainRef, mainRecord);
+        batch.set(mainRef, cleanObject(mainRecord));
         if (mirrorRef && e.debtStoreId) {
             const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
-            batch.set(mirrorRef, { id: mirrorRef.id, date: dateTime, storeId: e.debtStoreId, accountType: e.accountType as any, amount: mirrorAmount, type: mirrorAmount < 0 ? 'expense' : 'income_manual', description: `${e.description} (Asumido por ${activeStoreName})`, subCategory: e.subCategory || 'Varios', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: e.affectsMirrorBalance });
+            batch.set(mirrorRef, cleanObject({ id: mirrorRef.id, date: dateTime, storeId: e.debtStoreId, accountType: e.accountType as any, amount: mirrorAmount, type: mirrorAmount < 0 ? 'expense' : 'income_manual', description: `${e.description} (Asumido por ${activeStoreName})`, subCategory: e.subCategory || 'Varios', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: e.affectsMirrorBalance }));
         }
     });
     await batch.commit();

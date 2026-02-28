@@ -44,7 +44,9 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   useEffect(() => {
     if (currentStore) {
-        const today = new Date().toISOString().split('T')[0];
+        // Use local date for comparison to ensure it matches the user's day
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const isEnabledToday = currentStore.detailedVerificationEnabledDate === today;
         
         // If it's enabled today, we follow hideDetailedVerificationForSellers (which would be false if admin enabled it)
@@ -91,22 +93,28 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
   const handleToggleMagnifyingGlasses = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!currentStore || !isAdmin) return;
-      const newValue = e.target.checked;
-      const today = new Date().toISOString().split('T')[0];
+      const newValue = e.target.checked; // true = Hide, false = Show
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       
+      // Update local state immediately for UI responsiveness
       setLocalHideDetailed(newValue);
       
-      const updatedStore = { 
+      const updatedStore: Store = { 
           ...currentStore, 
           hideDetailedVerificationForSellers: newValue,
-          detailedVerificationEnabledDate: newValue ? currentStore.detailedVerificationEnabledDate : today
+          // When showing (newValue = false), we MUST set the date to today to activate it.
+          // When hiding (newValue = true), we can keep the date or clear it, but hideDetailedVerificationForSellers=true will take precedence.
+          detailedVerificationEnabledDate: newValue ? (currentStore.detailedVerificationEnabledDate || today) : today
       };
       
       try {
           await onUpdateStoreSettings(updatedStore);
       } catch (error) {
           console.error("Failed to update store settings:", error);
+          // Rollback local state on error
           setLocalHideDetailed(!newValue);
+          alert("Error al actualizar la configuración de la tienda.");
       }
   };
 

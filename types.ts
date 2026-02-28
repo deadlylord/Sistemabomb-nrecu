@@ -175,7 +175,7 @@ export interface StockTake {
   id: string;
   seller: string;
   createdAt: string; // ISO string
-  cashBase?: number;
+  cashBase?: number | null;
   isApplied?: boolean;
   productCounts?: Record<string, number>;
   verification: {
