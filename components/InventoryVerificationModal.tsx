@@ -110,6 +110,11 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
       
       try {
           await onUpdateStoreSettings(updatedStore);
+          if (!newValue) {
+              alert("✅ Verificación detallada activada para hoy.");
+          } else {
+              alert("🚫 Verificación detallada desactivada.");
+          }
       } catch (error) {
           console.error("Failed to update store settings:", error);
           // Rollback local state on error

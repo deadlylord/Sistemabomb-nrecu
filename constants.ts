@@ -31,20 +31,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '2.11.27',
-    date: '2026-02-27',
-    description: 'Corrección en Alertas de Inventario',
+    version: '2.11.28',
+    date: '2026-02-28',
+    description: 'Sincronización de Fecha Local y Confirmación de Activación',
     isCurrent: true,
     changes: [
-      'Sincronización en Tiempo Real: Se corrigió un error que impedía que las inconsistencias de inventario se detectaran en tiempo real en el Dashboard.',
-      'Lógica de Alerta Refinada: El sistema ahora verifica tanto el último conteo físico como las novedades pendientes, asegurando que la notificación sea precisa por local.',
-      'Persistencia de Datos: Se optimizó la carga de reportes de inventario para que el administrador vea las alertas inmediatamente sin necesidad de recargar la página.'
+      'Fecha Local: Se corrigió el error de zona horaria que causaba la desactivación prematura de la verificación detallada.',
+      'Confirmación de Activación: Se añadió un mensaje de confirmación al activar o desactivar las lupas para vendedores.',
+      'Persistencia Reforzada: Se optimizó el guardado de la fecha de activación para asegurar visibilidad inmediata.'
     ]
   },
   {
-    version: '2.11.26',
-    date: '2026-02-26',
-    description: 'Optimización de Auditoría y Control de Acceso',
+    version: '2.11.27',
+    date: '2026-02-27',
+    description: 'Corrección en Alertas de Inventario',
     changes: [
       'Auto-desactivación de Lupas: La visibilidad detallada para vendedores ahora se desactiva automáticamente cada día, requiriendo activación manual diaria por el administrador.',
       'Relocalización de Alertas: La alerta de descuadre se movió junto al botón de verificación para una respuesta más rápida.',
