@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase } from '../types';
+import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
 import ProductPerformanceModal from './ProductPerformanceModal';
 import CartPanel from './CartPanel';
@@ -7,6 +7,8 @@ import DailySalesReportModal from './DailySalesReportModal';
 import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
 import EditProductImageModal from './EditProductImageModal';
+import SellVoucherModal from './SellVoucherModal';
+import CheckVoucherModal from './CheckVoucherModal';
 import { formatCOP } from '../constants';
 import EditProductModal from './EditProductModal';
 
@@ -48,6 +50,9 @@ interface PosViewProps {
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
   onUpdateStoreSettings: (updatedStore: Store) => Promise<void>;
   onOpenVerification: () => void;
+  giftVouchers: GiftVoucher[];
+  onCreateGiftVoucher: (voucher: Omit<GiftVoucher, 'id'>) => Promise<void>;
+  onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
@@ -55,6 +60,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
+  const [isSellVoucherModalOpen, setIsSellVoucherModalOpen] = useState(false);
+  const [isCheckVoucherModalOpen, setIsCheckVoucherModalOpen] = useState(false);
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [editingProductDetails, setEditingProductDetails] = useState<Product | null>(null);
   const [performanceProduct, setPerformanceProduct] = useState<Product | null>(null);
@@ -297,7 +304,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
           result = newArrivalsInventory.filter(p => {
               const matchesSearch = lowerCaseSearchTerm
                   ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
+                    p.sku.toLowerCase().includes(lowerCaseSearchTerm)
                   : true;
               return matchesSearch;
           });
@@ -306,7 +314,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
               const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
               const matchesSearch = lowerCaseSearchTerm
                   ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
+                    p.sku.toLowerCase().includes(lowerCaseSearchTerm)
                   : true;
               return matchesDiscount && matchesSearch;
           });
@@ -317,7 +326,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
               const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
               const matchesSearch = lowerCaseSearchTerm
                 ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                  (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                  (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
+                  p.sku.toLowerCase().includes(lowerCaseSearchTerm)
                 : true;
               return matchesCategory && matchesSearch;
             });
@@ -423,6 +433,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 <a href={props.currentStore?.sistecreditoLink} target="_blank" rel="noopener noreferrer" className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-purple-600">Sistecredito</a>
                 <button onClick={() => setIsIncidentModalOpen(true)} className="bg-orange-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-orange-600"><AlertTriangleIcon className="w-4 h-4"/><span className="hidden sm:inline">Novedad</span></button>
                 <button onClick={props.onOpenVerification} className="bg-blue-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-blue-600"><ClipboardListIcon className="w-4 h-4" /><span className="hidden sm:inline">Verificar</span></button>
+                <button onClick={() => setIsSellVoucherModalOpen(true)} className="bg-pink-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-pink-600"><ShoppingCartIcon className="w-4 h-4"/><span className="hidden sm:inline">Vender Bono</span></button>
+                <button onClick={() => setIsCheckVoucherModalOpen(true)} className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-purple-600"><SearchIcon className="w-4 h-4"/><span className="hidden sm:inline">Consultar Bono</span></button>
                 <button onClick={() => setIsSalesReportModalOpen(true)} className="bg-teal-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-teal-600"><ChartBarIcon className="w-4 h-4" /><span className="hidden sm:inline">Reporte</span></button>
             </div>
         </div>
@@ -442,6 +454,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
             isCartPulsing={isCartPulsing}
             initialCustomerInfo={customerInfo}
             currentStore={props.currentStore}
+            giftVouchers={props.giftVouchers}
+            onUpdateGiftVoucher={props.onUpdateGiftVoucher}
         />
     </div>
   );
@@ -590,6 +604,24 @@ const PosView: React.FC<PosViewProps> = (props) => {
             roles={props.roles}
             onCreateIncident={props.onCreateIncident}
             customers={props.allCustomers}
+        />
+      )}
+      {isSellVoucherModalOpen && (
+        <SellVoucherModal
+            isOpen={isSellVoucherModalOpen}
+            onClose={() => setIsSellVoucherModalOpen(false)}
+            sellers={props.sellers}
+            customers={props.allCustomers}
+            currentStore={props.currentStore}
+            onCreateGiftVoucher={props.onCreateGiftVoucher}
+            onProcessSale={props.onProcessSale}
+        />
+      )}
+      {isCheckVoucherModalOpen && (
+        <CheckVoucherModal
+            isOpen={isCheckVoucherModalOpen}
+            onClose={() => setIsCheckVoucherModalOpen(false)}
+            giftVouchers={props.giftVouchers}
         />
       )}
       {editingProductImage && (

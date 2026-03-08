@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CartItem, PaymentMethod, Seller, Customer, Payment, Store } from '../types';
+import { CartItem, PaymentMethod, Seller, Customer, Payment, Store, GiftVoucher } from '../types';
 import { TrashIcon, PlusIcon, MinusIcon, PauseIcon, TagIcon, TruckIcon } from './Icons';
 import PaymentModal from './PaymentModal';
 import { formatCOP, toTitleCase } from '../constants';
@@ -21,9 +21,11 @@ interface CartPanelProps {
   isCartPulsing: boolean;
   initialCustomerInfo: {name: string, phone: string} | null;
   currentStore: Store | undefined;
+  giftVouchers: GiftVoucher[];
+  onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
 }
 
-const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore }) => {
+const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isLayawayModalOpen, setIsLayawayModalOpen] = useState(false);
   const [isPreOrder, setIsPreOrder] = useState(false);
@@ -254,6 +256,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         onHoldSale={onHoldSale}
         initialCustomerInfo={initialCustomerInfo}
         currentStore={currentStore}
+        giftVouchers={giftVouchers}
+        onUpdateGiftVoucher={onUpdateGiftVoucher}
       />
 
       {isLayawayModalOpen && (

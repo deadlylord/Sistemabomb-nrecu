@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { PaymentMethod, Seller, Customer, Payment, Store } from '../types';
+import { PaymentMethod, Seller, Customer, Payment, Store, GiftVoucher } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon } from './Icons';
 
@@ -15,14 +15,18 @@ interface PaymentModalProps {
   onHoldSale: (data: { customer: { name: string; phone: string }; sellerName: string; }) => void;
   initialCustomerInfo: {name: string, phone: string} | null;
   currentStore: Store | undefined;
+  giftVouchers: GiftVoucher[];
+  onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
   const [payments, setPayments] = useState<Omit<Payment, 'date' | 'seller'>[]>([]);
   const [amountInput, setAmountInput] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [selectedSeller, setSelectedSeller] = useState('');
+  const [voucherCode, setVoucherCode] = useState('');
+  const [isVoucherValidating, setIsVoucherValidating] = useState(false);
 
   const paidAmount = useMemo(() => payments.reduce((sum, p) => sum + p.amount, 0), [payments]);
   const remainingAmount = total - paidAmount;
@@ -32,6 +36,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
   useEffect(() => {
     setPayments([]);
     setSelectedSeller('');
+    setVoucherCode('');
     setCustomerName(initialCustomerInfo?.name || '');
     setCustomerPhone(initialCustomerInfo?.phone || '');
   }, [total, initialCustomerInfo]);
@@ -59,19 +64,49 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }
   };
   
-  const handleAddPayment = (method: PaymentMethod) => {
+  const handleAddPayment = async (method: PaymentMethod) => {
     const amount = parseFloat(amountInput);
     if (isNaN(amount) || amount <= 0) {
       alert("Por favor, ingresa un monto válido.");
       return;
     }
     
-    if (method !== PaymentMethod.Efectivo && amount > remainingAmount && remainingAmount > 0) {
-        alert(`El monto para ${method} no puede superar el faltante de ${formatCOP(remainingAmount)}.`);
-        return;
-    }
+    if (method === PaymentMethod.Bono) {
+        if (!voucherCode) {
+            alert("Ingresa el código del bono.");
+            return;
+        }
+        setIsVoucherValidating(true);
+        const voucher = giftVouchers.find(v => v.code.toUpperCase() === voucherCode.toUpperCase());
+        
+        if (!voucher) {
+            alert("Bono no encontrado.");
+            setIsVoucherValidating(false);
+            return;
+        }
+        if (voucher.status !== 'active' || voucher.currentValue <= 0) {
+            alert(`Este bono ya fue redimido o no tiene saldo. Saldo actual: ${formatCOP(voucher.currentValue)}`);
+            setIsVoucherValidating(false);
+            return;
+        }
 
-    setPayments(prev => [...prev, { amount, method }]);
+        const amountToUse = Math.min(amount, voucher.currentValue, remainingAmount);
+        if (amountToUse <= 0) {
+            alert("El monto ingresado es inválido para este bono.");
+            setIsVoucherValidating(false);
+            return;
+        }
+
+        setPayments(prev => [...prev, { amount: amountToUse, method, voucherId: voucher.id, voucherCode: voucher.code }]);
+        setVoucherCode('');
+        setIsVoucherValidating(false);
+    } else {
+        if (method !== PaymentMethod.Efectivo && amount > remainingAmount && remainingAmount > 0) {
+            alert(`El monto para ${method} no puede superar el faltante de ${formatCOP(remainingAmount)}.`);
+            return;
+        }
+        setPayments(prev => [...prev, { amount, method }]);
+    }
   };
 
   const handleRemovePayment = (indexToRemove: number) => {
@@ -181,7 +216,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                 <div className="space-y-3">
                   <div>
                     <label htmlFor="amountInput" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Monto a Pagar</label>
-                    <input type="number" id="amountInput" value={amountInput} onChange={e => setAmountInput(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md font-bold text-lg" placeholder="0" min="0" step="1000" />
+                    <div className="flex gap-2">
+                        <input type="number" id="amountInput" value={amountInput} onChange={e => setAmountInput(e.target.value)} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-md font-bold text-lg" placeholder="0" min="0" step="1000" />
+                        <input 
+                            type="text" 
+                            value={voucherCode} 
+                            onChange={e => setVoucherCode(e.target.value.toUpperCase())} 
+                            className="w-32 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-2 rounded-md text-sm font-mono" 
+                            placeholder="CÓDIGO BONO"
+                        />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Método de Pago</label>

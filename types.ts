@@ -220,6 +220,7 @@ export enum PaymentMethod {
     Tarjeta = 'Tarjeta',
     Sistecredito = 'Sistecredito',
     Addi = 'Addi',
+    Bono = 'Bono de Regalo',
 }
 
 export interface Payment {
@@ -227,6 +228,8 @@ export interface Payment {
   amount: number;
   method: PaymentMethod;
   seller: string;
+  voucherId?: string;
+  voucherCode?: string;
 }
 
 export interface Layaway {
@@ -405,4 +408,18 @@ export interface Expense {
   storeId: string;
   registeredBy: string;
   isRecurring?: boolean;
+}
+
+export interface GiftVoucher {
+  id: string;
+  code: string;
+  initialValue: number;
+  currentValue: number;
+  status: 'active' | 'redeemed' | 'cancelled';
+  createdAt: string;
+  expiryDate?: string;
+  customerName?: string;
+  customerPhone?: string;
+  storeId: string;
+  createdBy: string;
 }

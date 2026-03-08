@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -87,6 +87,7 @@ const cleanObject = (obj: any) => {
 };
 
 const App: React.FC = () => {
+  const [giftVouchers, setGiftVouchers] = useState<GiftVoucher[]>([]);
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [inventory, setInventory] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -311,6 +312,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('stockTakes'), setStockTakes);
+            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             break;
         case View.POS:
             attach(storeInventoryQuery, setInventory);
@@ -318,6 +320,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('customers'), setCustomers);
+            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             break;
         case View.INVENTORY:
@@ -509,7 +512,7 @@ const App: React.FC = () => {
 
   const handleClearCart = () => setActiveCart([]);
 
-  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => {
+  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[] }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
 
     try {
@@ -532,14 +535,15 @@ const App: React.FC = () => {
             }
 
             const saleRef = doc(collection(db, 'sales'));
-            const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const itemsToProcess = saleData.items || activeCart;
+            const totalAmount = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
             const newSale: Sale = {
                 id: saleRef.id,
                 invoiceNumber: currentInvoiceNumber,
                 customerName: saleData.customerName,
                 customerPhone: saleData.customerPhone,
-                items: activeCart,
+                items: itemsToProcess,
                 totalAmount,
                 payments: saleData.payments,
                 paymentMethod: saleData.payments[0]?.method,
@@ -552,22 +556,41 @@ const App: React.FC = () => {
 
             transaction.set(saleRef, cleanObject(newSale));
 
-            activeCart.forEach(item => {
-                const productRef = doc(db, 'inventory', item.id);
-                transaction.update(productRef, { stock: increment(-item.quantity) });
+            // Handle Gift Voucher Redemptions
+            for (const payment of saleData.payments) {
+                if (payment.method === PaymentMethod.Bono && payment.voucherId) {
+                    const voucherRef = doc(db, 'giftVouchers', payment.voucherId);
+                    const voucherDoc = await transaction.get(voucherRef);
+                    if (voucherDoc.exists()) {
+                        const currentVal = voucherDoc.data().currentValue || 0;
+                        const newVal = Math.max(0, currentVal - payment.amount);
+                        transaction.update(voucherRef, { 
+                            currentValue: newVal,
+                            status: newVal <= 0 ? 'redeemed' : 'active'
+                        });
+                    }
+                }
+            }
 
-                const logRef = doc(collection(db, 'productHistory'));
-                const log: ProductHistoryLog = {
-                    id: logRef.id,
-                    productId: item.id,
-                    productName: item.name,
-                    storeId: currentStoreId,
-                    changedBy: saleData.seller,
-                    timestamp: saleDate.toISOString(),
-                    changeType: ProductChangeType.SALE,
-                    details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}`
-                };
-                transaction.set(logRef, log);
+            itemsToProcess.forEach(item => {
+                // Only update stock and history if it's a real product (vouchers start with 'voucher-')
+                if (!item.id.startsWith('voucher-')) {
+                    const productRef = doc(db, 'inventory', item.id);
+                    transaction.update(productRef, { stock: increment(-item.quantity) });
+
+                    const logRef = doc(collection(db, 'productHistory'));
+                    const log: ProductHistoryLog = {
+                        id: logRef.id,
+                        productId: item.id,
+                        productName: item.name,
+                        storeId: currentStoreId,
+                        changedBy: saleData.seller,
+                        timestamp: saleDate.toISOString(),
+                        changeType: ProductChangeType.SALE,
+                        details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}`
+                    };
+                    transaction.set(logRef, log);
+                }
             });
 
             transaction.update(storeRef, { nextInvoiceNumber: currentInvoiceNumber + 1 });
@@ -576,7 +599,9 @@ const App: React.FC = () => {
         if (savedSale) {
             setSaleForReceipt(savedSale);
             setShowReceiptModal(true);
-            handleClearCart();
+            if (!saleData.items) {
+                handleClearCart();
+            }
         }
 
     } catch (e) {
@@ -1309,6 +1334,25 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
+  const handleCreateGiftVoucher = async (voucher: Omit<GiftVoucher, 'id'>) => {
+    try {
+      const newRef = doc(collection(db, 'giftVouchers'));
+      await setDoc(newRef, { ...voucher, id: newRef.id });
+    } catch (error) {
+      console.error("Error creating gift voucher:", error);
+      throw error;
+    }
+  };
+
+  const handleUpdateGiftVoucher = async (voucherId: string, updates: Partial<GiftVoucher>) => {
+    try {
+      await updateDoc(doc(db, 'giftVouchers', voucherId), updates);
+    } catch (error) {
+      console.error("Error updating gift voucher:", error);
+      throw error;
+    }
+  };
+
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
       const inputName = newProductData.name;
       
@@ -1717,7 +1761,7 @@ const App: React.FC = () => {
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
       <main className="container mx-auto p-4 pb-20 lg:pb-4">
         {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} />}
+        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
