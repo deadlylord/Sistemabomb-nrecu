@@ -17,11 +17,13 @@ const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, 
   if (!isOpen) return null;
 
   const handleSearch = () => {
-    const voucher = giftVouchers.find(v => v.code.toUpperCase() === code.toUpperCase());
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) return;
+    const voucher = giftVouchers.find(v => v.code.toUpperCase() === trimmedCode);
     if (voucher) {
       setFoundVoucher(voucher);
     } else {
-      alert("Bono no encontrado.");
+      alert(`Bono "${trimmedCode}" no encontrado.`);
       setFoundVoucher(null);
     }
   };

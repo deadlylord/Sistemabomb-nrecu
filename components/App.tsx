@@ -312,7 +312,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('stockTakes'), setStockTakes);
-            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
+            attach(query(collection(db, 'giftVouchers')), setGiftVouchers);
             break;
         case View.POS:
             attach(storeInventoryQuery, setInventory);
@@ -320,7 +320,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('customers'), setCustomers);
-            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
+            attach(query(collection(db, 'giftVouchers')), setGiftVouchers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             break;
         case View.INVENTORY:

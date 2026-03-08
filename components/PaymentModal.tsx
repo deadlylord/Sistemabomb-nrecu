@@ -72,33 +72,39 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }
     
     if (method === PaymentMethod.Bono) {
-        if (!voucherCode) {
+        const trimmedCode = voucherCode.trim().toUpperCase();
+        if (!trimmedCode) {
             alert("Ingresa el código del bono.");
             return;
         }
         setIsVoucherValidating(true);
-        const voucher = giftVouchers.find(v => v.code.toUpperCase() === voucherCode.toUpperCase());
+        
+        // Debug log
+        console.log("Validating voucher:", trimmedCode, "Available vouchers:", giftVouchers.length);
+        
+        const voucher = giftVouchers.find(v => v.code.toUpperCase() === trimmedCode);
         
         if (!voucher) {
-            alert("Bono no encontrado.");
+            alert(`Bono "${trimmedCode}" no encontrado. Asegúrate de que el código sea correcto.`);
             setIsVoucherValidating(false);
             return;
         }
         if (voucher.status !== 'active' || voucher.currentValue <= 0) {
-            alert(`Este bono ya fue redimido o no tiene saldo. Saldo actual: ${formatCOP(voucher.currentValue)}`);
+            alert(`Este bono no está activo o no tiene saldo. Saldo actual: ${formatCOP(voucher.currentValue)}`);
             setIsVoucherValidating(false);
             return;
         }
 
         const amountToUse = Math.min(amount, voucher.currentValue, remainingAmount);
         if (amountToUse <= 0) {
-            alert("El monto ingresado es inválido para este bono.");
+            alert(`No se puede aplicar el bono. Saldo: ${formatCOP(voucher.currentValue)}, Faltante: ${formatCOP(remainingAmount)}`);
             setIsVoucherValidating(false);
             return;
         }
 
         setPayments(prev => [...prev, { amount: amountToUse, method, voucherId: voucher.id, voucherCode: voucher.code }]);
         setVoucherCode('');
+        setAmountInput(''); // Clear amount input after adding payment
         setIsVoucherValidating(false);
     } else {
         if (method !== PaymentMethod.Efectivo && amount > remainingAmount && remainingAmount > 0) {
@@ -225,19 +231,24 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                             className="w-32 bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-2 rounded-md text-sm font-mono" 
                             placeholder="CÓDIGO BONO"
                         />
+                        <button 
+                            type="button"
+                            onClick={() => handleAddPayment(PaymentMethod.Bono)}
+                            disabled={isVoucherValidating || !voucherCode.trim()}
+                            className="px-3 bg-pink-500 text-white rounded-md text-xs font-bold hover:bg-pink-600 disabled:bg-gray-400 transition-colors"
+                        >
+                            {isVoucherValidating ? '...' : 'Redimir'}
+                        </button>
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Método de Pago</label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {Object.values(PaymentMethod).map(method => {
-                        let label = method;
-                        if (method === PaymentMethod.Efectivo && currentStore?.accountLabels?.cash) label = currentStore.accountLabels.cash as PaymentMethod;
+                      {Object.values(PaymentMethod).filter(m => m !== PaymentMethod.Bono).map(method => {
+                        let label: string = method;
+                        if (method === PaymentMethod.Efectivo && currentStore?.accountLabels?.cash) label = currentStore.accountLabels.cash;
                         if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method) && currentStore?.accountLabels?.qr) {
-                            if (method === PaymentMethod.QR) label = currentStore.accountLabels.qr as PaymentMethod;
-                        }
-                        if ([PaymentMethod.Tarjeta, PaymentMethod.Sistecredito, PaymentMethod.Addi].includes(method) && currentStore?.accountLabels?.bank) {
-                            // if (method === PaymentMethod.Tarjeta) label = currentStore.accountLabels.bank as PaymentMethod;
+                            if (method === PaymentMethod.QR) label = currentStore.accountLabels.qr;
                         }
                         
                         return (
