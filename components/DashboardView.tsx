@@ -407,7 +407,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const isNextDayDisabled = useMemo(() => { const today = new Date(); today.setHours(0, 0, 0, 0); const currentSelectionEnd = new Date(endDate + 'T12:00:00'); currentSelectionEnd.setHours(0, 0, 0, 0); return currentSelectionEnd >= today; }, [endDate]);
 
     const metricsForCurrentStore = useMemo(() => {
-        const directSalesInRange = sales.filter(s => isWithinRange(s.createdAt) && !s.layawayId);
+        const directSalesInRange = sales.filter(s => {
+            if (!isWithinRange(s.createdAt) || s.layawayId) return false;
+            const items = (Array.isArray(s.items) ? s.items : Object.values(s.items || {})) as CartItem[];
+            const isVoucherSale = items.length > 0 && items.every(item => item && item.id && item.id.startsWith('voucher-'));
+            return !isVoucherSale;
+        });
         const newActiveLayawaysInRange = layaways.filter(l => isWithinRange(l.createdAt) && l.status === 'active');
         const allSoldItems = [...directSalesInRange.flatMap(s => s.items || []), ...newActiveLayawaysInRange.flatMap(l => l.items || [])].filter(Boolean);
         const unitsBySeller: { [key: string]: number } = {};

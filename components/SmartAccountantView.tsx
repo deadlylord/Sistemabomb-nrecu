@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod } from '../types';
 import { formatCOP } from '../constants';
 import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
@@ -116,6 +116,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     const endOfSelected = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
     
     const monthlySalesPayments = sales
+        .filter(s => {
+            const items = (Array.isArray(s.items) ? s.items : Object.values(s.items || {})) as any[];
+            const isVoucherSale = items.length > 0 && items.every(item => item && item.id && item.id.startsWith('voucher-'));
+            return !isVoucherSale;
+        })
         .flatMap(s => (Array.isArray(s.payments) ? s.payments : Object.values(s.payments || {})) as any[])
         .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);

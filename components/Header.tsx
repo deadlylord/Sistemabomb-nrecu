@@ -6,7 +6,7 @@ import {
   ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, 
   SwapIcon, BuildingStorefrontIcon, DashboardIcon, AlertTriangleIcon, MenuIcon, CrossIcon, 
   LogoutIcon, ChevronDownIcon, SparklesIcon, ShoppingCartIcon, PackageIcon, CheckIcon,
-  ChevronLeftIcon, ChevronRightIcon
+  ChevronLeftIcon, ChevronRightIcon, TagIcon
 } from './Icons';
 import { APP_VERSIONS } from '../constants';
 
@@ -73,6 +73,7 @@ const Header: React.FC<HeaderProps> = ({
             { view: View.POS, label: 'Punto de Venta', shortLabel: 'POS', description: 'Facturación rápida', icon: StoreIcon },
             { view: View.LAYAWAY, label: 'Abonos y Apartados', shortLabel: 'Abonos', description: 'Gestionar pagos', icon: ReceiptIcon },
             { view: View.INCIDENTS, label: 'Novedades / Cambios', shortLabel: 'Novedades', description: 'Garantías y cambios', icon: AlertTriangleIcon },
+            { view: View.GIFT_VOUCHERS, label: 'Bonos de Regalo', shortLabel: 'Bonos', description: 'Administrar bonos', icon: TagIcon },
             { view: View.CUSTOMERS, label: 'Mis Clientes', shortLabel: 'Clientes', description: 'Directorio', icon: ContactIcon },
         ]
     },
@@ -110,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
-            if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION) return isAdmin;
+            if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION || item.view === View.GIFT_VOUCHERS) return isAdmin;
             return userPermissions.includes(item.view);
         })
     })).filter(group => group.items.length > 0);

@@ -210,6 +210,7 @@ export enum View {
   ROLE_MANAGER = 'role_manager',
   ACCOUNTING = 'accounting',
   FINANCIAL_RECONCILIATION = 'financial_reconciliation',
+  GIFT_VOUCHERS = 'gift_vouchers',
 }
 
 export enum PaymentMethod {

@@ -84,7 +84,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
                     const productsSold = new Map<string, { name: string, quantity: number, revenue: number }>();
                     storeSales.forEach(sale => {
                         (sale.items || []).forEach(item => {
-                            if(!item) return;
+                            if(!item || item.id.startsWith('voucher-')) return;
                             const existing = productsSold.get(item.id);
                             if (existing) {
                                 existing.quantity += item.quantity;
@@ -99,9 +99,11 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
                         .filter(p => p.stock > 0 && !productsSold.has(p.id))
                         .map(p => ({ name: p.name, stock: p.stock, cost: p.cost }));
 
+                    const totalVentas = Array.from(productsSold.values()).reduce((sum, p) => sum + p.revenue, 0);
+
                     return {
                         nombreTienda: store?.name,
-                        totalVentas: storeSales.reduce((sum, s) => sum + s.totalAmount, 0),
+                        totalVentas,
                         productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue),
                         productosEstancados: stagnantProducts.slice(0, 15),
                     };

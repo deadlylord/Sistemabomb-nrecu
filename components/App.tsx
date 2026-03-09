@@ -54,6 +54,7 @@ import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
 import SmartAccountantView from './SmartAccountantView';
 import VersionHistoryModal from './VersionHistoryModal';
 import FinancialReconciliationView from './FinancialReconciliationView';
+import GiftVouchersView from './GiftVouchersView';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -246,6 +247,14 @@ const App: React.FC = () => {
     if (isAdmin) {
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'layaways')), setAllLayaways));
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'incidents')), setAllIncidents));
+      
+      // Ensure Administrator role has gift_vouchers permission
+      const adminRole = roles.find(r => r.name === 'Administrator');
+      if (adminRole && !adminRole.permissions.includes(View.GIFT_VOUCHERS)) {
+        updateDoc(doc(db, 'roles', adminRole.id), {
+          permissions: [...adminRole.permissions, View.GIFT_VOUCHERS]
+        }).catch(err => console.error("Error updating admin permissions:", err));
+      }
     }
     return () => unsubscribers.forEach(unsub => unsub());
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
@@ -312,7 +321,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('stockTakes'), setStockTakes);
-            attach(query(collection(db, 'giftVouchers')), setGiftVouchers);
+            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             break;
         case View.POS:
             attach(storeInventoryQuery, setInventory);
@@ -320,7 +329,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('customers'), setCustomers);
-            attach(query(collection(db, 'giftVouchers')), setGiftVouchers);
+            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             break;
         case View.INVENTORY:
@@ -386,6 +395,9 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('expenses'), setExpenses);
             attach(storeSpecificQuery('incidents'), setIncidents);
+            break;
+        case View.GIFT_VOUCHERS:
+            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
@@ -525,6 +537,18 @@ const App: React.FC = () => {
                 throw new Error("Store document does not exist!");
             }
 
+            // Pre-fetch voucher documents if any to satisfy Firestore requirement (all reads before writes)
+            const voucherDocs: { ref: any, doc: any, paymentAmount: number }[] = [];
+            for (const payment of saleData.payments) {
+                if (payment.method === PaymentMethod.Bono && payment.voucherId) {
+                    const voucherRef = doc(db, 'giftVouchers', payment.voucherId);
+                    const voucherDoc = await transaction.get(voucherRef);
+                    if (voucherDoc.exists()) {
+                        voucherDocs.push({ ref: voucherRef, doc: voucherDoc, paymentAmount: payment.amount });
+                    }
+                }
+            }
+
             let currentInvoiceNumber = storeDoc.data().nextInvoiceNumber;
             
             if (typeof currentInvoiceNumber !== 'number') {
@@ -557,19 +581,13 @@ const App: React.FC = () => {
             transaction.set(saleRef, cleanObject(newSale));
 
             // Handle Gift Voucher Redemptions
-            for (const payment of saleData.payments) {
-                if (payment.method === PaymentMethod.Bono && payment.voucherId) {
-                    const voucherRef = doc(db, 'giftVouchers', payment.voucherId);
-                    const voucherDoc = await transaction.get(voucherRef);
-                    if (voucherDoc.exists()) {
-                        const currentVal = voucherDoc.data().currentValue || 0;
-                        const newVal = Math.max(0, currentVal - payment.amount);
-                        transaction.update(voucherRef, { 
-                            currentValue: newVal,
-                            status: newVal <= 0 ? 'redeemed' : 'active'
-                        });
-                    }
-                }
+            for (const { ref, doc, paymentAmount } of voucherDocs) {
+                const currentVal = doc.data().currentValue || 0;
+                const newVal = Math.max(0, currentVal - paymentAmount);
+                transaction.update(ref, { 
+                    currentValue: newVal,
+                    status: newVal <= 0 ? 'redeemed' : 'active'
+                });
             }
 
             itemsToProcess.forEach(item => {
@@ -1334,6 +1352,15 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
+  const handleUpdateVoucherStatus = async (voucherId: string, status: 'active' | 'redeemed' | 'cancelled') => {
+    try {
+      await updateDoc(doc(db, 'giftVouchers', voucherId), { status });
+    } catch (error) {
+      console.error("Error updating voucher status:", error);
+      alert("Error al actualizar el estado del bono.");
+    }
+  };
+
   const handleCreateGiftVoucher = async (voucher: Omit<GiftVoucher, 'id'>) => {
     try {
       const newRef = doc(collection(db, 'giftVouchers'));
@@ -1809,6 +1836,15 @@ const App: React.FC = () => {
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
             />
+        )}
+        {currentView === View.GIFT_VOUCHERS && (
+          <GiftVouchersView 
+            vouchers={giftVouchers} 
+            sellers={sellers} 
+            stores={stores} 
+            currentUser={currentUser} 
+            onUpdateVoucherStatus={handleUpdateVoucherStatus} 
+          />
         )}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
