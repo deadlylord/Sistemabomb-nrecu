@@ -22,8 +22,8 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 2,
-    barcodeHeight: 30,
+    barcodeWidth: 1.5,
+    barcodeHeight: 25,
   };
 
   const [config, setConfig] = useState<LabelConfig>(store.labelConfig || DEFAULT_CONFIG);
@@ -111,6 +111,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               align-items: center;
               text-align: center;
               box-sizing: border-box;
+              padding: 0;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
                 height: ${config.width}mm;
@@ -127,9 +128,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; }
             .barcode { 
-              max-width: ${config.orientation === 'landscape' ? config.height - 2 : config.width - 2}mm; 
+              width: 100%;
+              max-width: 100%; 
               height: auto; 
-              margin: 0.2mm 0;
+              margin: 0.1mm 0;
               shape-rendering: crispEdges;
             }
             .sku { font-size: ${config.fontSize * 0.9}pt; }
@@ -234,7 +236,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             </div>
           </div>
 
-          <h3 className="font-bold text-gray-700 dark:text-text-light border-t border-gray-200 dark:border-gray-700 pt-4 pb-2">Código de Barras</h3>
+          <h3 className="font-bold text-gray-700 dark:text-text-light border-t border-gray-200 dark:border-gray-700 pt-4 pb-2 flex justify-between items-center">
+            <span>Código de Barras</span>
+            <span className="text-[10px] text-accent font-black uppercase tracking-widest">Sugerido: 1.2 - 1.5</span>
+          </h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Ancho Barras</label>

@@ -43,8 +43,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 2,
-    barcodeHeight: 30,
+    barcodeWidth: 1.5,
+    barcodeHeight: 25,
   };
 
   const handleQuantityChange = (productId: string, qty: number) => {
@@ -145,6 +145,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               align-items: center;
               text-align: center;
               box-sizing: border-box;
+              padding: 0;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
                 height: ${config.width}mm;
@@ -161,9 +162,10 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
             .barcode { 
-              max-width: ${config.orientation === 'landscape' ? config.height - 2 : config.width - 2}mm; 
+              width: 100%;
+              max-width: 100%; 
               height: auto; 
-              margin: 0.2mm 0;
+              margin: 0.1mm 0;
               shape-rendering: crispEdges;
             }
             .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }

@@ -31,10 +31,29 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.5',
+    date: '2026-03-18',
+    description: 'Optimización de Espacio en Etiquetas y Lectura de Código de Barras',
+    isCurrent: true,
+    changes: [
+      'Espacio Central: Se eliminaron márgenes internos y rellenos innecesarios para que las etiquetas queden más juntas en impresiones multi-columna.',
+      'Código de Barras: Se optimizó el ancho del código de barras para ocupar el 100% del espacio disponible, mejorando la legibilidad.',
+      'Configuración Sugerida: Se añadieron valores recomendados en el panel de configuración para maximizar la eficiencia del papel.'
+    ]
+  },
+  {
+    version: '1.1.4',
+    date: '2026-03-18',
+    description: 'Corrección de Error de Fetch (Getter-only)',
+    changes: [
+      'Error de Fetch: Se implementó un parche en index.html para evitar que polyfills externos intenten sobrescribir window.fetch cuando es de solo lectura.',
+      'Estabilidad: Se mejoró la compatibilidad con el entorno de ejecución de AI Studio.'
+    ]
+  },
+  {
     version: '1.1.3',
     date: '2026-03-18',
     description: 'Ajuste de Espaciado entre Columnas de Etiquetas',
-    isCurrent: true,
     changes: [
       'Espacio entre Columnas: Se añadió una opción para configurar el espacio (gap) entre etiquetas en impresiones multi-columna.',
       'Eliminación de Divisiones: Al establecer el espacio en 0, las etiquetas quedan perfectamente pegadas una de la otra.',
