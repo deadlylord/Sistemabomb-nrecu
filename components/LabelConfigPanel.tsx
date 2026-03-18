@@ -21,7 +21,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 1.5,
+    barcodeWidth: 2,
     barcodeHeight: 30,
   };
 
@@ -68,7 +68,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             jsbarcode-format="CODE128"
             jsbarcode-width="${config.barcodeWidth}"
             jsbarcode-height="${config.barcodeHeight}"
-            jsbarcode-fontSize="10"
+            jsbarcode-displayValue="false"
             jsbarcode-margin="0"
           ></svg>
           <div class="sku">SKU-TEST-${i + 1}</div>
@@ -124,7 +124,12 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             }
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; }
-            .barcode { max-width: ${config.orientation === 'landscape' ? config.height - 4 : config.width - 4}mm; height: auto; margin: 0.5mm 0; }
+            .barcode { 
+              max-width: ${config.orientation === 'landscape' ? config.height - 2 : config.width - 2}mm; 
+              height: auto; 
+              margin: 0.2mm 0;
+              shape-rendering: crispEdges;
+            }
             .sku { font-size: ${config.fontSize * 0.9}pt; }
             .cipher { font-size: ${config.fontSize * 0.8}pt; border-top: 0.1mm solid #000; }
             .price { font-size: ${config.fontSize * 1.2}pt; font-weight: bold; }

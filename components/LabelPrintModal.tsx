@@ -38,7 +38,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 1.5,
+    barcodeWidth: 2,
     barcodeHeight: 30,
   };
 
@@ -84,14 +84,14 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               <div class="label-inner">
                 <div class="store-name">${store.receiptName || store.name || 'Boutique'}</div>
                 ${config.showName ? `<div class="product-name">${product.name}</div>` : ''}
-                <svg class="barcode" 
-                  jsbarcode-value="${product.sku}"
-                  jsbarcode-format="CODE128"
-                  jsbarcode-width="${config.barcodeWidth}"
-                  jsbarcode-height="${config.barcodeHeight}"
-                  jsbarcode-fontSize="10"
-                  jsbarcode-margin="0"
-                ></svg>
+                  <svg class="barcode" 
+                    jsbarcode-value="${product.sku}"
+                    jsbarcode-format="CODE128"
+                    jsbarcode-width="${config.barcodeWidth}"
+                    jsbarcode-height="${config.barcodeHeight}"
+                    jsbarcode-displayValue="false"
+                    jsbarcode-margin="0"
+                  ></svg>
                 ${config.showSku ? `<div class="sku">${product.sku}</div>` : ''}
                 <div class="cipher">${cipherCode}</div>
                 ${config.showPrice ? `<div class="price">$ ${product.price.toLocaleString()}</div>` : ''}
@@ -154,7 +154,12 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             }
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
-            .barcode { max-width: ${config.orientation === 'landscape' ? config.height - 4 : config.width - 4}mm; height: auto; margin: 0.5mm 0; }
+            .barcode { 
+              max-width: ${config.orientation === 'landscape' ? config.height - 2 : config.width - 2}mm; 
+              height: auto; 
+              margin: 0.2mm 0;
+              shape-rendering: crispEdges;
+            }
             .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
             .cipher { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
             .price { font-size: ${config.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
