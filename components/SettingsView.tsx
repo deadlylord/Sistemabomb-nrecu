@@ -136,10 +136,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
       }
   };
 
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if(localSettings) {
         onSave(localSettings);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
     }
   };
   
@@ -505,7 +509,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             </div>
           </div>
 
-          <div className="flex justify-end pt-4">
+          <div className="flex justify-end pt-4 items-center gap-4">
+            {saveSuccess && (
+              <span className="text-green-600 font-bold text-sm animate-fade-in flex items-center gap-1">
+                <CheckIcon className="w-4 h-4" /> ¡Ajustes guardados!
+              </span>
+            )}
             <button type="submit" className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover">
               <CheckIcon />
               <span>Guardar Ajustes</span>

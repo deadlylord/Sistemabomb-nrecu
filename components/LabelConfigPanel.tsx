@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { LabelConfig, Store } from '../types';
 import { CheckIcon } from './Icons';
 import { encodePrice } from '../constants';
+import { TagIcon } from 'lucide-react';
 
 interface LabelConfigPanelProps {
   store: Store;
@@ -14,6 +15,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     width: 57,
     height: 48,
     columns: 1,
+    orientation: 'portrait',
     fontSize: 8,
     showPrice: true,
     showName: true,
@@ -23,26 +25,121 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     barcodeHeight: 30,
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
     setConfig(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : parseFloat(value) || 0
+      [name]: type === 'checkbox' ? checked : (name === 'orientation' ? value : parseFloat(value) || 0)
     }));
   };
 
+  const [showSuccess, setShowSuccess] = useState(false);
+
   const handleSave = () => {
     onSave(config);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const handleTestPrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const totalWidth = config.width * config.columns;
+    const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => `
+      <div class="label">
+        <div class="label-inner">
+          <div class="store-name">${store.receiptName || store.name}</div>
+          <div class="product-name">PRODUCTO DE PRUEBA</div>
+          <div class="barcode-placeholder">|||||||||||||||||||||||||||</div>
+          <div class="sku">SKU-TEST-${i + 1}</div>
+          <div class="cipher">180326-ABCDE</div>
+          <div class="price">$ 99.999</div>
+        </div>
+      </div>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Prueba de Impresión</title>
+          <style>
+            @page { 
+              size: ${totalWidth}mm ${config.height}mm; 
+              margin: 0; 
+            }
+            body { margin: 0; font-family: monospace; }
+            .container {
+              display: grid;
+              grid-template-columns: repeat(${config.columns}, 1fr);
+              width: ${totalWidth}mm;
+            }
+            .label { 
+              width: ${config.width}mm; 
+              height: ${config.height}mm; 
+              box-sizing: border-box; 
+              border: 0.1mm solid #eee;
+              position: relative;
+              overflow: hidden;
+            }
+            .label-inner {
+              display: flex; 
+              flex-direction: column; 
+              justify-content: center; 
+              align-items: center;
+              text-align: center;
+              padding: 1mm;
+              box-sizing: border-box;
+              ${config.orientation === 'landscape' ? `
+                width: ${config.height}mm;
+                height: ${config.width}mm;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(-90deg);
+                transform-origin: center;
+              ` : `
+                width: 100%;
+                height: 100%;
+              `}
+            }
+            .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; }
+            .product-name { font-size: ${config.fontSize}pt; font-weight: bold; }
+            .barcode-placeholder { font-size: 10pt; margin: 1mm 0; }
+            .sku { font-size: ${config.fontSize * 0.9}pt; }
+            .cipher { font-size: ${config.fontSize * 0.8}pt; border-top: 0.1mm solid #000; }
+            .price { font-size: ${config.fontSize * 1.2}pt; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="container">${labelsHtml}</div>
+          <script>
+            window.onload = () => {
+              window.print();
+              window.close();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {showSuccess && (
+        <div className="absolute -top-12 right-0 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in flex items-center gap-2 z-50">
+          <CheckIcon className="w-4 h-4" />
+          <span className="text-xs font-bold uppercase tracking-widest">Configuración Guardada</span>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-          <h3 className="font-bold text-gray-700 dark:text-text-light border-b border-gray-200 dark:border-gray-700 pb-2">Dimensiones (mm)</h3>
+          <h3 className="font-bold text-gray-700 dark:text-text-light border-b border-gray-200 dark:border-gray-700 pb-2">Dimensiones y Diseño</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Ancho</label>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Ancho (mm)</label>
               <input 
                 type="number" 
                 name="width" 
@@ -52,7 +149,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Alto</label>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Alto (mm)</label>
               <input 
                 type="number" 
                 name="height" 
@@ -69,7 +166,21 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 value={config.columns} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                min="1"
+                max="4"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Orientación</label>
+              <select 
+                name="orientation" 
+                value={config.orientation} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+              >
+                <option value="portrait">Vertical (Portrait)</option>
+                <option value="landscape">Horizontal (Landscape)</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tamaño Fuente</label>
@@ -130,51 +241,84 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold text-gray-700 dark:text-text-light">Vista Previa</h3>
-          <div className="flex justify-center bg-gray-200 dark:bg-gray-900 p-8 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 overflow-auto min-h-[300px] items-center">
+          <h3 className="font-bold text-gray-700 dark:text-text-light flex justify-between items-center">
+            <span>Vista Previa del Diseño</span>
+            <span className="text-[10px] uppercase bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
+              {config.columns} {config.columns === 1 ? 'Columna' : 'Columnas'}
+            </span>
+          </h3>
+          <div className="flex justify-center bg-gray-200 dark:bg-gray-900 p-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 overflow-auto min-h-[400px] items-start">
             <div 
-              style={{
-                width: `${config.width}mm`,
-                height: `${config.height}mm`,
-                backgroundColor: 'white',
-                padding: '2mm',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                textAlign: 'center',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                color: 'black',
-                fontFamily: 'monospace'
+              className="grid gap-2 p-2 bg-white/50 dark:bg-white/10 rounded shadow-inner"
+              style={{ 
+                gridTemplateColumns: `repeat(${config.columns}, 1fr)`,
+                width: 'max-content'
               }}
             >
-              <div style={{ fontSize: `${config.fontSize * 0.8}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm' }}>{store.receiptName || store.name}</div>
-              {config.showName && <div style={{ fontSize: `${config.fontSize}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', whiteSpace: 'nowrap', overflow: 'hidden', width: '100%' }}>PRODUCTO DE EJEMPLO</div>}
-              
-              <div style={{ width: '100%', height: `${config.barcodeHeight * 0.3}mm`, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '1mm 0', border: '1px dashed #ccc' }}>
-                <span style={{ fontSize: '6pt', color: '#999' }}>BARCODE {config.barcodeWidth}x{config.barcodeHeight}</span>
-              </div>
+              {[...Array(config.columns * 2)].map((_, i) => (
+                <div 
+                  key={i}
+                  className="relative overflow-hidden"
+                  style={{
+                    width: `${config.width}mm`,
+                    height: `${config.height}mm`,
+                    backgroundColor: 'white',
+                    boxSizing: 'border-box',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                    color: 'black',
+                    fontFamily: 'monospace',
+                    border: '1px solid #ddd'
+                  }}
+                >
+                  <div 
+                    className="flex flex-col justify-center items-center text-center p-[2mm] box-border"
+                    style={{
+                      width: config.orientation === 'landscape' ? `${config.height}mm` : '100%',
+                      height: config.orientation === 'landscape' ? `${config.width}mm` : '100%',
+                      position: config.orientation === 'landscape' ? 'absolute' : 'relative',
+                      top: config.orientation === 'landscape' ? '50%' : 'auto',
+                      left: config.orientation === 'landscape' ? '50%' : 'auto',
+                      transform: config.orientation === 'landscape' ? 'translate(-50%, -50%) rotate(-90deg)' : 'none',
+                      transformOrigin: 'center'
+                    }}
+                  >
+                    <div style={{ fontSize: `${config.fontSize * 0.7}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', opacity: 0.8 }}>{store.receiptName || store.name}</div>
+                    {config.showName && <div style={{ fontSize: `${config.fontSize * 0.9}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', whiteSpace: 'nowrap', overflow: 'hidden', width: '100%' }}>PRODUCTO ${i + 1}</div>}
+                    
+                    <div style={{ width: '100%', height: `${config.barcodeHeight * 0.25}mm`, backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.5mm 0', border: '0.5px dashed #ccc' }}>
+                      <span style={{ fontSize: '5pt', color: '#999' }}>BARCODE</span>
+                    </div>
 
-              {config.showSku && <div style={{ fontSize: `${config.fontSize * 0.9}pt`, fontWeight: 'bold' }}>SKU-123456</div>}
-              <div style={{ fontSize: `${config.fontSize * 0.8}pt`, fontWeight: 'bold', borderTop: '0.2mm solid #000', paddingTop: '0.5mm', marginTop: '0.5mm' }}>
-                {new Date().toISOString().split('T')[0].replace(/-/g, '').slice(2)}-{encodePrice(50000)}
-              </div>
-              {config.showPrice && <div style={{ fontSize: `${config.fontSize * 1.2}pt`, fontWeight: 'black', marginTop: '1mm' }}>$ 50.000</div>}
-              {config.showSupplier && <div style={{ fontSize: `${config.fontSize * 0.7}pt`, opacity: 0.7 }}>PROVEEDOR ABC</div>}
+                    {config.showSku && <div style={{ fontSize: `${config.fontSize * 0.8}pt`, fontWeight: 'bold' }}>SKU-TEST-${i + 1}</div>}
+                    <div style={{ fontSize: `${config.fontSize * 0.7}pt`, fontWeight: 'bold', borderTop: '0.2mm solid #000', paddingTop: '0.5mm', marginTop: '0.5mm' }}>
+                      180326-ABCDE
+                    </div>
+                    {config.showPrice && <div style={{ fontSize: `${config.fontSize * 1.1}pt`, fontWeight: 'black', marginTop: '0.5mm' }}>$ 99.999</div>}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <p className="text-[10px] text-gray-500 text-center italic">La vista previa es una aproximación. El resultado final depende de la impresora.</p>
+          <div className="flex gap-3">
+            <button 
+              onClick={handleTestPrint}
+              className="flex-1 py-3 text-xs font-black uppercase text-accent border-2 border-accent rounded-xl hover:bg-accent hover:text-white transition-all flex items-center justify-center gap-2"
+            >
+              <TagIcon className="w-4 h-4" />
+              Impresión de Prueba
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-500 text-center italic">La vista previa muestra {config.columns * 2} etiquetas para visualizar el diseño multi-columna.</p>
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
         <button 
           onClick={handleSave}
-          className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover"
+          className="bg-accent text-white font-black uppercase tracking-widest py-4 px-10 rounded-2xl flex items-center justify-center space-x-2 transition-all duration-300 hover:scale-105 shadow-lg shadow-accent/20"
         >
-          <CheckIcon />
-          <span>Guardar Configuración de Etiquetas</span>
+          <CheckIcon className="w-5 h-5" />
+          <span>Guardar Configuración</span>
         </button>
       </div>
     </div>
