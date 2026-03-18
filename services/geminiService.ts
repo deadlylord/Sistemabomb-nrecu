@@ -80,6 +80,59 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
   }
 };
 
+export const generateStrategicReport = async (data: any): Promise<string> => {
+  if (!data) {
+    throw new Error("Data for report cannot be empty.");
+  }
+  
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  try {
+    const prompt = `
+      **PERSONA:** Actúa como un Senior Business Consultant y Estratega de Retail de Lujo y Moda. Tu especialidad es transformar datos crudos en estrategias accionables que aumenten el margen neto y la fidelización.
+
+      **OBJETIVO:** Generar un "Reporte Estratégico de Alto Impacto" basado en los datos proporcionados.
+
+      **DATOS DEL NEGOCIO:**
+      ${JSON.stringify(data, null, 2)}
+
+      **ESTRUCTURA DEL REPORTE (MANDATORIA):**
+      1. **Resumen Ejecutivo (Executive Summary):** Una visión de 30,000 pies sobre la salud del negocio en este periodo.
+      2. **Análisis de Ventas y Rentabilidad:** Identifica qué está moviendo la aguja y qué está drenando recursos.
+      3. **Diagnóstico de Inventario:** Análisis de rotación. ¿Qué debemos liquidar? ¿Qué debemos reponer con urgencia?
+      4. **Comportamiento del Cliente:** Análisis de retención y riesgo de fuga.
+      5. **Plan de Acción (Actionable Strategies):** 3-5 estrategias concretas, numeradas, con pasos específicos a seguir mañana mismo.
+      6. **Proyección y Recomendación:** ¿Hacia dónde vamos si seguimos así?
+
+      **INSTRUCCIONES DE ESTILO:**
+      - Usa Markdown editorial de alta calidad.
+      - Títulos elegantes (##), subtítulos (###).
+      - Usa **negritas** para cifras clave y conceptos estratégicos.
+      - El tono debe ser inspirador pero basado en datos duros.
+      - Sé conciso pero profundo. Evita generalidades.
+
+      Responde en español.
+    `;
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+    });
+    
+    const text = response.text;
+
+    if (!text) {
+      throw new Error("Received an empty response from the Strategic Report API.");
+    }
+    
+    return text.trim();
+    
+  } catch (error) {
+    console.error("Error calling Gemini API for strategic report:", error);
+    throw new Error("Failed to generate strategic report from Gemini API.");
+  }
+};
+
 export const getAccountingChatResponse = async (
   accountingData: any, 
   history: { role: 'user' | 'model', parts: { text: string }[] }[], 

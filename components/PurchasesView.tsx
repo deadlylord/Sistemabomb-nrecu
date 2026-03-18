@@ -841,6 +841,19 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                             onClick={() => {
                                 const product = inventory.find(inv => inv.id === labelPurchase.productId);
                                 if (!product) return;
+                                const store = stores.find(s => s.id === labelPurchase.storeId);
+                                const config = store?.labelConfig || {
+                                   width: 57,
+                                   height: 48,
+                                   columns: 1,
+                                   fontSize: 8,
+                                   showPrice: true,
+                                   showName: true,
+                                   showSku: true,
+                                   showSupplier: false,
+                                   barcodeWidth: 1.2,
+                                   barcodeHeight: 30,
+                                };
                                 const encoded = encodePrice(product.price);
                                 const dateStr = labelPurchase.createdAt.split('T')[0].replace(/-/g, '').slice(2);
                                 const cipherCode = `${dateStr}-${encoded}`;
@@ -848,21 +861,38 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                 const printWindow = window.open('', '_blank');
                                 if (!printWindow) return;
 
-                                const labelsHtml = Array.from({ length: labelQuantity }).map((_, i) => `
-                                    <div class="label">
-                                        <div class="store-name">${stores.find(s => s.id === labelPurchase.storeId)?.name || 'Boutique'}</div>
-                                        <div class="product-name">${product.name}</div>
-                                        <svg class="barcode" 
-                                            jsbarcode-value="${product.sku}"
-                                            jsbarcode-format="CODE128"
-                                            jsbarcode-width="1.2"
-                                            jsbarcode-height="35"
-                                            jsbarcode-fontSize="10"
-                                            jsbarcode-margin="0"
-                                        ></svg>
-                                        <div class="cipher">${cipherCode}</div>
-                                    </div>
-                                `).join('');
+                                const labels = Array.from({ length: labelQuantity });
+                                let labelsHtml = '';
+                                for (let i = 0; i < labels.length; i += config.columns) {
+                                    labelsHtml += '<div class="container">';
+                                    for (let j = 0; j < config.columns; j++) {
+                                        if (i + j < labels.length) {
+                                            labelsHtml += `
+                                                <div class="label">
+                                                    <div class="store-name">${store?.receiptName || store?.name || 'Boutique'}</div>
+                                                    ${config.showName ? `<div class="product-name">${product.name}</div>` : ''}
+                                                    <svg class="barcode" 
+                                                        jsbarcode-value="${product.sku}"
+                                                        jsbarcode-format="CODE128"
+                                                        jsbarcode-width="${config.barcodeWidth}"
+                                                        jsbarcode-height="${config.barcodeHeight}"
+                                                        jsbarcode-fontSize="10"
+                                                        jsbarcode-margin="0"
+                                                    ></svg>
+                                                    ${config.showSku ? `<div class="sku">${product.sku}</div>` : ''}
+                                                    <div class="cipher">${cipherCode}</div>
+                                                    ${config.showPrice ? `<div class="price">$ ${product.price.toLocaleString()}</div>` : ''}
+                                                    ${config.showSupplier && product.supplier ? `<div class="supplier">${product.supplier}</div>` : ''}
+                                                </div>
+                                            `;
+                                        } else {
+                                            labelsHtml += '<div class="label"></div>';
+                                        }
+                                    }
+                                    labelsHtml += '</div>';
+                                }
+
+                                const totalWidth = config.width * config.columns;
 
                                 printWindow.document.write(`
                                     <html>
@@ -870,24 +900,33 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                                             <title>Imprimir Etiquetas</title>
                                             <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
                                             <style>
-                                                @page { size: 40mm 25mm; margin: 0; }
+                                                @page { size: ${totalWidth}mm ${config.height}mm; margin: 0; }
                                                 body { margin: 0; font-family: 'Courier New', Courier, monospace; }
+                                                .container {
+                                                    display: grid;
+                                                    grid-template-columns: repeat(${config.columns}, 1fr);
+                                                    width: ${totalWidth}mm;
+                                                    page-break-after: always;
+                                                }
                                                 .label { 
-                                                    width: 40mm; 
-                                                    height: 25mm; 
+                                                    width: ${config.width}mm; 
+                                                    height: ${config.height}mm; 
                                                     padding: 1mm; 
                                                     box-sizing: border-box; 
                                                     display: flex; 
-                                                    flex-direction: column; 
+                                                     flex-direction: column; 
                                                     justify-content: center; 
                                                     align-items: center;
                                                     text-align: center;
-                                                    page-break-after: always;
+                                                    overflow: hidden;
                                                 }
-                                                .store-name { font-size: 6pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
-                                                .product-name { font-size: 7pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
-                                                .barcode { max-width: 38mm; height: auto; margin: 0.5mm 0; }
-                                                .cipher { font-size: 7pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+                                                .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
+                                                .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
+                                                .barcode { max-width: ${config.width - 4}mm; height: auto; margin: 0.5mm 0; }
+                                                .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
+                                                .cipher { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+                                                .price { font-size: ${config.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
+                                                .supplier { font-size: ${config.fontSize * 0.7}pt; opacity: 0.7; }
                                             </style>
                                         </head>
                                         <body>

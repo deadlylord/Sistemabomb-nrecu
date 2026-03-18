@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Category, Product } from '../types';
 import { EditIcon, CheckIcon, PlusCircleIcon, TrashIcon } from './Icons';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface CategoryManagerProps {
   categories: Category[];
@@ -17,6 +18,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, inventory
   const [newCategoryName, setNewCategoryName] = useState('');
   // FIX: Changed state to handle string IDs.
   const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
 
   const handleAdd = () => {
     if (newCategoryName.trim()) {
@@ -90,7 +92,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, inventory
                           <EditIcon />
                         </button>
                         <button 
-                            onClick={() => onDeleteCategory(cat.id)} 
+                            onClick={() => setCategoryToDelete(cat)} 
                             disabled={isUsed}
                             className="text-gray-500 dark:text-text-dark hover:text-red-500 disabled:text-gray-400/50 dark:disabled:text-gray-600 disabled:cursor-not-allowed p-1"
                             title={isUsed ? "La categoría está en uso por productos" : "Eliminar categoría"}
@@ -104,6 +106,15 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ categories, inventory
             );
         })}
       </div>
+      
+      <DeleteConfirmationModal
+        isOpen={!!categoryToDelete}
+        onClose={() => setCategoryToDelete(null)}
+        onConfirm={() => categoryToDelete && onDeleteCategory(categoryToDelete.id)}
+        title="¿Eliminar Categoría?"
+        message="¿Estás seguro de que deseas eliminar esta categoría? Esta acción no se puede deshacer."
+        itemName={categoryToDelete?.name}
+      />
     </div>
   );
 };

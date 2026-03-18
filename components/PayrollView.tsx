@@ -233,7 +233,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     }).forEach(sale => {
         const dateStr = toLocalDateString(new Date(sale.createdAt));
         const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
-        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + saleUnits);
+        
+        const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as any[];
+        const bonoPaymentTotal = payments.filter(p => p.method === 'Bono de Regalo').reduce((sum, p) => sum + p.amount, 0);
+        const bonoRatio = sale.totalAmount > 0 ? (bonoPaymentTotal / sale.totalAmount) : 0;
+        const unitsToCount = saleUnits * (1 - bonoRatio);
+        
+        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + unitsToCount);
     });
 
     layaways.filter(layaway => {
@@ -242,7 +248,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     }).forEach(layaway => {
         const dateStr = toLocalDateString(new Date(layaway.createdAt));
         const layawayUnits = layaway.items.reduce((sum, item) => sum + item.quantity, 0);
-        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + layawayUnits);
+        
+        const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as any[];
+        const bonoPaymentTotal = payments.filter(p => p.method === 'Bono de Regalo').reduce((sum, p) => sum + p.amount, 0);
+        const bonoRatio = layaway.totalAmount > 0 ? (bonoPaymentTotal / layaway.totalAmount) : 0;
+        const unitsToCount = layawayUnits * (1 - bonoRatio);
+        
+        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + unitsToCount);
     });
 
     const allDates = new Set<string>([...loginsByDay.keys(), ...salesAndLayawaysByDay.keys()]);

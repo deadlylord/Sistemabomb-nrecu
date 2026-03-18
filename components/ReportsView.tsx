@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Sale, Product, Store, Category } from '../types';
-import { analyzeSalesData } from '../services/geminiService';
-import { SparklesIcon, CrossIcon } from './Icons';
+import { Sale, Product, Store, Category, CartItem } from '../types';
+import { analyzeSalesData, generateStrategicReport } from '../services/geminiService';
+import { SparklesIcon, CrossIcon, FileTextIcon } from './Icons';
 
 interface ReportsModalProps {
   isOpen: boolean;
@@ -36,6 +36,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
     const [customQuery, setCustomQuery] = useState('');
     const [analysis, setAnalysis] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isStrategicLoading, setIsStrategicLoading] = useState(false);
     const [error, setError] = useState('');
 
     if (!isOpen) return null;
@@ -48,14 +49,16 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
         );
     };
 
-    const handleGenerateAnalysis = async (query: string) => {
-        setIsLoading(true);
+    const handleGenerateAnalysis = async (query: string, isStrategic: boolean = false) => {
+        if (isStrategic) setIsStrategicLoading(true);
+        else setIsLoading(true);
         setError('');
         setAnalysis('');
 
         if (selectedStoreIds.length === 0) {
             setError('Por favor, selecciona al menos una tienda para analizar.');
             setIsLoading(false);
+            setIsStrategicLoading(false);
             return;
         }
 
@@ -83,7 +86,8 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
                     
                     const productsSold = new Map<string, { name: string, quantity: number, revenue: number }>();
                     storeSales.forEach(sale => {
-                        (sale.items || []).forEach(item => {
+                        const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[];
+                        items.forEach(item => {
                             if(!item || item.id.startsWith('voucher-')) return;
                             const existing = productsSold.get(item.id);
                             if (existing) {
@@ -104,18 +108,21 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
                     return {
                         nombreTienda: store?.name,
                         totalVentas,
-                        productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue),
+                        productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue).slice(0, 20),
                         productosEstancados: stagnantProducts.slice(0, 15),
                     };
                 })
             };
 
-            const result = await analyzeSalesData(dataForAI, query);
+            const result = isStrategic 
+                ? await generateStrategicReport(dataForAI)
+                : await analyzeSalesData(dataForAI, query);
             setAnalysis(result);
         } catch (e: any) {
             setError(e.message || 'Ocurrió un error desconocido al generar el análisis.');
         } finally {
             setIsLoading(false);
+            setIsStrategicLoading(false);
         }
     };
 
@@ -175,21 +182,46 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
                             <label htmlFor="customQuery" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">O haz tu propia pregunta</label>
                             <textarea id="customQuery" value={customQuery} onChange={e => setCustomQuery(e.target.value)} rows={2} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md" placeholder="Ej: ¿Qué categoría se vendió más en Divino la semana pasada?"/>
                         </div>
-                        <div className="flex justify-end">
-                            <button onClick={() => handleGenerateAnalysis(customQuery || 'Análisis General del Periodo')} disabled={isLoading} className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 hover:bg-accent-hover disabled:bg-gray-500">
+                        <div className="flex flex-col sm:flex-row justify-end gap-2">
+                            <button 
+                                onClick={() => handleGenerateAnalysis('', true)} 
+                                disabled={isLoading || isStrategicLoading} 
+                                className="bg-gradient-to-r from-purple-600 to-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 hover:opacity-90 disabled:bg-gray-500 transition-all active:scale-95"
+                            >
+                                <FileTextIcon className="w-5 h-5" />
+                                <span>{isStrategicLoading ? 'Generando Reporte...' : 'Reporte Estratégico'}</span>
+                            </button>
+                            <button 
+                                onClick={() => handleGenerateAnalysis(customQuery || 'Análisis General del Periodo')} 
+                                disabled={isLoading || isStrategicLoading} 
+                                className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 hover:bg-accent-hover disabled:bg-gray-500 transition-all active:scale-95"
+                            >
                                 <SparklesIcon />
-                                <span>{isLoading ? 'Analizando...' : 'Generar Análisis'}</span>
+                                <span>{isLoading ? 'Analizando...' : 'Análisis Personalizado'}</span>
                             </button>
                         </div>
                     </div>
 
-                    {(isLoading || analysis || error) && (
-                        <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-lg">
-                            <h3 className="text-xl font-bold text-accent mb-4">Resultado del Análisis</h3>
-                            {isLoading && (
+                    {(isLoading || isStrategicLoading || analysis || error) && (
+                        <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-accent">Resultado del Análisis</h3>
+                                {analysis && (
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(analysis);
+                                            alert('Copiado al portapapeles');
+                                        }}
+                                        className="text-xs bg-white dark:bg-gray-800 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-700 hover:bg-gray-50 flex items-center gap-1 font-bold"
+                                    >
+                                        Copiar
+                                    </button>
+                                )}
+                            </div>
+                            {(isLoading || isStrategicLoading) && (
                                 <div className="flex items-center justify-center py-10">
                                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
-                                    <p className="ml-4 text-gray-500 dark:text-text-dark">Generando insights...</p>
+                                    <p className="ml-4 text-gray-500 dark:text-text-dark">Generando insights estratégicos...</p>
                                 </div>
                             )}
                             {error && <p className="text-red-500 bg-red-500/10 p-3 rounded-md">{error}</p>}

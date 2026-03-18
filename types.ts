@@ -69,6 +69,19 @@ export interface ProductHistoryLog {
   details: string;
 }
 
+export interface LabelConfig {
+  width: number; // mm
+  height: number; // mm
+  columns: number;
+  fontSize: number;
+  showPrice: boolean;
+  showName: boolean;
+  showSku: boolean;
+  showSupplier: boolean;
+  barcodeWidth: number;
+  barcodeHeight: number;
+}
+
 export interface Store {
   id: string;
   name: string;
@@ -99,6 +112,8 @@ export interface Store {
     qr: string;
     bank: string;
   };
+  paymentCommissions?: { [key in PaymentMethod]?: number };
+  labelConfig?: LabelConfig;
 }
 
 export interface InventoryTransfer {
@@ -423,4 +438,5 @@ export interface GiftVoucher {
   customerPhone?: string;
   storeId: string;
   createdBy: string;
+  saleId?: string;
 }

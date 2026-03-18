@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Store, Seller, Role, Product, Category } from '../types';
-import { CheckIcon, DownloadIcon, DollarIcon, BuildingStorefrontIcon } from './Icons';
+import { Store, Seller, Role, Product, Category, PaymentMethod, LabelConfig } from '../types';
+import { CheckIcon, DownloadIcon, DollarIcon, BuildingStorefrontIcon, TagIcon } from './Icons';
 import { compressImage } from '../services/storageService';
 import { db } from '../firebase';
+import { LabelConfigPanel } from './LabelConfigPanel';
 
 interface SettingsViewProps {
   stores: Store[];
@@ -59,6 +60,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             accountNames: {
                 ...(prev.accountNames || { cash: 'Efectivo', qr: 'Bancolombia (QR)', bank: 'Bancos / Otros' }),
                 [key]: value
+            }
+        }) : null);
+        return;
+    }
+
+    if (name.startsWith('commission_')) {
+        const method = name.split('_')[1] as PaymentMethod;
+        setLocalSettings(prev => prev ? ({
+            ...prev,
+            paymentCommissions: {
+                ...(prev.paymentCommissions || {}),
+                [method]: parseFloat(value) / 100 || 0
             }
         }) : null);
         return;
@@ -181,6 +194,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     document.body.removeChild(link);
   };
   
+  const handleLabelConfigSave = (config: LabelConfig) => {
+    if (!localSettings) return;
+    setLocalSettings(prev => prev ? ({ ...prev, labelConfig: config }) : null);
+    onSave({ ...localSettings, labelConfig: config });
+  };
+
   if (!localSettings) {
       return (
         <div className="max-w-2xl mx-auto">
@@ -346,6 +365,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
              </div>
           </div>
 
+          <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Comisiones por Medio de Pago (%)</h3>
+          <p className="text-xs text-gray-500 italic -mt-4">Define el porcentaje que cobra cada servicio (datáfono, Addi, etc) para calcular ganancias reales.</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.values(PaymentMethod).filter(m => m !== PaymentMethod.Bono && m !== PaymentMethod.Efectivo).map(method => (
+              <div key={method} className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">{method}</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    name={`commission_${method}`}
+                    value={((localSettings.paymentCommissions?.[method] || 0) * 100).toFixed(2)}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 pr-6 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="0.00"
+                    step="0.01"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
            <div className="pt-4 border-t-2 border-gray-200 dark:border-gray-700">
             <label htmlFor="nextInvoiceNumber" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Próximo Número de Factura</label>
             <input
@@ -471,6 +512,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
             </button>
           </div>
         </form>
+
+        <div className="mt-8 pt-6 border-t-2 border-gray-200 dark:border-gray-700">
+            <h3 className="text-xl font-bold text-accent mb-4 flex items-center gap-2">
+                <TagIcon className="w-6 h-6" />
+                Configuración de Etiquetas
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">Configura las dimensiones y la información que se mostrará en las etiquetas de productos.</p>
+            <LabelConfigPanel store={localSettings} onSave={handleLabelConfigSave} />
+        </div>
 
         {isAdmin && (
           <div className="mt-8 pt-6 border-t-2 border-dashed border-gray-400/50">

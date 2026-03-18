@@ -122,12 +122,12 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             return !isVoucherSale;
         })
         .flatMap(s => (Array.isArray(s.payments) ? s.payments : Object.values(s.payments || {})) as any[])
-        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected)
+        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected && p.method !== PaymentMethod.Bono)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const monthlyLayawayPayments = layaways
         .flatMap(l => (Array.isArray(l.payments) ? l.payments : Object.values(l.payments || {})) as any[])
-        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected)
+        .filter(p => p && new Date(p.date) >= startOfSelected && new Date(p.date) <= endOfSelected && p.method !== PaymentMethod.Bono)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const totalRevenue = monthlySalesPayments + monthlyLayawayPayments;

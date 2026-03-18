@@ -2,19 +2,23 @@
 import React, { useState, useMemo } from 'react';
 import { GiftVoucher, Seller, Store } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
-import { SearchIcon, HistoryIcon, UsersIcon, CalendarIcon, CheckIcon, CrossIcon, TagIcon, FilterIcon } from './Icons';
+import { SearchIcon, HistoryIcon, UsersIcon, CalendarIcon, CheckIcon, CrossIcon, TagIcon, FilterIcon, TrashIcon } from './Icons';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface GiftVouchersViewProps {
   vouchers: GiftVoucher[];
   sellers: Seller[];
   stores: Store[];
   currentUser: Seller;
+  isAdmin: boolean;
   onUpdateVoucherStatus: (voucherId: string, status: 'active' | 'redeemed' | 'cancelled') => Promise<void>;
+  onDeleteVoucher: (voucherId: string) => Promise<void>;
 }
 
-const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, stores, currentUser, onUpdateVoucherStatus }) => {
+const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, stores, currentUser, isAdmin, onUpdateVoucherStatus, onDeleteVoucher }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'redeemed' | 'cancelled'>('all');
+  const [voucherToDelete, setVoucherToDelete] = useState<GiftVoucher | null>(null);
 
   const filteredVouchers = useMemo(() => {
     return vouchers.filter(v => {
@@ -169,7 +173,7 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex items-center justify-center gap-2 transition-all">
                         {voucher.status === 'active' && (
                           <>
                             <button 
@@ -197,6 +201,15 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
                             <HistoryIcon className="w-5 h-5" />
                           </button>
                         )}
+                        {isAdmin && (
+                          <button 
+                            onClick={() => setVoucherToDelete(voucher)}
+                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"
+                            title="Eliminar Permanentemente"
+                          >
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -212,6 +225,20 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
           )}
         </div>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!voucherToDelete}
+        onClose={() => setVoucherToDelete(null)}
+        onConfirm={() => {
+          if (voucherToDelete) {
+            onDeleteVoucher(voucherToDelete.id);
+            setVoucherToDelete(null);
+          }
+        }}
+        title="¿Eliminar Bono?"
+        message="¿Estás seguro de que deseas eliminar este bono permanentemente? Esta acción no se puede deshacer y el código dejará de ser válido."
+        itemName={`Código: ${voucherToDelete?.code} - ${formatCOP(voucherToDelete?.currentValue || 0)}`}
+      />
     </div>
   );
 };

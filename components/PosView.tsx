@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
 import ProductPerformanceModal from './ProductPerformanceModal';
@@ -71,16 +71,28 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastKeyTimeRef = useRef<number>(0);
 
   const { onClearVerifications } = props;
+
+  useEffect(() => {
+    // Auto-focus search input on mount
+    searchInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     
     const handleKeyDown = (e: KeyboardEvent) => {
+      const now = Date.now();
+      const diff = now - lastKeyTimeRef.current;
+      lastKeyTimeRef.current = now;
+
       // Si el foco está en un input o textarea, dejamos que el navegador lo maneje normalmente
       // a menos que sea la tecla Enter, que podría ser el final de un escaneo.
       const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      const isSearchInput = e.target === searchInputRef.current;
       
       if (e.key === 'Enter') {
         if (barcodeBuffer.length > 2) {
@@ -89,16 +101,33 @@ const PosView: React.FC<PosViewProps> = (props) => {
             handleAddToCartWithAnimation(product);
             setBarcodeBuffer('');
             e.preventDefault();
+            // Asegurar que el foco vuelva al buscador después de un escaneo exitoso
+            searchInputRef.current?.focus();
+            return;
           }
         }
         setBarcodeBuffer('');
-      } else if (!isInput && e.key.length === 1) {
-        // Solo acumulamos si no estamos en un input para evitar duplicados
-        setBarcodeBuffer(prev => prev + e.key);
-        
-        // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
-        clearTimeout(timeout);
-        timeout = setTimeout(() => setBarcodeBuffer(''), 100);
+      } else if (e.key.length === 1) {
+        // Solo acumulamos si no estamos en el buscador para evitar duplicados
+        if (!isSearchInput) {
+          let key = e.key;
+          // Corrección para escáneres con configuración de teclado incorrecta
+          if (key === "'" || key === ",") key = "-";
+
+          // Si detectamos una ráfaga rápida de teclas (escáner) mientras estamos en otro input
+          if (diff < 40 && isInput && barcodeBuffer.length > 0) {
+            // Enfocamos el buscador y movemos lo que llevamos acumulado
+            searchInputRef.current?.focus();
+            setSearchTerm(barcodeBuffer + key);
+            setBarcodeBuffer('');
+          } else {
+            setBarcodeBuffer(prev => prev + key);
+          }
+          
+          // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
+          clearTimeout(timeout);
+          timeout = setTimeout(() => setBarcodeBuffer(''), 150);
+        }
       }
     };
 
@@ -469,10 +498,17 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     <div className="space-y-3 mb-3">
                         <div className="relative w-full">
                             <input 
+                                ref={searchInputRef}
                                 type="text"
                                 placeholder="Buscar por nombre o proveedor..."
                                 value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
+                                onChange={e => {
+                                    let val = e.target.value;
+                                    // Corrección para escáneres con configuración de teclado incorrecta
+                                    // Reemplazamos comilla simple o coma por guion si parece ser un SKU
+                                    val = val.replace(/[']/g, '-').replace(/[,]/g, '-');
+                                    setSearchTerm(val);
+                                }}
                                 onKeyDown={e => {
                                     if (e.key === 'Enter' && searchTerm.length > 2) {
                                         const product = props.inventory.find(p => p.sku === searchTerm);

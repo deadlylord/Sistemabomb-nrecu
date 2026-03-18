@@ -612,6 +612,27 @@ const App: React.FC = () => {
             });
 
             transaction.update(storeRef, { nextInvoiceNumber: currentInvoiceNumber + 1 });
+
+            // 2. Handle new vouchers being sold
+            for (const item of itemsToProcess) {
+                if (item.id.startsWith('voucher-')) {
+                    const code = item.id.replace('voucher-', '');
+                    const voucherRef = doc(collection(db, 'giftVouchers'));
+                    transaction.set(voucherRef, {
+                        id: voucherRef.id,
+                        code,
+                        initialValue: item.price,
+                        currentValue: item.price,
+                        status: 'active',
+                        createdAt: saleDate.toISOString(),
+                        customerName: saleData.customerName,
+                        customerPhone: saleData.customerPhone,
+                        storeId: currentStoreId,
+                        createdBy: saleData.seller,
+                        saleId: saleRef.id,
+                    });
+                }
+            }
         });
 
         if (savedSale) {
@@ -1196,29 +1217,51 @@ const App: React.FC = () => {
   };
 
   const handleDeleteSale = async (saleId: string) => {
-      const sale = sales.find(s => s.id === saleId);
+      const sale = (allSales.length > 0 ? allSales : sales).find(s => s.id === saleId);
       if (!sale || !currentUser) return;
-
-      if (!window.confirm('¿Eliminar venta? Las unidades vendidas volverán al inventario.')) return;
 
       const batch = writeBatch(db);
       
       sale.items.forEach(item => {
-          const productRef = doc(db, 'inventory', item.id);
-          batch.update(productRef, { stock: increment(item.quantity) });
+          if (item && item.id && item.id.startsWith('voucher-')) {
+              // Si es un bono que se vendió, lo eliminamos
+              const voucherCode = item.id.replace('voucher-', '');
+              const voucher = giftVouchers.find(v => v.code === voucherCode);
+              if (voucher) {
+                  batch.delete(doc(db, 'giftVouchers', voucher.id));
+              }
+          } else if (item && item.id) {
+              const productRef = doc(db, 'inventory', item.id);
+              batch.update(productRef, { stock: increment(item.quantity) });
 
-          const logRef = doc(collection(db, 'productHistory'));
-          const log: ProductHistoryLog = {
-              id: logRef.id,
-              productId: item.id,
-              productName: item.name,
-              storeId: sale.storeId,
-              changedBy: currentUser.name,
-              timestamp: new Date().toISOString(),
-              changeType: ProductChangeType.SALE_DELETED,
-              details: `Venta #${sale.invoiceNumber} eliminada. Stock restaurado: +${item.quantity}`
-          };
-          batch.set(logRef, log);
+              const logRef = doc(collection(db, 'productHistory'));
+              const log: ProductHistoryLog = {
+                  id: logRef.id,
+                  productId: item.id,
+                  productName: item.name,
+                  storeId: sale.storeId,
+                  changedBy: currentUser.name,
+                  timestamp: new Date().toISOString(),
+                  changeType: ProductChangeType.SALE_DELETED,
+                  details: `Venta #${sale.invoiceNumber} eliminada. Stock restaurado: +${item.quantity}`
+              };
+              batch.set(logRef, log);
+          }
+      });
+
+      // Restaurar valor de bonos si se usaron como medio de pago
+      const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
+      paymentsArray.forEach(payment => {
+          if (payment && payment.method === PaymentMethod.Bono && payment.voucherId) {
+              const voucher = giftVouchers.find(v => v.id === payment.voucherId);
+              if (voucher) {
+                  const newVal = (voucher.currentValue || 0) + payment.amount;
+                  batch.update(doc(db, 'giftVouchers', voucher.id), {
+                      currentValue: newVal,
+                      status: 'active'
+                  });
+              }
+          }
       });
 
       batch.delete(doc(db, 'sales', saleId));
@@ -1358,6 +1401,39 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error updating voucher status:", error);
       alert("Error al actualizar el estado del bono.");
+    }
+  };
+
+  const handleDeleteVoucher = async (voucherId: string) => {
+    const voucher = giftVouchers.find(v => v.id === voucherId);
+    if (!voucher) return;
+
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Delete the voucher document
+      batch.delete(doc(db, 'giftVouchers', voucherId));
+      
+      // 2. Find and delete the sale that created this voucher
+      // We first check if the voucher has a saleId stored
+      let saleIdToDelete = voucher.saleId;
+      
+      if (!saleIdToDelete) {
+        // Fallback: Find a sale that has an item with id: voucher-{code}
+        const saleToCancel = (allSales.length > 0 ? allSales : sales).find(s => 
+          s.items.some(item => item && item.id === `voucher-${voucher.code}`)
+        );
+        if (saleToCancel) saleIdToDelete = saleToCancel.id;
+      }
+      
+      if (saleIdToDelete) {
+        batch.delete(doc(db, 'sales', saleIdToDelete));
+      }
+      
+      await batch.commit();
+    } catch (error) {
+      console.error("Error deleting voucher:", error);
+      alert("Error al eliminar el bono.");
     }
   };
 
@@ -1516,7 +1592,7 @@ const App: React.FC = () => {
       await batch.commit();
   };
 
-  const handleDeleteProduct = async (productId: string) => { if (window.confirm('¿Eliminar producto?')) await deleteDoc(doc(db, 'inventory', productId)); };
+  const handleDeleteProduct = async (productId: string) => { await deleteDoc(doc(db, 'inventory', productId)); };
   
   const handleBulkAddProducts = async (products: any[], storeId: string) => {
       const batch = writeBatch(db);
@@ -1837,13 +1913,15 @@ const App: React.FC = () => {
                 onAddExpense={handleAddExpense}
             />
         )}
-        {currentView === View.GIFT_VOUCHERS && (
+        {currentView === View.GIFT_VOUCHERS && currentUser && (
           <GiftVouchersView 
             vouchers={giftVouchers} 
             sellers={sellers} 
             stores={stores} 
             currentUser={currentUser} 
+            isAdmin={isAdmin}
             onUpdateVoucherStatus={handleUpdateVoucherStatus} 
+            onDeleteVoucher={handleDeleteVoucher}
           />
         )}
       </main>

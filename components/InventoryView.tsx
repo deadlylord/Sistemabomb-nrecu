@@ -7,6 +7,7 @@ import ProductHistoryModal from './ProductHistoryModal';
 import InventoryCostChart from './InventoryCostChart';
 import BulkAddProductsModal from './BulkAddProductsModal';
 import InconsistencyResolutionModal from './InconsistencyResolutionModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface InventoryViewProps {
   inventory: Product[];
@@ -62,6 +63,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const [showOnlyDisabled, setShowOnlyDisabled] = useState(false);
   const [isFixModalOpen, setIsFixModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDiscontinueConfirm, setShowBulkDiscontinueConfirm] = useState(false);
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -97,8 +99,10 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         return;
     }
 
-    if (!window.confirm(`¿Seguro que deseas descontinuar los ${selectedIds.size} productos seleccionados?`)) return;
+    setShowBulkDiscontinueConfirm(true);
+  };
 
+  const confirmBulkDiscontinue = async () => {
     try {
         const promises = Array.from(selectedIds).map(id => {
             const p = inventory.find(item => item.id === id);
@@ -478,7 +482,12 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                   type="text"
                   placeholder="Buscar por nombre o proveedor..."
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={e => {
+                    let val = e.target.value;
+                    // Corrección para escáneres con configuración de teclado incorrecta
+                    val = val.replace(/[']/g, '-').replace(/[,]/g, '-');
+                    setSearchTerm(val);
+                  }}
                   className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                 />
                 <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-slate-400">
@@ -652,6 +661,14 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
           onResolve={onReactivateInconsistentProducts}
         />
       )}
+
+      <DeleteConfirmationModal
+        isOpen={showBulkDiscontinueConfirm}
+        onClose={() => setShowBulkDiscontinueConfirm(false)}
+        onConfirm={confirmBulkDiscontinue}
+        title="¿Descontinuar Productos?"
+        message={`¿Estás seguro de que deseas descontinuar los ${selectedIds.size} productos seleccionados?`}
+      />
     </>
   );
 };

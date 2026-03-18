@@ -24,11 +24,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
   if (!store) return null; // Can't render without store info
 
   // Re-formatted text for WhatsApp to look more like an invoice
-  const itemsText = sale.items.map(item =>
-      `*${shortenProductName(item.name)}*` +
-      `\n> Cant: ${item.quantity}` +
-      `\n> Subtotal: *${formatCOP(item.price * item.quantity)}*`
-  ).join('\n\n');
+  const itemsText = sale.items.map(item => {
+      let text = `*${shortenProductName(item.name)}*`;
+      if (item.id.startsWith('voucher-')) {
+          text += `\n> CÓDIGO: *${item.id.replace('voucher-', '')}*`;
+      }
+      text += `\n> Cant: ${item.quantity}` +
+              `\n> Subtotal: *${formatCOP(item.price * item.quantity)}*`;
+      return text;
+  }).join('\n\n');
 
   const paymentsText = sale.payments
     ? sale.payments.map(p => `*${p.method}:* ${formatCOP(p.amount)}`).join('\n')
@@ -140,7 +144,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
                 <tbody className="divide-y divide-dashed divide-black dark:divide-gray-500">
                     {sale.items.map(item => (
                         <tr key={item.id}>
-                            <td className="py-1">{shortenProductName(item.name)}</td>
+                            <td className="py-1">
+                                {shortenProductName(item.name)}
+                                {item.id.startsWith('voucher-') && (
+                                    <div className="text-[10px] font-bold text-accent">CÓDIGO: {item.id.replace('voucher-', '')}</div>
+                                )}
+                            </td>
                             <td className="text-center py-1">{item.quantity}</td>
                             <td className="text-right py-1">{formatCOP(item.price * item.quantity)}</td>
                         </tr>

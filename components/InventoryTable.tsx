@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product, Category } from '../types';
 import { EditIcon, HistoryIcon, TrashIcon, PowerIcon, PackageIcon } from './Icons';
 import EditProductModal from './EditProductModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 import { formatCOP } from '../constants';
 
 type EnrichedProduct = Product & {
@@ -131,6 +132,7 @@ const VelocityPill: React.FC<{ velocity: EnrichedProduct['velocity'] }> = ({ vel
 
 export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categories, onUpdateProduct, onDeleteProduct, onShowHistory, requestSort, sortConfig, isAdmin, selectedIds, onToggleSelect, onToggleSelectAll }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const handleToggleDisabled = (product: Product) => {
     if (!product.isDisabled) {
@@ -226,7 +228,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
                           <HistoryIcon className="w-5 h-5" />
                         </button>
                         {isAdmin && (
-                          <button onClick={() => onDeleteProduct(product.id)} className="text-slate-500 dark:text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors" title="Eliminar Producto">
+                          <button onClick={() => setProductToDelete(product)} className="text-slate-500 dark:text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-500/10 transition-colors" title="Eliminar Producto">
                             <TrashIcon className="w-5 h-5" />
                           </button>
                         )}
@@ -249,6 +251,15 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
             onUpdateProduct={onUpdateProduct}
         />
       )}
+
+      <DeleteConfirmationModal
+        isOpen={!!productToDelete}
+        onClose={() => setProductToDelete(null)}
+        onConfirm={() => productToDelete && onDeleteProduct(productToDelete.id)}
+        title="¿Eliminar Producto?"
+        message="¿Estás seguro de que deseas eliminar este producto? Esta acción eliminará permanentemente el registro del inventario."
+        itemName={productToDelete?.name}
+      />
     </>
   );
 };

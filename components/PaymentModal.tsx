@@ -71,6 +71,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       return;
     }
     
+    // Calculate current remaining amount based on current payments state
+    const currentPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const currentRemaining = total - currentPaid;
+
     if (method === PaymentMethod.Bono) {
         const trimmedCode = voucherCode.trim().toUpperCase();
         if (!trimmedCode) {
@@ -78,9 +82,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             return;
         }
         setIsVoucherValidating(true);
-        
-        // Debug log
-        console.log("Validating voucher:", trimmedCode, "Available vouchers:", giftVouchers.length);
         
         const voucher = giftVouchers.find(v => v.code.toUpperCase() === trimmedCode);
         
@@ -95,23 +96,27 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             return;
         }
 
-        const amountToUse = Math.min(amount, voucher.currentValue, remainingAmount);
+        const amountToUse = Math.min(amount, voucher.currentValue, currentRemaining);
         if (amountToUse <= 0) {
-            alert(`No se puede aplicar el bono. Saldo: ${formatCOP(voucher.currentValue)}, Faltante: ${formatCOP(remainingAmount)}`);
+            alert(`No se puede aplicar el bono. Saldo: ${formatCOP(voucher.currentValue)}, Faltante: ${formatCOP(currentRemaining)}`);
             setIsVoucherValidating(false);
             return;
         }
 
         setPayments(prev => [...prev, { amount: amountToUse, method, voucherId: voucher.id, voucherCode: voucher.code }]);
         setVoucherCode('');
-        setAmountInput(''); // Clear amount input after adding payment
+        setAmountInput(''); 
         setIsVoucherValidating(false);
     } else {
-        if (method !== PaymentMethod.Efectivo && amount > remainingAmount && remainingAmount > 0) {
-            alert(`El monto para ${method} no puede superar el faltante de ${formatCOP(remainingAmount)}.`);
-            return;
+        let amountToUse = amount;
+        if (method !== PaymentMethod.Efectivo) {
+            amountToUse = Math.min(amount, currentRemaining);
+            if (amountToUse <= 0 && currentRemaining <= 0) {
+                alert(`La venta ya está totalmente pagada.`);
+                return;
+            }
         }
-        setPayments(prev => [...prev, { amount, method }]);
+        setPayments(prev => [...prev, { amount: amountToUse, method }]);
     }
   };
 
