@@ -31,10 +31,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.7',
+    date: '2026-03-18',
+    description: 'Corrección de Teclado y Ajuste Fino de Centro',
+    isCurrent: true,
+    changes: [
+      'Corrección de Teclado: Se solucionó el problema que impedía escribir valores negativos o borrar el contenido de los campos numéricos.',
+      'Ajuste Centro (mm): Nueva opción para desplazar el contenido de cada etiqueta hacia el centro de la página, optimizando el espacio y evitando recortes en los bordes.',
+      'Sincronización Real: Se aseguró que el ajuste del centro se refleje tanto en la vista previa como en la impresión final.'
+    ]
+  },
+  {
     version: '1.1.6',
     date: '2026-03-18',
     description: 'Ajuste de Centrado y Desplazamiento de Etiquetas',
-    isCurrent: true,
     changes: [
       'Ajuste de Centro: Se añadió una opción para desplazar horizontalmente las columnas de etiquetas, permitiendo centrarlas o pegarlas según la necesidad del papel.',
       'Espaciado Negativo: Se habilitó la posibilidad de usar valores negativos en la división de columnas para eliminar cualquier espacio residual.',

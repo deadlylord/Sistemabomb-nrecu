@@ -83,6 +83,7 @@ export interface LabelConfig {
   barcodeWidth: number;
   barcodeHeight: number;
   horizontalOffset?: number;
+  centerOffset?: number;
 }
 
 export interface Store {

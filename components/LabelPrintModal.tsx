@@ -45,6 +45,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     showSupplier: false,
     barcodeWidth: 1.5,
     barcodeHeight: 25,
+    horizontalOffset: 0,
+    centerOffset: 0,
   };
 
   const handleQuantityChange = (productId: string, qty: number) => {
@@ -112,6 +114,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     }
 
     const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
+    const centerOffset = config.centerOffset || 0;
 
     printWindow.document.write(`
       <html>
@@ -139,6 +142,12 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               position: relative;
               overflow: hidden;
             }
+            .label:nth-child(${config.columns}n+1) .label-inner {
+              padding-left: ${2 + centerOffset}mm;
+            }
+            .label:nth-child(${config.columns}n+${config.columns}) .label-inner {
+              padding-right: ${2 + centerOffset}mm;
+            }
             .label-inner {
               display: flex; 
               flex-direction: column; 
@@ -146,7 +155,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               align-items: center;
               text-align: center;
               box-sizing: border-box;
-              padding: 0;
+              padding: 2mm;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
                 height: ${config.width}mm;

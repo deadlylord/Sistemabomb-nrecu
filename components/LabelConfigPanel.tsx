@@ -27,19 +27,46 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
   };
 
   const [config, setConfig] = useState<LabelConfig>(store.labelConfig || DEFAULT_CONFIG);
+  const [localValues, setLocalValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const initialLocal: Record<string, string> = {};
+    Object.entries(config).forEach(([key, value]) => {
+      if (typeof value === 'number') {
+        initialLocal[key] = value.toString();
+      }
+    });
+    setLocalValues(initialLocal);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
-    setConfig(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : (name === 'orientation' ? value : parseFloat(value) || 0)
-    }));
+    
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setConfig(prev => ({ ...prev, [name]: checked }));
+      return;
+    }
+
+    if (name === 'orientation') {
+      setConfig(prev => ({ ...prev, [name]: value as 'portrait' | 'landscape' }));
+      return;
+    }
+
+    // For numeric inputs, update local string state first
+    setLocalValues(prev => ({ ...prev, [name]: value }));
+
+    // Only update main config if it's a valid number
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue)) {
+      setConfig(prev => ({ ...prev, [name]: numValue }));
+    }
   };
 
   const handleReset = () => {
     if (window.confirm('¿Estás seguro de que deseas restablecer la configuración a los valores predeterminados?')) {
       setConfig(DEFAULT_CONFIG);
+      setLocalValues({}); // Clear local string values
       onSave(DEFAULT_CONFIG);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
@@ -59,6 +86,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     if (!printWindow) return;
 
     const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
+    const centerOffset = config.centerOffset || 0;
     const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => `
       <div class="label">
         <div class="label-inner">
@@ -89,7 +117,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               size: ${totalWidth}mm ${config.height}mm; 
               margin: 0; 
             }
-            body { margin: 0; font-family: monospace; }
+            body { margin: 0; font-family: 'Courier New', Courier, monospace; }
             .container {
               display: grid;
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
@@ -105,6 +133,12 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               position: relative;
               overflow: hidden;
             }
+            .label:nth-child(${config.columns}n+1) .label-inner {
+              padding-left: ${2 + centerOffset}mm;
+            }
+            .label:nth-child(${config.columns}n+${config.columns}) .label-inner {
+              padding-right: ${2 + centerOffset}mm;
+            }
             .label-inner {
               display: flex; 
               flex-direction: column; 
@@ -112,7 +146,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               align-items: center;
               text-align: center;
               box-sizing: border-box;
-              padding: 0;
+              padding: 2mm;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
                 height: ${config.width}mm;
@@ -126,8 +160,8 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 height: 100%;
               `}
             }
-            .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; }
-            .product-name { font-size: ${config.fontSize}pt; font-weight: bold; }
+            .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
+            .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
             .barcode { 
               width: 100%;
               max-width: 100%; 
@@ -135,9 +169,9 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               margin: 0.1mm 0;
               shape-rendering: crispEdges;
             }
-            .sku { font-size: ${config.fontSize * 0.9}pt; }
-            .cipher { font-size: ${config.fontSize * 0.8}pt; border-top: 0.1mm solid #000; }
-            .price { font-size: ${config.fontSize * 1.2}pt; font-weight: bold; }
+            .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
+            .cipher { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+            .price { font-size: ${config.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
           </style>
         </head>
         <body>
@@ -174,7 +208,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               <input 
                 type="number" 
                 name="width" 
-                value={config.width} 
+                value={localValues.width ?? config.width} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -184,7 +218,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               <input 
                 type="number" 
                 name="height" 
-                value={config.height} 
+                value={localValues.height ?? config.height} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -194,7 +228,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               <input 
                 type="number" 
                 name="columns" 
-                value={config.columns} 
+                value={localValues.columns ?? config.columns} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
                 min="1"
@@ -207,7 +241,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 type="number" 
                 name="columnGap" 
                 step="0.1"
-                value={config.columnGap} 
+                value={localValues.columnGap ?? config.columnGap} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -218,7 +252,18 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 type="number" 
                 name="horizontalOffset" 
                 step="0.1"
-                value={config.horizontalOffset || 0} 
+                value={localValues.horizontalOffset ?? (config.horizontalOffset || 0)} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Ajuste Centro (mm)</label>
+              <input 
+                type="number" 
+                name="centerOffset" 
+                step="0.1"
+                value={localValues.centerOffset ?? (config.centerOffset || 0)} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -240,7 +285,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               <input 
                 type="number" 
                 name="fontSize" 
-                value={config.fontSize} 
+                value={localValues.fontSize ?? config.fontSize} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -258,7 +303,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 type="number" 
                 name="barcodeWidth" 
                 step="0.1"
-                value={config.barcodeWidth} 
+                value={localValues.barcodeWidth ?? config.barcodeWidth} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -268,7 +313,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               <input 
                 type="number" 
                 name="barcodeHeight" 
-                value={config.barcodeHeight} 
+                value={localValues.barcodeHeight ?? config.barcodeHeight} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -313,33 +358,41 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 width: 'max-content'
               }}
             >
-              {[...Array(config.columns * 2)].map((_, i) => (
-                <div 
-                  key={i}
-                  className="relative overflow-hidden"
-                  style={{
-                    width: `${config.width}mm`,
-                    height: `${config.height}mm`,
-                    backgroundColor: 'white',
-                    boxSizing: 'border-box',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-                    color: 'black',
-                    fontFamily: 'monospace',
-                    border: '1px solid #ddd'
-                  }}
-                >
+              {[...Array(config.columns * 2)].map((_, i) => {
+                const colIndex = i % config.columns;
+                const isLeftColumn = colIndex === 0;
+                const isRightColumn = colIndex === config.columns - 1 && config.columns > 1;
+                const centerOffset = config.centerOffset || 0;
+
+                return (
                   <div 
-                    className="flex flex-col justify-center items-center text-center p-[2mm] box-border"
+                    key={i}
+                    className="relative overflow-hidden"
                     style={{
-                      width: config.orientation === 'landscape' ? `${config.height}mm` : '100%',
-                      height: config.orientation === 'landscape' ? `${config.width}mm` : '100%',
-                      position: config.orientation === 'landscape' ? 'absolute' : 'relative',
-                      top: config.orientation === 'landscape' ? '50%' : 'auto',
-                      left: config.orientation === 'landscape' ? '50%' : 'auto',
-                      transform: config.orientation === 'landscape' ? 'translate(-50%, -50%) rotate(-90deg)' : 'none',
-                      transformOrigin: 'center'
+                      width: `${config.width}mm`,
+                      height: `${config.height}mm`,
+                      backgroundColor: 'white',
+                      boxSizing: 'border-box',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                      color: 'black',
+                      fontFamily: 'monospace',
+                      border: '1px solid #ddd'
                     }}
                   >
+                    <div 
+                      className="flex flex-col justify-center items-center text-center p-[2mm] box-border"
+                      style={{
+                        width: config.orientation === 'landscape' ? `${config.height}mm` : '100%',
+                        height: config.orientation === 'landscape' ? `${config.width}mm` : '100%',
+                        position: config.orientation === 'landscape' ? 'absolute' : 'relative',
+                        top: config.orientation === 'landscape' ? '50%' : 'auto',
+                        left: config.orientation === 'landscape' ? '50%' : 'auto',
+                        transform: config.orientation === 'landscape' ? 'translate(-50%, -50%) rotate(-90deg)' : 'none',
+                        transformOrigin: 'center',
+                        paddingLeft: isLeftColumn ? `${2 + centerOffset}mm` : '2mm',
+                        paddingRight: isRightColumn ? `${2 + centerOffset}mm` : '2mm'
+                      }}
+                    >
                     <div style={{ fontSize: `${config.fontSize * 0.7}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', opacity: 0.8 }}>{store.receiptName || store.name}</div>
                     {config.showName && <div style={{ fontSize: `${config.fontSize * 0.9}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', whiteSpace: 'nowrap', overflow: 'hidden', width: '100%' }}>PRODUCTO ${i + 1}</div>}
                     
@@ -356,9 +409,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                     {config.showPrice && <div style={{ fontSize: `${config.fontSize * 1.1}pt`, fontWeight: 'black', marginTop: '0.5mm' }}>$ 99.999</div>}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </div>
           <div className="flex gap-3">
             <button 
               onClick={handleTestPrint}
