@@ -15,6 +15,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     width: 57,
     height: 48,
     columns: 1,
+    columnGap: 0,
     orientation: 'portrait',
     fontSize: 8,
     showPrice: true,
@@ -57,7 +58,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const totalWidth = config.width * config.columns;
+    const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
     const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => `
       <div class="label">
         <div class="label-inner">
@@ -91,7 +92,8 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             body { margin: 0; font-family: monospace; }
             .container {
               display: grid;
-              grid-template-columns: repeat(${config.columns}, 1fr);
+              grid-template-columns: repeat(${config.columns}, ${config.width}mm);
+              column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
             }
             .label { 
@@ -197,6 +199,18 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               />
             </div>
             <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Espacio Columnas (mm)</label>
+              <input 
+                type="number" 
+                name="columnGap" 
+                step="0.1"
+                value={config.columnGap} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                min="0"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Orientación</label>
               <select 
                 name="orientation" 
@@ -275,9 +289,11 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           </h3>
           <div className="flex justify-center bg-gray-200 dark:bg-gray-900 p-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 overflow-auto min-h-[400px] items-start">
             <div 
-              className="grid gap-2 p-2 bg-white/50 dark:bg-white/10 rounded shadow-inner"
+              className="grid p-2 bg-white/50 dark:bg-white/10 rounded shadow-inner"
               style={{ 
-                gridTemplateColumns: `repeat(${config.columns}, 1fr)`,
+                gridTemplateColumns: `repeat(${config.columns}, ${config.width}mm)`,
+                columnGap: `${config.columnGap}mm`,
+                rowGap: '2mm',
                 width: 'max-content'
               }}
             >

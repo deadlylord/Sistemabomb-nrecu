@@ -9,6 +9,7 @@ interface LabelPrintModalProps {
   onClose: () => void;
   selectedProducts: Product[];
   store: Store;
+  initialQuantities?: Record<string, number>;
 }
 
 interface PrintItem {
@@ -16,15 +17,18 @@ interface PrintItem {
   quantity: number;
 }
 
-export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClose, selectedProducts, store }) => {
+export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClose, selectedProducts, store, initialQuantities }) => {
   const [printItems, setPrintItems] = useState<PrintItem[]>([]);
   const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setPrintItems(selectedProducts.map(p => ({ product: p, quantity: 1 })));
+      setPrintItems(selectedProducts.map(p => ({ 
+        product: p, 
+        quantity: initialQuantities?.[p.id] ?? (p.stock > 0 ? p.stock : 1) 
+      })));
     }
-  }, [isOpen, selectedProducts]);
+  }, [isOpen, selectedProducts, initialQuantities]);
 
   if (!isOpen) return null;
 
@@ -32,6 +36,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     width: 57,
     height: 48,
     columns: 1,
+    columnGap: 0,
     orientation: 'portrait',
     fontSize: 8,
     showPrice: true,
@@ -106,7 +111,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
       labelsHtml += '</div>';
     }
 
-    const totalWidth = config.width * config.columns;
+    const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
 
     printWindow.document.write(`
       <html>
@@ -121,7 +126,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             body { margin: 0; font-family: 'Courier New', Courier, monospace; }
             .container {
               display: grid;
-              grid-template-columns: repeat(${config.columns}, 1fr);
+              grid-template-columns: repeat(${config.columns}, ${config.width}mm);
+              column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
               page-break-after: always;
             }

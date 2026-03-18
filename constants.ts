@@ -31,10 +31,29 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.3',
+    date: '2026-03-18',
+    description: 'Ajuste de Espaciado entre Columnas de Etiquetas',
+    isCurrent: true,
+    changes: [
+      'Espacio entre Columnas: Se añadió una opción para configurar el espacio (gap) entre etiquetas en impresiones multi-columna.',
+      'Eliminación de Divisiones: Al establecer el espacio en 0, las etiquetas quedan perfectamente pegadas una de la otra.',
+      'Vista Previa Precisa: Se mejoró la vista previa del diseño para reflejar exactamente el espaciado configurado.'
+    ]
+  },
+  {
+    version: '1.1.2',
+    date: '2026-03-18',
+    description: 'Cantidades Predeterminadas en Etiquetas',
+    changes: [
+      'Cantidades Inteligentes: El modal de etiquetas ahora sugiere automáticamente la cantidad basada en el stock (Inventario) o la cantidad comprada (Compras).',
+      'Corrección de Fallback: Se actualizaron los valores por defecto de la configuración de etiquetas.'
+    ]
+  },
+  {
     version: '2.11.28',
     date: '2026-02-28',
     description: 'Sincronización de Fecha Local y Confirmación de Activación',
-    isCurrent: true,
     changes: [
       'Fecha Local: Se corrigió el error de zona horaria que causaba la desactivación prematura de la verificación detallada.',
       'Confirmación de Activación: Se añadió un mensaje de confirmación al activar o desactivar las lupas para vendedores.',

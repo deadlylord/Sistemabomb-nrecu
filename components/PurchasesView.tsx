@@ -793,6 +793,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             onClose={() => setLabelPurchase(null)}
             selectedProducts={[inventory.find(p => p.id === labelPurchase.productId)!]}
             store={stores.find(s => s.id === labelPurchase.storeId)!}
+            initialQuantities={{ [labelPurchase.productId]: labelPurchase.quantity }}
         />
       )}
 
