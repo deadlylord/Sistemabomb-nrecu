@@ -95,6 +95,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
               column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
+              margin-left: ${config.horizontalOffset || 0}mm;
             }
             .label { 
               width: ${config.width}mm; 
@@ -209,7 +210,17 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 value={config.columnGap} 
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
-                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Margen Izquierdo (mm)</label>
+              <input 
+                type="number" 
+                name="horizontalOffset" 
+                step="0.1"
+                value={config.horizontalOffset || 0} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
             </div>
             <div>

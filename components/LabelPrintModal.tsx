@@ -129,6 +129,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
               column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
+              margin-left: ${config.horizontalOffset || 0}mm;
               page-break-after: always;
             }
             .label { 

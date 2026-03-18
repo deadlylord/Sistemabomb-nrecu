@@ -82,6 +82,7 @@ export interface LabelConfig {
   showSupplier: boolean;
   barcodeWidth: number;
   barcodeHeight: number;
+  horizontalOffset?: number;
 }
 
 export interface Store {

@@ -31,10 +31,20 @@ export const toTitleCase = (str: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.6',
+    date: '2026-03-18',
+    description: 'Ajuste de Centrado y Desplazamiento de Etiquetas',
+    isCurrent: true,
+    changes: [
+      'Ajuste de Centro: Se añadió una opción para desplazar horizontalmente las columnas de etiquetas, permitiendo centrarlas o pegarlas según la necesidad del papel.',
+      'Espaciado Negativo: Se habilitó la posibilidad de usar valores negativos en la división de columnas para eliminar cualquier espacio residual.',
+      'Control de Margen: Nuevo control para ajustar el margen izquierdo de la impresión.'
+    ]
+  },
+  {
     version: '1.1.5',
     date: '2026-03-18',
     description: 'Optimización de Espacio en Etiquetas y Lectura de Código de Barras',
-    isCurrent: true,
     changes: [
       'Espacio Central: Se eliminaron márgenes internos y rellenos innecesarios para que las etiquetas queden más juntas en impresiones multi-columna.',
       'Código de Barras: Se optimizó el ancho del código de barras para ocupar el 100% del espacio disponible, mejorando la legibilidad.',
