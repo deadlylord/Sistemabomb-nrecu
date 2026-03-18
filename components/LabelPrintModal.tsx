@@ -38,7 +38,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 1.2,
+    barcodeWidth: 1.5,
     barcodeHeight: 30,
   };
 
@@ -138,7 +138,6 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               justify-content: center; 
               align-items: center;
               text-align: center;
-              padding: 1mm;
               box-sizing: border-box;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;

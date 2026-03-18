@@ -11,7 +11,7 @@ interface LabelConfigPanelProps {
 }
 
 export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSave }) => {
-  const [config, setConfig] = useState<LabelConfig>(store.labelConfig || {
+  const DEFAULT_CONFIG: LabelConfig = {
     width: 57,
     height: 48,
     columns: 1,
@@ -21,9 +21,11 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     showName: true,
     showSku: true,
     showSupplier: false,
-    barcodeWidth: 1.2,
+    barcodeWidth: 1.5,
     barcodeHeight: 30,
-  });
+  };
+
+  const [config, setConfig] = useState<LabelConfig>(store.labelConfig || DEFAULT_CONFIG);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -32,6 +34,15 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
       ...prev,
       [name]: type === 'checkbox' ? checked : (name === 'orientation' ? value : parseFloat(value) || 0)
     }));
+  };
+
+  const handleReset = () => {
+    if (window.confirm('¿Estás seguro de que deseas restablecer la configuración a los valores predeterminados?')) {
+      setConfig(DEFAULT_CONFIG);
+      onSave(DEFAULT_CONFIG);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
   };
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -52,7 +63,14 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
         <div class="label-inner">
           <div class="store-name">${store.receiptName || store.name}</div>
           <div class="product-name">PRODUCTO DE PRUEBA</div>
-          <div class="barcode-placeholder">|||||||||||||||||||||||||||</div>
+          <svg class="barcode" 
+            jsbarcode-value="SKU-TEST-${i + 1}"
+            jsbarcode-format="CODE128"
+            jsbarcode-width="${config.barcodeWidth}"
+            jsbarcode-height="${config.barcodeHeight}"
+            jsbarcode-fontSize="10"
+            jsbarcode-margin="0"
+          ></svg>
           <div class="sku">SKU-TEST-${i + 1}</div>
           <div class="cipher">180326-ABCDE</div>
           <div class="price">$ 99.999</div>
@@ -64,6 +82,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
       <html>
         <head>
           <title>Prueba de Impresión</title>
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             @page { 
               size: ${totalWidth}mm ${config.height}mm; 
@@ -89,7 +108,6 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               justify-content: center; 
               align-items: center;
               text-align: center;
-              padding: 1mm;
               box-sizing: border-box;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
@@ -106,7 +124,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             }
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; }
-            .barcode-placeholder { font-size: 10pt; margin: 1mm 0; }
+            .barcode { max-width: ${config.orientation === 'landscape' ? config.height - 4 : config.width - 4}mm; height: auto; margin: 0.5mm 0; }
             .sku { font-size: ${config.fontSize * 0.9}pt; }
             .cipher { font-size: ${config.fontSize * 0.8}pt; border-top: 0.1mm solid #000; }
             .price { font-size: ${config.fontSize * 1.2}pt; font-weight: bold; }
@@ -116,8 +134,11 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           <div class="container">${labelsHtml}</div>
           <script>
             window.onload = () => {
-              window.print();
-              window.close();
+              JsBarcode(".barcode").init();
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 500);
             };
           </script>
         </body>
@@ -285,8 +306,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                     <div style={{ fontSize: `${config.fontSize * 0.7}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', opacity: 0.8 }}>{store.receiptName || store.name}</div>
                     {config.showName && <div style={{ fontSize: `${config.fontSize * 0.9}pt`, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5mm', whiteSpace: 'nowrap', overflow: 'hidden', width: '100%' }}>PRODUCTO ${i + 1}</div>}
                     
-                    <div style={{ width: '100%', height: `${config.barcodeHeight * 0.25}mm`, backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0.5mm 0', border: '0.5px dashed #ccc' }}>
-                      <span style={{ fontSize: '5pt', color: '#999' }}>BARCODE</span>
+                    <div style={{ width: '100%', height: `${config.barcodeHeight * 0.25}mm`, display: 'flex', alignItems: 'stretch', justifyContent: 'center', margin: '0.5mm 0' }}>
+                      {[...Array(20)].map((_, idx) => (
+                        <div key={idx} style={{ width: `${Math.random() * 3 + 1}px`, backgroundColor: idx % 2 === 0 ? 'black' : 'transparent', marginRight: '1px' }} />
+                      ))}
                     </div>
 
                     {config.showSku && <div style={{ fontSize: `${config.fontSize * 0.8}pt`, fontWeight: 'bold' }}>SKU-TEST-${i + 1}</div>}
@@ -312,7 +335,13 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
         </div>
       </div>
 
-      <div className="flex justify-end gap-3">
+      <div className="flex justify-between gap-3">
+        <button 
+          onClick={handleReset}
+          className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-black uppercase tracking-widest py-4 px-10 rounded-2xl flex items-center justify-center space-x-2 transition-all duration-300 hover:scale-105 shadow-lg"
+        >
+          <span>Restablecer</span>
+        </button>
         <button 
           onClick={handleSave}
           className="bg-accent text-white font-black uppercase tracking-widest py-4 px-10 rounded-2xl flex items-center justify-center space-x-2 transition-all duration-300 hover:scale-105 shadow-lg shadow-accent/20"
