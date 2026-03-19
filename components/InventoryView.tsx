@@ -8,8 +8,6 @@ import InventoryCostChart from './InventoryCostChart';
 import BulkAddProductsModal from './BulkAddProductsModal';
 import InconsistencyResolutionModal from './InconsistencyResolutionModal';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
-import { LabelPrintModal } from './LabelPrintModal';
-import { TagIcon } from './Icons';
 
 interface InventoryViewProps {
   inventory: Product[];
@@ -66,7 +64,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const [isFixModalOpen, setIsFixModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDiscontinueConfirm, setShowBulkDiscontinueConfirm] = useState(false);
-  const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
@@ -601,12 +598,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                 <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
                 <div className="flex items-center gap-3">
                     <button 
-                        onClick={() => setIsLabelModalOpen(true)}
-                        className="bg-accent text-white font-black py-2 px-5 rounded-full hover:bg-accent-hover transition-all flex items-center gap-2 shadow-lg shadow-accent/20 active:scale-95 text-xs uppercase"
-                    >
-                        <TagIcon className="w-4 h-4" /> Imprimir Etiquetas
-                    </button>
-                    <button 
                         onClick={handleBulkDiscontinue}
                         className="bg-red-500 text-white font-black py-2 px-5 rounded-full hover:bg-red-600 transition-all flex items-center gap-2 shadow-lg shadow-red-500/20 active:scale-95 text-xs uppercase"
                     >
@@ -677,13 +668,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         onConfirm={confirmBulkDiscontinue}
         title="¿Descontinuar Productos?"
         message={`¿Estás seguro de que deseas descontinuar los ${selectedIds.size} productos seleccionados?`}
-      />
-
-      <LabelPrintModal 
-        isOpen={isLabelModalOpen}
-        onClose={() => setIsLabelModalOpen(false)}
-        selectedProducts={inventory.filter(p => selectedIds.has(p.id))}
-        store={stores.find(s => s.id === currentStoreId)!}
       />
     </>
   );

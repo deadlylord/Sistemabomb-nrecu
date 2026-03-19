@@ -72,7 +72,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const lastKeyTimeRef = useRef<number>(0);
 
   const { onClearVerifications } = props;
 
@@ -85,14 +84,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
     let timeout: NodeJS.Timeout;
     
     const handleKeyDown = (e: KeyboardEvent) => {
-      const now = Date.now();
-      const diff = now - lastKeyTimeRef.current;
-      lastKeyTimeRef.current = now;
-
       // Si el foco está en un input o textarea, dejamos que el navegador lo maneje normalmente
       // a menos que sea la tecla Enter, que podría ser el final de un escaneo.
       const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-      const isSearchInput = e.target === searchInputRef.current;
       
       if (e.key === 'Enter') {
         if (barcodeBuffer.length > 2) {
@@ -101,33 +95,19 @@ const PosView: React.FC<PosViewProps> = (props) => {
             handleAddToCartWithAnimation(product);
             setBarcodeBuffer('');
             e.preventDefault();
-            // Asegurar que el foco vuelva al buscador después de un escaneo exitoso
-            searchInputRef.current?.focus();
-            return;
           }
         }
         setBarcodeBuffer('');
-      } else if (e.key.length === 1) {
-        // Solo acumulamos si no estamos en el buscador para evitar duplicados
-        if (!isSearchInput) {
-          let key = e.key;
-          // Corrección para escáneres con configuración de teclado incorrecta
-          if (key === "'" || key === ",") key = "-";
-
-          // Si detectamos una ráfaga rápida de teclas (escáner) mientras estamos en otro input
-          if (diff < 40 && isInput && barcodeBuffer.length > 0) {
-            // Enfocamos el buscador y movemos lo que llevamos acumulado
-            searchInputRef.current?.focus();
-            setSearchTerm(barcodeBuffer + key);
-            setBarcodeBuffer('');
-          } else {
-            setBarcodeBuffer(prev => prev + key);
-          }
-          
-          // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
-          clearTimeout(timeout);
-          timeout = setTimeout(() => setBarcodeBuffer(''), 150);
-        }
+      } else if (!isInput && e.key.length === 1) {
+        // Solo acumulamos si no estamos en un input para evitar duplicados
+        let key = e.key;
+        // Corrección para escáneres con configuración de teclado incorrecta
+        if (key === "'" || key === ",") key = "-";
+        setBarcodeBuffer(prev => prev + key);
+        
+        // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
+        clearTimeout(timeout);
+        timeout = setTimeout(() => setBarcodeBuffer(''), 100);
       }
     };
 

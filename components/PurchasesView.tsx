@@ -5,7 +5,6 @@ import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, 
 import { formatCOP, encodePrice } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
-import { LabelPrintModal } from './LabelPrintModal';
 
 interface PurchasesViewProps {
   purchases: Purchase[];
@@ -788,13 +787,173 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
       )}
 
       {labelPurchase && (
-        <LabelPrintModal 
-            isOpen={!!labelPurchase}
-            onClose={() => setLabelPurchase(null)}
-            selectedProducts={[inventory.find(p => p.id === labelPurchase.productId)!]}
-            store={stores.find(s => s.id === labelPurchase.storeId)!}
-            initialQuantities={{ [labelPurchase.productId]: labelPurchase.quantity }}
-        />
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white dark:bg-secondary w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-accent/20">
+                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+                    <h3 className="text-lg font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                        <TagIcon className="w-5 h-5" /> Generar Etiquetas
+                    </h3>
+                    <button onClick={() => setLabelPurchase(null)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><CrossIcon className="w-6 h-6" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl">
+                        <div className="w-16 h-16 rounded-xl bg-white dark:bg-gray-900 border flex items-center justify-center overflow-hidden">
+                            {inventory.find(inv => inv.id === labelPurchase.productId)?.imageUrl ? (
+                                <img src={inventory.find(inv => inv.id === labelPurchase.productId)?.imageUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                                <PackageIcon className="w-8 h-8 text-gray-300" />
+                            )}
+                        </div>
+                        <div>
+                            <p className="font-black text-sm uppercase">{labelPurchase.productName}</p>
+                            <p className="text-[10px] text-gray-500 font-bold">SKU: {inventory.find(inv => inv.id === labelPurchase.productId)?.sku}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Cantidad de etiquetas</label>
+                        <input 
+                            type="number" 
+                            value={labelQuantity} 
+                            onChange={e => setLabelQuantity(parseInt(e.target.value) || 1)}
+                            className="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-accent font-black text-xl text-center"
+                            min="1"
+                        />
+                    </div>
+
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800">
+                        <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase mb-2">Vista Previa del Cifrado</p>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-500">Precio Original:</span>
+                            <span className="text-sm font-black text-gray-800 dark:text-white">{formatCOP(inventory.find(inv => inv.id === labelPurchase.productId)?.price || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs font-bold text-gray-500">Código Cifrado:</span>
+                            <span className="text-sm font-black text-accent tracking-widest">
+                                {labelPurchase.createdAt.split('T')[0].replace(/-/g, '').slice(2)}-{encodePrice(inventory.find(inv => inv.id === labelPurchase.productId)?.price || 0)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <button onClick={() => setLabelPurchase(null)} className="flex-1 py-4 text-xs font-black uppercase text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-2xl hover:bg-gray-200 transition-all">Cancelar</button>
+                        <button 
+                            onClick={() => {
+                                const product = inventory.find(inv => inv.id === labelPurchase.productId);
+                                if (!product) return;
+                                const store = stores.find(s => s.id === labelPurchase.storeId);
+                                const config = store?.labelConfig || {
+                                   width: 57,
+                                   height: 48,
+                                   columns: 1,
+                                   fontSize: 8,
+                                   showPrice: true,
+                                   showName: true,
+                                   showSku: true,
+                                   showSupplier: false,
+                                   barcodeWidth: 1.2,
+                                   barcodeHeight: 30,
+                                };
+                                const encoded = encodePrice(product.price);
+                                const dateStr = labelPurchase.createdAt.split('T')[0].replace(/-/g, '').slice(2);
+                                const cipherCode = `${dateStr}-${encoded}`;
+                                
+                                const printWindow = window.open('', '_blank');
+                                if (!printWindow) return;
+
+                                const labels = Array.from({ length: labelQuantity });
+                                let labelsHtml = '';
+                                for (let i = 0; i < labels.length; i += config.columns) {
+                                    labelsHtml += '<div class="container">';
+                                    for (let j = 0; j < config.columns; j++) {
+                                        if (i + j < labels.length) {
+                                            labelsHtml += `
+                                                <div class="label">
+                                                    <div class="store-name">${store?.receiptName || store?.name || 'Boutique'}</div>
+                                                    ${config.showName ? `<div class="product-name">${product.name}</div>` : ''}
+                                                    <svg class="barcode" 
+                                                        jsbarcode-value="${product.sku}"
+                                                        jsbarcode-format="CODE128"
+                                                        jsbarcode-width="${config.barcodeWidth}"
+                                                        jsbarcode-height="${config.barcodeHeight}"
+                                                        jsbarcode-fontSize="10"
+                                                        jsbarcode-margin="0"
+                                                    ></svg>
+                                                    ${config.showSku ? `<div class="sku">${product.sku}</div>` : ''}
+                                                    <div class="cipher">${cipherCode}</div>
+                                                    ${config.showPrice ? `<div class="price">$ ${product.price.toLocaleString()}</div>` : ''}
+                                                    ${config.showSupplier && product.supplier ? `<div class="supplier">${product.supplier}</div>` : ''}
+                                                </div>
+                                            `;
+                                        } else {
+                                            labelsHtml += '<div class="label"></div>';
+                                        }
+                                    }
+                                    labelsHtml += '</div>';
+                                }
+
+                                const totalWidth = config.width * config.columns;
+
+                                printWindow.document.write(`
+                                    <html>
+                                        <head>
+                                            <title>Imprimir Etiquetas</title>
+                                            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+                                            <style>
+                                                @page { size: ${totalWidth}mm ${config.height}mm; margin: 0; }
+                                                body { margin: 0; font-family: 'Courier New', Courier, monospace; }
+                                                .container {
+                                                    display: grid;
+                                                    grid-template-columns: repeat(${config.columns}, 1fr);
+                                                    width: ${totalWidth}mm;
+                                                    page-break-after: always;
+                                                }
+                                                .label { 
+                                                    width: ${config.width}mm; 
+                                                    height: ${config.height}mm; 
+                                                    padding: 1mm; 
+                                                    box-sizing: border-box; 
+                                                    display: flex; 
+                                                     flex-direction: column; 
+                                                    justify-content: center; 
+                                                    align-items: center;
+                                                    text-align: center;
+                                                    overflow: hidden;
+                                                }
+                                                .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
+                                                .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
+                                                .barcode { max-width: ${config.width - 4}mm; height: auto; margin: 0.5mm 0; }
+                                                .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
+                                                .cipher { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+                                                .price { font-size: ${config.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
+                                                .supplier { font-size: ${config.fontSize * 0.7}pt; opacity: 0.7; }
+                                            </style>
+                                        </head>
+                                        <body>
+                                            ${labelsHtml}
+                                            <script>
+                                                window.onload = () => {
+                                                    JsBarcode(".barcode").init();
+                                                    setTimeout(() => {
+                                                        window.print();
+                                                        window.close();
+                                                    }, 500);
+                                                };
+                                            </script>
+                                        </body>
+                                    </html>
+                                `);
+                                printWindow.document.close();
+                                setLabelPurchase(null);
+                            }} 
+                            className="flex-2 py-4 text-xs font-black uppercase text-white bg-accent rounded-2xl shadow-lg shadow-accent/20 hover:scale-105 transition-all"
+                        >
+                            Imprimir Etiquetas
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
       )}
 
       {previewImage && (

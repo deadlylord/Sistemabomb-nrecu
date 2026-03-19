@@ -228,18 +228,13 @@ const App: React.FC = () => {
   }, [isAuthReady, isAppReady]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady) return;
+    if (!isAppReady || !isAuthReady || currentUser) return;
     const unsubscribers = [
+      attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
       attachFirestoreListener(query(collection(db, 'stores')), setStores),
       attachFirestoreListener(query(collection(db, 'roles')), setRoles),
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [isAppReady, isAuthReady]);
-
-  useEffect(() => {
-    if (!isAppReady || !isAuthReady || currentUser) return;
-    const unsubscribe = attachFirestoreListener(query(collection(db, 'sellers')), setSellers);
-    return () => unsubscribe();
   }, [isAppReady, isAuthReady, currentUser]);
 
   useEffect(() => {
