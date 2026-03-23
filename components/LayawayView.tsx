@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Layaway, PaymentMethod, Seller, Role, Product } from '../types';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, TrashIcon, CrossIcon, EditIcon } from './Icons';
 import EditLayawayModal from './EditLayawayModal';
 
@@ -232,13 +232,13 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
     const [filter, setFilter] = useState<Layaway['status'] | 'all'>('all');
 
     const filteredLayaways = useMemo(() => {
+        const normalizedSearch = normalizeText(searchTerm);
         return layaways.filter(l => {
             const matchesFilter = filter === 'all' ? true : l.status === filter;
-            const lowerCaseSearch = searchTerm.toLowerCase();
-            const matchesSearch = searchTerm ?
-                l.customerName.toLowerCase().includes(lowerCaseSearch) ||
-                l.customerPhone.includes(lowerCaseSearch) ||
-                l.invoiceNumber.toLowerCase().includes(lowerCaseSearch)
+            const matchesSearch = normalizedSearch ?
+                normalizeText(l.customerName).includes(normalizedSearch) ||
+                l.customerPhone.includes(normalizedSearch) ||
+                normalizeText(l.invoiceNumber).includes(normalizedSearch)
                 : true;
             return matchesFilter && matchesSearch;
         }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());

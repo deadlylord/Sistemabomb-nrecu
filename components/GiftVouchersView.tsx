@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { GiftVoucher, Seller, Store } from '../types';
-import { formatCOP, toTitleCase } from '../constants';
+import { formatCOP, toTitleCase, normalizeText } from '../constants';
 import { SearchIcon, HistoryIcon, UsersIcon, CalendarIcon, CheckIcon, CrossIcon, TagIcon, FilterIcon, TrashIcon } from './Icons';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
@@ -21,11 +21,12 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
   const [voucherToDelete, setVoucherToDelete] = useState<GiftVoucher | null>(null);
 
   const filteredVouchers = useMemo(() => {
+    const normalizedSearch = normalizeText(searchTerm);
     return vouchers.filter(v => {
       const matchesSearch = 
-        v.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.customerPhone || '').includes(searchTerm);
+        normalizeText(v.code).includes(normalizedSearch) ||
+        (v.customerName && normalizeText(v.customerName).includes(normalizedSearch)) ||
+        (v.customerPhone && v.customerPhone.includes(normalizedSearch));
       
       const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
 

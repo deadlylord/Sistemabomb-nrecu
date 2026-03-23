@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
 import { PlusCircleIcon, CheckIcon, SwapIcon, SearchIcon, EditIcon, TrashIcon, CrossIcon, HistoryIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 import EditIncidentModal from './EditIncidentModal';
 import EditExchangeIncidentModal from './EditExchangeIncidentModal';
 
@@ -37,17 +37,17 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
 
   const filteredIncidents = useMemo(() => {
-    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    const normalizedSearch = normalizeText(searchTerm);
     return [...incidents]
       .filter(i => {
         const matchesStatus = filter === 'ALL' ? true : i.status === filter;
         
-        const matchesSearch = lowerCaseSearchTerm ? 
-            i.description.toLowerCase().includes(lowerCaseSearchTerm) ||
-            (i.productName && i.productName.toLowerCase().includes(lowerCaseSearchTerm)) ||
-            (i.customerName && i.customerName.toLowerCase().includes(lowerCaseSearchTerm)) ||
-            (i.customerPhone && i.customerPhone.includes(lowerCaseSearchTerm)) ||
-            (i.originalSaleInvoiceNumber && i.originalSaleInvoiceNumber.includes(lowerCaseSearchTerm))
+        const matchesSearch = normalizedSearch ? 
+            normalizeText(i.description).includes(normalizedSearch) ||
+            (i.productName && normalizeText(i.productName).includes(normalizedSearch)) ||
+            (i.customerName && normalizeText(i.customerName).includes(normalizedSearch)) ||
+            (i.customerPhone && i.customerPhone.includes(normalizedSearch)) ||
+            (i.originalSaleInvoiceNumber && i.originalSaleInvoiceNumber.includes(normalizedSearch))
             : true;
             
         return matchesStatus && matchesSearch;

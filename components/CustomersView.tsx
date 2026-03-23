@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Sale, Layaway, Customer } from '../types';
 import { SearchIcon, UserPlusIcon, CrossIcon, EditIcon } from './Icons';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 import BulkImportCustomersModal from './BulkImportCustomersModal';
 import EditCustomerModal from './EditCustomerModal';
 
@@ -211,13 +211,13 @@ const CustomersView: React.FC<CustomersViewProps> = ({ sales, layaways, allCusto
   }, [allCustomers, sales, layaways]);
 
   const sortedAndFilteredCustomers = useMemo(() => {
-      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      const normalizedSearch = normalizeText(searchTerm);
       let filtered = allCustomers.length > 0 ? enrichedCustomerData : [];
 
-      if (lowerCaseSearchTerm) {
+      if (normalizedSearch) {
         filtered = filtered.filter(c => 
-          c.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-          c.phone.includes(lowerCaseSearchTerm)
+          normalizeText(c.name).includes(normalizedSearch) ||
+          c.phone.includes(searchTerm)
         );
       }
 

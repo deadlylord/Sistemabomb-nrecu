@@ -29,12 +29,98 @@ export const toTitleCase = (str: string): string => {
     .join(' ');
 };
 
+export const normalizeText = (text: string): string => {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+};
+
 export const APP_VERSIONS: VersionLog[] = [
+  {
+    version: '1.1.9',
+    date: '2026-03-23',
+    description: 'Búsqueda Insensible a Tildes en Toda la Aplicación',
+    isCurrent: true,
+    changes: [
+      'Búsqueda Global: Se extendió la búsqueda insensible a acentos a todos los módulos (Inventario, Ventas, Clientes, Vendedores).',
+      'Mejora de Entrada: Se corrigió el problema que impedía la entrada de texto en los buscadores en ciertos casos.',
+      'Normalización: Uso de la función normalizeText en todos los filtros de búsqueda.'
+    ]
+  },
+  {
+    version: '1.1.8',
+    date: '2026-03-23',
+    description: 'Búsqueda Insensible a Tildes y Mejoras de Teclado',
+    changes: [
+      'Búsqueda Optimizada: Ahora los buscadores ignoran las tildes y acentos (ej. "canción" encontrará "cancion").',
+      'Mejora de Teclado: Se refinó la lógica de captura de teclas en el POS para evitar bloqueos en la entrada de texto.',
+      'Normalización de Texto: Implementación de una función global para estandarizar las búsquedas en toda la aplicación.'
+    ]
+  },
+  {
+    version: '1.1.7',
+    date: '2026-03-18',
+    description: 'Corrección de Teclado y Ajuste Fino de Centro',
+    changes: [
+      'Corrección de Teclado: Se solucionó el problema que impedía escribir valores negativos o borrar el contenido de los campos numéricos.',
+      'Ajuste Centro (mm): Nueva opción para desplazar el contenido de cada etiqueta hacia el centro de la página, optimizando el espacio y evitando recortes en los bordes.',
+      'Sincronización Real: Se aseguró que el ajuste del centro se refleje tanto en la vista previa como en la impresión final.'
+    ]
+  },
+  {
+    version: '1.1.6',
+    date: '2026-03-18',
+    description: 'Ajuste de Centrado y Desplazamiento de Etiquetas',
+    changes: [
+      'Ajuste de Centro: Se añadió una opción para desplazar horizontalmente las columnas de etiquetas, permitiendo centrarlas o pegarlas según la necesidad del papel.',
+      'Espaciado Negativo: Se habilitó la posibilidad de usar valores negativos en la división de columnas para eliminar cualquier espacio residual.',
+      'Control de Margen: Nuevo control para ajustar el margen izquierdo de la impresión.'
+    ]
+  },
+  {
+    version: '1.1.5',
+    date: '2026-03-18',
+    description: 'Optimización de Espacio en Etiquetas y Lectura de Código de Barras',
+    changes: [
+      'Espacio Central: Se eliminaron márgenes internos y rellenos innecesarios para que las etiquetas queden más juntas en impresiones multi-columna.',
+      'Código de Barras: Se optimizó el ancho del código de barras para ocupar el 100% del espacio disponible, mejorando la legibilidad.',
+      'Configuración Sugerida: Se añadieron valores recomendados en el panel de configuración para maximizar la eficiencia del papel.'
+    ]
+  },
+  {
+    version: '1.1.4',
+    date: '2026-03-18',
+    description: 'Corrección de Error de Fetch (Getter-only)',
+    changes: [
+      'Error de Fetch: Se implementó un parche en index.html para evitar que polyfills externos intenten sobrescribir window.fetch cuando es de solo lectura.',
+      'Estabilidad: Se mejoró la compatibilidad con el entorno de ejecución de AI Studio.'
+    ]
+  },
+  {
+    version: '1.1.3',
+    date: '2026-03-18',
+    description: 'Ajuste de Espaciado entre Columnas de Etiquetas',
+    changes: [
+      'Espacio entre Columnas: Se añadió una opción para configurar el espacio (gap) entre etiquetas en impresiones multi-columna.',
+      'Eliminación de Divisiones: Al establecer el espacio en 0, las etiquetas quedan perfectamente pegadas una de la otra.',
+      'Vista Previa Precisa: Se mejoró la vista previa del diseño para reflejar exactamente el espaciado configurado.'
+    ]
+  },
+  {
+    version: '1.1.2',
+    date: '2026-03-18',
+    description: 'Cantidades Predeterminadas en Etiquetas',
+    changes: [
+      'Cantidades Inteligentes: El modal de etiquetas ahora sugiere automáticamente la cantidad basada en el stock (Inventario) o la cantidad comprada (Compras).',
+      'Corrección de Fallback: Se actualizaron los valores por defecto de la configuración de etiquetas.'
+    ]
+  },
   {
     version: '2.11.28',
     date: '2026-02-28',
     description: 'Sincronización de Fecha Local y Confirmación de Activación',
-    isCurrent: true,
     changes: [
       'Fecha Local: Se corrigió el error de zona horaria que causaba la desactivación prematura de la verificación detallada.',
       'Confirmación de Activación: Se añadió un mensaje de confirmación al activar o desactivar las lupas para vendedores.',

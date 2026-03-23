@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryTransfer, Product, Store, Seller } from '../types';
 import { SwapIcon, SearchIcon, DollarIcon } from './Icons';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 
 interface InventoryTransferViewProps {
   inventory: Product[];
@@ -31,8 +31,9 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
   }, [inventory, fromStoreId]);
   
   const suggestedProducts = useMemo(() => {
-    if (!productSearch) return [];
-    return availableProducts.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+    const normalizedSearch = normalizeText(productSearch);
+    if (!normalizedSearch) return [];
+    return availableProducts.filter(p => normalizeText(p.name).includes(normalizedSearch));
   }, [productSearch, availableProducts]);
 
   useEffect(() => {

@@ -73,6 +73,8 @@ export interface LabelConfig {
   width: number; // mm
   height: number; // mm
   columns: number;
+  columnGap: number; // mm
+  orientation: 'portrait' | 'landscape';
   fontSize: number;
   showPrice: boolean;
   showName: boolean;
@@ -80,6 +82,8 @@ export interface LabelConfig {
   showSupplier: boolean;
   barcodeWidth: number;
   barcodeHeight: number;
+  horizontalOffset?: number;
+  centerOffset?: number;
 }
 
 export interface Store {

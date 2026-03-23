@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon, EditIcon, CheckIcon, PlusIcon, AlertTriangleIcon } from './Icons';
 
 interface PayrollViewProps {
@@ -478,13 +478,13 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   };
 
   const filteredHistory = useMemo(() => {
-    const lowerCaseSearchTerm = historySearchTerm.toLowerCase();
+    const normalizedSearch = normalizeText(historySearchTerm);
     return [...payrollHistory]
       .filter(record => {
         const recordDate = new Date(record.paidAt);
         const start = historyStartDate ? new Date(historyStartDate + 'T00:00:00') : null;
         const end = historyEndDate ? new Date(historyEndDate + 'T23:59:59') : null;
-        const matchesSearch = record.sellerName.toLowerCase().includes(lowerCaseSearchTerm);
+        const matchesSearch = normalizeText(record.sellerName).includes(normalizedSearch);
         const matchesStartDate = start ? recordDate >= start : true;
         const matchesEndDate = end ? recordDate <= end : true;
         return matchesSearch && matchesStartDate && matchesEndDate;

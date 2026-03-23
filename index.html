@@ -8,6 +8,26 @@
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/assets/icon.svg">
   <meta name="theme-color" content="#ff007f">
+  <script>
+    // Parche para corregir "TypeError: Cannot set property fetch of #<Window> which has only a getter"
+    // Este error ocurre cuando un polyfill (como formdata-polyfill) intenta sobrescribir window.fetch
+    // en entornos donde esta propiedad está definida como un getter de solo lectura.
+    (function() {
+      try {
+        const descriptor = Object.getOwnPropertyDescriptor(window, 'fetch');
+        if (descriptor && !descriptor.writable && !descriptor.set) {
+          Object.defineProperty(window, 'fetch', {
+            value: window.fetch,
+            writable: true,
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch (e) {
+        // Silenciosamente fallar si no se puede redefinir
+      }
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Sale, Seller, Product, Role, Category, CartItem, PaymentMethod, Payment } from '../types';
 import { SearchIcon, EditIcon, TrashIcon, ChevronDownIcon, PrintIcon, CrossIcon, ChevronLeftIcon, ChevronRightIcon } from './Icons';
-import { formatCOP, COMMISSION_RATES } from '../constants';
+import { formatCOP, COMMISSION_RATES, normalizeText } from '../constants';
 // FIX: Changed to a named import for EditSaleModal to resolve module loading error.
 import { EditSaleModal } from './EditSaleModal';
 
@@ -85,20 +85,20 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
   const filteredSales = useMemo(() => {
     return sortedSales.filter(sale => {
       const saleDate = new Date(sale.createdAt);
-      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      const normalizedSearch = normalizeText(searchTerm);
       // FIX: Explicitly cast to CartItem[] to handle cases where `sale.items` might be an object from Firebase.
       const itemsArray: CartItem[] = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as any[]).filter(Boolean) as CartItem[];
 
       const matchesSearch =
         sale.invoiceNumber.toString().includes(searchTerm) ||
         // FIX: Add guards for potentially missing properties from Firestore data to prevent runtime errors.
-        (sale.customerName || '').toLowerCase().includes(lowerCaseSearchTerm) ||
+        normalizeText(sale.customerName || '').includes(normalizedSearch) ||
         (sale.customerPhone || '').includes(searchTerm) ||
         // FIX: Explicitly type the 'item' parameter to ensure correct type inference within the callback, resolving a 'type unknown' error.
         itemsArray.some((item: CartItem) =>
             item && (
-                item.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                (item.supplier && item.supplier.toLowerCase().includes(lowerCaseSearchTerm))
+                normalizeText(item.name).includes(normalizedSearch) ||
+                (item.supplier && normalizeText(item.supplier).includes(normalizedSearch))
             )
         );
       

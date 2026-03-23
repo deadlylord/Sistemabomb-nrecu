@@ -9,7 +9,7 @@ import CreateIncidentModal from './CreateIncidentModal';
 import EditProductImageModal from './EditProductImageModal';
 import SellVoucherModal from './SellVoucherModal';
 import CheckVoucherModal from './CheckVoucherModal';
-import { formatCOP } from '../constants';
+import { formatCOP, normalizeText } from '../constants';
 import EditProductModal from './EditProductModal';
 
 interface PosViewProps {
@@ -70,8 +70,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
-  const [barcodeBuffer, setBarcodeBuffer] = useState('');
+  const barcodeBufferRef = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastKeyTimeRef = useRef<number>(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { onClearVerifications } = props;
 
@@ -81,42 +83,54 @@ const PosView: React.FC<PosViewProps> = (props) => {
   }, []);
 
   useEffect(() => {
-    let timeout: NodeJS.Timeout;
-    
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Si el foco está en un input o textarea, dejamos que el navegador lo maneje normalmente
-      // a menos que sea la tecla Enter, que podría ser el final de un escaneo.
+      const now = Date.now();
+      const diff = now - lastKeyTimeRef.current;
+      lastKeyTimeRef.current = now;
+
       const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      const isSearchInput = e.target === searchInputRef.current;
       
       if (e.key === 'Enter') {
-        if (barcodeBuffer.length > 2) {
-          const product = props.inventory.find(p => p.sku === barcodeBuffer);
+        const buffer = barcodeBufferRef.current;
+        if (buffer.length > 2) {
+          const product = props.inventory.find(p => p.sku === buffer);
           if (product && product.stock > 0 && !product.isDisabled) {
             handleAddToCartWithAnimation(product);
-            setBarcodeBuffer('');
+            barcodeBufferRef.current = '';
             e.preventDefault();
+            searchInputRef.current?.focus();
+            return;
           }
         }
-        setBarcodeBuffer('');
-      } else if (!isInput && e.key.length === 1) {
-        // Solo acumulamos si no estamos en un input para evitar duplicados
-        let key = e.key;
-        // Corrección para escáneres con configuración de teclado incorrecta
-        if (key === "'" || key === ",") key = "-";
-        setBarcodeBuffer(prev => prev + key);
-        
-        // Limpiar el buffer si pasa mucho tiempo entre teclas (no es un escáner)
-        clearTimeout(timeout);
-        timeout = setTimeout(() => setBarcodeBuffer(''), 100);
+        barcodeBufferRef.current = '';
+      } else if (e.key.length === 1) {
+        if (!isSearchInput) {
+          let key = e.key;
+          if (key === "'" || key === ",") key = "-";
+
+          if (diff < 40 && isInput && barcodeBufferRef.current.length > 0) {
+            searchInputRef.current?.focus();
+            setSearchTerm(barcodeBufferRef.current + key);
+            barcodeBufferRef.current = '';
+          } else {
+            barcodeBufferRef.current += key;
+          }
+          
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          timeoutRef.current = setTimeout(() => {
+            barcodeBufferRef.current = '';
+          }, 150);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      clearTimeout(timeout);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [barcodeBuffer, props.inventory]);
+  }, [props.inventory]);
 
   useEffect(() => {
     return () => {
@@ -309,22 +323,24 @@ const PosView: React.FC<PosViewProps> = (props) => {
   
       let result: Product[] = [];
 
+      const normalizedSearch = normalizeText(searchTerm);
+
       if (selectedCategoryId === NOVEDADES_CATEGORY_ID) {
           result = newArrivalsInventory.filter(p => {
-              const matchesSearch = lowerCaseSearchTerm
-                  ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                    p.sku.toLowerCase().includes(lowerCaseSearchTerm)
+              const matchesSearch = normalizedSearch
+                  ? normalizeText(p.name).includes(normalizedSearch) ||
+                    (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
+                    normalizeText(p.sku).includes(normalizedSearch)
                   : true;
               return matchesSearch;
           });
       } else if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
           result = props.inventory.filter(p => {
               const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
-              const matchesSearch = lowerCaseSearchTerm
-                  ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                    (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                    p.sku.toLowerCase().includes(lowerCaseSearchTerm)
+              const matchesSearch = normalizedSearch
+                  ? normalizeText(p.name).includes(normalizedSearch) ||
+                    (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
+                    normalizeText(p.sku).includes(normalizedSearch)
                   : true;
               return matchesDiscount && matchesSearch;
           });
@@ -333,10 +349,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
             .filter(p => {
               if (p.isDisabled) return false;
               const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
-              const matchesSearch = lowerCaseSearchTerm
-                ? p.name.toLowerCase().includes(lowerCaseSearchTerm) ||
-                  (p.supplier && p.supplier.toLowerCase().includes(lowerCaseSearchTerm)) ||
-                  p.sku.toLowerCase().includes(lowerCaseSearchTerm)
+              const matchesSearch = normalizedSearch
+                ? normalizeText(p.name).includes(normalizedSearch) ||
+                  (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
+                  normalizeText(p.sku).includes(normalizedSearch)
                 : true;
               return matchesCategory && matchesSearch;
             });

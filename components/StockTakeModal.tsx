@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { SearchIcon } from './Icons';
+import { normalizeText } from '../constants';
 
 interface StockTakeModalProps {
   inventory: Product[];
@@ -18,9 +19,10 @@ const StockTakeModal: React.FC<StockTakeModalProps> = ({ inventory, isOpen, onCl
   if (!isOpen) return null;
 
   const filteredInventory = useMemo(() => {
+    const normalizedSearch = normalizeText(searchTerm);
     return inventory.filter(product => 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      normalizeText(product.name).includes(normalizedSearch) ||
+      normalizeText(product.sku).includes(normalizedSearch)
     ).sort((a,b) => a.name.localeCompare(b.name));
   }, [inventory, searchTerm]);
 

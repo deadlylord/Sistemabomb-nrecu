@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
-import { formatCOP, toTitleCase } from '../constants';
+import { formatCOP, toTitleCase, normalizeText } from '../constants';
 import { TrashIcon, PlusIcon, MinusIcon, SearchIcon, CrossIcon } from './Icons';
 
 interface EditSaleModalProps {
@@ -55,9 +55,10 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
   
   const suggestedProducts = useMemo(() => {
     if (!productSearch) return [];
+    const normalizedSearch = normalizeText(productSearch);
     return inventory.filter(p => 
       !p.isDisabled &&
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) &&
+      normalizeText(p.name).includes(normalizedSearch) &&
       !items.some(item => item.id === p.id) // Exclude items already in cart
     );
   }, [productSearch, inventory, items]);

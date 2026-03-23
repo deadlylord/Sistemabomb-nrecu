@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Seller, Role, Store } from '../types';
 import { EditIcon, PlusCircleIcon, TrashIcon, SearchIcon, CrossIcon, PowerIcon } from './Icons';
 import SellerModal from './SellerModal';
+import { normalizeText } from '../constants';
 
 interface SellersViewProps {
   sellers: Seller[];
@@ -53,8 +54,8 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
       if (!showInactive && seller.isDisabled) {
         return false;
       }
-      const lowerCaseSearchTerm = searchTerm.toLowerCase();
-      const matchesSearch = seller.name.toLowerCase().includes(lowerCaseSearchTerm);
+      const normalizedSearch = normalizeText(searchTerm);
+      const matchesSearch = normalizeText(seller.name).includes(normalizedSearch);
       const matchesRole = roleFilter ? seller.roleId === roleFilter : true;
       const matchesStore = storeFilter ? seller.storeId === storeFilter : true;
       return matchesSearch && matchesRole && matchesStore;

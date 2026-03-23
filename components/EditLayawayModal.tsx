@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Layaway, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
-import { formatCOP, toTitleCase } from '../constants';
+import { formatCOP, toTitleCase, normalizeText } from '../constants';
 import { TrashIcon, PlusIcon, MinusIcon, SearchIcon, CrossIcon } from './Icons';
 
 interface EditLayawayModalProps {
@@ -57,9 +57,10 @@ const EditLayawayModal: React.FC<EditLayawayModalProps> = ({ isOpen, onClose, la
   
   const suggestedProducts = useMemo(() => {
     if (!productSearch) return [];
+    const normalizedSearch = normalizeText(productSearch);
     return inventory.filter(p => 
       !p.isDisabled &&
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) &&
+      normalizeText(p.name).includes(normalizedSearch) &&
       !items.some(item => item.id === p.id)
     );
   }, [productSearch, inventory, items]);

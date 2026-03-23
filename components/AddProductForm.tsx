@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, Store } from '../types';
 import { PlusCircleIcon, UploadIcon } from './Icons';
-import { toTitleCase } from '../constants';
+import { toTitleCase, normalizeText } from '../constants';
 
 interface AddProductFormProps {
   onAddProduct: (newProductData: Omit<Product, 'id' | 'sku' | 'storeId' | 'imageUrl'>, selectedStoreIds: string[], imageFile?: File) => void;
@@ -44,13 +44,13 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
 
   const suggestedProducts = useMemo(() => {
     if (!productSearch) return [];
-    const lowerCaseSearch = productSearch.toLowerCase();
+    const normalizedSearch = normalizeText(productSearch);
     const uniqueProductNames = new Set<string>();
     return allInventory
       .filter(p => {
-        const nameLower = p.name.toLowerCase();
-        if (nameLower.includes(lowerCaseSearch) && !uniqueProductNames.has(nameLower)) {
-          uniqueProductNames.add(nameLower);
+        const nameNormalized = normalizeText(p.name);
+        if (nameNormalized.includes(normalizedSearch) && !uniqueProductNames.has(nameNormalized)) {
+          uniqueProductNames.add(nameNormalized);
           return true;
         }
         return false;
@@ -61,8 +61,9 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
   const storesWithProduct = useMemo(() => {
     const productNameToFind = selectedProduct?.name || productSearch;
     if (!productNameToFind) return [];
+    const normalizedProductNameToFind = normalizeText(productNameToFind);
     return allInventory
-        .filter(p => p.name.toLowerCase() === productNameToFind.toLowerCase())
+        .filter(p => normalizeText(p.name) === normalizedProductNameToFind)
         .map(p => p.storeId);
   }, [selectedProduct, productSearch, allInventory]);
 
