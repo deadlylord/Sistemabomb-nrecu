@@ -39,6 +39,29 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.11',
+    date: '2026-03-24',
+    description: 'Conciliación: Dinero en Custodia y Saldos Reales',
+    isCurrent: true,
+    changes: [
+      'Conciliación: Se implementó el concepto de "Dinero en Custodia" para recaudos de otras sedes.',
+      'UX: Diferenciación clara entre "Saldo en Cuentas" (dinero físico) y "Patrimonio Neto" (dinero propio).',
+      'Corrección: Se corrigió el acceso a la configuración de saldos iniciales desde el panel de conciliación.',
+      'Sincronización: El libro diario ahora muestra movimientos cruzados de otras sedes que afectan el patrimonio local.'
+    ]
+  },
+  {
+    version: '1.1.10',
+    date: '2026-03-24',
+    description: 'Acceso Directo a Configuración de Saldos Iniciales',
+    isCurrent: false,
+    changes: [
+      'Conciliación: Se añadió un botón de acceso directo para configurar los saldos iniciales de la sede activa.',
+      'UX: Mejora en la visibilidad de la configuración de saldos inter-sedes.',
+      'Integración: El modal de sede ahora es accesible directamente desde el panel de conciliación para administradores.'
+    ]
+  },
+  {
     version: '1.1.9',
     date: '2026-03-23',
     description: 'Búsqueda Insensible a Tildes en Toda la Aplicación',

@@ -1792,7 +1792,7 @@ const App: React.FC = () => {
   const handleUpdateExpenseCategory = async (id: string, name: string) => await updateDoc(doc(db, 'expenseCategories', id), { name });
   const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
 
-  const handleAddStore = async (name: string) => { const newRef = doc(collection(db, 'stores')); await setDoc(newRef, { id: newRef.id, name, nextInvoiceNumber: 1, accentColor: '#000000', accentColorHover: '#333333' }); };
+  const handleAddStore = async (store: Store) => await setDoc(doc(db, 'stores', store.id), cleanObject(store) as any);
   const handleUpdateStore = async (updatedStore: Store) => await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string) => { const newRef = doc(collection(db, 'sellers')); await setDoc(newRef, { id: newRef.id, name, password, roleId, storeId, isDisabled: false }); };
@@ -1875,10 +1875,7 @@ const App: React.FC = () => {
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
-        {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={(id, newName) => {
-          const store = stores.find(s => s.id === id);
-          if (store) handleUpdateStore({ ...store, name: newName });
-        }} onDeleteStore={handleDeleteStore} />}
+        {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
         {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
@@ -1916,6 +1913,7 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
+                onUpdateStore={handleUpdateStore}
             />
         )}
         {currentView === View.GIFT_VOUCHERS && currentUser && (
@@ -1975,3 +1973,5 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+// VERSION: 1.1.11

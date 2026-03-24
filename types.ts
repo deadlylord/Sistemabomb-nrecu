@@ -111,6 +111,13 @@ export interface Store {
     qr: number;
     bank: number;
   };
+  crossStoreInitialBalances?: {
+    [otherStoreId: string]: {
+      cash: number;
+      qr: number;
+      bank: number;
+    }
+  };
   accountNames?: {
     cash: string;
     qr: string;
