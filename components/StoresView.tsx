@@ -68,7 +68,6 @@ const StoresView: React.FC<StoresViewProps> = ({ stores, onAddStore, onUpdateSto
                         <div className="flex flex-col gap-1">
                             <span className="text-[9px] font-bold text-gray-500 uppercase">EFEC: {formatCOP(store.initialBalances?.cash || 0)}</span>
                             <span className="text-[9px] font-bold text-gray-500 uppercase">QR: {formatCOP(store.initialBalances?.qr || 0)}</span>
-                            <span className="text-[9px] font-bold text-gray-500 uppercase">BANCO: {formatCOP(store.initialBalances?.bank || 0)}</span>
                         </div>
                     </td>
                     <td className="p-4 text-center">

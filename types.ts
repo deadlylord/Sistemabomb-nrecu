@@ -35,7 +35,7 @@ export interface FinancialRecord {
   id: string;
   date: string; // ISO String
   storeId: string;
-  accountType: 'cash' | 'qr' | 'bank';
+  accountType: 'cash' | 'qr';
   amount: number; // Positivo para ingresos, negativo para egresos
   type: 'income_sales' | 'income_manual' | 'expense' | 'transfer' | 'adjustment';
   description: string;
@@ -109,19 +109,16 @@ export interface Store {
   initialBalances?: {
     cash: number;
     qr: number;
-    bank: number;
   };
   crossStoreInitialBalances?: {
     [otherStoreId: string]: {
       cash: number;
       qr: number;
-      bank: number;
     }
   };
   accountNames?: {
     cash: string;
     qr: string;
-    bank: string;
   };
   paymentCommissions?: { [key in PaymentMethod]?: number };
   labelConfig?: LabelConfig;

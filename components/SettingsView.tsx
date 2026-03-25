@@ -42,11 +42,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     const { name, value, type } = e.target;
     
     if (name.startsWith('initialBalance_')) {
-        const key = name.split('_')[1] as 'cash' | 'qr' | 'bank';
+        const key = name.split('_')[1] as 'cash' | 'qr';
         setLocalSettings(prev => prev ? ({
             ...prev,
             initialBalances: {
-                ...(prev.initialBalances || { cash: 0, qr: 0, bank: 0 }),
+                ...(prev.initialBalances || { cash: 0, qr: 0 }),
                 [key]: parseFloat(value) || 0
             }
         }) : null);
@@ -54,11 +54,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     }
 
     if (name.startsWith('accountName_')) {
-        const key = name.split('_')[1] as 'cash' | 'qr' | 'bank';
+        const key = name.split('_')[1] as 'cash' | 'qr';
         setLocalSettings(prev => prev ? ({
             ...prev,
             accountNames: {
-                ...(prev.accountNames || { cash: 'Efectivo', qr: 'Bancolombia (QR)', bank: 'Bancos / Otros' }),
+                ...(prev.accountNames || { cash: 'Efectivo', qr: 'Bancolombia (QR)' }),
                 [key]: value
             }
         }) : null);
@@ -295,7 +295,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
 
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Saldos Iniciales (Conciliación)</h3>
           <p className="text-xs text-gray-500 italic -mt-4">Define el capital inicial con el que comienza el libro mayor para cada cuenta en esta sede.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
                 <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2"><DollarIcon className="w-3 h-3"/> Caja Efectivo</label>
                 <input 
@@ -318,22 +318,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     placeholder="0"
                 />
              </div>
-             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
-                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2"><BuildingStorefrontIcon className="w-3 h-3 text-purple-500"/> Otros Bancos</label>
-                <input 
-                    type="number" 
-                    name="initialBalance_bank"
-                    value={localSettings.initialBalances?.bank || 0}
-                    onChange={handleSettingsChange}
-                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
-                    placeholder="0"
-                />
-             </div>
           </div>
 
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Nombres de Cuentas</h3>
           <p className="text-xs text-gray-500 italic -mt-4">Personaliza cómo se llaman las cuentas en esta sede (ej: Nequi Local, QR Bancolombia, etc).</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
                 <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2">Efectivo</label>
                 <input 
@@ -354,17 +343,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     onChange={handleSettingsChange}
                     className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
                     placeholder="Bancolombia (QR)"
-                />
-             </div>
-             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
-                <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-1 mb-2">Bancos / Otros</label>
-                <input 
-                    type="text" 
-                    name="accountName_bank"
-                    value={localSettings.accountNames?.bank || 'Bancos / Otros'}
-                    onChange={handleSettingsChange}
-                    className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
-                    placeholder="Bancos / Otros"
                 />
              </div>
           </div>

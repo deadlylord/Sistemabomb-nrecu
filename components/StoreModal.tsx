@@ -11,17 +11,17 @@ interface StoreModalProps {
 
 const StoreModal: React.FC<StoreModalProps> = ({ isOpen, onClose, onSave, store, allStores }) => {
   const [name, setName] = useState('');
-  const [initialBalances, setInitialBalances] = useState({ cash: 0, qr: 0, bank: 0 });
-  const [crossStoreInitialBalances, setCrossStoreInitialBalances] = useState<Record<string, { cash: number; qr: number; bank: number }>>({});
+  const [initialBalances, setInitialBalances] = useState({ cash: 0, qr: 0 });
+  const [crossStoreInitialBalances, setCrossStoreInitialBalances] = useState<Record<string, { cash: number; qr: number }>>({});
 
   useEffect(() => {
     if (store) {
       setName(store.name);
-      setInitialBalances(store.initialBalances || { cash: 0, qr: 0, bank: 0 });
+      setInitialBalances(store.initialBalances || { cash: 0, qr: 0 });
       setCrossStoreInitialBalances(store.crossStoreInitialBalances || {});
     } else {
       setName('');
-      setInitialBalances({ cash: 0, qr: 0, bank: 0 });
+      setInitialBalances({ cash: 0, qr: 0 });
       setCrossStoreInitialBalances({});
     }
   }, [store]);
@@ -54,12 +54,12 @@ const StoreModal: React.FC<StoreModalProps> = ({ isOpen, onClose, onSave, store,
     }
   };
 
-  const handleUpdateCrossBalance = (storeId: string, field: 'cash' | 'qr' | 'bank', value: string) => {
+  const handleUpdateCrossBalance = (storeId: string, field: 'cash' | 'qr', value: string) => {
     const num = parseFloat(value) || 0;
     setCrossStoreInitialBalances(prev => ({
       ...prev,
       [storeId]: {
-        ...(prev[storeId] || { cash: 0, qr: 0, bank: 0 }),
+        ...(prev[storeId] || { cash: 0, qr: 0 }),
         [field]: num
       }
     }));
@@ -108,27 +108,18 @@ const StoreModal: React.FC<StoreModalProps> = ({ isOpen, onClose, onSave, store,
                     className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-sm font-bold"
                   />
                 </div>
-                <div>
-                  <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Bancos / Otros</label>
-                  <input
-                    type="number"
-                    value={initialBalances.bank}
-                    onChange={e => setInitialBalances({ ...initialBalances, bank: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-2 text-sm font-bold"
-                  />
-                </div>
               </div>
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest border-b pb-2">Saldos de Otras Sedes</h3>
-              <p className="text-[10px] text-gray-400 italic">Dinero que esta sede tiene en sus cuentas pero que PERTENECE a otra sede.</p>
+              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest border-b pb-2">Dinero en Otras Sedes</h3>
+              <p className="text-[10px] text-gray-400 italic">Dinero que PERTENECE a esta sede pero que está físicamente en las cuentas de otra sede.</p>
               
               <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
                 {allStores.filter(s => s.id !== store?.id).map(otherStore => (
                   <div key={otherStore.id} className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
                     <p className="text-[10px] font-black text-accent uppercase mb-2">{otherStore.name}</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[8px] font-black text-gray-400 uppercase mb-1">Efectivo</label>
                         <input
@@ -144,15 +135,6 @@ const StoreModal: React.FC<StoreModalProps> = ({ isOpen, onClose, onSave, store,
                           type="number"
                           value={crossStoreInitialBalances[otherStore.id]?.qr || 0}
                           onChange={e => handleUpdateCrossBalance(otherStore.id, 'qr', e.target.value)}
-                          className="w-full bg-white dark:bg-gray-800 rounded p-1 text-[10px] font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[8px] font-black text-gray-400 uppercase mb-1">Banco</label>
-                        <input
-                          type="number"
-                          value={crossStoreInitialBalances[otherStore.id]?.bank || 0}
-                          onChange={e => handleUpdateCrossBalance(otherStore.id, 'bank', e.target.value)}
                           className="w-full bg-white dark:bg-gray-800 rounded p-1 text-[10px] font-bold"
                         />
                       </div>
