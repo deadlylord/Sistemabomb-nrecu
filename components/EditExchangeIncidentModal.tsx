@@ -286,8 +286,15 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Estado (Admin)</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as IncidentStatus)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md">
-                  {Object.values(IncidentStatus).map(s => <option key={s} value={s}>{s}</option>)}
+              <select 
+                value={status} 
+                onChange={(e) => setStatus(e.target.value as IncidentStatus)} 
+                className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md"
+                disabled={incident.status === IncidentStatus.CAMBIO_PROCESADO}
+              >
+                  {Object.values(IncidentStatus)
+                    .filter(s => s !== IncidentStatus.CAMBIO_PROCESADO || incident.status === IncidentStatus.CAMBIO_PROCESADO)
+                    .map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>

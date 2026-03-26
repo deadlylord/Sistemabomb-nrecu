@@ -1098,6 +1098,8 @@ const App: React.FC = () => {
 
   const handleUpdateIncident = async (incident: Incident) => { 
     const existingIncident = incidents.find(i => i.id === incident.id);
+    const batch = writeBatch(db);
+
     if (existingIncident && existingIncident.status !== incident.status) {
         incident.history = [
             ...(incident.history || []),
@@ -1108,8 +1110,33 @@ const App: React.FC = () => {
                 notes: 'Estado actualizado manualmente por administrador'
             }
         ];
+
+        // Ajustar inventario si es una prenda dañada y cambia el estado
+        if (incident.type === IncidentType.DAMAGED && incident.productId) {
+            const oldStatusImpact = existingIncident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+            const newStatusImpact = incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+            const stockChange = newStatusImpact - oldStatusImpact;
+
+            if (stockChange !== 0) {
+                batch.update(doc(db, 'inventory', incident.productId), { stock: increment(stockChange) });
+                
+                const logRef = doc(collection(db, 'productHistory'));
+                const log: ProductHistoryLog = {
+                    id: logRef.id,
+                    productId: incident.productId,
+                    productName: incident.productName || 'Producto',
+                    storeId: incident.storeId,
+                    changedBy: currentUser?.name || 'Sistema',
+                    timestamp: new Date().toISOString(),
+                    changeType: stockChange > 0 ? ProductChangeType.DAMAGED_RETURNED : ProductChangeType.DAMAGED,
+                    details: `Estado de novedad modificado manualmente de ${existingIncident.status} a ${incident.status}. Ajuste de stock: ${stockChange > 0 ? '+' : ''}${stockChange}.`
+                };
+                batch.set(logRef, log);
+            }
+        }
     }
-    await setDoc(doc(db, 'incidents', incident.id), incident, { merge: true }); 
+    batch.set(doc(db, 'incidents', incident.id), incident, { merge: true }); 
+    await batch.commit();
   };
 
   const handleDeleteIncident = async (incidentId: string) => {

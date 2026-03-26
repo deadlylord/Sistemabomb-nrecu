@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.11',
+    date: '2026-03-26',
+    description: 'Corrección en Novedades y Ediciones Manuales',
+    isCurrent: true,
+    changes: [
+      'Se corrigió un error donde editar manualmente el estado de una prenda dañada no actualizaba el inventario correctamente.',
+      'Se deshabilitó la edición manual de estados procesados (Cambios, Traslados) para evitar inconsistencias en inventario y ventas.',
+      'Se mejoró la lógica de actualización de inventario al editar novedades.'
+    ]
+  },
+  {
     version: '1.1.10',
     date: '2026-03-25',
     description: 'Mejora en Cruce de Sedes y Cuentas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se agregó la opción de elegir de qué caja física sale/entra el dinero en el cruce de sedes.',
       'Se ocultó la tienda de prueba (Training Store) de los menús de cruce de sedes.',

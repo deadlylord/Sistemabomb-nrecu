@@ -92,8 +92,11 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
                   value={status}
                   onChange={e => setStatus(e.target.value as IncidentStatus)}
                   className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                  disabled={incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && incident.status === IncidentStatus.TRASLADO_COMPLETADO}
                 >
-                  {Object.values(IncidentStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                  {Object.values(IncidentStatus)
+                    .filter(s => !(incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && s === IncidentStatus.TRASLADO_COMPLETADO) || incident.status === IncidentStatus.TRASLADO_COMPLETADO)
+                    .map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             )}
