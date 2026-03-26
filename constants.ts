@@ -39,33 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '1.1.11',
-    date: '2026-03-24',
-    description: 'Conciliación: Dinero en Custodia y Saldos Reales',
+    version: '1.1.10',
+    date: '2026-03-25',
+    description: 'Mejora en Cruce de Sedes y Cuentas',
     isCurrent: true,
     changes: [
-      'Conciliación: Se implementó el concepto de "Dinero en Custodia" para recaudos de otras sedes.',
-      'UX: Diferenciación clara entre "Saldo en Cuentas" (dinero físico) y "Patrimonio Neto" (dinero propio).',
-      'Corrección: Se corrigió el acceso a la configuración de saldos iniciales desde el panel de conciliación.',
-      'Sincronización: El libro diario ahora muestra movimientos cruzados de otras sedes que afectan el patrimonio local.'
-    ]
-  },
-  {
-    version: '1.1.10',
-    date: '2026-03-24',
-    description: 'Acceso Directo a Configuración de Saldos Iniciales',
-    isCurrent: false,
-    changes: [
-      'Conciliación: Se añadió un botón de acceso directo para configurar los saldos iniciales de la sede activa.',
-      'UX: Mejora en la visibilidad de la configuración de saldos inter-sedes.',
-      'Integración: El modal de sede ahora es accesible directamente desde el panel de conciliación para administradores.'
+      'Se agregó la opción de elegir de qué caja física sale/entra el dinero en el cruce de sedes.',
+      'Se ocultó la tienda de prueba (Training Store) de los menús de cruce de sedes.',
+      'Se renombró la cuenta "Bancos / Otros" a "Bancos".'
     ]
   },
   {
     version: '1.1.9',
     date: '2026-03-23',
     description: 'Búsqueda Insensible a Tildes en Toda la Aplicación',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Búsqueda Global: Se extendió la búsqueda insensible a acentos a todos los módulos (Inventario, Ventas, Clientes, Vendedores).',
       'Mejora de Entrada: Se corrigió el problema que impedía la entrada de texto en los buscadores en ciertos casos.',
@@ -315,8 +303,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '2',
@@ -335,8 +323,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
   {
     id: '3',
@@ -355,8 +343,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
+    initialBalances: { cash: 0, qr: 0, bank: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
   },
 ];
 

@@ -4,7 +4,7 @@ import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, 
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon } from './Icons';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc, or } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 
 interface FinancialReconciliationViewProps {
   stores: Store[];
@@ -15,12 +15,9 @@ interface FinancialReconciliationViewProps {
   currentUser: Seller;
   onNavigate?: (view: View) => void;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
-  onUpdateStore: (store: Store) => void;
 }
 
-import StoreModal from './StoreModal';
-
-type AccountType = 'cash' | 'qr';
+type AccountType = 'cash' | 'qr' | 'bank';
 
 interface TransactionDetail {
     id: string;
@@ -33,11 +30,13 @@ interface TransactionDetail {
 interface DailySystemTotal {
     cash: number;
     qr: number;
+    bank: number;
     date: string;
     details: string[];
     transactions: {
         cash: TransactionDetail[];
         qr: TransactionDetail[];
+        bank: TransactionDetail[];
     };
 }
 
@@ -51,7 +50,7 @@ interface ManualEntry {
     subCategory: string;
     debtStoreId?: string;
     mirrorCategory?: string; 
-    affectsMirrorBalance: boolean; 
+    physicalStoreId: string; 
 }
 
 interface PaymentSummaryData {
@@ -83,14 +82,11 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense, onUpdateStore }) => {
-  const filteredStores = useMemo(() => stores.filter(s => s.name.toLowerCase() !== 'training store'), [stores]);
-  const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
-  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
+  const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || stores[0]?.id || '');
   const [records, setRecords] = useState<FinancialRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('cash_own');
+  const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [searchTerm, setSearchTerm] = useState('');
-  const version = "1.0.7";
   
   // Filtros de fecha adicionales para la tabla principal
   const [ledgerStartDate, setLedgerStartDate] = useState('');
@@ -110,7 +106,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
   const [isEditingNames, setIsEditingNames] = useState(false);
-  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '' });
+  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', bank: '' });
 
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
@@ -125,11 +121,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     return `${year}-${month}-${day}`;
   };
 
-  const activeStore = useMemo(() => filteredStores.find(s => s.id === activeStoreId), [activeStoreId, filteredStores]);
-  const accountNames = useMemo(() => ({
-    cash: activeStore?.accountNames?.cash || 'Efectivo',
-    qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)'
-  }), [activeStore]);
+  const activeStore = useMemo(() => stores.find(s => s.id === activeStoreId), [activeStoreId, stores]);
   const isAdmin = currentUser.roleId === '1';
 
   const years = useMemo(() => {
@@ -144,36 +136,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  const [activeTabType, activeTabOwnerId, activeTabLocationId] = useMemo(() => {
-    const parts = activeTab.split('_');
-    const type = parts[0] as AccountType;
-    const mode = parts[1]; // 'own', 'custody', 'remote'
-    const otherId = parts[2];
-
-    if (mode === 'own') return [type, activeStoreId, activeStoreId];
-    if (mode === 'custody') return [type, otherId, activeStoreId];
-    if (mode === 'remote') return [type, activeStoreId, otherId];
-    return [type, activeStoreId, activeStoreId];
-  }, [activeTab, activeStoreId]);
-
-  useEffect(() => {
-    if (filteredStores.length > 0) {
-      const exists = filteredStores.some(s => s.id === activeStoreId);
-      if (!exists) {
-        setActiveStoreId(currentUser.storeId || filteredStores[0].id);
-      }
-    }
-  }, [filteredStores, currentUser.storeId, activeStoreId]);
-
   useEffect(() => {
     if (!activeStoreId) return;
-    const q = query(
-        collection(db, 'financialRecords'), 
-        or(
-            where('storeId', '==', activeStoreId),
-            where('debtStoreId', '==', activeStoreId)
-        )
-    );
+    const q = query(collection(db, 'financialRecords'), where('storeId', '==', activeStoreId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FinancialRecord));
         setRecords(list.sort((a, b) => {
@@ -249,84 +214,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [records, selectedMonth, selectedYear]);
 
   const interStoreBalances = useMemo(() => {
-      const balances: Record<string, { total: number, cash: number, qr: number, storeId: string, history: FinancialRecord[] }> = {};
-      
-      // 1. Cargar saldos iniciales cruzados
-      // Si NOSOTROS tenemos dinero que está en OTRAS sedes (Remote)
-      if (activeStore?.crossStoreInitialBalances) {
-          Object.entries(activeStore.crossStoreInitialBalances).forEach(([otherStoreId, bal]: [string, any]) => {
-              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
-              const b = balances[otherStoreId];
-              const total = (bal.cash || 0) + (bal.qr || 0);
-              b.total += total; // Nos deben
-              b.cash += (bal.cash || 0);
-              b.qr += (bal.qr || 0);
-              
-              if (total !== 0) {
-                  b.history.push({
-                      id: `initial_remote_${activeStoreId}_${otherStoreId}`,
-                      date: new Date(selectedYear, 0, 1).toISOString(),
-                      description: `Saldo Inicial (Nuestro dinero en ${stores.find(s => s.id === otherStoreId)?.name || 'otra sede'})`,
-                      amount: total,
-                      type: 'income_manual',
-                      subCategory: 'Saldo Inicial',
-                      storeId: otherStoreId,
-                      accountType: 'cash',
-                      registeredBy: 'Sistema',
-                      isConfirmed: true
-                  } as any);
-              }
-          });
-      }
-
-      // Si OTRAS sedes tienen dinero que está en NUESTRA sede (Custody)
-      stores.forEach(s => {
-          if (s.id !== activeStoreId && s.crossStoreInitialBalances?.[activeStoreId]) {
-              const bal: any = s.crossStoreInitialBalances[activeStoreId];
-              if (!balances[s.id]) balances[s.id] = { total: 0, cash: 0, qr: 0, storeId: s.id, history: [] };
-              const b = balances[s.id];
-              const total = (bal.cash || 0) + (bal.qr || 0);
-              b.total -= total; // Debemos
-              b.cash -= (bal.cash || 0);
-              b.qr -= (bal.qr || 0);
-
-              if (total !== 0) {
-                  b.history.push({
-                      id: `initial_custody_${s.id}_${activeStoreId}`,
-                      date: new Date(selectedYear, 0, 1).toISOString(),
-                      description: `Saldo Inicial (Dinero de ${s.name} en esta sede)`,
-                      amount: -total,
-                      type: 'expense',
-                      subCategory: 'Saldo Inicial',
-                      storeId: activeStoreId,
-                      accountType: 'cash',
-                      registeredBy: 'Sistema',
-                      isConfirmed: true
-                  } as any);
-              }
-          }
-      });
-
-      // 2. Cargar registros históricos
+      const balances: Record<string, { total: number, cash: number, qr: number, bank: number, storeId: string, history: FinancialRecord[] }> = {};
       records.forEach(r => {
-          if (r.storeId === activeStoreId && r.debtStoreId) {
-              const otherStoreId = r.debtStoreId;
-              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
+          const otherStoreId = r.debtStoreId;
+          if (otherStoreId) {
+              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0, storeId: otherStoreId, history: [] };
               const b = balances[otherStoreId]!;
-              const netImpact = -r.amount;
+              const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') ? -r.amount : r.amount;
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
               if (r.accountType === 'cash') b.cash += netImpact;
               else if (r.accountType === 'qr') b.qr += netImpact;
-          } else if (r.debtStoreId === activeStoreId && r.storeId !== activeStoreId) {
-              const otherStoreId = r.storeId;
-              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
-              const b = balances[otherStoreId]!;
-              const netImpact = r.amount;
-              b.total += netImpact;
-              b.history.push({ ...r, netImpact } as any);
-              if (r.accountType === 'cash') b.cash += netImpact;
-              else if (r.accountType === 'qr') b.qr += netImpact;
+              else if (r.accountType === 'bank') b.bank += netImpact;
           }
       });
       return Object.entries(balances).map(([otherStoreId, stats]) => ({
@@ -335,36 +234,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           ...stats,
           history: stats.history.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())
       })).filter(s => Math.abs(s.total) > 0.1);
-  }, [records, stores, activeStore, activeStoreId, selectedYear]);
+  }, [records, stores]);
 
   const globalDebtsSummary = useMemo(() => {
       let toCollect = 0; let toPay = 0;
       interStoreBalances.forEach(b => { if (b.total > 0) toCollect += b.total; else toPay += Math.abs(b.total); });
       return { toCollect, toPay };
   }, [interStoreBalances]);
-
-  const storeNetWorth = useMemo(() => {
-      // Dinero físico en caja (Propio + Custodia)
-      const ownInitialCash = activeStore?.initialBalances?.cash || 0;
-      const ownInitialQr = activeStore?.initialBalances?.qr || 0;
-      
-      const custodyInitialCash = stores.filter(s => s.id !== activeStoreId).reduce((sum: number, s: any) => sum + (s.crossStoreInitialBalances?.[activeStoreId]?.cash || 0), 0);
-      const custodyInitialQr = stores.filter(s => s.id !== activeStoreId).reduce((sum: number, s: any) => sum + (s.crossStoreInitialBalances?.[activeStoreId]?.qr || 0), 0);
-
-      const cashBal = records.filter(r => r.accountType === 'cash' && r.affectsCashBalance !== false).reduce((sum, r) => sum + r.amount, 0) + ownInitialCash + custodyInitialCash;
-      const qrBal = records.filter(r => r.accountType === 'qr' && r.affectsCashBalance !== false).reduce((sum, r) => sum + r.amount, 0) + ownInitialQr + custodyInitialQr;
-      
-      const totalInAccounts = cashBal + qrBal;
-      const netInterStore = interStoreBalances.reduce((sum, b) => sum + b.total, 0);
-      
-      return {
-          totalInAccounts,
-          netInterStore,
-          grandTotal: totalInAccounts + netInterStore,
-          cashBal,
-          qrBal
-      };
-  }, [records, activeStore, interStoreBalances]);
 
   const dailySystemTotals = useMemo(() => {
     const totalsMap = new Map<string, DailySystemTotal>();
@@ -373,8 +249,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     const getExisting = (dateStr: string): DailySystemTotal => {
         return totalsMap.get(dateStr) || { 
-            cash: 0, qr: 0, date: dateStr, details: [], 
-            transactions: { cash: [], qr: [] } 
+            cash: 0, qr: 0, bank: 0, date: dateStr, details: [], 
+            transactions: { cash: [], qr: [], bank: [] } 
         };
     }
 
@@ -400,6 +276,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(p.method)) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
+        } else if ([PaymentMethod.Tarjeta, PaymentMethod.Sistecredito, PaymentMethod.Addi].includes(p.method)) {
+            existing.bank += amount;
+            existing.transactions.bank.push(detail);
         }
         totalsMap.set(dateStr, existing);
     };
@@ -440,6 +319,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method)) {
             existing.qr += finalAmount;
             existing.transactions.qr.push(detail);
+        } else {
+            existing.bank += finalAmount;
+            existing.transactions.bank.push(detail);
         }
         existing.details.push(`Ajuste ${incident.type}: ${isExpense ? '-' : '+'}${formatCOP(amount)}`);
         totalsMap.set(dateStr, existing);
@@ -451,30 +333,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const getAccountName = (type: AccountType): string => {
     if (activeStore?.accountNames?.[type]) return activeStore.accountNames[type];
     if (type === 'cash') return 'Efectivo';
-    return 'Bancolombia (QR)';
-  };
-
-  const getTabDisplayName = (tab: string): string => {
-    const parts = tab.split('_');
-    const type = parts[0] as AccountType;
-    const mode = parts[1];
-    const otherId = parts[2];
-    
-    const baseName = getAccountName(type);
-    if (mode === 'own') return baseName;
-    
-    const otherStore = filteredStores.find(s => s.id === otherId);
-    const storeName = otherStore?.name || 'Local';
-    
-    if (mode === 'custody') return `${baseName} ${storeName}`;
-    if (mode === 'remote') return `${baseName} ${storeName}`;
-    return baseName;
+    if (type === 'qr') return 'Bancolombia (QR)';
+    return 'Bancos';
   };
 
   const handleOpenEditNames = () => {
     setTempAccountNames({
         cash: activeStore?.accountNames?.cash || 'Efectivo',
-        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)'
+        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)',
+        bank: activeStore?.accountNames?.bank || 'Bancos'
     });
     setIsEditingNames(true);
   };
@@ -503,81 +370,37 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const initialBalanceValue = useMemo(() => {
-    if (!activeStore) return 0;
-    const parts = activeTab.split('_');
-    const type = parts[0] as AccountType;
-    const mode = parts[1];
-    const otherId = parts[2];
-
-    if (mode === 'own') {
-        const ownInitial = activeStore.initialBalances?.[type] || 0;
-        const custodyInitial = stores.filter(s => s.id !== activeStoreId).reduce((sum: number, s: any) => sum + (s.crossStoreInitialBalances?.[activeStoreId]?.[type] || 0), 0);
-        return ownInitial + custodyInitial;
-    } else if (mode === 'custody') {
-        const otherStore = filteredStores.find(s => s.id === otherId);
-        return (otherStore?.crossStoreInitialBalances?.[activeStoreId]?.[type] || 0);
-    } else if (mode === 'remote') {
-        return (activeStore.crossStoreInitialBalances?.[otherId]?.[type] || 0);
-    }
-    return 0;
-  }, [activeStore, activeTab, stores, activeStoreId]);
+    if (!activeStore || !activeStore.initialBalances) return 0;
+    return activeStore.initialBalances[activeTab] || 0;
+  }, [activeStore, activeTab]);
 
   const filteredRecords = useMemo(() => {
-    const parts = activeTab.split('_');
-    const type = parts[0] as AccountType;
-    const mode = parts[1];
-    const otherId = parts[2];
-
     return records.filter(r => {
-        const isCorrectType = r.accountType === type;
-        let isCorrectContext = false;
-
-        if (mode === 'own') {
-            isCorrectContext = r.storeId === activeStoreId;
-        } else if (mode === 'custody') {
-            isCorrectContext = r.storeId === activeStoreId && r.debtStoreId === otherId;
-        } else if (mode === 'remote') {
-            isCorrectContext = r.storeId === otherId && r.debtStoreId === activeStoreId;
-        }
-
-        if (!isCorrectType || !isCorrectContext) return false;
-
+        const matchesAccount = r.accountType === activeTab;
         const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) || (r.subCategory && r.subCategory.toLowerCase().includes(searchTerm.toLowerCase()));
         
+        // Filtro de rango de fechas
         const rDate = new Date(r.date);
         const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00') : null;
         const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59') : null;
         const matchesDate = (!start || rDate >= start) && (!end || rDate <= end);
 
+        // Filtro de tipo (Ingreso / Egreso)
         let matchesType = true;
         if (financeTypeFilter === 'income') matchesType = r.amount > 0;
         else if (financeTypeFilter === 'expense') matchesType = r.amount < 0;
 
-        return matchesSearch && matchesDate && matchesType;
+        return matchesAccount && matchesSearch && matchesDate && matchesType;
     });
-  }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter, activeStoreId]);
+  }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter]);
 
   const currentBalance = useMemo(() => {
-      const parts = activeTab.split('_');
-      const type = parts[0] as AccountType;
-      const mode = parts[1];
-      const otherId = parts[2];
-
+      // El saldo real se calcula siempre sobre TODOS los registros de la cuenta para ser consistente
       const recordsSum = records
-        .filter(r => {
-            const isCorrectType = r.accountType === type && r.affectsCashBalance !== false;
-            if (mode === 'own') {
-                return isCorrectType && r.storeId === activeStoreId;
-            } else if (mode === 'custody') {
-                return isCorrectType && r.storeId === activeStoreId && r.debtStoreId === otherId;
-            } else if (mode === 'remote') {
-                return isCorrectType && r.storeId === otherId && r.debtStoreId === activeStoreId;
-            }
-            return false;
-        })
+        .filter(r => r.accountType === activeTab && r.affectsCashBalance !== false)
         .reduce((sum, r) => sum + r.amount, 0);
       return initialBalanceValue + recordsSum;
-  }, [records, activeTab, initialBalanceValue, activeStoreId]);
+  }, [records, activeTab, initialBalanceValue]);
 
   // Totales visibles (para el pie de tabla)
   const visibleTotals = useMemo(() => {
@@ -590,23 +413,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [filteredRecords]);
 
   const recordsWithBalance = useMemo(() => {
-    const parts = activeTab.split('_');
-    const type = parts[0] as AccountType;
-    const mode = parts[1];
-    const otherId = parts[2];
-
+    const sorted = [...filteredRecords].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
+    let runningBalance = initialBalanceValue;
+    
+    // Para mostrar el saldo dinámico, necesitamos calcularlo basado en el historial completo de la cuenta
+    // no solo en los filtrados, o de lo contrario el saldo "salta" visualmente.
     const accountHistory = records
-        .filter(r => {
-            const isCorrectType = r.accountType === type;
-            if (mode === 'own') {
-                return isCorrectType && r.storeId === activeStoreId;
-            } else if (mode === 'custody') {
-                return isCorrectType && r.storeId === activeStoreId && r.debtStoreId === otherId;
-            } else if (mode === 'remote') {
-                return isCorrectType && r.storeId === otherId && r.debtStoreId === activeStoreId;
-            }
-            return false;
-        })
+        .filter(r => r.accountType === activeTab)
         .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
 
     const balanceMap = new Map<string, number>();
@@ -617,7 +430,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     });
 
     return filteredRecords.map(r => ({ ...r, saldo: balanceMap.get(r.id) || 0 })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
-  }, [filteredRecords, records, activeTab, initialBalanceValue, activeStoreId]);
+  }, [filteredRecords, records, activeTab, initialBalanceValue]);
 
   const handleAddRow = () => {
     const lastEntry = manualEntries[manualEntries.length - 1];
@@ -630,11 +443,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         time: time,
         amount: '',
         description: '',
-        accountType: activeTabType,
-        subCategory: activeTabOwnerId !== activeStoreId ? 'Cruce Sedes' : '',
-        debtStoreId: activeTabOwnerId !== activeStoreId ? activeTabOwnerId : '',
+        accountType: activeTab,
+        subCategory: '',
+        debtStoreId: '',
         mirrorCategory: '',
-        affectsMirrorBalance: activeTabOwnerId !== activeStoreId 
+        physicalStoreId: activeStoreId 
     }]);
   };
 
@@ -731,12 +544,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const mainRef = doc(collection(db, 'financialRecords'));
         const mirrorRef = e.debtStoreId ? doc(collection(db, 'financialRecords')) : null;
         const mainSubCategory = (e.debtStoreId && e.subCategory !== 'Cruce Sedes') ? 'Préstamo a Sede' : (e.subCategory || 'Manual');
-        const mainRecord: FinancialRecord = { id: mainRef.id, date: dateTime, storeId: activeStoreId, accountType: e.accountType as any, amount: totalAmountVal, type: totalAmountVal < 0 ? 'expense' : 'income_manual', description: e.description, subCategory: mainSubCategory, registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: true, ...(e.debtStoreId ? { debtStoreId: e.debtStoreId } : {}) };
+        
+        const affectsMainBalance = e.debtStoreId ? (e.physicalStoreId === activeStoreId) : true;
+
+        const mainRecord: FinancialRecord = { id: mainRef.id, date: dateTime, storeId: activeStoreId, accountType: e.accountType as any, amount: totalAmountVal, type: totalAmountVal < 0 ? 'expense' : 'income_manual', description: e.description, subCategory: mainSubCategory, registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: affectsMainBalance, ...(e.debtStoreId ? { debtStoreId: e.debtStoreId } : {}) };
         if (mirrorRef) mainRecord.relatedRecordId = mirrorRef.id;
         batch.set(mainRef, cleanObject(mainRecord));
         if (mirrorRef && e.debtStoreId) {
             const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
-            batch.set(mirrorRef, cleanObject({ id: mirrorRef.id, date: dateTime, storeId: e.debtStoreId, accountType: e.accountType as any, amount: mirrorAmount, type: mirrorAmount < 0 ? 'expense' : 'income_manual', description: `${e.description} (Asumido por ${activeStoreName})`, subCategory: e.subCategory || 'Varios', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: e.affectsMirrorBalance }));
+            const affectsMirrorBalance = e.physicalStoreId === e.debtStoreId;
+            batch.set(mirrorRef, cleanObject({ id: mirrorRef.id, date: dateTime, storeId: e.debtStoreId, accountType: e.accountType as any, amount: mirrorAmount, type: mirrorAmount < 0 ? 'expense' : 'income_manual', description: `${e.description} (Asumido por ${activeStoreName})`, subCategory: e.subCategory || 'Varios', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: affectsMirrorBalance }));
         }
     });
     await batch.commit();
@@ -782,20 +599,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-0">
-        {/* Modal de Configuración de Sede (Saldos Iniciales) */}
-        {isStoreModalOpen && activeStore && (
-            <StoreModal 
-                isOpen={isStoreModalOpen}
-                store={activeStore}
-                allStores={filteredStores}
-                onClose={() => setIsStoreModalOpen(false)}
-                onSave={(updatedStore) => {
-                    onUpdateStore(updatedStore);
-                    setIsStoreModalOpen(false);
-                }}
-            />
-        )}
-
         {/* Modal de Edición de Nombres de Cuentas */}
         {isEditingNames && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -830,6 +633,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     placeholder="Bancolombia (QR)"
                                 />
                             </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Otros Bancos / Tarjetas</label>
+                                <input 
+                                    type="text" 
+                                    value={tempAccountNames.bank} 
+                                    onChange={e => setTempAccountNames({...tempAccountNames, bank: e.target.value})}
+                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
+                                    placeholder="Bancos"
+                                />
+                            </div>
                         </div>
 
                         <div className="pt-4 flex gap-3">
@@ -845,51 +658,69 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             <div className="flex items-center gap-3 sm:gap-4">
                 <div className="p-2 sm:p-3 bg-accent/10 rounded-2xl text-accent shadow-inner"><ChartBarIcon className="w-8 h-8 sm:w-10 sm:h-10" /></div>
                 <div>
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Conciliación</h2>
-                        <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-400 text-[8px] font-black rounded uppercase">v{version}</span>
-                    </div>
+                    <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Conciliación</h2>
                     <p className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest mt-1 sm:mt-2 flex items-center gap-1.5 truncate">
                         <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 h-4" /> SEDE: <span className="text-gray-900 dark:text-white px-1.5 py-0.5 bg-accent/5 rounded border border-accent/20">{activeStore?.name}</span>
                     </p>
                 </div>
             </div>
-            <div className="flex flex-col items-end gap-2">
-                <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center justify-end">
-                    {filteredStores.map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
-                    {isAdmin && (
-                        <div className="flex gap-1.5">
-                            <button 
-                                onClick={() => setIsStoreModalOpen(true)}
-                                className="px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all text-[9px] font-black uppercase flex items-center gap-1.5 border border-accent/20"
-                                title="Configurar Saldos Iniciales"
-                            >
-                                <BuildingStorefrontIcon className="w-3.5 h-3.5" />
-                                Saldos Iniciales
-                            </button>
-                            <button 
-                                onClick={handleOpenEditNames}
-                                className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
-                                title="Editar nombres de cuentas"
-                            >
-                                <SettingsIcon className="w-4 h-4" />
-                            </button>
-                        </div>
-                    )}
-                </div>
-                <div className="bg-accent/5 px-4 py-2 rounded-xl border border-accent/20 flex items-center gap-4">
-                    <div className="text-right">
-                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Patrimonio Neto (Dinero Propio)</p>
-                        <p className="text-lg font-black text-accent">{formatCOP(storeNetWorth.grandTotal)}</p>
-                    </div>
-                    <div className="h-8 w-px bg-accent/20"></div>
-                    <div className="text-right">
-                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Saldo en Cuentas (Dinero Físico)</p>
-                        <p className="text-xs font-bold text-gray-600 dark:text-gray-300">{formatCOP(storeNetWorth.totalInAccounts)}</p>
-                    </div>
-                </div>
+            <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
+                {stores.map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
+                {isAdmin && (
+                    <button 
+                        onClick={handleOpenEditNames}
+                        className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
+                        title="Editar nombres de cuentas"
+                    >
+                        <SettingsIcon className="w-4 h-4" />
+                    </button>
+                )}
             </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-accent/20">
+                <div onClick={() => setIsDebtsSectionOpen(!isDebtsSectionOpen)} className="flex justify-between items-center cursor-pointer mb-3 group">
+                    <h3 className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2"><SwapIcon className="w-4 h-4 sm:w-5 h-5" /> Intercambios Sedes</h3>
+                    <div className="flex items-center gap-1.5 sm:gap-3">
+                        {globalDebtsSummary.toCollect > 0 && <span className="text-[8px] sm:text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded truncate max-w-[100px]">COBRAR: {formatCOP(globalDebtsSummary.toCollect)}</span>}
+                        <ChevronDownIcon className={`w-4 h-4 sm:w-5 h-5 text-gray-400 transition-transform ${isDebtsSectionOpen ? 'rotate-180' : ''} group-hover:text-accent`} />
+                    </div>
+                </div>
+                {isDebtsSectionOpen && (
+                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 scrollbar-hide animate-fade-in">
+                        {interStoreBalances.length > 0 ? interStoreBalances.map((item, idx) => (
+                            <div key={idx} className={`p-3 sm:p-4 rounded-xl border flex flex-col justify-between ${item.total > 0 ? 'bg-green-50 dark:bg-green-900/10 border-green-200' : 'bg-red-50 dark:bg-red-900/10 border-red-200'}`}>
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="min-w-0"><p className="text-[9px] font-black text-gray-500 uppercase">Sede:</p><p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 uppercase truncate">{item.otherStoreName}</p></div>
+                                    <div className="text-right shrink-0"><p className={`text-[10px] sm:text-xs font-bold uppercase mb-0.5 ${item.total > 0 ? 'text-green-500' : 'text-red-500'}`}>{item.total > 0 ? 'PAGO PENDIENTE (POR COBRAR)' : 'DEUDA A PAGAR'}</p><p className={`text-sm sm:text-lg font-black ${item.total > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCOP(Math.abs(item.total))}</p></div>
+                                </div>
+                                <div className="mt-2">
+                                    <button onClick={() => setExpandedDebtStoreId(expandedDebtStoreId === item.storeId ? null : item.storeId)} className="text-[8px] sm:text-[9px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 w-full justify-center pt-1 border-t border-gray-100 dark:border-gray-700">{expandedDebtStoreId === item.storeId ? 'Ocultar' : 'Historial'}<ChevronDownIcon className={`w-3 h-3 transition-transform ${expandedDebtStoreId === item.storeId ? 'rotate-180' : ''}`} /></button>
+                                    {expandedDebtStoreId === item.storeId && (
+                                        <div className="mt-2 space-y-1 bg-white/50 dark:bg-black/20 p-2 rounded-lg animate-fade-in">
+                                            {item.history.map(record => {
+                                                const impact = (record as any).netImpact || 0;
+                                                const methodLabel = record.accountType === 'cash' ? 'EFEC' : (record.accountType === 'qr' ? 'QR' : 'BANCO');
+                                                const methodColor = record.accountType === 'cash' ? 'text-green-600 dark:text-green-400' : (record.accountType === 'qr' ? 'text-blue-500' : 'text-purple-500');
+                                                return (<div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center"><div className="flex flex-col min-w-0 pr-2"><div className="flex items-center gap-2"><span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span><span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span></div><span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>{record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}</div><span className={`font-black shrink-0 ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>{impact > 0 ? '+' : ''}{formatCOP(impact)}</span></div>)
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                                {item.total < 0 && (
+                                    <div className="mt-2 pt-2 border-t-2 border-dashed border-red-200 dark:border-red-900/50">
+                                        <div className="flex gap-1.5">
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-green-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-green-200 shadow-sm">PAGAR EFECTIVO</button>
+                                            <button onClick={() => initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr', item.history)} className="flex-1 bg-white dark:bg-gray-800 text-blue-600 text-[8px] sm:text-[9px] font-black py-1.5 rounded-lg border border-blue-200 shadow-sm">PAGAR QR</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )) : <p className="text-[10px] text-gray-400 italic text-center py-4">Sin saldos pendientes.</p>}
+                    </div>
+                )}
+            </div>
 
             <div className="bg-white dark:bg-secondary rounded-2xl shadow-md border border-accent/20 overflow-hidden flex flex-col">
                 <div className="flex bg-gray-50 dark:bg-gray-800 p-1 border-b dark:border-gray-700">
@@ -960,6 +791,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     </div>
                 </div>
             </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
             <div className="lg:col-span-4 space-y-4">
@@ -1044,38 +876,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
 
             <div className="lg:col-span-8 space-y-4">
+                <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
+                    <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
+                    <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                    <button onClick={() => setActiveTab('bank')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'bank' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('bank')}</button>
+                </div>
+
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col min-h-[500px]">
-                    {/* NAVEGACIÓN DE CUENTAS (TABS) SIMPLIFICADA */}
-                    <div className="bg-gray-100 dark:bg-gray-800 p-2 flex flex-wrap gap-2 border-b dark:border-gray-700">
-                        {/* CUENTAS PROPIAS */}
-                        <button 
-                            onClick={() => setActiveTab('cash_own')}
-                            className={`px-4 py-2 text-[10px] font-black uppercase rounded-xl transition-all shadow-sm ${activeTab === 'cash_own' ? 'bg-accent text-white scale-105' : 'bg-white dark:bg-gray-900 text-gray-400 hover:text-accent'}`}
-                        >
-                            {accountNames.cash}
-                        </button>
-
-                        <button 
-                            onClick={() => setActiveTab('qr_own')}
-                            className={`px-4 py-2 text-[10px] font-black uppercase rounded-xl transition-all shadow-sm ${activeTab === 'qr_own' ? 'bg-accent text-white scale-105' : 'bg-white dark:bg-gray-900 text-gray-400 hover:text-accent'}`}
-                        >
-                            {accountNames.qr}
-                        </button>
-
-                        {/* NUESTRO DINERO EN OTRAS SEDES (REMOTE) */}
-                        {filteredStores.filter(s => s.id !== activeStoreId).map(otherStore => {
-                            return (
-                                <button 
-                                    key={`qr_remote_${otherStore.id}`}
-                                    onClick={() => setActiveTab(`qr_remote_${otherStore.id}`)}
-                                    className={`px-4 py-2 text-[10px] font-black uppercase rounded-xl transition-all shadow-sm ${activeTab === `qr_remote_${otherStore.id}` ? 'bg-blue-500 text-white scale-105' : 'bg-blue-50 dark:bg-blue-900/10 text-blue-600 hover:bg-blue-100'}`}
-                                >
-                                    {otherStore.accountNames?.qr || 'Bancolombia'} {otherStore.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-
                     <div className="p-4 border-b dark:border-slate-800 flex flex-col gap-4 bg-gray-50 dark:bg-gray-900/50">
                         {/* Filtros Superiores del Libro */}
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -1146,11 +953,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <td className="p-3 sm:p-4">
                                             <div className="flex items-center gap-1.5 sm:gap-2">
                                                 <p className="font-bold text-gray-800 dark:text-gray-200 uppercase truncate max-w-[120px] sm:max-w-none">{record.description}</p>
-                                                {record.debtStoreId && (
-                                                    <span className={`px-1 py-0.5 font-black text-[7px] rounded uppercase shrink-0 ${activeTab.includes('_own') ? 'bg-yellow-500 text-white' : 'bg-blue-500 text-white'}`}>
-                                                        {activeTab.includes('_own') ? `Custodia: ${stores.find(s => s.id === record.debtStoreId)?.name || 'Sede'}` : 'Cruce'}
-                                                    </span>
-                                                )}
+                                                {record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}
                                             </div>
                                             <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
                                         </td>
@@ -1193,21 +996,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         </div>
 
+        {/* MODAL INGRESOS MANUALES */}
         {showAddModal && (
             <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">
                     <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
-                    <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0">
-                        <div className="text-center">
-                            <p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p>
-                            <p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p>
-                        </div>
-                        <div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div>
-                        <div className="text-center">
-                            <p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p>
-                            <p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{getTabDisplayName(activeTab)}</p>
-                        </div>
-                    </div>
+                    <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0"><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p><p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p></div><div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p><p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{activeTab.toUpperCase()}</p></div></div>
                     <div className="flex-grow overflow-y-auto p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-900/50">
                         <div className="space-y-4">
                             <div className="hidden md:grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest"><div className="col-span-2">Fecha y Hora</div><div className="col-span-1">Cuenta</div><div className="col-span-2">Descripción</div><div className="col-span-2">Categoría</div><div className="col-span-1 text-right">Monto $</div><div className="col-span-3 text-center border-l border-gray-300 dark:border-gray-600">Conf. Cruzada</div><div className="col-span-1"></div></div>
@@ -1237,6 +1031,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent">
                                             <option value="cash">Efec</option>
                                             <option value="qr">QR</option>
+                                            <option value="bank">Banco</option>
                                         </select>
                                     </div>
 
@@ -1260,31 +1055,19 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     </div>
 
                                     <div className="col-span-2 md:col-span-3 w-full border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-2 md:pt-0 md:pl-4">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1 mb-0.5 block">¿Relación con otra Sede?</label>
-                                        <select 
-                                            value={entry.debtStoreId} 
-                                            onChange={e => {
-                                                handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value);
-                                                if (e.target.value && !entry.subCategory) {
-                                                    handleUpdateEntryField(entry.tempId, 'subCategory', 'Cruce Sedes');
-                                                }
-                                                if (e.target.value) {
-                                                    handleUpdateEntryField(entry.tempId, 'affectsMirrorBalance', true);
-                                                }
-                                            }} 
-                                            className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-1.5 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400"
-                                        >
-                                            <option value="">No es cruzado</option>
-                                            {filteredStores.filter(s => s.id !== activeStoreId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1 mb-0.5 block">¿Pago por otro local?</label>
+                                        <select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-1.5 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400">
+                                            <option value="">No es préstamo</option>
+                                            {stores.filter(s => s.id !== activeStoreId && !s.name.toLowerCase().includes('training')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                         {entry.debtStoreId && (
                                             <div className="mt-1.5 space-y-1 bg-yellow-100/30 dark:bg-yellow-900/5 p-1.5 rounded-xl border border-yellow-100">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-[6px] font-black uppercase text-gray-500 leading-tight">¿Afectar caja física en la otra sede?</p>
-                                                    <label className="relative inline-flex items-center cursor-pointer scale-75 shrink-0">
-                                                        <input type="checkbox" checked={entry.affectsMirrorBalance} onChange={e => handleUpdateEntryField(entry.tempId, 'affectsMirrorBalance', e.target.checked)} className="sr-only peer" />
-                                                        <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-accent"></div>
-                                                    </label>
+                                                <div className="flex flex-col gap-1">
+                                                    <p className="text-[6px] font-black uppercase text-gray-500 leading-tight">¿De qué caja física entró/salió el dinero?</p>
+                                                    <select value={entry.physicalStoreId || activeStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'physicalStoreId', e.target.value)} className="w-full bg-white dark:bg-gray-800 p-1 rounded border border-yellow-200 outline-none font-bold text-[8px] uppercase text-gray-700 dark:text-gray-300">
+                                                        <option value={activeStoreId}>{activeStore?.name || 'Local Actual'}</option>
+                                                        <option value={entry.debtStoreId}>{stores.find(s => s.id === entry.debtStoreId)?.name || 'Otra Sede'}</option>
+                                                    </select>
                                                 </div>
                                             </div>
                                         )}
@@ -1295,8 +1078,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-2 text-gray-300 hover:text-red-500 transition-all" title="Eliminar registro"><TrashIcon className="w-5 h-5" /></button>
                                     </div>
                                 </div>
-                                );
-                            })}
+                                )})}
                         </div>
                         <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
                     </div>
@@ -1310,7 +1092,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-lg overflow-hidden border border-accent/20">
                     <div className="p-4 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button></div>
                     <form onSubmit={handleUpdateSingleRecord} className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
+                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option><option value="bank">Banco</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
                         <div className="flex gap-2 pt-4 border-t dark:border-gray-700"><button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button><button type="submit" className="flex-1 bg-accent text-white font-black p-3 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-xs">Guardar Cambios</button></div>
                     </form>
                 </div>
