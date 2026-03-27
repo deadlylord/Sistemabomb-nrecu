@@ -39,10 +39,42 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.14',
+    date: '2026-03-27',
+    description: 'Movimientos Divididos (Cruce Parcial)',
+    isCurrent: true,
+    changes: [
+      'Implementación de la capacidad de dividir un movimiento entre el local actual y un cruce a otra sede.',
+      'Nueva interfaz en el modal de conciliación para especificar el monto exacto del cruce.',
+      'Generación automática de registros locales y de cruce según la división especificada.'
+    ]
+  },
+  {
+    version: '1.1.13',
+    date: '2026-03-27',
+    description: 'Modal de Confirmación para Eliminación',
+    isCurrent: false,
+    changes: [
+      'Se reemplazó el diálogo nativo de confirmación por un modal personalizado para eliminar registros en conciliación.',
+      'Mejora en la experiencia de usuario en entornos donde los diálogos nativos están restringidos.'
+    ]
+  },
+  {
+    version: '1.1.12',
+    date: '2026-03-27',
+    description: 'Refinamiento de Conciliación y Cruce de Sedes',
+    isCurrent: false,
+    changes: [
+      'Se eliminó definitivamente la opción de cuenta "Banco" de la conciliación financiera.',
+      'Se mejoraron las descripciones de los cruces de sedes para ser más explícitas (ej: "Cruce Metro").',
+      'Se aseguró que la "Training Store" no aparezca en ningún listado de la conciliación.'
+    ]
+  },
+  {
     version: '1.1.11',
     date: '2026-03-26',
     description: 'Corrección en Novedades y Ediciones Manuales',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se corrigió un error donde editar manualmente el estado de una prenda dañada no actualizaba el inventario correctamente.',
       'Se deshabilitó la edición manual de estados procesados (Cambios, Traslados) para evitar inconsistencias en inventario y ventas.',
@@ -314,8 +346,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    initialBalances: { cash: 0, qr: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
   },
   {
     id: '2',
@@ -334,8 +366,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    initialBalances: { cash: 0, qr: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
   },
   {
     id: '3',
@@ -354,8 +386,8 @@ export const INITIAL_STORES: Store[] = [
     nextInvoiceNumber: 1,
     loginBackgroundUrl: null,
     imageCompressionQuality: 'medium',
-    initialBalances: { cash: 0, qr: 0, bank: 0 },
-    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)', bank: 'Otros Bancos' }
+    initialBalances: { cash: 0, qr: 0 },
+    accountNames: { cash: 'Caja Efectivo', qr: 'Bancolombia (QR)' }
   },
 ];
 

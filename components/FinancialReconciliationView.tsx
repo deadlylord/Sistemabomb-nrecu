@@ -17,7 +17,7 @@ interface FinancialReconciliationViewProps {
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
 }
 
-type AccountType = 'cash' | 'qr' | 'bank';
+type AccountType = 'cash' | 'qr';
 
 interface TransactionDetail {
     id: string;
@@ -30,13 +30,11 @@ interface TransactionDetail {
 interface DailySystemTotal {
     cash: number;
     qr: number;
-    bank: number;
     date: string;
     details: string[];
     transactions: {
         cash: TransactionDetail[];
         qr: TransactionDetail[];
-        bank: TransactionDetail[];
     };
 }
 
@@ -45,6 +43,7 @@ interface ManualEntry {
     date: string;
     time: string; 
     amount: string; 
+    cruceAmount?: string; // Parte que corresponde al otro local
     description: string;
     accountType: AccountType;
     subCategory: string;
@@ -83,7 +82,8 @@ const cleanObject = (obj: any) => {
 };
 
 const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
-  const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || stores[0]?.id || '');
+  const filteredStores = useMemo(() => stores.filter(s => !s.name.toLowerCase().includes('training')), [stores]);
+  const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [searchTerm, setSearchTerm] = useState('');
@@ -106,7 +106,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
   const [isEditingNames, setIsEditingNames] = useState(false);
-  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', bank: '' });
+  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '' });
 
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
@@ -133,6 +133,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [manualEntries, setManualEntries] = useState<ManualEntry[]>([]);
   
   const [editingRecord, setEditingRecord] = useState<(FinancialRecord & { amountString?: string, timeString?: string, dateString?: string }) | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<FinancialRecord | null>(null);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -214,27 +215,26 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [records, selectedMonth, selectedYear]);
 
   const interStoreBalances = useMemo(() => {
-      const balances: Record<string, { total: number, cash: number, qr: number, bank: number, storeId: string, history: FinancialRecord[] }> = {};
+      const balances: Record<string, { total: number, cash: number, qr: number, storeId: string, history: FinancialRecord[] }> = {};
       records.forEach(r => {
           const otherStoreId = r.debtStoreId;
           if (otherStoreId) {
-              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, bank: 0, storeId: otherStoreId, history: [] };
+              if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
               const b = balances[otherStoreId]!;
               const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') ? -r.amount : r.amount;
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
               if (r.accountType === 'cash') b.cash += netImpact;
               else if (r.accountType === 'qr') b.qr += netImpact;
-              else if (r.accountType === 'bank') b.bank += netImpact;
           }
       });
       return Object.entries(balances).map(([otherStoreId, stats]) => ({
-          otherStoreName: stores.find(s => s.id === otherStoreId)?.name || 'Local',
+          otherStoreName: filteredStores.find(s => s.id === otherStoreId)?.name || 'Local',
           storeId: otherStoreId,
           ...stats,
           history: stats.history.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())
       })).filter(s => Math.abs(s.total) > 0.1);
-  }, [records, stores]);
+  }, [records, filteredStores]);
 
   const globalDebtsSummary = useMemo(() => {
       let toCollect = 0; let toPay = 0;
@@ -249,8 +249,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     const getExisting = (dateStr: string): DailySystemTotal => {
         return totalsMap.get(dateStr) || { 
-            cash: 0, qr: 0, bank: 0, date: dateStr, details: [], 
-            transactions: { cash: [], qr: [], bank: [] } 
+            cash: 0, qr: 0, date: dateStr, details: [], 
+            transactions: { cash: [], qr: [] } 
         };
     }
 
@@ -276,9 +276,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(p.method)) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
-        } else if ([PaymentMethod.Tarjeta, PaymentMethod.Sistecredito, PaymentMethod.Addi].includes(p.method)) {
-            existing.bank += amount;
-            existing.transactions.bank.push(detail);
         }
         totalsMap.set(dateStr, existing);
     };
@@ -319,9 +316,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method)) {
             existing.qr += finalAmount;
             existing.transactions.qr.push(detail);
-        } else {
-            existing.bank += finalAmount;
-            existing.transactions.bank.push(detail);
         }
         existing.details.push(`Ajuste ${incident.type}: ${isExpense ? '-' : '+'}${formatCOP(amount)}`);
         totalsMap.set(dateStr, existing);
@@ -340,8 +334,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const handleOpenEditNames = () => {
     setTempAccountNames({
         cash: activeStore?.accountNames?.cash || 'Efectivo',
-        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)',
-        bank: activeStore?.accountNames?.bank || 'Bancos'
+        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)'
     });
     setIsEditingNames(true);
   };
@@ -442,6 +435,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         date: date,
         time: time,
         amount: '',
+        cruceAmount: '',
         description: '',
         accountType: activeTab,
         subCategory: '',
@@ -485,8 +479,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const nowIso = new Date().toISOString();
           const mainRef = doc(collection(db, 'financialRecords'));
           const mirrorRef = doc(collection(db, 'financialRecords'));
-          const mainRecord: FinancialRecord = { id: mainRef.id, date: nowIso, storeId: activeStoreId, accountType: sourceAccount, amount: -amount, type: 'expense', description: `Pago deuda de ref. ${debtReferenceDates} a ${targetStoreName}`, subCategory: 'Cruce Sedes', registeredBy: currentUser.name, isConfirmed: true, debtStoreId: targetStoreId, affectsCashBalance: true };
-          const mirrorRecord: FinancialRecord = { id: mirrorRef.id, date: nowIso, storeId: targetStoreId, accountType: sourceAccount, amount: amount, type: 'income_manual', description: `Recibo de pago deuda ref. ${debtReferenceDates} de ${activeStoreName}`, subCategory: 'Cruce Sedes', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: true };
+          const mainRecord: FinancialRecord = { id: mainRef.id, date: nowIso, storeId: activeStoreId, accountType: sourceAccount, amount: -amount, type: 'expense', description: `Cruce ${targetStoreName}: Pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: currentUser.name, isConfirmed: true, debtStoreId: targetStoreId, affectsCashBalance: true };
+          const mirrorRecord: FinancialRecord = { id: mirrorRef.id, date: nowIso, storeId: targetStoreId, accountType: sourceAccount, amount: amount, type: 'income_manual', description: `Cruce ${activeStoreName}: Recibo pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: true };
           mainRecord.relatedRecordId = mirrorRef.id;
           batch.set(mainRef, mainRecord); batch.set(mirrorRef, mirrorRecord);
           await batch.commit();
@@ -507,7 +501,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     setManualEntries(manualEntries.map(e => {
         if (e.tempId === tempId) {
             let finalValue = value;
-            if (field === 'amount') finalValue = parseInputToNumber(value);
+            if (field === 'amount' || field === 'cruceAmount') finalValue = parseInputToNumber(value);
             const updated = { ...e, [field]: finalValue };
             if (field === 'description') { const suggestedCat = autoCategorize(value); if (suggestedCat) updated.subCategory = suggestedCat; }
             return updated;
@@ -540,20 +534,79 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     const activeStoreName = activeStore?.name || 'Local Actual';
     manualEntries.forEach(e => {
         const totalAmountVal = parseFloat(e.amount);
+        const cruceAmountVal = e.cruceAmount ? parseFloat(e.cruceAmount) : totalAmountVal;
+        const localAmountVal = totalAmountVal - cruceAmountVal;
         const dateTime = `${e.date}T${e.time}:00`;
-        const mainRef = doc(collection(db, 'financialRecords'));
-        const mirrorRef = e.debtStoreId ? doc(collection(db, 'financialRecords')) : null;
-        const mainSubCategory = (e.debtStoreId && e.subCategory !== 'Cruce Sedes') ? 'Préstamo a Sede' : (e.subCategory || 'Manual');
-        
-        const affectsMainBalance = e.debtStoreId ? (e.physicalStoreId === activeStoreId) : true;
+        const activeStoreName = activeStore?.name || 'Local Actual';
+        const targetStoreName = e.debtStoreId ? filteredStores.find(s => s.id === e.debtStoreId)?.name || 'Otra Sede' : '';
 
-        const mainRecord: FinancialRecord = { id: mainRef.id, date: dateTime, storeId: activeStoreId, accountType: e.accountType as any, amount: totalAmountVal, type: totalAmountVal < 0 ? 'expense' : 'income_manual', description: e.description, subCategory: mainSubCategory, registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: affectsMainBalance, ...(e.debtStoreId ? { debtStoreId: e.debtStoreId } : {}) };
-        if (mirrorRef) mainRecord.relatedRecordId = mirrorRef.id;
-        batch.set(mainRef, cleanObject(mainRecord));
-        if (mirrorRef && e.debtStoreId) {
-            const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -totalAmountVal : totalAmountVal;
+        // 1. Registro Local (si hay remanente)
+        if (localAmountVal !== 0 || !e.debtStoreId) {
+            const localRef = doc(collection(db, 'financialRecords'));
+            const localRecord: FinancialRecord = { 
+                id: localRef.id, 
+                date: dateTime, 
+                storeId: activeStoreId, 
+                accountType: e.accountType as any, 
+                amount: e.debtStoreId ? localAmountVal : totalAmountVal, 
+                type: (e.debtStoreId ? localAmountVal : totalAmountVal) < 0 ? 'expense' : 'income_manual', 
+                description: e.description, 
+                subCategory: e.subCategory || 'Manual', 
+                registeredBy: currentUser.name, 
+                isConfirmed: true, 
+                affectsCashBalance: true 
+            };
+            batch.set(localRef, cleanObject(localRecord));
+        }
+
+        // 2. Registro de Cruce (si hay deuda)
+        if (e.debtStoreId && cruceAmountVal !== 0) {
+            const mainRef = doc(collection(db, 'financialRecords'));
+            const mirrorRef = doc(collection(db, 'financialRecords'));
+            
+            const mainSubCategory = e.subCategory !== 'Cruce Sedes' ? 'Préstamo a Sede' : 'Cruce Sedes';
+            const affectsMainBalance = e.physicalStoreId === activeStoreId;
+
+            const mainDescription = e.description 
+                ? `Cruce ${targetStoreName}: ${e.description}` 
+                : `Cruce ${targetStoreName}`;
+
+            const mainRecord: FinancialRecord = { 
+                id: mainRef.id, 
+                date: dateTime, 
+                storeId: activeStoreId, 
+                accountType: e.accountType as any, 
+                amount: cruceAmountVal, 
+                type: cruceAmountVal < 0 ? 'expense' : 'income_manual', 
+                description: mainDescription, 
+                subCategory: mainSubCategory, 
+                registeredBy: currentUser.name, 
+                isConfirmed: true, 
+                affectsCashBalance: affectsMainBalance, 
+                debtStoreId: e.debtStoreId,
+                relatedRecordId: mirrorRef.id
+            };
+            batch.set(mainRef, cleanObject(mainRecord));
+
+            const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -cruceAmountVal : cruceAmountVal;
             const affectsMirrorBalance = e.physicalStoreId === e.debtStoreId;
-            batch.set(mirrorRef, cleanObject({ id: mirrorRef.id, date: dateTime, storeId: e.debtStoreId, accountType: e.accountType as any, amount: mirrorAmount, type: mirrorAmount < 0 ? 'expense' : 'income_manual', description: `${e.description} (Asumido por ${activeStoreName})`, subCategory: e.subCategory || 'Varios', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: affectsMirrorBalance }));
+            const mirrorDescription = e.description ? `Cruce ${activeStoreName}: ${e.description}` : `Cruce ${activeStoreName}`;
+            
+            batch.set(mirrorRef, cleanObject({ 
+                id: mirrorRef.id, 
+                date: dateTime, 
+                storeId: e.debtStoreId, 
+                accountType: e.accountType as any, 
+                amount: mirrorAmount, 
+                type: mirrorAmount < 0 ? 'expense' : 'income_manual', 
+                description: mirrorDescription, 
+                subCategory: e.subCategory || 'Varios', 
+                registeredBy: `${currentUser.name} (vía ${activeStoreName})`, 
+                isConfirmed: true, 
+                debtStoreId: activeStoreId, 
+                relatedRecordId: mainRef.id, 
+                affectsCashBalance: affectsMirrorBalance 
+            }));
         }
     });
     await batch.commit();
@@ -582,7 +635,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       setEditingRecord(null);
   };
 
-  const handleDeleteRecord = async (id: string) => { if (window.confirm("¿Seguro que deseas eliminar este registro del libro?")) await deleteDoc(doc(db, 'financialRecords', id)); };
+  const handleDeleteRecord = (record: FinancialRecord) => { setRecordToDelete(record); };
+
+  const confirmDelete = async () => {
+      if (recordToDelete) {
+          await deleteDoc(doc(db, 'financialRecords', recordToDelete.id));
+          setRecordToDelete(null);
+      }
+  };
 
   const handleExportCategoryToAccounting = (name: string, value: number) => {
       if (window.confirm(`¿Deseas exportar el gasto total de "${name}" (${formatCOP(value)}) al módulo de Contabilidad IA para el periodo actual?`)) {
@@ -879,7 +939,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
                     <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
                     <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
-                    <button onClick={() => setActiveTab('bank')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'bank' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('bank')}</button>
                 </div>
 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col min-h-[500px]">
@@ -967,7 +1026,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <td className="p-3 sm:p-4 text-center">
                                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                                 <button onClick={() => handleOpenEdit(record)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDeleteRecord(record.id)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteRecord(record)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button>
                                             </div>
                                         </td>
                                     </tr>
@@ -1028,10 +1087,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
                                     <div className="col-span-1 md:col-span-1 w-full">
                                         <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Cuenta</label>
-                                        <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-[10px] uppercase outline-none focus:border-accent">
+                                        <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent">
                                             <option value="cash">Efec</option>
                                             <option value="qr">QR</option>
-                                            <option value="bank">Banco</option>
                                         </select>
                                     </div>
 
@@ -1061,9 +1119,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             {stores.filter(s => s.id !== activeStoreId && !s.name.toLowerCase().includes('training')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                         {entry.debtStoreId && (
-                                            <div className="mt-1.5 space-y-1 bg-yellow-100/30 dark:bg-yellow-900/5 p-1.5 rounded-xl border border-yellow-100">
+                                            <div className="mt-1.5 space-y-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-2 rounded-xl border border-yellow-100">
                                                 <div className="flex flex-col gap-1">
-                                                    <p className="text-[6px] font-black uppercase text-gray-500 leading-tight">¿De qué caja física entró/salió el dinero?</p>
+                                                    <p className="text-[7px] font-black uppercase text-gray-500 leading-tight">Valor que es Cruce $</p>
+                                                    <input 
+                                                        type="text" 
+                                                        inputMode="decimal" 
+                                                        value={formatInputDisplay(entry.cruceAmount || '')} 
+                                                        onChange={e => handleUpdateEntryField(entry.tempId, 'cruceAmount', e.target.value)} 
+                                                        placeholder="Monto Cruce $" 
+                                                        className="w-full bg-white dark:bg-gray-800 p-1.5 rounded border border-yellow-200 outline-none font-black text-[10px] text-right text-yellow-700 dark:text-yellow-400" 
+                                                    />
+                                                    <p className="text-[6px] text-gray-400 italic">Si se deja vacío, se asume el total.</p>
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <p className="text-[7px] font-black uppercase text-gray-500 leading-tight">¿De qué caja física salió/entró?</p>
                                                     <select value={entry.physicalStoreId || activeStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'physicalStoreId', e.target.value)} className="w-full bg-white dark:bg-gray-800 p-1 rounded border border-yellow-200 outline-none font-bold text-[8px] uppercase text-gray-700 dark:text-gray-300">
                                                         <option value={activeStoreId}>{activeStore?.name || 'Local Actual'}</option>
                                                         <option value={entry.debtStoreId}>{stores.find(s => s.id === entry.debtStoreId)?.name || 'Otra Sede'}</option>
@@ -1092,7 +1162,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-lg overflow-hidden border border-accent/20">
                     <div className="p-4 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button></div>
                     <form onSubmit={handleUpdateSingleRecord} className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option><option value="bank">Banco</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
+                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
                         <div className="flex gap-2 pt-4 border-t dark:border-gray-700"><button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button><button type="submit" className="flex-1 bg-accent text-white font-black p-3 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-xs">Guardar Cambios</button></div>
                     </form>
                 </div>
@@ -1101,6 +1171,38 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         {paymentSummary && (
              <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm"><div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-sm overflow-hidden border border-accent/20"><div className="p-6 text-center space-y-4"><div className="w-16 h-16 bg-accent/10 text-accent rounded-full flex items-center justify-center mx-auto mb-2"><CheckIcon className="w-10 h-10" /></div><h3 className="text-xl font-black uppercase tracking-tighter">Confirmar Pago</h3><p className="text-sm text-gray-500">¿Deseas registrar el pago de <span className="font-bold text-accent">{formatCOP(paymentSummary.amount)}</span> de la sede <span className="font-bold text-gray-800 dark:text-white">{activeStore?.name}</span> hacia <span className="font-bold text-gray-800 dark:text-white">{paymentSummary.targetStoreName}</span>?</p><div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl space-y-2 text-left"><p className="text-[10px] font-black text-gray-400 uppercase">Canal de pago: <span className="text-accent">{paymentSummary.sourceAccount.toUpperCase()}</span></p><p className="text-[10px] font-black text-gray-400 uppercase">Referencia de deuda: <span className="text-accent">{paymentSummary.debtReferenceDates}</span></p></div><div className="flex gap-2 pt-4"><button onClick={() => setPaymentSummary(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs">Cancelar</button><button onClick={handleConfirmSettlement} className="flex-1 bg-accent text-white font-bold p-3 rounded-xl shadow-lg uppercase text-xs">REGISTRAR PAGO</button></div></div></div></div>
+        )}
+
+        {recordToDelete && (
+            <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-red-500/20">
+                    <div className="p-6 text-center space-y-4">
+                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <TrashIcon className="w-10 h-10" />
+                        </div>
+                        <h3 className="text-xl font-black uppercase tracking-tighter text-red-600">¿Eliminar Registro?</h3>
+                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl text-left space-y-1 border border-gray-100 dark:border-gray-800">
+                            <p className="text-[10px] font-black text-gray-400 uppercase">Concepto:</p>
+                            <p className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase truncate">{recordToDelete.description}</p>
+                            <div className="flex justify-between items-end mt-2">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase">Monto:</p>
+                                    <p className={`text-sm font-black ${recordToDelete.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(recordToDelete.amount)}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase">Fecha:</p>
+                                    <p className="text-[10px] font-bold text-gray-500">{getLocalDateString(recordToDelete.date)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 italic">Esta acción no se puede deshacer y afectará los saldos de conciliación.</p>
+                        <div className="flex gap-2 pt-2">
+                            <button onClick={() => setRecordToDelete(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
+                            <button onClick={confirmDelete} className="flex-1 bg-red-500 text-white font-black p-3 rounded-xl shadow-lg hover:bg-red-600 transition-colors uppercase text-[10px]">ELIMINAR AHORA</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         )}
 
     </div>
