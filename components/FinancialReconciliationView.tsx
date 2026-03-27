@@ -101,12 +101,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
+  const [showBothClosures, setShowBothClosures] = useState(false);
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
   const [isEditingNames, setIsEditingNames] = useState(false);
   const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '' });
+  const [tempInitialBalances, setTempInitialBalances] = useState({ cash: 0, qr: 0 });
 
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
@@ -336,6 +338,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         cash: activeStore?.accountNames?.cash || 'Efectivo',
         qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)'
     });
+    setTempInitialBalances({
+        cash: activeStore?.initialBalances?.cash || 0,
+        qr: activeStore?.initialBalances?.qr || 0
+    });
     setIsEditingNames(true);
   };
 
@@ -343,12 +349,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     if (!activeStoreId) return;
     try {
         await updateDoc(doc(db, 'stores', activeStoreId), {
-            accountNames: tempAccountNames
+            accountNames: tempAccountNames,
+            initialBalances: tempInitialBalances
         });
         setIsEditingNames(false);
     } catch (error) {
-        console.error("Error saving account names:", error);
-        alert("Error al guardar los nombres de las cuentas.");
+        console.error("Error saving account settings:", error);
+        alert("Error al guardar los ajustes de la sede.");
     }
   };
 
@@ -670,38 +677,53 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         <button onClick={() => setIsEditingNames(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><CrossIcon className="w-6 h-6" /></button>
                     </div>
                     <div className="p-6 space-y-4">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">Personaliza los nombres de las cuentas para identificar mejor dónde llega el dinero en esta sede.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">Personaliza los nombres de las cuentas y sus saldos iniciales para esta sede.</p>
                         
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Cuenta Efectivo</label>
-                                <input 
-                                    type="text" 
-                                    value={tempAccountNames.cash} 
-                                    onChange={e => setTempAccountNames({...tempAccountNames, cash: e.target.value})}
-                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
-                                    placeholder="Efectivo"
-                                />
+                        <div className="space-y-6">
+                            <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/30 space-y-4">
+                                <h4 className="text-[10px] font-black text-green-600 uppercase tracking-widest">Cuenta Efectivo</h4>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Nombre Personalizado</label>
+                                    <input 
+                                        type="text" 
+                                        value={tempAccountNames.cash} 
+                                        onChange={e => setTempAccountNames({...tempAccountNames, cash: e.target.value})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-bold text-sm focus:border-green-500"
+                                        placeholder="Efectivo"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Saldo Inicial $</label>
+                                    <input 
+                                        type="number" 
+                                        value={tempInitialBalances.cash} 
+                                        onChange={e => setTempInitialBalances({...tempInitialBalances, cash: parseFloat(e.target.value) || 0})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-black text-sm text-green-600 focus:border-green-500"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Cuenta QR (Bancolombia/Nequi)</label>
-                                <input 
-                                    type="text" 
-                                    value={tempAccountNames.qr} 
-                                    onChange={e => setTempAccountNames({...tempAccountNames, qr: e.target.value})}
-                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
-                                    placeholder="Bancolombia (QR)"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest">Otros Bancos / Tarjetas</label>
-                                <input 
-                                    type="text" 
-                                    value={tempAccountNames.bank} 
-                                    onChange={e => setTempAccountNames({...tempAccountNames, bank: e.target.value})}
-                                    className="w-full bg-gray-100 dark:bg-gray-800 p-3 rounded-xl border-2 border-transparent focus:border-accent outline-none font-bold text-sm"
-                                    placeholder="Bancos"
-                                />
+
+                            <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-4">
+                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Cuenta QR</h4>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Nombre Personalizado</label>
+                                    <input 
+                                        type="text" 
+                                        value={tempAccountNames.qr} 
+                                        onChange={e => setTempAccountNames({...tempAccountNames, qr: e.target.value})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-bold text-sm focus:border-blue-500"
+                                        placeholder="Bancolombia (QR)"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Saldo Inicial $</label>
+                                    <input 
+                                        type="number" 
+                                        value={tempInitialBalances.qr} 
+                                        onChange={e => setTempInitialBalances({...tempInitialBalances, qr: parseFloat(e.target.value) || 0})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-black text-sm text-blue-600 focus:border-blue-500"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -725,7 +747,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 </div>
             </div>
             <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
-                {stores.map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
+                {stores.filter(s => !s.name.toLowerCase().includes('training')).map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
                 {isAdmin && (
                     <button 
                         onClick={handleOpenEditNames}
@@ -858,9 +880,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
                     <div className="mb-4 flex flex-col gap-2">
                         <button onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)} className="text-[10px] sm:text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors w-full"><HistoryIcon className="w-4 h-4 text-accent" /> Cierres de Caja <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} /></button>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                              <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
                              <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                             <button 
+                                onClick={() => setShowBothClosures(!showBothClosures)}
+                                className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all flex items-center gap-1.5 ${showBothClosures ? 'bg-accent text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent'}`}
+                                title="Ver cierres de Efectivo y QR al tiempo"
+                             >
+                                <SwapIcon className="w-3 h-3" />
+                                {showBothClosures ? 'Ver Solo Activa' : 'Cargar Ambos'}
+                             </button>
                         </div>
                     </div>
                     {isSystemLoadsOpen && (
@@ -878,52 +908,60 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                 {isExpanded ? <CrossIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
                                             </button>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">EFEC:</p><p className={`text-xs sm:text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
-                                            <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? 'OK' : 'CONCILIAR'}</button>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">QR:</p><p className={`text-xs sm:text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
-                                            <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? 'OK' : 'CONCILIAR'}</button>
-                                        </div>
+                                        {(showBothClosures || activeTab === 'cash') && (
+                                            <div className="flex justify-between items-center">
+                                                <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">EFEC:</p><p className={`text-xs sm:text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                            </div>
+                                        )}
+                                        {(showBothClosures || activeTab === 'qr') && (
+                                            <div className="flex justify-between items-center">
+                                                <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">QR:</p><p className={`text-xs sm:text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                            </div>
+                                        )}
 
                                         {isExpanded && (
                                             <div className="mt-3 space-y-3 pt-3 border-t border-dashed border-gray-300 dark:border-gray-600 animate-fade-in">
                                                 {/* Sección QR */}
-                                                <div>
-                                                    <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                                        <BuildingStorefrontIcon className="w-2.5 h-2.5" /> Desglose QR ({item.transactions.qr.length})
-                                                    </p>
-                                                    <div className="space-y-1">
-                                                        {item.transactions.qr.length > 0 ? item.transactions.qr.map(t => (
-                                                            <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                                                <div className="min-w-0">
-                                                                    <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
-                                                                    <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                {(showBothClosures || activeTab === 'qr') && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                                            <BuildingStorefrontIcon className="w-2.5 h-2.5" /> Desglose QR ({item.transactions.qr.length})
+                                                        </p>
+                                                        <div className="space-y-1">
+                                                            {item.transactions.qr.length > 0 ? item.transactions.qr.map(t => (
+                                                                <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                                                                    <div className="min-w-0">
+                                                                        <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
+                                                                        <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                                    </div>
+                                                                    <span className="font-black text-blue-600 shrink-0">{formatCOP(t.amount)}</span>
                                                                 </div>
-                                                                <span className="font-black text-blue-600 shrink-0">{formatCOP(t.amount)}</span>
-                                                            </div>
-                                                        )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones QR</p>}
+                                                            )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones QR</p>}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
 
                                                 {/* Sección Efectivo */}
-                                                <div>
-                                                    <p className="text-[8px] font-black text-green-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                                        <DollarIcon className="w-2.5 h-2.5" /> Desglose EFECTIVO ({item.transactions.cash.length})
-                                                    </p>
-                                                    <div className="space-y-1">
-                                                        {item.transactions.cash.length > 0 ? item.transactions.cash.map(t => (
-                                                            <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                                                <div className="min-w-0">
-                                                                    <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
-                                                                    <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                {(showBothClosures || activeTab === 'cash') && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-green-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                                            <DollarIcon className="w-2.5 h-2.5" /> Desglose EFECTIVO ({item.transactions.cash.length})
+                                                        </p>
+                                                        <div className="space-y-1">
+                                                            {item.transactions.cash.length > 0 ? item.transactions.cash.map(t => (
+                                                                <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
+                                                                    <div className="min-w-0">
+                                                                        <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
+                                                                        <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                                    </div>
+                                                                    <span className={`font-black shrink-0 ${t.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(t.amount)}</span>
                                                                 </div>
-                                                                <span className={`font-black shrink-0 ${t.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(t.amount)}</span>
-                                                            </div>
-                                                        )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones efectivo</p>}
+                                                            )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones efectivo</p>}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

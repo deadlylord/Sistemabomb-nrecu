@@ -39,10 +39,32 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.16',
+    date: '2026-03-27',
+    description: 'Carga inteligente de cierres de caja (Efectivo/QR) con opción de vista combinada.',
+    isCurrent: true,
+    changes: [
+      'Se añadió la capacidad de cargar cierres de caja de forma selectiva según la cuenta activa (Efectivo o QR).',
+      'Nueva opción "Cargar Ambos" para visualizar y conciliar ambos tipos de cierres simultáneamente.',
+      'Mejora en la interfaz de cierres de caja para mayor claridad y agilidad en la conciliación.'
+    ]
+  },
+  {
+    version: '1.1.15',
+    date: '2026-03-27',
+    description: 'Edición de Saldo Inicial y Filtro de Sedes',
+    isCurrent: false,
+    changes: [
+      'Se añadió la posibilidad de editar el saldo inicial de las cuentas directamente desde el modal de ajustes (piñón).',
+      'Se filtró la "Training Store" del selector de sedes en la vista de conciliación.',
+      'Mejora en la interfaz del modal de ajustes con secciones diferenciadas por cuenta.'
+    ]
+  },
+  {
     version: '1.1.14',
     date: '2026-03-27',
     description: 'Movimientos Divididos (Cruce Parcial)',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Implementación de la capacidad de dividir un movimiento entre el local actual y un cruce a otra sede.',
       'Nueva interfaz en el modal de conciliación para especificar el monto exacto del cruce.',
