@@ -303,7 +303,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         };
     }
 
-    const processPayment = (p: Payment, type: 'Venta' | 'Abono', refId: string, customer: string) => {
+    const processPayment = (p: Payment, type: 'Venta' | 'Abono', refId: string, customer: string, index: number) => {
         const pDate = new Date(p.date);
         if (pDate.getTime() < startOfMonth.getTime() || pDate.getTime() > endOfMonth.getTime()) return;
         const dateStr = getLocalDateString(p.date);
@@ -312,17 +312,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const time = p.date.split('T')[1]?.slice(0, 5) || '--:--';
         
         const detail: TransactionDetail = {
-            id: `${refId}_${Math.random().toString(36).substr(2, 5)}`,
+            id: `${refId}_${index}`,
             time,
             amount,
-            description: `${type} ${customer}`,
+            description: `${type} [${p.method.toUpperCase()}] ${customer}`,
             type
         };
 
         if (p.method === PaymentMethod.Efectivo) {
             existing.cash += amount;
             existing.transactions.cash.push(detail);
-        } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(p.method)) {
+        } else if (p.method === PaymentMethod.QR) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
         }
@@ -331,13 +331,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     sales.filter(s => s.storeId === activeStoreId).forEach(sale => {
         const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
-        if (payments.length > 0) payments.forEach(p => processPayment(p, 'Venta', sale.id, sale.customerName));
-        else if (sale.paymentMethod) processPayment({ amount: sale.totalAmount, method: sale.paymentMethod, date: sale.createdAt, seller: sale.seller }, 'Venta', sale.id, sale.customerName);
+        if (payments.length > 0) payments.forEach((p, idx) => processPayment(p, 'Venta', sale.id, sale.customerName, idx));
+        else if (sale.paymentMethod) processPayment({ amount: sale.totalAmount, method: sale.paymentMethod, date: sale.createdAt, seller: sale.seller }, 'Venta', sale.id, sale.customerName, 0);
     });
 
     layaways.filter(l => l.storeId === activeStoreId).forEach(layaway => {
         const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
-        payments.forEach(p => processPayment(p, 'Abono', layaway.id, layaway.customerName));
+        payments.forEach((p, idx) => processPayment(p, 'Abono', layaway.id, layaway.customerName, idx));
     });
 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
@@ -406,13 +406,60 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }
   };
 
-  const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType) => {
-    const recordId = `daily_auto_${activeStoreId}_${accountType}_${dateStr}`;
-    const existing = records.find(r => r.id === recordId);
-    if (existing) { alert("Este total diario ya fue conciliado."); return; }
+  const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType, transaction?: TransactionDetail) => {
+    const recordId = transaction 
+        ? `trans_auto_${transaction.id}`
+        : `daily_auto_${activeStoreId}_${accountType}_${dateStr}`;
+    
+    const existing = allRecords.find(r => r.id === recordId);
+    
+    if (existing) {
+        // Si el monto o la cuenta cambiaron, permitimos actualizar el registro
+        if (existing.amount !== amount || existing.accountType !== accountType) {
+            const diffMsg = existing.amount !== amount 
+                ? `El monto del sistema (${formatCOP(amount)}) es diferente al conciliado (${formatCOP(existing.amount)}).`
+                : `La cuenta del sistema (${accountType}) es diferente a la conciliada (${existing.accountType}).`;
+
+            if (window.confirm(`${diffMsg} ¿Deseas actualizar el registro de conciliación?`)) {
+                await updateDoc(doc(db, 'financialRecords', recordId), { 
+                    amount: amount,
+                    accountType: accountType,
+                    description: transaction 
+                        ? `${transaction.description} (${getAccountName(accountType)}) [ACTUALIZADO]`
+                        : `Cierre Diario ${getAccountName(accountType)} (${dateStr}) [ACTUALIZADO]`
+                });
+            }
+            return;
+        }
+        
+        if (transaction) {
+            alert("Esta transacción ya fue conciliada y coincide con el sistema.");
+            return;
+        }
+        
+        alert("Este total diario ya fue conciliado y coincide con el sistema."); 
+        return; 
+    }
+
     let typeLabel = getAccountName(accountType);
-    const dateTime = `${dateStr}T23:59:59`;
-    const newRecord: FinancialRecord = { id: recordId, date: dateTime, storeId: activeStoreId, accountType: accountType as any, amount: amount, type: 'income_sales', description: `Cierre Diario ${typeLabel} (${dateStr})`, subCategory: 'Cierre Diario', registeredBy: currentUser.name, isConfirmed: true, affectsCashBalance: true };
+    const dateTime = transaction ? `${dateStr}T${transaction.time}:00` : `${dateStr}T23:59:59`;
+    const description = transaction 
+        ? `${transaction.description} (${typeLabel})`
+        : `Cierre Diario ${typeLabel} (${dateStr})`;
+
+    const newRecord: FinancialRecord = { 
+        id: recordId, 
+        date: dateTime, 
+        storeId: activeStoreId, 
+        accountType: accountType as any, 
+        amount: amount, 
+        type: 'income_sales', 
+        description: description, 
+        subCategory: transaction ? 'Venta Individual' : 'Cierre Diario', 
+        registeredBy: currentUser.name, 
+        isConfirmed: true, 
+        affectsCashBalance: true 
+    };
     await setDoc(doc(db, 'financialRecords', recordId), newRecord);
   };
 
@@ -1034,12 +1081,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 const isExpanded = expandedSystemLoadId === item.date;
                                 
                                 return (
-                                    <div key={item.date} className={`p-3 sm:p-4 bg-gray-5 dark:bg-gray-800/50 border rounded-xl space-y-2.5 transition-all ${isExpanded ? 'border-accent ring-1 ring-accent/20' : 'border-gray-100 dark:border-gray-700'}`}>
+                                    <div key={item.date} className="p-3 sm:p-4 bg-gray-5 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl space-y-2.5 transition-all">
                                         <div className="flex justify-between items-center border-b dark:border-gray-700 pb-1">
                                             <p className="text-[9px] sm:text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-tighter">{item.date}</p>
-                                            <button onClick={() => setExpandedSystemLoadId(isExpanded ? null : item.date)} className="p-1 hover:bg-accent/10 rounded text-accent transition-colors" title="Ver desglose de pagos">
-                                                {isExpanded ? <CrossIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
-                                            </button>
                                         </div>
                                         {(showBothClosures || activeTab === 'cash') && (
                                             <div className="flex justify-between items-center">
@@ -1054,24 +1098,52 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             </div>
                                         )}
 
-                                        {isExpanded && (
-                                            <div className="mt-3 space-y-3 pt-3 border-t border-dashed border-gray-300 dark:border-gray-600 animate-fade-in">
-                                                {/* Sección QR */}
+                                        <div className="mt-3 space-y-3 pt-3 border-t border-dashed border-gray-300 dark:border-gray-600 animate-fade-in">
+                                            {/* Sección QR */}
                                                 {(showBothClosures || activeTab === 'qr') && (
                                                     <div>
                                                         <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                                                             <BuildingStorefrontIcon className="w-2.5 h-2.5" /> Desglose QR ({item.transactions.qr.length})
                                                         </p>
                                                         <div className="space-y-1">
-                                                            {item.transactions.qr.length > 0 ? item.transactions.qr.map(t => (
-                                                                <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                                                    <div className="min-w-0">
-                                                                        <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
-                                                                        <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                            {item.transactions.qr.length > 0 ? item.transactions.qr.map(t => {
+                                                                const recordId = `trans_auto_${t.id}`;
+                                                                const existingRecord = allRecords.find(r => r.id === recordId);
+                                                                const isTransConfirmed = !!existingRecord;
+                                                                const isAmountMismatch = isTransConfirmed && existingRecord.amount !== t.amount;
+                                                                const isAccountMismatch = isTransConfirmed && existingRecord.accountType !== 'qr';
+
+                                                                return (
+                                                                    <div key={t.id} className={`flex justify-between items-center text-[9px] p-1.5 rounded-lg border ${isAmountMismatch || isAccountMismatch ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-white dark:bg-black/20 border-gray-100 dark:border-gray-800'}`}>
+                                                                        <div className="min-w-0 flex items-center gap-2">
+                                                                            <span className="text-gray-400 font-mono">{t.time}</span>
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[100px]">{t.description}</span>
+                                                                                {isAmountMismatch && <span className="text-[7px] text-red-500 font-bold">Conciliado: {formatCOP(existingRecord.amount)}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-black text-blue-600">{formatCOP(t.amount)}</span>
+                                                                            <div className="flex flex-col items-end gap-1">
+                                                                                <button 
+                                                                                    onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all ${isTransConfirmed ? (isAmountMismatch || isAccountMismatch ? 'bg-red-500 text-white' : 'bg-green-500 text-white') : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white'}`}
+                                                                                >
+                                                                                    {isTransConfirmed ? (isAmountMismatch ? 'DIFERENCIA' : (isAccountMismatch ? 'OTRA CUENTA' : 'OK')) : 'CONCILIAR'}
+                                                                                </button>
+                                                                                {isTransConfirmed && (isAmountMismatch || isAccountMismatch) && (
+                                                                                    <button 
+                                                                                        onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                        className="text-[7px] text-blue-500 font-bold hover:underline"
+                                                                                    >
+                                                                                        ACTUALIZAR
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <span className="font-black text-blue-600 shrink-0">{formatCOP(t.amount)}</span>
-                                                                </div>
-                                                            )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones QR</p>}
+                                                                );
+                                                            }) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones QR</p>}
                                                         </div>
                                                     </div>
                                                 )}
@@ -1083,20 +1155,48 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                             <DollarIcon className="w-2.5 h-2.5" /> Desglose EFECTIVO ({item.transactions.cash.length})
                                                         </p>
                                                         <div className="space-y-1">
-                                                            {item.transactions.cash.length > 0 ? item.transactions.cash.map(t => (
-                                                                <div key={t.id} className="flex justify-between items-center text-[9px] bg-white dark:bg-black/20 p-1.5 rounded-lg border border-gray-100 dark:border-gray-800">
-                                                                    <div className="min-w-0">
-                                                                        <span className="text-gray-400 font-mono pr-1.5">{t.time}</span>
-                                                                        <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[120px]">{t.description}</span>
+                                                            {item.transactions.cash.length > 0 ? item.transactions.cash.map(t => {
+                                                                const recordId = `trans_auto_${t.id}`;
+                                                                const existingRecord = allRecords.find(r => r.id === recordId);
+                                                                const isTransConfirmed = !!existingRecord;
+                                                                const isAmountMismatch = isTransConfirmed && existingRecord.amount !== t.amount;
+                                                                const isAccountMismatch = isTransConfirmed && existingRecord.accountType !== 'cash';
+
+                                                                return (
+                                                                    <div key={t.id} className={`flex justify-between items-center text-[9px] p-1.5 rounded-lg border ${isAmountMismatch || isAccountMismatch ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-white dark:bg-black/20 border-gray-100 dark:border-gray-800'}`}>
+                                                                        <div className="min-w-0 flex items-center gap-2">
+                                                                            <span className="text-gray-400 font-mono">{t.time}</span>
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[100px]">{t.description}</span>
+                                                                                {isAmountMismatch && <span className="text-[7px] text-red-500 font-bold">Conciliado: {formatCOP(existingRecord.amount)}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`font-black ${t.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(t.amount)}</span>
+                                                                            <div className="flex flex-col items-end gap-1">
+                                                                                <button 
+                                                                                    onClick={() => confirmDailyTotal(item.date, t.amount, 'cash', t)}
+                                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all ${isTransConfirmed ? (isAmountMismatch || isAccountMismatch ? 'bg-red-500 text-white' : 'bg-green-500 text-white') : 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-600 hover:text-white'}`}
+                                                                                >
+                                                                                    {isTransConfirmed ? (isAmountMismatch ? 'DIFERENCIA' : (isAccountMismatch ? 'OTRA CUENTA' : 'OK')) : 'CONCILIAR'}
+                                                                                </button>
+                                                                                {isTransConfirmed && (isAmountMismatch || isAccountMismatch) && (
+                                                                                    <button 
+                                                                                        onClick={() => confirmDailyTotal(item.date, t.amount, 'cash', t)}
+                                                                                        className="text-[7px] text-blue-500 font-bold hover:underline"
+                                                                                    >
+                                                                                        ACTUALIZAR
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <span className={`font-black shrink-0 ${t.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(t.amount)}</span>
-                                                                </div>
-                                                            )) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones efectivo</p>}
+                                                                );
+                                                            }) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones efectivo</p>}
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
                                     </div>
                                 );
                             })}

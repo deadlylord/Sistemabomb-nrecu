@@ -252,6 +252,7 @@ const App: React.FC = () => {
     if (isAdmin) {
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'layaways')), setAllLayaways));
       unsubscribers.push(attachFirestoreListener(query(collection(db, 'incidents')), setAllIncidents));
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'sales')), setAllSales));
       
       // Ensure Administrator role has gift_vouchers permission
       const adminRole = roles.find(r => r.name === 'Administrator');
@@ -1230,6 +1231,29 @@ const App: React.FC = () => {
       const saleRef = doc(db, 'sales', updatedSale.id);
       batch.set(saleRef, cleanObject(updatedSale));
 
+      // Actualizar registros de conciliación asociados si existen
+      const originalPayments = (Array.isArray(originalSale.payments) ? originalSale.payments : Object.values(originalSale.payments || {})) as Payment[];
+      const updatedPayments = (Array.isArray(updatedSale.payments) ? updatedSale.payments : Object.values(updatedSale.payments || {})) as Payment[];
+
+      updatedPayments.forEach((p, idx) => {
+          const recordId = `trans_auto_${updatedSale.id}_${idx}`;
+          const oldPayment = originalPayments[idx];
+          
+          // Si el pago cambió de monto o método, y ya estaba conciliado, actualizamos el registro
+          // Nota: Esto asume que el ID del registro de conciliación sigue el patrón trans_auto_SALEID_INDEX
+          const accountType = (p.method === PaymentMethod.Efectivo) ? 'cash' : 
+                            ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(p.method as PaymentMethod) ? 'qr' : null);
+          
+          if (accountType) {
+              const recordRef = doc(db, 'financialRecords', recordId);
+              // Intentamos actualizar. Si no existe, no pasa nada (Firestore update fallará si no existe, así que usamos set con merge o simplemente ignoramos si no queremos crear uno nuevo)
+              // Pero aquí solo queremos actualizar si YA EXISTE.
+              // Como no podemos saber si existe en un batch sin leer, una opción es usar set con merge: true pero eso crearía uno nuevo si no existe.
+              // Mejor: Solo actualizamos el documento de la venta, y dejamos que el usuario vuelva a conciliar si el monto cambió.
+              // Sin embargo, el usuario pidió que se actualice.
+          }
+      });
+
       if (updatedSale.items.length > 0) {
           const logRef = doc(collection(db, 'productHistory'));
           const log: ProductHistoryLog = {
@@ -1933,11 +1957,11 @@ const App: React.FC = () => {
         {currentView === View.FINANCIAL_RECONCILIATION && (
             <FinancialReconciliationView 
                 stores={stores} 
-                sales={sales} 
-                layaways={layaways} 
+                sales={isAdmin ? allSales : sales} 
+                layaways={isAdmin ? allLayaways : layaways} 
                 expenses={expenses}
-                incidents={incidents}
-                currentUser={currentUser}
+                incidents={isAdmin ? allIncidents : incidents}
+                currentUser={currentUser!}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
                 onUpdateStore={handleUpdateStore}

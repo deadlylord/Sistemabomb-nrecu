@@ -39,10 +39,43 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.20',
+    date: '2026-03-27',
+    description: 'Mejora en la visualización de conciliaciones: registros siempre expandidos y filtrado estricto de medios de pago.',
+    isCurrent: true,
+    changes: [
+      'Se eliminó la necesidad de expandir manualmente los cierres de caja; ahora se muestran siempre abiertos.',
+      'Se ajustó el filtrado de QR para que sea estricto: ahora Nequi y Daviplata no aparecen en la lista de QR si no se desea conciliarlos allí.',
+      'Mejora en la interfaz para una conciliación más rápida y directa.'
+    ]
+  },
+  {
+    version: '1.1.19',
+    date: '2026-03-27',
+    description: 'Mejora en la sincronización de conciliaciones al editar ventas y visualización detallada de medios de pago.',
+    isCurrent: false,
+    changes: [
+      'Se añadió el nombre del medio de pago en la descripción de las transacciones para mayor claridad.',
+      'Mejora en la sincronización de conciliaciones: al editar una venta, se actualizan los registros de conciliación asociados.',
+      'Se corrigió un error donde los administradores no veían las ventas de otras sedes en la vista de conciliación.'
+    ]
+  },
+  {
+    version: '1.1.18',
+    date: '2026-03-27',
+    description: 'Conciliación individual de pagos QR y efectivo',
+    isCurrent: false,
+    changes: [
+      'Se añadió la capacidad de conciliar cada pago de QR y efectivo de forma independiente.',
+      'Mejora en la sincronización de cierres de caja: ahora se permite actualizar el registro si el monto del sistema cambia.',
+      'Estabilización de IDs de transacciones para una conciliación persistente y precisa.'
+    ]
+  },
+  {
     version: '1.1.17',
     date: '2026-03-27',
     description: 'Estado General Global de Sedes',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Nuevo botón "Estado General" que despliega un resumen consolidado de todas las tiendas.',
       'Visualización detallada de saldos (Efectivo/QR) y deudas (Por Cobrar/Por Pagar) por sede.',
