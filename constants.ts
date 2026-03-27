@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.17',
+    date: '2026-03-27',
+    description: 'Estado General Global de Sedes',
+    isCurrent: true,
+    changes: [
+      'Nuevo botón "Estado General" que despliega un resumen consolidado de todas las tiendas.',
+      'Visualización detallada de saldos (Efectivo/QR) y deudas (Por Cobrar/Por Pagar) por sede.',
+      'Cálculo de balance neto global de toda la red de tiendas.'
+    ]
+  },
+  {
     version: '1.1.16',
     date: '2026-03-27',
     description: 'Carga inteligente de cierres de caja (Efectivo/QR) con opción de vista combinada.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se añadió la capacidad de cargar cierres de caja de forma selectiva según la cuenta activa (Efectivo o QR).',
       'Nueva opción "Cargar Ambos" para visualizar y conciliar ambos tipos de cierres simultáneamente.',

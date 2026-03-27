@@ -85,6 +85,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const filteredStores = useMemo(() => stores.filter(s => !s.name.toLowerCase().includes('training')), [stores]);
   const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
   const [records, setRecords] = useState<FinancialRecord[]>([]);
+  const [allRecords, setAllRecords] = useState<FinancialRecord[]>([]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -102,6 +103,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
   const [showBothClosures, setShowBothClosures] = useState(false);
+  const [showGlobalSummary, setShowGlobalSummary] = useState(false);
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
@@ -140,18 +142,23 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   useEffect(() => {
-    if (!activeStoreId) return;
-    const q = query(collection(db, 'financialRecords'), where('storeId', '==', activeStoreId));
+    const q = query(collection(db, 'financialRecords'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FinancialRecord));
-        setRecords(list.sort((a, b) => {
-            const timeA = new Date(a.date).getTime();
-            const timeB = new Date(b.date).getTime();
-            return timeB - timeA || b.id.localeCompare(a.id);
-        }));
+        setAllRecords(list);
     });
     return () => unsubscribe();
-  }, [activeStoreId]);
+  }, []);
+
+  useEffect(() => {
+    if (!activeStoreId) return;
+    const list = allRecords.filter(r => r.storeId === activeStoreId);
+    setRecords(list.sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        return timeB - timeA || b.id.localeCompare(a.id);
+    }));
+  }, [activeStoreId, allRecords]);
 
   const learnedKnowledge = useMemo(() => {
     const directMap: Record<string, string> = {};
@@ -243,6 +250,46 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       interStoreBalances.forEach(b => { if (b.total > 0) toCollect += b.total; else toPay += Math.abs(b.total); });
       return { toCollect, toPay };
   }, [interStoreBalances]);
+
+  const globalStoreSummaries = useMemo(() => {
+    return filteredStores.map(store => {
+      const storeRecords = allRecords.filter(r => r.storeId === store.id);
+      
+      const cashBalance = (store.initialBalances?.cash || 0) + 
+        storeRecords.filter(r => r.accountType === 'cash' && r.affectsCashBalance !== false)
+                    .reduce((acc, r) => acc + r.amount, 0);
+                    
+      const qrBalance = (store.initialBalances?.qr || 0) + 
+        storeRecords.filter(r => r.accountType === 'qr' && r.affectsCashBalance !== false)
+                    .reduce((acc, r) => acc + r.amount, 0);
+
+      let totalToCollect = 0;
+      let totalDebts = 0;
+      
+      const balances: Record<string, number> = {};
+      storeRecords.forEach(r => {
+        if (r.debtStoreId) {
+          const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') ? -r.amount : r.amount;
+          balances[r.debtStoreId] = (balances[r.debtStoreId] || 0) + netImpact;
+        }
+      });
+      
+      Object.values(balances).forEach(val => {
+        if (val > 0) totalToCollect += val;
+        else totalDebts += Math.abs(val);
+      });
+
+      return {
+        storeId: store.id,
+        storeName: store.name,
+        cashBalance,
+        qrBalance,
+        totalDebts,
+        totalToCollect,
+        netBalance: cashBalance + qrBalance + totalToCollect - totalDebts
+      };
+    });
+  }, [filteredStores, allRecords]);
 
   const dailySystemTotals = useMemo(() => {
     const totalsMap = new Map<string, DailySystemTotal>();
@@ -736,6 +783,82 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         )}
         
+        {/* Modal de Estado General Global */}
+        {showGlobalSummary && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-secondary w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden border border-accent/20 flex flex-col max-h-[90vh]">
+                    <div className="p-4 sm:p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 shrink-0">
+                        <div>
+                            <h3 className="text-lg sm:text-xl font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                                <ChartBarIcon className="w-6 h-6" /> Estado General de Sedes
+                            </h3>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mt-1">Resumen consolidado de saldos y deudas por tienda</p>
+                        </div>
+                        <button onClick={() => setShowGlobalSummary(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-white dark:bg-gray-800 rounded-full shadow-sm"><CrossIcon className="w-6 h-6" /></button>
+                    </div>
+                    
+                    <div className="p-4 sm:p-6 overflow-y-auto scrollbar-hide space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {globalStoreSummaries.map(summary => (
+                                <div key={summary.storeId} className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-accent/30 transition-all group">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <h4 className="text-sm font-black text-gray-800 dark:text-white uppercase truncate max-w-[150px]">{summary.storeName}</h4>
+                                        <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${summary.netBalance >= 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                            Neto: {formatCOP(summary.netBalance)}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-gray-400 font-bold uppercase">Efectivo:</span>
+                                            <span className="font-black text-green-600">{formatCOP(summary.cashBalance)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-gray-400 font-bold uppercase">QR:</span>
+                                            <span className="font-black text-blue-600">{formatCOP(summary.qrBalance)}</span>
+                                        </div>
+                                        <div className="h-px bg-gray-200 dark:bg-gray-800 my-1"></div>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-gray-400 font-bold uppercase">Por Cobrar:</span>
+                                            <span className="font-black text-green-500">+{formatCOP(summary.totalToCollect)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-gray-400 font-bold uppercase">Por Pagar:</span>
+                                            <span className="font-black text-red-500">-{formatCOP(summary.totalDebts)}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <button 
+                                        onClick={() => { setActiveStoreId(summary.storeId); setShowGlobalSummary(false); }}
+                                        className="w-full mt-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-[9px] font-black uppercase text-gray-500 hover:text-accent hover:border-accent transition-all"
+                                    >
+                                        Ir a Conciliación
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="p-4 bg-gray-50 dark:bg-gray-900/80 border-t dark:border-gray-800 flex justify-between items-center shrink-0">
+                        <div className="flex gap-4">
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-gray-400 uppercase">Total Efectivo Global</span>
+                                <span className="text-sm font-black text-green-600">{formatCOP(globalStoreSummaries.reduce((acc, s) => acc + s.cashBalance, 0))}</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-gray-400 uppercase">Total QR Global</span>
+                                <span className="text-sm font-black text-blue-600">{formatCOP(globalStoreSummaries.reduce((acc, s) => acc + s.qrBalance, 0))}</span>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-[8px] font-black text-gray-400 uppercase">Balance Neto Red</span>
+                            <span className="text-lg font-black text-accent">{formatCOP(globalStoreSummaries.reduce((acc, s) => acc + s.netBalance, 0))}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl shadow-lg border-b-8" style={{ borderBottomColor: activeStore?.accentColor || '#ff007f' }}>
             <div className="flex items-center gap-3 sm:gap-4">
                 <div className="p-2 sm:p-3 bg-accent/10 rounded-2xl text-accent shadow-inner"><ChartBarIcon className="w-8 h-8 sm:w-10 sm:h-10" /></div>
@@ -749,13 +872,23 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
                 {stores.filter(s => !s.name.toLowerCase().includes('training')).map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
                 {isAdmin && (
-                    <button 
-                        onClick={handleOpenEditNames}
-                        className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
-                        title="Editar nombres de cuentas"
-                    >
-                        <SettingsIcon className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1.5">
+                        <button 
+                            onClick={() => setShowGlobalSummary(true)}
+                            className="p-2 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-accent/20"
+                            title="Ver estado general de todas las sedes"
+                        >
+                            <ChartBarIcon className="w-4 h-4" />
+                            <span className="text-[9px] font-black uppercase hidden sm:inline">Estado General</span>
+                        </button>
+                        <button 
+                            onClick={handleOpenEditNames}
+                            className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
+                            title="Editar nombres de cuentas"
+                        >
+                            <SettingsIcon className="w-4 h-4" />
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
