@@ -17,7 +17,7 @@ interface FinancialReconciliationViewProps {
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
 }
 
-type AccountType = 'cash' | 'qr';
+type AccountType = 'cash' | 'qr' | 'addi' | 'sistecredito';
 
 interface TransactionDetail {
     id: string;
@@ -30,11 +30,15 @@ interface TransactionDetail {
 interface DailySystemTotal {
     cash: number;
     qr: number;
+    addi: number;
+    sistecredito: number;
     date: string;
     details: string[];
     transactions: {
         cash: TransactionDetail[];
         qr: TransactionDetail[];
+        addi: TransactionDetail[];
+        sistecredito: TransactionDetail[];
     };
 }
 
@@ -88,6 +92,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [allRecords, setAllRecords] = useState<FinancialRecord[]>([]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
+  const [closuresActiveTab, setClosuresActiveTab] = useState<AccountType>('cash');
+  const [sisteRangeStart, setSisteRangeStart] = useState('');
+  const [sisteRangeEnd, setSisteRangeEnd] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   
   // Filtros de fecha adicionales para la tabla principal
@@ -110,8 +117,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
 
   const [isEditingNames, setIsEditingNames] = useState(false);
-  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '' });
-  const [tempInitialBalances, setTempInitialBalances] = useState({ cash: 0, qr: 0 });
+  const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', addi: '' });
+  const [tempInitialBalances, setTempInitialBalances] = useState({ cash: 0, qr: 0, addi: 0 });
 
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
@@ -235,7 +242,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
               if (r.accountType === 'cash') b.cash += netImpact;
-              else if (r.accountType === 'qr') b.qr += netImpact;
+              else if (r.accountType === 'qr' || r.accountType === 'addi') b.qr += netImpact;
           }
       });
       return Object.entries(balances).map(([otherStoreId, stats]) => ({
@@ -260,8 +267,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         storeRecords.filter(r => r.accountType === 'cash' && r.affectsCashBalance !== false)
                     .reduce((acc, r) => acc + r.amount, 0);
                     
-      const qrBalance = (store.initialBalances?.qr || 0) + 
-        storeRecords.filter(r => r.accountType === 'qr' && r.affectsCashBalance !== false)
+      const qrBalance = (store.initialBalances?.qr || 0) + (store.initialBalances?.addi || 0) + 
+        storeRecords.filter(r => (r.accountType === 'qr' || r.accountType === 'addi') && r.affectsCashBalance !== false)
                     .reduce((acc, r) => acc + r.amount, 0);
 
       let totalToCollect = 0;
@@ -306,24 +313,39 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     const getExisting = (dateStr: string): DailySystemTotal => {
         return totalsMap.get(dateStr) || { 
-            cash: 0, qr: 0, date: dateStr, details: [], 
-            transactions: { cash: [], qr: [] } 
+            cash: 0, qr: 0, addi: 0, sistecredito: 0, date: dateStr, details: [], 
+            transactions: { cash: [], qr: [], addi: [], sistecredito: [] } 
         };
     }
 
     const processPayment = (p: Payment, type: 'Venta' | 'Abono', refId: string, customer: string, index: number) => {
         const pDate = new Date(p.date);
-        if (pDate.getTime() < startOfMonth.getTime() || pDate.getTime() > endOfMonth.getTime()) return;
-        const dateStr = getLocalDateString(p.date);
+        let reconciliationDate = new Date(pDate);
+        let amount = Number(p.amount) || 0;
+        let description = `${type} [${p.method.toUpperCase()}] ${customer}`;
+
+        if (p.method === PaymentMethod.Addi || p.method === PaymentMethod.Sistecredito) {
+            const methodKey = p.method === PaymentMethod.Addi ? PaymentMethod.Addi : PaymentMethod.Sistecredito;
+            const commission = activeStore?.paymentCommissions?.[methodKey] || 0;
+            const originalAmount = amount;
+            if (commission > 0) {
+                amount = amount * (1 - commission);
+            }
+            const label = p.method === PaymentMethod.Addi ? 'ADDI' : 'SISTECREDITO';
+            description = `${type} [${label}] ${customer} (Venta: ${getLocalDateString(p.date)}) - Valor: ${formatCOP(originalAmount)} | Neto: ${formatCOP(amount)}`;
+        }
+
+        if (reconciliationDate.getTime() < startOfMonth.getTime() || reconciliationDate.getTime() > endOfMonth.getTime()) return;
+        
+        const dateStr = getLocalDateString(reconciliationDate);
         const existing = getExisting(dateStr);
-        const amount = Number(p.amount) || 0;
         const time = p.date.split('T')[1]?.slice(0, 5) || '--:--';
         
         const detail: TransactionDetail = {
             id: `${refId}_${index}`,
             time,
             amount,
-            description: `${type} [${p.method.toUpperCase()}] ${customer}`,
+            description,
             type
         };
 
@@ -333,6 +355,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         } else if (p.method === PaymentMethod.QR) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
+        } else if (p.method === PaymentMethod.Addi) {
+            existing.addi += amount;
+            existing.transactions.addi.push(detail);
+        } else if (p.method === PaymentMethod.Sistecredito) {
+            existing.sistecredito += amount;
+            existing.transactions.sistecredito.push(detail);
         }
         totalsMap.set(dateStr, existing);
     };
@@ -379,10 +407,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     });
 
     return Array.from(totalsMap.values()).sort((a, b) => b.date.localeCompare(a.date));
-  }, [sales, layaways, incidents, activeStoreId, selectedMonth, selectedYear]);
+  }, [sales, layaways, incidents, activeStoreId, selectedMonth, selectedYear, stores]);
 
   const getAccountName = (type: AccountType): string => {
-    if (activeStore?.accountNames?.[type]) return activeStore.accountNames[type];
+    if (type === 'addi') return 'Addi';
+    if (type === 'sistecredito') return 'Sistecredito';
+    if (activeStore?.accountNames?.[type as any]) return (activeStore.accountNames as any)[type];
     if (type === 'cash') return 'Efectivo';
     if (type === 'qr') return 'Bancolombia (QR)';
     return 'Bancos';
@@ -391,11 +421,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const handleOpenEditNames = () => {
     setTempAccountNames({
         cash: activeStore?.accountNames?.cash || 'Efectivo',
-        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)'
+        qr: activeStore?.accountNames?.qr || 'Bancolombia (QR)',
+        addi: activeStore?.accountNames?.addi || 'Addi'
     });
     setTempInitialBalances({
         cash: activeStore?.initialBalances?.cash || 0,
-        qr: activeStore?.initialBalances?.qr || 0
+        qr: activeStore?.initialBalances?.qr || 0,
+        addi: activeStore?.initialBalances?.addi || 0,
+        sistecredito: (activeStore?.initialBalances as any)?.sistecredito || 0
     });
     setIsEditingNames(true);
   };
@@ -414,16 +447,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }
   };
 
-  const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType, transaction?: TransactionDetail) => {
+  const confirmDailyTotal = async (dateStr: string, amount: number, accountType: AccountType, transaction?: TransactionDetail, idPrefix?: string) => {
     const recordId = transaction 
         ? `trans_auto_${transaction.id}`
-        : `daily_auto_${activeStoreId}_${accountType}_${dateStr}`;
+        : `daily_auto_${activeStoreId}_${idPrefix || accountType}_${dateStr}`;
     
     const existing = allRecords.find(r => r.id === recordId);
     
     if (existing) {
         // Si el monto o la cuenta cambiaron, permitimos actualizar el registro
-        if (existing.amount !== amount || existing.accountType !== accountType) {
+        if (existing.amount !== amount || (existing.accountType !== accountType && !idPrefix)) {
             const diffMsg = existing.amount !== amount 
                 ? `El monto del sistema (${formatCOP(amount)}) es diferente al conciliado (${formatCOP(existing.amount)}).`
                 : `La cuenta del sistema (${accountType}) es diferente a la conciliada (${existing.accountType}).`;
@@ -434,7 +467,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     accountType: accountType,
                     description: transaction 
                         ? `${transaction.description} (${getAccountName(accountType)}) [ACTUALIZADO]`
-                        : `Cierre Diario ${getAccountName(accountType)} (${dateStr}) [ACTUALIZADO]`
+                        : `Cierre Diario ${idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(accountType))} (${dateStr}) [ACTUALIZADO]`
                 });
             }
             return;
@@ -449,7 +482,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         return; 
     }
 
-    let typeLabel = getAccountName(accountType);
+    let typeLabel = idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(accountType));
     const dateTime = transaction ? `${dateStr}T${transaction.time}:00` : `${dateStr}T23:59:59`;
     const description = transaction 
         ? `${transaction.description} (${typeLabel})`
@@ -463,7 +496,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         amount: amount, 
         type: 'income_sales', 
         description: description, 
-        subCategory: transaction ? 'Venta Individual' : 'Cierre Diario', 
+        subCategory: transaction ? 'Venta Individual' : (idPrefix === 'addi' ? 'Cierre Addi' : 'Cierre Diario'), 
         registeredBy: currentUser.name, 
         isConfirmed: true, 
         affectsCashBalance: true 
@@ -828,6 +861,29 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     />
                                 </div>
                             </div>
+
+                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 space-y-4">
+                                <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Cuenta Addi</h4>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Nombre Personalizado</label>
+                                    <input 
+                                        type="text" 
+                                        value={tempAccountNames.addi} 
+                                        onChange={e => setTempAccountNames({...tempAccountNames, addi: e.target.value})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-bold text-sm focus:border-indigo-500"
+                                        placeholder="Addi"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-1 tracking-widest">Saldo Inicial $</label>
+                                    <input 
+                                        type="number" 
+                                        value={tempInitialBalances.addi} 
+                                        onChange={e => setTempInitialBalances({...tempInitialBalances, addi: parseFloat(e.target.value) || 0})}
+                                        className="w-full bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 outline-none font-black text-sm text-indigo-600 focus:border-indigo-500"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div className="pt-4 flex gap-3">
@@ -872,6 +928,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <div className="flex justify-between items-center text-[10px]">
                                             <span className="text-gray-400 font-bold uppercase">QR:</span>
                                             <span className="font-black text-blue-600">{formatCOP(summary.qrBalance)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="text-gray-400 font-bold uppercase">Addi:</span>
+                                            <span className="font-black text-indigo-600">{formatCOP((summary as any).addiBalance)}</span>
                                         </div>
                                         <div className="h-px bg-gray-200 dark:bg-gray-800 my-1"></div>
                                         
@@ -918,6 +978,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-black text-gray-400 uppercase">Total QR Global</span>
                                 <span className="text-sm font-black text-blue-600">{formatCOP(globalStoreSummaries.reduce((acc, s) => acc + s.qrBalance, 0))}</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-gray-400 uppercase">Total Addi Global</span>
+                                <span className="text-sm font-black text-indigo-600">{formatCOP(globalStoreSummaries.reduce((acc, s) => acc + (s as any).addiBalance, 0))}</span>
                             </div>
                         </div>
                         <div className="text-right">
@@ -1101,12 +1165,106 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 {showBothClosures ? 'Ver Solo Activa' : 'Cargar Ambos'}
                              </button>
                         </div>
+                        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mt-1 overflow-x-auto scrollbar-hide">
+                            <button onClick={() => setClosuresActiveTab('cash')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'cash' ? 'bg-white dark:bg-secondary text-accent shadow-sm' : 'text-gray-400'}`}>Efectivo</button>
+                            <button onClick={() => setClosuresActiveTab('qr')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'qr' ? 'bg-white dark:bg-secondary text-blue-600 shadow-sm' : 'text-gray-400'}`}>QR</button>
+                            <button onClick={() => setClosuresActiveTab('addi')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'addi' ? 'bg-white dark:bg-secondary text-indigo-600 shadow-sm' : 'text-gray-400'}`}>Addi</button>
+                            <button onClick={() => setClosuresActiveTab('sistecredito')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'sistecredito' ? 'bg-white dark:bg-secondary text-orange-600 shadow-sm' : 'text-gray-400'}`}>Siste</button>
+                        </div>
                     </div>
+                    {isSystemLoadsOpen && closuresActiveTab === 'sistecredito' && (
+                        <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800 animate-fade-in">
+                            <p className="text-[10px] font-black text-orange-600 uppercase mb-2 flex items-center gap-1"><HistoryIcon className="w-3 h-3"/> Conciliación por Rango (Sistecredito)</p>
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div>
+                                    <label className="text-[7px] font-bold text-gray-400 uppercase block mb-1">Desde</label>
+                                    <input type="date" value={sisteRangeStart} onChange={e => setSisteRangeStart(e.target.value)} className="w-full bg-white dark:bg-gray-800 p-1.5 rounded-lg text-[9px] border outline-none font-bold" />
+                                </div>
+                                <div>
+                                    <label className="text-[7px] font-bold text-gray-400 uppercase block mb-1">Hasta</label>
+                                    <input type="date" value={sisteRangeEnd} onChange={e => setSisteRangeEnd(e.target.value)} className="w-full bg-white dark:bg-gray-800 p-1.5 rounded-lg text-[9px] border outline-none font-bold" />
+                                </div>
+                            </div>
+                            {sisteRangeStart && sisteRangeEnd && (() => {
+                                const start = new Date(sisteRangeStart);
+                                const end = new Date(sisteRangeEnd);
+                                let rangeTotal = 0;
+                                let rangeOriginalTotal = 0;
+                                let rangeCount = 0;
+                                
+                                dailySystemTotals.forEach(item => {
+                                    const itemDate = new Date(item.date);
+                                    if (itemDate >= start && itemDate <= end) {
+                                        rangeTotal += item.sistecredito;
+                                        item.transactions.sistecredito.forEach(t => {
+                                            // Extraer valor original de la descripción si es posible
+                                            const match = t.description.match(/Valor: \$([\d.,]+)/);
+                                            if (match) {
+                                                const val = parseFloat(match[1].replace(/\./g, '').replace(/,/g, ''));
+                                                rangeOriginalTotal += val;
+                                            } else {
+                                                rangeOriginalTotal += t.amount;
+                                            }
+                                            rangeCount++;
+                                        });
+                                    }
+                                });
+
+                                const rangeId = `range_siste_${activeStoreId}_${sisteRangeStart}_${sisteRangeEnd}`;
+                                const isRangeConfirmed = allRecords.some(r => r.id === rangeId);
+
+                                return (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-end border-b border-orange-200 dark:border-orange-800 pb-2">
+                                            <div className="flex flex-col">
+                                                <span className="text-[8px] font-bold text-gray-500 uppercase">Total Bruto ({rangeCount})</span>
+                                                <span className="text-xs font-black text-gray-700 dark:text-gray-300">{formatCOP(rangeOriginalTotal)}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[8px] font-bold text-orange-600 uppercase">Total Neto (A Consignar)</span>
+                                                <span className="text-sm font-black text-orange-600">{formatCOP(rangeTotal)}</span>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={async () => {
+                                                if (rangeTotal === 0) return;
+                                                const description = `Conciliación Sistecredito Rango: ${sisteRangeStart} al ${sisteRangeEnd} (${rangeCount} ventas)`;
+                                                const record: FinancialRecord = {
+                                                    id: rangeId,
+                                                    date: sisteRangeEnd,
+                                                    storeId: activeStoreId,
+                                                    accountType: 'qr', // Se concilia en QR por defecto
+                                                    amount: rangeTotal,
+                                                    type: 'income_sales',
+                                                    description,
+                                                    registeredBy: currentUser.name,
+                                                    isConfirmed: true
+                                                };
+                                                try {
+                                                    await setDoc(doc(db, 'financialRecords', rangeId), record);
+                                                    alert("Rango de Sistecredito conciliado correctamente en la cuenta QR.");
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    alert("Error al conciliar el rango.");
+                                                }
+                                            }}
+                                            disabled={isRangeConfirmed || rangeTotal === 0}
+                                            className={`w-full py-2 rounded-xl text-[9px] font-black uppercase transition-all ${isRangeConfirmed ? 'bg-green-500 text-white' : 'bg-orange-600 text-white shadow-lg hover:bg-orange-700'}`}
+                                        >
+                                            {isRangeConfirmed ? 'RANGO CONCILIADO OK' : 'CONCILIAR TODO EL RANGO'}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
                     {isSystemLoadsOpen && (
                         <div className="space-y-3 overflow-y-auto pr-1 scrollbar-hide animate-fade-in max-h-[300px] lg:max-h-none">
                             {dailySystemTotals.map((item) => {
                                 const isCashConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
                                 const isQrConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
+                                const isAddiConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_addi_${item.date}`);
+                                const isSisteConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_sistecredito_${item.date}`);
                                 const isExpanded = expandedSystemLoadId === item.date;
                                 
                                 return (
@@ -1114,22 +1272,34 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <div className="flex justify-between items-center border-b dark:border-gray-700 pb-1">
                                             <p className="text-[9px] sm:text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-tighter">{item.date}</p>
                                         </div>
-                                        {(showBothClosures || activeTab === 'cash') && (
+                                        {(showBothClosures || closuresActiveTab === 'cash') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">EFEC:</p><p className={`text-xs sm:text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
                                                 <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? 'OK' : 'CONCILIAR'}</button>
                                             </div>
                                         )}
-                                        {(showBothClosures || activeTab === 'qr') && (
+                                        {(showBothClosures || closuresActiveTab === 'qr') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">QR:</p><p className={`text-xs sm:text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
                                                 <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? 'OK' : 'CONCILIAR'}</button>
                                             </div>
                                         )}
+                                        {(showBothClosures || closuresActiveTab === 'addi') && (
+                                            <div className="flex justify-between items-center">
+                                                <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">ADDI:</p><p className={`text-xs sm:text-sm font-black ${item.addi >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>{formatCOP(item.addi)}</p></div>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.addi, 'qr', undefined, 'addi')} disabled={isAddiConfirmed || item.addi === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isAddiConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isAddiConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                            </div>
+                                        )}
+                                        {(showBothClosures || closuresActiveTab === 'sistecredito') && (
+                                            <div className="flex justify-between items-center">
+                                                <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">SISTE:</p><p className={`text-xs sm:text-sm font-black ${item.sistecredito >= 0 ? 'text-orange-600' : 'text-red-500'}`}>{formatCOP(item.sistecredito)}</p></div>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.sistecredito, 'qr', undefined, 'sistecredito')} disabled={isSisteConfirmed || item.sistecredito === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isSisteConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isSisteConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                            </div>
+                                        )}
 
                                         <div className="mt-3 space-y-3 pt-3 border-t border-dashed border-gray-300 dark:border-gray-600 animate-fade-in">
                                             {/* Sección QR */}
-                                                {(showBothClosures || activeTab === 'qr') && (
+                                                {(showBothClosures || closuresActiveTab === 'qr') && (
                                                     <div>
                                                         <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                                                             <BuildingStorefrontIcon className="w-2.5 h-2.5" /> Desglose QR ({item.transactions.qr.length})
@@ -1177,8 +1347,106 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                     </div>
                                                 )}
 
+                                                {/* Sección ADDI */}
+                                                {(showBothClosures || closuresActiveTab === 'addi') && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                                            <PlusCircleIcon className="w-2.5 h-2.5" /> Desglose ADDI ({item.transactions.addi.length})
+                                                        </p>
+                                                        <div className="space-y-1">
+                                                            {item.transactions.addi.length > 0 ? item.transactions.addi.map(t => {
+                                                                const recordId = `trans_auto_${t.id}`;
+                                                                const existingRecord = allRecords.find(r => r.id === recordId);
+                                                                const isTransConfirmed = !!existingRecord;
+                                                                const isAmountMismatch = isTransConfirmed && existingRecord.amount !== t.amount;
+                                                                const isAccountMismatch = isTransConfirmed && existingRecord.accountType !== 'qr';
+
+                                                                return (
+                                                                    <div key={t.id} className={`flex justify-between items-center text-[9px] p-1.5 rounded-lg border ${isAmountMismatch || isAccountMismatch ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-white dark:bg-black/20 border-gray-100 dark:border-gray-800'}`}>
+                                                                        <div className="min-w-0 flex items-center gap-2">
+                                                                            <span className="text-gray-400 font-mono">{t.time}</span>
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[100px]">{t.description}</span>
+                                                                                {isAmountMismatch && <span className="text-[7px] text-red-500 font-bold">Conciliado: {formatCOP(existingRecord.amount)}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`font-black text-indigo-600`}>{formatCOP(t.amount)}</span>
+                                                                            <div className="flex flex-col items-end gap-1">
+                                                                                <button 
+                                                                                    onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all ${isTransConfirmed ? (isAmountMismatch || isAccountMismatch ? 'bg-red-500 text-white' : 'bg-green-500 text-white') : 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-600 hover:text-white'}`}
+                                                                                >
+                                                                                    {isTransConfirmed ? (isAmountMismatch ? 'DIFERENCIA' : (isAccountMismatch ? 'OTRA CUENTA' : 'OK')) : 'CONCILIAR'}
+                                                                                </button>
+                                                                                {isTransConfirmed && (isAmountMismatch || isAccountMismatch) && (
+                                                                                    <button 
+                                                                                        onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                        className="text-[7px] text-blue-500 font-bold hover:underline"
+                                                                                    >
+                                                                                        ACTUALIZAR
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones Addi</p>}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Sección SISTECREDITO */}
+                                                {(showBothClosures || closuresActiveTab === 'sistecredito') && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                                            <PlusCircleIcon className="w-2.5 h-2.5" /> Desglose SISTECREDITO ({item.transactions.sistecredito.length})
+                                                        </p>
+                                                        <div className="space-y-1">
+                                                            {item.transactions.sistecredito.length > 0 ? item.transactions.sistecredito.map(t => {
+                                                                const recordId = `trans_auto_${t.id}`;
+                                                                const existingRecord = allRecords.find(r => r.id === recordId);
+                                                                const isTransConfirmed = !!existingRecord;
+                                                                const isAmountMismatch = isTransConfirmed && existingRecord.amount !== t.amount;
+                                                                const isAccountMismatch = isTransConfirmed && existingRecord.accountType !== 'qr';
+
+                                                                return (
+                                                                    <div key={t.id} className={`flex justify-between items-center text-[9px] p-1.5 rounded-lg border ${isAmountMismatch || isAccountMismatch ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-white dark:bg-black/20 border-gray-100 dark:border-gray-800'}`}>
+                                                                        <div className="min-w-0 flex items-center gap-2">
+                                                                            <span className="text-gray-400 font-mono">{t.time}</span>
+                                                                            <div className="flex flex-col">
+                                                                                <span className="font-bold text-gray-700 dark:text-gray-300 truncate inline-block max-w-[100px]">{t.description}</span>
+                                                                                {isAmountMismatch && <span className="text-[7px] text-red-500 font-bold">Conciliado: {formatCOP(existingRecord.amount)}</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`font-black text-orange-600`}>{formatCOP(t.amount)}</span>
+                                                                            <div className="flex flex-col items-end gap-1">
+                                                                                <button 
+                                                                                    onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                    className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all ${isTransConfirmed ? (isAmountMismatch || isAccountMismatch ? 'bg-red-500 text-white' : 'bg-green-500 text-white') : 'bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-600 hover:text-white'}`}
+                                                                                >
+                                                                                    {isTransConfirmed ? (isAmountMismatch ? 'DIFERENCIA' : (isAccountMismatch ? 'OTRA CUENTA' : 'OK')) : 'CONCILIAR'}
+                                                                                </button>
+                                                                                {isTransConfirmed && (isAmountMismatch || isAccountMismatch) && (
+                                                                                    <button 
+                                                                                        onClick={() => confirmDailyTotal(item.date, t.amount, 'qr', t)}
+                                                                                        className="text-[7px] text-blue-500 font-bold hover:underline"
+                                                                                    >
+                                                                                        ACTUALIZAR
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }) : <p className="text-[8px] text-gray-400 italic pl-1">Sin transacciones Sistecredito</p>}
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 {/* Sección Efectivo */}
-                                                {(showBothClosures || activeTab === 'cash') && (
+                                                {(showBothClosures || closuresActiveTab === 'cash') && (
                                                     <div>
                                                         <p className="text-[8px] font-black text-green-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                                                             <DollarIcon className="w-2.5 h-2.5" /> Desglose EFECTIVO ({item.transactions.cash.length})
@@ -1390,6 +1658,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent">
                                             <option value="cash">Efec</option>
                                             <option value="qr">QR</option>
+                                            <option value="addi">Addi</option>
                                         </select>
                                     </div>
 

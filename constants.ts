@@ -39,10 +39,94 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.27',
+    date: '2026-04-09',
+    description: 'Integración de pestaña Sistecredito y conciliación por rango.',
+    isCurrent: true,
+    changes: [
+      'Se añadió la pestaña de Sistecredito en la sección de Cierres de Caja.',
+      'Implementación de conciliación por rango de fechas para Sistecredito, agrupando ventas y calculando totales netos.',
+      'Los registros de Sistecredito ahora muestran el valor bruto, el descuento aplicado y el valor neto.',
+      'Se unificó la lógica de descuentos para Addi (6.5%) y Sistecredito (3%) basada en la configuración de la sede.',
+      'Se añadió soporte para saldos iniciales de Sistecredito en los ajustes de la sede.'
+    ]
+  },
+  {
+    version: '1.1.26',
+    date: '2026-04-09',
+    description: 'Ajuste de pestañas de Addi en cierres.',
+    isCurrent: false,
+    changes: [
+      'Se eliminó la pestaña de Addi de las cuentas principales del libro para mantener la consolidación en QR.',
+      'Se añadió un selector de pestañas específico dentro de la sección de Cierres de Caja para revisar Addi de forma independiente.',
+      'La conciliación de Addi sigue dirigiéndose a la cuenta QR como se solicitó.',
+      'Se mantiene la visualización detallada de fecha de venta y descuentos en los registros de Addi.'
+    ]
+  },
+  {
+    version: '1.1.25',
+    date: '2026-04-09',
+    description: 'Separación de Addi en cierres y corrección de descuentos.',
+    isCurrent: false,
+    changes: [
+      'Addi ahora tiene su propia pestaña independiente en la sección de Cierres de Caja para facilitar la revisión.',
+      'Se corrigió la aplicación de descuentos en Addi; ahora el valor conciliado refleja el descuento correctamente.',
+      'Se añadió la fecha de venta original en cada registro de Addi para mayor claridad.',
+      'En el libro principal, Addi sigue consolidándose en la cuenta QR por solicitud previa, pero su revisión en cierres es independiente.'
+    ]
+  },
+  {
+    version: '1.1.24',
+    date: '2026-04-09',
+    description: 'Corrección técnica de error de Fetch.',
+    isCurrent: false,
+    changes: [
+      'Se mejoró el parche de window.fetch en index.html para evitar errores de "getter-only" en navegadores específicos.',
+      'El parche ahora define correctamente una propiedad escribible incluso si fetch es heredado del prototipo.'
+    ]
+  },
+  {
+    version: '1.1.23',
+    date: '2026-04-09',
+    description: 'Integración de Addi en cuenta QR.',
+    isCurrent: false,
+    changes: [
+      'Addi ahora se concilia en la misma cuenta que QR por solicitud del usuario.',
+      'Se eliminó la pestaña independiente de Addi para simplificar el flujo.',
+      'Addi aparece como ítem separado en Cierres de Caja pero se registra en la cuenta QR.',
+      'Se eliminó el retraso de 1 mes en Addi; ahora aparece en el mes exacto de la venta.',
+      'Los montos de Addi ya incluyen el descuento por comisión aplicado automáticamente.'
+    ]
+  },
+  {
+    version: '1.1.22',
+    date: '2026-04-08',
+    description: 'Separación de conciliación de Addi.',
+    isCurrent: false,
+    changes: [
+      'Se separó la conciliación de Addi de la de QR para un mejor control.',
+      'Nueva pestaña de Addi en el libro de conciliación con su propio saldo y desglose.',
+      'Saldos de Addi ahora se muestran de forma independiente en el Estado General de Sedes.',
+      'Posibilidad de configurar el nombre y saldo inicial de la cuenta Addi por sede.'
+    ]
+  },
+  {
+    version: '1.1.21',
+    date: '2026-04-08',
+    description: 'Integración de pagos Addi en conciliación QR.',
+    isCurrent: false,
+    changes: [
+      'Los pagos realizados con Addi ahora aparecen automáticamente en la conciliación de Bancolombia QR.',
+      'Se implementó el retraso de 1 mes para los pagos de Addi (ej: venta en enero se concilia en febrero).',
+      'Cálculo automático del descuento de Addi basado en la comisión configurada por sede.',
+      'La descripción de la transacción ahora incluye la fecha real de la compra para facilitar su rastreo.'
+    ]
+  },
+  {
     version: '1.1.20',
     date: '2026-03-27',
     description: 'Mejora en la visualización de conciliaciones: registros siempre expandidos y filtrado estricto de medios de pago.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se eliminó la necesidad de expandir manualmente los cierres de caja; ahora se muestran siempre abiertos.',
       'Se ajustó el filtrado de QR para que sea estricto: ahora Nequi y Daviplata no aparecen en la lista de QR si no se desea conciliarlos allí.',

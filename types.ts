@@ -35,7 +35,7 @@ export interface FinancialRecord {
   id: string;
   date: string; // ISO String
   storeId: string;
-  accountType: 'cash' | 'qr';
+  accountType: 'cash' | 'qr' | 'addi' | 'sistecredito';
   amount: number; // Positivo para ingresos, negativo para egresos
   type: 'income_sales' | 'income_manual' | 'expense' | 'transfer' | 'adjustment';
   description: string;
