@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
-import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon } from './Icons';
+import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon } from './Icons';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 
@@ -324,15 +324,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         let amount = Number(p.amount) || 0;
         let description = `${type} [${p.method.toUpperCase()}] ${customer}`;
 
-        if (p.method === PaymentMethod.Addi || p.method === PaymentMethod.Sistecredito) {
-            const methodKey = p.method === PaymentMethod.Addi ? PaymentMethod.Addi : PaymentMethod.Sistecredito;
-            const commission = activeStore?.paymentCommissions?.[methodKey] || 0;
+        // Aplicar comisión si existe para el medio de pago
+        const commission = activeStore?.paymentCommissions?.[p.method] || 0;
+        if (commission > 0) {
             const originalAmount = amount;
-            if (commission > 0) {
-                amount = amount * (1 - commission);
-            }
-            const label = p.method === PaymentMethod.Addi ? 'ADDI' : 'SISTECREDITO';
-            description = `${type} [${label}] ${customer} (Venta: ${getLocalDateString(p.date)}) - Valor: ${formatCOP(originalAmount)} | Neto: ${formatCOP(amount)}`;
+            amount = amount * (1 - commission);
+            description = `${type} [${p.method.toUpperCase()}] ${customer} (Venta: ${getLocalDateString(p.date)}) - Valor: ${formatCOP(originalAmount)} | Neto: ${formatCOP(amount)}`;
         }
 
         if (reconciliationDate.getTime() < startOfMonth.getTime() || reconciliationDate.getTime() > endOfMonth.getTime()) return;
@@ -352,7 +349,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         if (p.method === PaymentMethod.Efectivo) {
             existing.cash += amount;
             existing.transactions.cash.push(detail);
-        } else if (p.method === PaymentMethod.QR) {
+        } else if ([PaymentMethod.QR, PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.Tarjeta].includes(p.method)) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
         } else if (p.method === PaymentMethod.Addi) {
@@ -408,6 +405,58 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     return Array.from(totalsMap.values()).sort((a, b) => b.date.localeCompare(a.date));
   }, [sales, layaways, incidents, activeStoreId, selectedMonth, selectedYear, stores]);
+
+  const hasMismatches = useMemo(() => {
+    return dailySystemTotals.some(item => {
+        const cashRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
+        const qrRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
+        const addiRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_addi_${item.date}`);
+        const sisteRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_sistecredito_${item.date}`);
+        
+        return (cashRecord && Math.abs(cashRecord.amount - item.cash) > 0.1) ||
+               (qrRecord && Math.abs(qrRecord.amount - item.qr) > 0.1) ||
+               (addiRecord && Math.abs(addiRecord.amount - item.addi) > 0.1) ||
+               (sisteRecord && Math.abs(sisteRecord.amount - item.sistecredito) > 0.1);
+    });
+  }, [dailySystemTotals, records, activeStoreId]);
+
+  const syncAllMismatches = async () => {
+    if (!window.confirm('¿Deseas actualizar todos los cierres que tienen diferencias con el sistema para este mes?')) return;
+    
+    const batch = writeBatch(db);
+    let count = 0;
+
+    dailySystemTotals.forEach(item => {
+        const checkAndUpdate = (type: AccountType, amount: number, idPrefix?: string) => {
+            const recordId = `daily_auto_${activeStoreId}_${idPrefix || type}_${item.date}`;
+            const existing = records.find(r => r.id === recordId);
+            if (existing && Math.abs(existing.amount - amount) > 0.1) {
+                batch.update(doc(db, 'financialRecords', recordId), { 
+                    amount: amount,
+                    description: `Cierre Diario ${idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(type))} (${item.date}) [SINCRONIZADO]`
+                });
+                count++;
+            }
+        };
+
+        checkAndUpdate('cash', item.cash);
+        checkAndUpdate('qr', item.qr);
+        checkAndUpdate('qr', item.addi, 'addi');
+        checkAndUpdate('qr', item.sistecredito, 'sistecredito');
+    });
+
+    if (count > 0) {
+        try {
+            await batch.commit();
+            alert(`${count} registros actualizados correctamente.`);
+        } catch (error) {
+            console.error("Error syncing mismatches:", error);
+            alert("Error al sincronizar los registros.");
+        }
+    } else {
+        alert("No se encontraron diferencias para actualizar.");
+    }
+  };
 
   const getAccountName = (type: AccountType): string => {
     if (type === 'addi') return 'Addi';
@@ -1152,7 +1201,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             <div className="lg:col-span-4 space-y-4">
                 <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
                     <div className="mb-4 flex flex-col gap-2">
-                        <button onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)} className="text-[10px] sm:text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors w-full"><HistoryIcon className="w-4 h-4 text-accent" /> Cierres de Caja <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} /></button>
+                        <div className="flex justify-between items-center">
+                            <button onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)} className="text-[10px] sm:text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors"><HistoryIcon className="w-4 h-4 text-accent" /> Cierres de Caja <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} /></button>
+                            {isSystemLoadsOpen && hasMismatches && (
+                                <button 
+                                    onClick={syncAllMismatches}
+                                    className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-[8px] font-black uppercase rounded-lg shadow-sm animate-pulse flex items-center gap-1"
+                                    title="Sincronizar todos los cierres con diferencias"
+                                >
+                                    <ArrowPathIcon className="w-3 h-3" /> Sincronizar Todo
+                                </button>
+                            )}
+                        </div>
                         <div className="flex flex-wrap gap-2">
                              <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
                              <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
@@ -1261,10 +1321,22 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     {isSystemLoadsOpen && (
                         <div className="space-y-3 overflow-y-auto pr-1 scrollbar-hide animate-fade-in max-h-[300px] lg:max-h-none">
                             {dailySystemTotals.map((item) => {
-                                const isCashConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
-                                const isQrConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
-                                const isAddiConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_addi_${item.date}`);
-                                const isSisteConfirmed = records.some(r => r.id === `daily_auto_${activeStoreId}_sistecredito_${item.date}`);
+                                const cashRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
+                                const isCashConfirmed = !!cashRecord;
+                                const isCashMismatch = isCashConfirmed && cashRecord.amount !== item.cash;
+
+                                const qrRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_qr_${item.date}`);
+                                const isQrConfirmed = !!qrRecord;
+                                const isQrMismatch = isQrConfirmed && qrRecord.amount !== item.qr;
+
+                                const addiRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_addi_${item.date}`);
+                                const isAddiConfirmed = !!addiRecord;
+                                const isAddiMismatch = isAddiConfirmed && addiRecord.amount !== item.addi;
+
+                                const sisteRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_sistecredito_${item.date}`);
+                                const isSisteConfirmed = !!sisteRecord;
+                                const isSisteMismatch = isSisteConfirmed && sisteRecord.amount !== item.sistecredito;
+
                                 const isExpanded = expandedSystemLoadId === item.date;
                                 
                                 return (
@@ -1275,25 +1347,25 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         {(showBothClosures || closuresActiveTab === 'cash') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">EFEC:</p><p className={`text-xs sm:text-sm font-black ${item.cash >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(item.cash)}</p></div>
-                                                <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={isCashConfirmed || item.cash === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isCashConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.cash, 'cash')} disabled={(!isCashMismatch && isCashConfirmed) || item.cash === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isCashMismatch ? 'bg-red-500 text-white shadow-lg animate-pulse' : (isCashConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20')}`}>{isCashMismatch ? 'DIFERENCIA' : (isCashConfirmed ? 'OK' : 'CONCILIAR')}</button>
                                             </div>
                                         )}
                                         {(showBothClosures || closuresActiveTab === 'qr') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">QR:</p><p className={`text-xs sm:text-sm font-black ${item.qr >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{formatCOP(item.qr)}</p></div>
-                                                <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={isQrConfirmed || item.qr === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isQrConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.qr, 'qr')} disabled={(!isQrMismatch && isQrConfirmed) || item.qr === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isQrMismatch ? 'bg-red-500 text-white shadow-lg animate-pulse' : (isQrConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20')}`}>{isQrMismatch ? 'DIFERENCIA' : (isQrConfirmed ? 'OK' : 'CONCILIAR')}</button>
                                             </div>
                                         )}
                                         {(showBothClosures || closuresActiveTab === 'addi') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">ADDI:</p><p className={`text-xs sm:text-sm font-black ${item.addi >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>{formatCOP(item.addi)}</p></div>
-                                                <button onClick={() => confirmDailyTotal(item.date, item.addi, 'qr', undefined, 'addi')} disabled={isAddiConfirmed || item.addi === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isAddiConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isAddiConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.addi, 'qr', undefined, 'addi')} disabled={(!isAddiMismatch && isAddiConfirmed) || item.addi === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isAddiMismatch ? 'bg-red-500 text-white shadow-lg animate-pulse' : (isAddiConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20')}`}>{isAddiMismatch ? 'DIFERENCIA' : (isAddiConfirmed ? 'OK' : 'CONCILIAR')}</button>
                                             </div>
                                         )}
                                         {(showBothClosures || closuresActiveTab === 'sistecredito') && (
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0"><p className="text-[8px] font-black text-gray-400 uppercase">SISTE:</p><p className={`text-xs sm:text-sm font-black ${item.sistecredito >= 0 ? 'text-orange-600' : 'text-red-500'}`}>{formatCOP(item.sistecredito)}</p></div>
-                                                <button onClick={() => confirmDailyTotal(item.date, item.sistecredito, 'qr', undefined, 'sistecredito')} disabled={isSisteConfirmed || item.sistecredito === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isSisteConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20'}`}>{isSisteConfirmed ? 'OK' : 'CONCILIAR'}</button>
+                                                <button onClick={() => confirmDailyTotal(item.date, item.sistecredito, 'qr', undefined, 'sistecredito')} disabled={(!isSisteMismatch && isSisteConfirmed) || item.sistecredito === 0} className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${isSisteMismatch ? 'bg-red-500 text-white shadow-lg animate-pulse' : (isSisteConfirmed ? 'bg-green-500 text-white' : 'bg-white dark:bg-gray-700 text-accent border border-accent/20')}`}>{isSisteMismatch ? 'DIFERENCIA' : (isSisteConfirmed ? 'OK' : 'CONCILIAR')}</button>
                                             </div>
                                         )}
 

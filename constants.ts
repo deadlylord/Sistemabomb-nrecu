@@ -39,10 +39,44 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.30',
+    date: '2026-04-14',
+    description: 'Sincronización masiva de cierres y soporte universal de comisiones.',
+    isCurrent: true,
+    changes: [
+      'Se añadió un botón de "Sincronizar Todo" que permite actualizar todos los cierres del mes con un solo clic si se detectan diferencias por cambios en comisiones.',
+      'Se extendió el cálculo de comisiones a todos los medios de pago configurados (Tarjeta, Nequi, Daviplata, etc.).',
+      'Se agruparon automáticamente los pagos digitales (Nequi, Daviplata, Tarjeta) en la categoría de QR para una conciliación unificada.',
+      'El sistema ahora recalcula dinámicamente los totales de cierre al detectar cualquier cambio en los porcentajes de comisión.'
+    ]
+  },
+  {
+    version: '1.1.29',
+    date: '2026-04-14',
+    description: 'Soporte universal de comisiones por medio de pago.',
+    isCurrent: false,
+    changes: [
+      'Se extendió el cálculo de comisiones a todos los medios de pago configurados (Tarjeta, Nequi, Daviplata, etc.).',
+      'Se agruparon automáticamente los pagos digitales (Nequi, Daviplata, Tarjeta) en la categoría de QR para una conciliación unificada.',
+      'El sistema ahora recalcula dinámicamente los totales de cierre al detectar cualquier cambio en los porcentajes de comisión.'
+    ]
+  },
+  {
+    version: '1.1.28',
+    date: '2026-04-14',
+    description: 'Recalculado dinámico de cierres al cambiar comisiones.',
+    isCurrent: false,
+    changes: [
+      'Se habilitó la actualización de cierres de caja cuando hay una diferencia entre el valor del sistema y el conciliado.',
+      'El sistema ahora detecta automáticamente si el cambio en las comisiones afecta los totales y permite actualizar el registro con un solo clic.',
+      'Se añadió un indicador visual de "DIFERENCIA" en los botones de cierre cuando los montos no coinciden.'
+    ]
+  },
+  {
     version: '1.1.27',
     date: '2026-04-09',
     description: 'Integración de pestaña Sistecredito y conciliación por rango.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se añadió la pestaña de Sistecredito en la sección de Cierres de Caja.',
       'Implementación de conciliación por rango de fechas para Sistecredito, agrupando ventas y calculando totales netos.',
