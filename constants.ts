@@ -39,10 +39,20 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.31',
+    date: '2026-04-14',
+    description: 'Seguimiento de saldo acumulado en intercambios entre sedes.',
+    isCurrent: true,
+    changes: [
+      'Se añadió el cálculo de saldo acumulado (running balance) en el historial de intercambios entre sedes.',
+      'Ahora cada registro de deuda o pago muestra el saldo resultante después de ese movimiento, facilitando el seguimiento de la deuda histórica.'
+    ]
+  },
+  {
     version: '1.1.30',
     date: '2026-04-14',
     description: 'Sincronización masiva de cierres y soporte universal de comisiones.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se añadió un botón de "Sincronizar Todo" que permite actualizar todos los cierres del mes con un solo clic si se detectan diferencias por cambios en comisiones.',
       'Se extendió el cálculo de comisiones a todos los medios de pago configurados (Tarjeta, Nequi, Daviplata, etc.).',

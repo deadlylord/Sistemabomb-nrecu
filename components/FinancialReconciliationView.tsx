@@ -245,12 +245,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               else if (r.accountType === 'qr' || r.accountType === 'addi') b.qr += netImpact;
           }
       });
-      return Object.entries(balances).map(([otherStoreId, stats]) => ({
-          otherStoreName: filteredStores.find(s => s.id === otherStoreId)?.name || 'Local',
-          storeId: otherStoreId,
-          ...stats,
-          history: stats.history.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())
-      })).filter(s => Math.abs(s.total) > 0.1);
+      return Object.entries(balances).map(([otherStoreId, stats]) => {
+          const sortedHistory = stats.history.sort((a: any, b: any) => new Date(a.date || '').getTime() - new Date(b.date || '').getTime());
+          let runningBalance = 0;
+          const historyWithBalance = sortedHistory.map(r => {
+              runningBalance += (r as any).netImpact || 0;
+              return { ...r, runningBalance };
+          });
+
+          return {
+              otherStoreName: filteredStores.find(s => s.id === otherStoreId)?.name || 'Local',
+              storeId: otherStoreId,
+              ...stats,
+              history: historyWithBalance.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())
+          };
+      }).filter(s => Math.abs(s.total) > 0.1);
   }, [records, filteredStores]);
 
   const globalDebtsSummary = useMemo(() => {
@@ -1105,9 +1114,29 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <div className="mt-2 space-y-1 bg-white/50 dark:bg-black/20 p-2 rounded-lg animate-fade-in">
                                             {item.history.map(record => {
                                                 const impact = (record as any).netImpact || 0;
+                                                const running = (record as any).runningBalance || 0;
                                                 const methodLabel = record.accountType === 'cash' ? 'EFEC' : (record.accountType === 'qr' ? 'QR' : 'BANCO');
                                                 const methodColor = record.accountType === 'cash' ? 'text-green-600 dark:text-green-400' : (record.accountType === 'qr' ? 'text-blue-500' : 'text-purple-500');
-                                                return (<div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center"><div className="flex flex-col min-w-0 pr-2"><div className="flex items-center gap-2"><span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span><span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span></div><span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>{record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}</div><span className={`font-black shrink-0 ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>{impact > 0 ? '+' : ''}{formatCOP(impact)}</span></div>)
+                                                return (
+                                                    <div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center">
+                                                        <div className="flex flex-col min-w-0 pr-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span>
+                                                                <span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span>
+                                                            </div>
+                                                            <span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>
+                                                            {record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}
+                                                        </div>
+                                                        <div className="flex flex-col items-end shrink-0">
+                                                            <span className={`font-black ${impact > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {impact > 0 ? '+' : ''}{formatCOP(impact)}
+                                                            </span>
+                                                            <span className="text-[7px] font-bold text-gray-400 uppercase">
+                                                                Saldo: {formatCOP(Math.abs(running))} {running > 0 ? '(Favor)' : running < 0 ? '(Deuda)' : ''}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )
                                             })}
                                         </div>
                                     )}
