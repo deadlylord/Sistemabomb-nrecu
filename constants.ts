@@ -39,10 +39,20 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.32',
+    date: '2026-04-17',
+    description: 'Separación de Tarjeta, Nequi y Daviplata de la conciliación QR.',
+    isCurrent: true,
+    changes: [
+      'Se eliminaron los pagos de Tarjeta, Nequi y Daviplata de la categoría de QR en la conciliación bancaria.',
+      'Ahora solo se incluyen Efectivo, QR (Bancolombia), Addi y Sistecredito en los totales de cierre de caja, respetando el flujo de trabajo original.'
+    ]
+  },
+  {
     version: '1.1.31',
     date: '2026-04-14',
     description: 'Seguimiento de saldo acumulado en intercambios entre sedes.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se añadió el cálculo de saldo acumulado (running balance) en el historial de intercambios entre sedes.',
       'Ahora cada registro de deuda o pago muestra el saldo resultante después de ese movimiento, facilitando el seguimiento de la deuda histórica.'

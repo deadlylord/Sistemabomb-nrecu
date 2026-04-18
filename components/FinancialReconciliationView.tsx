@@ -358,7 +358,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         if (p.method === PaymentMethod.Efectivo) {
             existing.cash += amount;
             existing.transactions.cash.push(detail);
-        } else if ([PaymentMethod.QR, PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.Tarjeta].includes(p.method)) {
+        } else if (p.method === PaymentMethod.QR) {
             existing.qr += amount;
             existing.transactions.qr.push(detail);
         } else if (p.method === PaymentMethod.Addi) {
@@ -404,7 +404,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         if (method === PaymentMethod.Efectivo) {
             existing.cash += finalAmount;
             existing.transactions.cash.push(detail);
-        } else if ([PaymentMethod.Nequi, PaymentMethod.Daviplata, PaymentMethod.QR].includes(method)) {
+        } else if (method === PaymentMethod.QR) {
             existing.qr += finalAmount;
             existing.transactions.qr.push(detail);
         }
