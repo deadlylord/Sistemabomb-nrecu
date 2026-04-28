@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.34',
+    date: '2026-04-28',
+    description: 'Mejora en la gestión de espacio de la vista de conciliación.',
+    isCurrent: true,
+    changes: [
+      'Implementación de sidebar colapsable para "Cierres de Caja".',
+      'Expansión automática del Libro Mayor a pantalla completa cuando los cierres están ocultos.',
+      'Inclusión de botón de restauración rápido para volver a mostrar los cierres de caja.'
+    ]
+  },
+  {
     version: '1.1.33',
     date: '2026-04-18',
     description: 'Optimización de ancho de pantalla y UI en vista de conciliación.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Eliminación de restricciones de ancho máximo (max-width) para aprovechar todo el espacio disponible en pantallas de escritorio.',
       'Ajuste de espaciados laterales y grids para mejorar la visibilidad del Libro Mayor y los registros de cuentas.'

@@ -1226,8 +1226,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-            <div className="lg:col-span-4 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+            {isSystemLoadsOpen && (
+                <div className="lg:col-span-4 space-y-4 animate-fade-in">
                 <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
                     <div className="mb-4 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
@@ -1603,9 +1604,20 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     )}
                 </div>
             </div>
+            )}
 
-            <div className="lg:col-span-8 space-y-4">
+            <div className={`${isSystemLoadsOpen ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-4 transition-all duration-300`}>
                 <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
+                    {!isSystemLoadsOpen && (
+                        <button 
+                            onClick={() => setIsSystemLoadsOpen(true)}
+                            className="p-2 sm:p-2.5 bg-accent/10 text-accent rounded-xl hover:bg-accent hover:text-white transition-all flex items-center gap-1.5 border border-accent/20 h-full"
+                            title="Mostrar Cierres de Caja"
+                        >
+                            <HistoryIcon className="w-4 h-4 sm:w-5 h-5" />
+                            <span className="text-[10px] font-black uppercase hidden sm:inline">Cierres</span>
+                        </button>
+                    )}
                     <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
                     <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
                 </div>
