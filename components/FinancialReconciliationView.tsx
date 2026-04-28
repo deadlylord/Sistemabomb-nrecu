@@ -1690,12 +1690,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                 <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
                                             </div>
                                         </td>
-                                        <td className="p-3 sm:p-4">
-                                            <div className="flex items-center gap-1.5 sm:gap-2">
-                                                <p className="font-bold text-gray-800 dark:text-gray-200 uppercase truncate max-w-[120px] sm:max-w-none">{record.description}</p>
-                                                {record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}
+                                        <td className="p-3 sm:p-4 min-w-[120px] sm:min-w-[200px]">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className="font-bold text-gray-800 dark:text-gray-200 uppercase text-[9px] sm:text-[11px] leading-snug break-words flex-grow">{record.description}</p>
+                                                    {record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}
+                                                </div>
+                                                <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
                                             </div>
-                                            <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
                                         </td>
                                         <td className="p-3 sm:p-4 uppercase font-black text-[8px] sm:text-[9px] text-gray-500 truncate max-w-[60px]">{record.subCategory || 'Varios'}</td>
                                         <td className={`p-3 sm:p-4 text-right font-black ${record.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>

@@ -39,10 +39,20 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.35',
+    date: '2026-04-28',
+    description: 'Mejora en la legibilidad de descripciones del Libro Mayor.',
+    isCurrent: true,
+    changes: [
+      'Se habilitó el ajuste de texto (text wrapping) en las descripciones del Libro Mayor para evitar desplazamientos horizontales.',
+      'Uso de break-words y leading-snug para mejorar la visualización de registros con descripciones extensas.'
+    ]
+  },
+  {
     version: '1.1.34',
     date: '2026-04-28',
     description: 'Mejora en la gestión de espacio de la vista de conciliación.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Implementación de sidebar colapsable para "Cierres de Caja".',
       'Expansión automática del Libro Mayor a pantalla completa cuando los cierres están ocultos.',
