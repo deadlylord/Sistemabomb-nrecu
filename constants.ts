@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.36',
+    date: '2026-04-28',
+    description: 'Barras de navegación fijas (Sticky) en Conciliación.',
+    isCurrent: true,
+    changes: [
+      'La barra de selección de sede se mantiene fija en la parte superior.',
+      'La barra de cambio de cuenta (Efectivo/QR) se mantiene fija al hacer scroll para mayor agilidad.',
+      'Mejora de visibilidad con efectos de desenfoque y capas de prioridad (Z-Index).'
+    ]
+  },
+  {
     version: '1.1.35',
     date: '2026-04-28',
     description: 'Mejora en la legibilidad de descripciones del Libro Mayor.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se habilitó el ajuste de texto (text wrapping) en las descripciones del Libro Mayor para evitar desplazamientos horizontales.',
       'Uso de break-words y leading-snug para mejorar la visualización de registros con descripciones extensas.'

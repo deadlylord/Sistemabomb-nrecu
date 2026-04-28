@@ -1051,37 +1051,39 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         )}
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl shadow-lg border-b-8" style={{ borderBottomColor: activeStore?.accentColor || '#ff007f' }}>
-            <div className="flex items-center gap-3 sm:gap-4">
-                <div className="p-2 sm:p-3 bg-accent/10 rounded-2xl text-accent shadow-inner"><ChartBarIcon className="w-8 h-8 sm:w-10 sm:h-10" /></div>
-                <div>
-                    <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Conciliación</h2>
-                    <p className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest mt-1 sm:mt-2 flex items-center gap-1.5 truncate">
-                        <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 h-4" /> SEDE: <span className="text-gray-900 dark:text-white px-1.5 py-0.5 bg-accent/5 rounded border border-accent/20">{activeStore?.name}</span>
-                    </p>
-                </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
-                {stores.filter(s => !s.name.toLowerCase().includes('training')).map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
-                {isAdmin && (
-                    <div className="flex gap-1.5">
-                        <button 
-                            onClick={() => setShowGlobalSummary(true)}
-                            className="p-2 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-accent/20"
-                            title="Ver estado general de todas las sedes"
-                        >
-                            <ChartBarIcon className="w-4 h-4" />
-                            <span className="text-[9px] font-black uppercase hidden sm:inline">Estado General</span>
-                        </button>
-                        <button 
-                            onClick={handleOpenEditNames}
-                            className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
-                            title="Editar nombres de cuentas"
-                        >
-                            <SettingsIcon className="w-4 h-4" />
-                        </button>
+        <div className="sticky top-0 z-[60] bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm -mx-2 px-2 py-3 mb-4 shadow-md sm:mb-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl shadow-lg border-b-8" style={{ borderBottomColor: activeStore?.accentColor || '#ff007f' }}>
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="p-2 sm:p-3 bg-accent/10 rounded-2xl text-accent shadow-inner"><ChartBarIcon className="w-8 h-8 sm:w-10 sm:h-10" /></div>
+                    <div>
+                        <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Conciliación</h2>
+                        <p className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest mt-1 sm:mt-2 flex items-center gap-1.5 truncate">
+                            <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 h-4" /> SEDE: <span className="text-gray-900 dark:text-white px-1.5 py-0.5 bg-accent/5 rounded border border-accent/20">{activeStore?.name}</span>
+                        </p>
                     </div>
-                )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
+                    {stores.filter(s => !s.name.toLowerCase().includes('training')).map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
+                    {isAdmin && (
+                        <div className="flex gap-1.5">
+                            <button 
+                                onClick={() => setShowGlobalSummary(true)}
+                                className="p-2 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-accent/20"
+                                title="Ver estado general de todas las sedes"
+                            >
+                                <ChartBarIcon className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase hidden sm:inline">Estado General</span>
+                            </button>
+                            <button 
+                                onClick={handleOpenEditNames}
+                                className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
+                                title="Editar nombres de cuentas"
+                            >
+                                <SettingsIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
 
@@ -1607,19 +1609,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             )}
 
             <div className={`${isSystemLoadsOpen ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-4 transition-all duration-300`}>
-                <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
-                    {!isSystemLoadsOpen && (
-                        <button 
-                            onClick={() => setIsSystemLoadsOpen(true)}
-                            className="p-2 sm:p-2.5 bg-accent/10 text-accent rounded-xl hover:bg-accent hover:text-white transition-all flex items-center gap-1.5 border border-accent/20 h-full"
-                            title="Mostrar Cierres de Caja"
-                        >
-                            <HistoryIcon className="w-4 h-4 sm:w-5 h-5" />
-                            <span className="text-[10px] font-black uppercase hidden sm:inline">Cierres</span>
-                        </button>
-                    )}
-                    <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
-                    <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                <div className="sticky top-[120px] md:top-[120px] z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm -mx-1 px-1 py-2">
+                    <div className="bg-white dark:bg-secondary p-2 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 sm:gap-2">
+                        {!isSystemLoadsOpen && (
+                            <button 
+                                onClick={() => setIsSystemLoadsOpen(true)}
+                                className="p-2 sm:p-2.5 bg-accent/10 text-accent rounded-xl hover:bg-accent hover:text-white transition-all flex items-center gap-1.5 border border-accent/20 h-full"
+                                title="Mostrar Cierres de Caja"
+                            >
+                                <HistoryIcon className="w-4 h-4 sm:w-5 h-5" />
+                                <span className="text-[10px] font-black uppercase hidden sm:inline">Cierres</span>
+                            </button>
+                        )}
+                        <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
+                        <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                    </div>
                 </div>
 
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col min-h-[500px]">
