@@ -39,10 +39,20 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.33',
+    date: '2026-04-18',
+    description: 'Optimización de ancho de pantalla y UI en vista de conciliación.',
+    isCurrent: true,
+    changes: [
+      'Eliminación de restricciones de ancho máximo (max-width) para aprovechar todo el espacio disponible en pantallas de escritorio.',
+      'Ajuste de espaciados laterales y grids para mejorar la visibilidad del Libro Mayor y los registros de cuentas.'
+    ]
+  },
+  {
     version: '1.1.32',
     date: '2026-04-17',
     description: 'Separación de Tarjeta, Nequi y Daviplata de la conciliación QR.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se eliminaron los pagos de Tarjeta, Nequi y Daviplata de la categoría de QR en la conciliación bancaria.',
       'Ahora solo se incluyen Efectivo, QR (Bancolombia), Addi y Sistecredito en los totales de cierre de caja, respetando el flujo de trabajo original.'

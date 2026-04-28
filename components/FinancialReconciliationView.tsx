@@ -859,7 +859,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-0">
+    <div className="w-full space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-4 lg:px-8">
         {/* Modal de Edición de Nombres de Cuentas */}
         {isEditingNames && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
