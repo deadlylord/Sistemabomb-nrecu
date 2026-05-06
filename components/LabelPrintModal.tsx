@@ -89,6 +89,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     const frameDoc = printFrame.contentWindow?.document;
     if (!frameDoc) return;
 
+    // Patch to remove headers/footers by setting empty title
+    frameDoc.title = "\u200E";
+
     let labelsHtml = '';
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '').slice(2);
 

@@ -104,6 +104,9 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     const frameDoc = printFrame.contentWindow?.document;
     if (!frameDoc) return;
 
+    // Patch to remove headers/footers by setting empty title
+    frameDoc.title = "\u200E";
+
     const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => {
       const colIndex = i % config.columns;
       const isFirstCol = colIndex === 0;

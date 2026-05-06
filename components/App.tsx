@@ -1844,7 +1844,15 @@ const App: React.FC = () => {
   const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
 
   const handleAddStore = async (store: Store) => await setDoc(doc(db, 'stores', store.id), cleanObject(store) as any);
-  const handleUpdateStore = async (updatedStore: Store) => await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
+  const handleUpdateStore = async (updatedStore: Store) => {
+    try {
+      await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
+    } catch (error: any) {
+      console.error('Error updating store:', error);
+      alert(`Error al guardar: ${error?.message || 'Error desconocido'}`);
+      throw error;
+    }
+  };
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string) => { const newRef = doc(collection(db, 'sellers')); await setDoc(newRef, { id: newRef.id, name, password, roleId, storeId, isDisabled: false }); };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string) => {
@@ -2025,4 +2033,4 @@ const App: React.FC = () => {
 
 export default App;
 
-// VERSION: 1.1.11
+// VERSION: 1.1.42

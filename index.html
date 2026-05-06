@@ -9,19 +9,29 @@
   <link rel="apple-touch-icon" href="/assets/icon.svg">
   <meta name="theme-color" content="#ff007f">
   <script>
-    // Parche definitivo para corregir "TypeError: Cannot set property fetch of #<Window> which has only a getter"
-    // Este error ocurre cuando un polyfill (como formdata-polyfill) intenta sobrescribir window.fetch
-    // en entornos donde esta propiedad está definida como un getter de solo lectura en el prototipo.
+    // Parche definitivo y agresivo para corregir "TypeError: Cannot set property fetch of #<Window> which has only a getter"
+    // Este error ocurre cuando un polyfill intenta sobrescribir window.fetch en entornos restrictivos.
     (function() {
       try {
-        const originalFetch = window.fetch;
-        if (typeof originalFetch === 'function') {
-          Object.defineProperty(window, 'fetch', {
-            value: originalFetch,
-            writable: true,
-            configurable: true,
-            enumerable: true
-          });
+        const descriptor = Object.getOwnPropertyDescriptor(window, 'fetch') || 
+                           Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window), 'fetch');
+        
+        if (descriptor && !descriptor.writable && !descriptor.set) {
+          const originalFetch = window.fetch;
+          if (typeof originalFetch === 'function') {
+            try {
+              // Intentamos borrar para luego redefinir
+              delete window.fetch;
+            } catch (e) {}
+
+            Object.defineProperty(window, 'fetch', {
+              value: originalFetch,
+              writable: true,
+              configurable: true,
+              enumerable: true
+            });
+            console.log("Parche de fetch aplicado con éxito.");
+          }
         }
       } catch (e) {
         console.warn("No se pudo aplicar el parche de fetch:", e);
