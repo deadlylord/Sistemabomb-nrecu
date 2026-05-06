@@ -147,8 +147,6 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               html, body {
                 margin: 0 !important;
                 padding: 0 !important;
-                width: ${totalWidth}mm;
-                height: ${config.height}mm;
               }
               header, footer, nav, aside { display: none !important; }
               @page { margin: 0; }
@@ -165,9 +163,11 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
               height: ${config.height}mm;
+              max-height: ${config.height}mm;
               margin-left: ${config.horizontalOffset || 0}mm;
               page-break-after: always;
               break-after: page;
+              page-break-inside: avoid;
               align-items: center;
               justify-content: start;
               overflow: hidden;
@@ -175,6 +175,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             .label { 
               width: ${config.width}mm; 
               height: ${config.height}mm; 
+              max-height: ${config.height}mm;
               position: relative;
               overflow: hidden;
               display: flex;

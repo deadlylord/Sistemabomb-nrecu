@@ -39,10 +39,22 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.46',
+    date: '2026-05-06',
+    description: 'Estabilización dimensional de impresión de etiquetas.',
+    isCurrent: true,
+    changes: [
+      'Se implementó una restricción de altura rígida por etiqueta para evitar desplazamientos verticales.',
+      'Sincronización de cuadrícula mediante medidas absolutas (mm) en lugar de fracciones proporcionales.',
+      'Corrección de desbordamiento en configuraciones multi-columna.',
+      'Versión de producción sincronizada (1.1.46).'
+    ]
+  },
+  {
     version: '1.1.45',
     date: '2026-05-06',
     description: 'Optimización de legibilidad de códigos de barras.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se ajustó el renderizado de códigos de barras para evitar que las barras se vean demasiado juntas.',
       'Mejora en el escalado automático de las barras según el ancho configurado.',
