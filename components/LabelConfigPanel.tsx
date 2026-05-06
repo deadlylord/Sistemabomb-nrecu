@@ -84,35 +84,62 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
   };
 
   const handleTestPrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
     const centerOffset = config.centerOffset || 0;
-    const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => `
-      <div class="label">
-        <div class="label-inner">
-          <div class="store-name">${store.receiptName || store.name}</div>
-          <div class="product-name">PRODUCTO DE PRUEBA</div>
-          <svg class="barcode" 
-            jsbarcode-value="SKU-TEST-${i + 1}"
-            jsbarcode-format="CODE128"
-            jsbarcode-width="${config.barcodeWidth}"
-            jsbarcode-height="${config.barcodeHeight}"
-            jsbarcode-displayValue="false"
-            jsbarcode-margin="0"
-          ></svg>
-          <div class="sku">SKU-TEST-${i + 1}</div>
-          <div class="cipher">180326-ABCDE</div>
-          <div class="price">$ 99.999</div>
-        </div>
-      </div>
-    `).join('');
 
-    printWindow.document.write(`
+    // Create a hidden iframe for printing to avoid "about:blank" title issues
+    let printFrame = document.getElementById('label-print-frame') as HTMLIFrameElement;
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'label-print-frame';
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      document.body.appendChild(printFrame);
+    }
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc) return;
+
+    const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => {
+      const colIndex = i % config.columns;
+      const isFirstCol = colIndex === 0;
+      const isLastCol = colIndex === config.columns - 1;
+      
+      return `
+        <div class="label">
+          <div class="label-inner" style="${isFirstCol ? `padding-left: ${2 + centerOffset}mm;` : ''} ${isLastCol ? `padding-right: ${2 + centerOffset}mm;` : ''}">
+            <div class="store-name">${store.receiptName || store.name}</div>
+            <div class="product-name">PRODUCTO DE PRUEBA</div>
+            <svg class="barcode" 
+              jsbarcode-value="SKU-TEST-${i + 1}"
+              jsbarcode-format="CODE128"
+              jsbarcode-width="${config.barcodeWidth}"
+              jsbarcode-height="${config.barcodeHeight}"
+              jsbarcode-displayValue="false"
+              jsbarcode-margin="0"
+            ></svg>
+            <div class="sku">SKU-TEST-${i + 1}</div>
+            <div class="cipher">180326-ABCDE</div>
+            <div class="price">$ 99.999</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const finalHtml = `
+      <div class="container">${labelsHtml.slice(0, Math.ceil(labelsHtml.length / 2))}</div>
+      <div class="container">${labelsHtml.slice(Math.ceil(labelsHtml.length / 2))}</div>
+    `;
+
+    frameDoc.open();
+    frameDoc.write(`
       <html>
         <head>
-          <title>Prueba de Etiquetas</title>
+          <title> </title>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             @page { 
@@ -123,10 +150,13 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               html, body {
                 margin: 0 !important;
                 padding: 0 !important;
+                width: ${totalWidth}mm;
+                height: ${config.height}mm;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
               header, footer, nav, aside { display: none !important; }
+              @page { margin: 0; }
             }
             body { 
               margin: 0; 
@@ -141,23 +171,19 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
               margin-left: ${config.horizontalOffset || 0}mm;
+              page-break-after: always;
+              align-items: center;
+              justify-content: start;
             }
             .label { 
               width: ${config.width}mm; 
               height: ${config.height}mm; 
               box-sizing: border-box; 
-              border: 0.1mm solid #eee;
               position: relative;
               overflow: hidden;
               display: flex;
               align-items: center;
               justify-content: center;
-            }
-            .label:nth-child(${config.columns}n+1) .label-inner {
-              padding-left: ${2 + centerOffset}mm;
-            }
-            .label:nth-child(${config.columns}n+${config.columns}) .label-inner {
-              padding-right: ${2 + centerOffset}mm;
             }
             .label-inner {
               display: flex; 
@@ -195,21 +221,40 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           </style>
         </head>
         <body>
-          <div class="container">${labelsHtml}</div>
+          <div class="container">
+            ${Array.from({ length: config.columns }).map((_, i) => `
+              <div class="label">
+                <div class="label-inner" style="${i === 0 ? `padding-left: ${2 + centerOffset}mm;` : ''} ${i === config.columns - 1 ? `padding-right: ${2 + centerOffset}mm;` : ''}">
+                  <div class="store-name">${store.receiptName || store.name}</div>
+                  <div class="product-name">PRUEBA ${i + 1}</div>
+                  <svg class="barcode" 
+                    jsbarcode-value="SKU-TEST-${i + 1}"
+                    jsbarcode-format="CODE128"
+                    jsbarcode-width="${config.barcodeWidth}"
+                    jsbarcode-height="${config.barcodeHeight}"
+                    jsbarcode-displayValue="false"
+                    jsbarcode-margin="0"
+                  ></svg>
+                  <div class="sku">SKU-TEST-${i + 1}</div>
+                  <div class="price">$ 99.999</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
           <script>
             window.onload = () => {
               JsBarcode(".barcode").init();
               document.title = "";
               setTimeout(() => {
+                window.focus();
                 window.print();
-                window.close();
               }, 600);
             };
           </script>
         </body>
       </html>
     `);
-    printWindow.document.close();
+    frameDoc.close();
   };
 
   return (

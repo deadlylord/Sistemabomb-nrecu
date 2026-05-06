@@ -56,12 +56,6 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Por favor permite las ventanas emergentes para imprimir.');
-      return;
-    }
-
     // Flatten items into a single list of labels to print
     const allLabels: Product[] = [];
     printItems.forEach(item => {
@@ -75,6 +69,26 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
       return;
     }
 
+    const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
+    const centerOffset = config.centerOffset || 0;
+
+    // Create a hidden iframe for printing to avoid "about:blank" title issues
+    let printFrame = document.getElementById('label-print-frame') as HTMLIFrameElement;
+    if (!printFrame) {
+      printFrame = document.createElement('iframe');
+      printFrame.id = 'label-print-frame';
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      document.body.appendChild(printFrame);
+    }
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc) return;
+
     let labelsHtml = '';
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '').slice(2);
 
@@ -85,6 +99,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
         if (product) {
           const encoded = encodePrice(product.price);
           const cipherCode = `${today}-${encoded}`;
+          const barcodeValue = product.sku || product.id.slice(0, 8);
           
           labelsHtml += `
             <div class="label">
@@ -92,7 +107,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 <div class="store-name">${store.receiptName || store.name || 'Boutique'}</div>
                 ${config.showName ? `<div class="product-name">${product.name}</div>` : ''}
                   <svg class="barcode" 
-                    jsbarcode-value="${product.sku}"
+                    jsbarcode-value="${barcodeValue}"
                     jsbarcode-format="CODE128"
                     jsbarcode-width="${config.barcodeWidth}"
                     jsbarcode-height="${config.barcodeHeight}"
@@ -113,13 +128,11 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
       labelsHtml += '</div>';
     }
 
-    const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
-    const centerOffset = config.centerOffset || 0;
-
-    printWindow.document.write(`
+    frameDoc.open();
+    frameDoc.write(`
       <html>
         <head>
-          <title>Etiquetas - ${store.name}</title>
+          <title> </title>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             @page { 
@@ -130,12 +143,13 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               html, body {
                 margin: 0 !important;
                 padding: 0 !important;
+                width: ${totalWidth}mm;
+                height: ${config.height}mm;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
-              /* Aggressive hide headers/footers */
-              @page { margin: 0; }
               header, footer, nav, aside { display: none !important; }
+              @page { margin: 0; }
             }
             body { 
               margin: 0; 
@@ -211,17 +225,17 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
           <script>
             window.onload = () => {
               JsBarcode(".barcode").init();
-              document.title = ""; // Try to clear title for print
+              document.title = ""; 
               setTimeout(() => {
+                window.focus();
                 window.print();
-                window.close();
               }, 600);
             };
           </script>
         </body>
       </html>
     `);
-    printWindow.document.close();
+    frameDoc.close();
     onClose();
   };
 
