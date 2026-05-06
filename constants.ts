@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.44',
+    date: '2026-05-06',
+    description: 'Unificación global de configuración de etiquetas.',
+    isCurrent: true,
+    changes: [
+      'Se implementó la sincronización automática de la configuración de etiquetas entre todos los locales.',
+      'Ahora, cualquier cambio en las dimensiones o formato de etiquetas se aplica instantáneamente a todas las tiendas del sistema.',
+      'Sincronización de versiones en todos los módulos (1.1.44).'
+    ]
+  },
+  {
     version: '1.1.43',
     date: '2026-05-06',
     description: 'Ajuste de precisión en la alineación de etiquetas.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se corrigió el desbordamiento de contenido entre etiquetas al imprimir múltiples unidades.',
       'Ajuste de rigidez en las dimensiones CSS (mm) para evitar saltos de página inesperados.',

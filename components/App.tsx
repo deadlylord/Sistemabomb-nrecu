@@ -1847,6 +1847,17 @@ const App: React.FC = () => {
   const handleUpdateStore = async (updatedStore: Store) => {
     try {
       await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
+      
+      // Sincronizar configuración de etiquetas en todos los locales
+      if (updatedStore.labelConfig) {
+        const batch = writeBatch(db);
+        stores.forEach(s => {
+          if (s.id !== updatedStore.id) {
+            batch.update(doc(db, 'stores', s.id), { labelConfig: updatedStore.labelConfig });
+          }
+        });
+        await batch.commit();
+      }
     } catch (error: any) {
       console.error('Error updating store:', error);
       alert(`Error al guardar: ${error?.message || 'Error desconocido'}`);
@@ -2033,4 +2044,4 @@ const App: React.FC = () => {
 
 export default App;
 
-// VERSION: 1.1.43
+// VERSION: 1.1.44
