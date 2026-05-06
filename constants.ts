@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.45',
+    date: '2026-05-06',
+    description: 'Optimización de legibilidad de códigos de barras.',
+    isCurrent: true,
+    changes: [
+      'Se ajustó el renderizado de códigos de barras para evitar que las barras se vean demasiado juntas.',
+      'Mejora en el escalado automático de las barras según el ancho configurado.',
+      'Sincronización de versiones en todos los módulos (1.1.45).'
+    ]
+  },
+  {
     version: '1.1.44',
     date: '2026-05-06',
     description: 'Unificación global de configuración de etiquetas.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se implementó la sincronización automática de la configuración de etiquetas entre todos los locales.',
       'Ahora, cualquier cambio en las dimensiones o formato de etiquetas se aplica instantáneamente a todas las tiendas del sistema.',

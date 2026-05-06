@@ -215,10 +215,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
             .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
             .barcode { 
-              width: 100%;
-              max-width: 100%; 
+              width: auto;
+              max-width: 98%; 
               height: auto; 
-              margin: 0.1mm 0;
+              margin: 0.2mm 0;
               shape-rendering: crispEdges;
             }
             .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
