@@ -216,15 +216,39 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
-            <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-              Configuración actual: <strong>{config.width}x{config.height}mm</strong>, <strong>{config.columns} {config.columns === 1 ? 'columna' : 'columnas'}</strong>.
-              Puedes ajustar esto en Ajustes {'>'} Etiquetas.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider mb-1">Configuración actual</p>
+              <p className="text-sm font-medium">
+                {config.width}x{config.height}mm, {config.columns} {config.columns === 1 ? 'columna' : 'columnas'}.
+              </p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+              <p className="text-xs text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider mb-1">Resumen de Impresión</p>
+              <p className="text-sm font-medium">
+                <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{printItems.reduce((sum, i) => sum + i.quantity, 0)}</span> etiquetas totales de <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{printItems.filter(i => i.quantity > 0).length}</span> productos.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Productos Seleccionados</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setPrintItems(prev => prev.map(item => ({ ...item, quantity: 1 })))}
+                className="px-2 py-1 text-[8px] font-black uppercase bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-100 transition-all"
+              >
+                Todos (1)
+              </button>
+              <button 
+                onClick={() => setPrintItems(prev => prev.map(item => ({ ...item, quantity: item.product.stock > 0 ? item.product.stock : 1 })))}
+                className="px-2 py-1 text-[8px] font-black uppercase bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-100 transition-all"
+              >
+                Según Stock
+              </button>
+            </div>
+          </div>
+          <div className="space-y-3">
             {printItems.map(item => (
               <div key={item.product.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
                 <div className="w-12 h-12 rounded-xl bg-white dark:bg-gray-700 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-600 flex-shrink-0">

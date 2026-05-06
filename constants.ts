@@ -39,10 +39,53 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.40',
+    date: '2026-05-06',
+    description: 'Mejora en la visibilidad de acceso a impresión por categorías.',
+    isCurrent: true,
+    changes: [
+      'Se hizo permanente el botón de impresión en el resumen de categorías.',
+      'Añadida leyenda informativa sobre el uso del icono de etiquetas por categoría.'
+    ]
+  },
+  {
+    version: '1.1.39',
+    date: '2026-05-06',
+    description: 'Impresión de etiquetas por categorías.',
+    isCurrent: false,
+    changes: [
+      'Se añadió la funcionalidad de imprimir etiquetas masivamente por categorías en el inventario.',
+      'Nueva vista previa en el modal de etiquetas con resumen de cantidades y productos únicos.',
+      'Controles rápidos para establecer cantidades masivas (Todos 1 o según Stock).'
+    ]
+  },
+  {
+    version: '1.1.38',
+    date: '2026-04-28',
+    description: 'Visualización de hora en intercambios entre sedes.',
+    isCurrent: false,
+    changes: [
+      'Se añadió la visualización de la hora en el historial de intercambios entre sedes.',
+      'Permite verificar con precisión la secuencia cronológica de los cruces de cuentas.',
+      'Facilita la auditoría de saldos sincronizados.'
+    ]
+  },
+  {
+    version: '1.1.37',
+    date: '2026-04-28',
+    description: 'Sincronización horaria en intercambios entre sedes.',
+    isCurrent: false,
+    changes: [
+      'Mejora del algoritmo de ordenamiento para intercambios entre sedes, incluyendo hora e ID como criterios de desempate.',
+      'Asegura que el saldo acumulado (running balance) sea idéntico en ambos locales involucrados en un cruce.',
+      'Eliminación de discrepancias visuales en el historial de deudas inter-sedes.'
+    ]
+  },
+  {
     version: '1.1.36',
     date: '2026-04-28',
     description: 'Barras de navegación fijas (Sticky) en Conciliación.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'La barra de selección de sede se mantiene fija en la parte superior.',
       'La barra de cambio de cuenta (Efectivo/QR) se mantiene fija al hacer scroll para mayor agilidad.',

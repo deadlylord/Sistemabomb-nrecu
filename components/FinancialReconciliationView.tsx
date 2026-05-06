@@ -246,7 +246,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           }
       });
       return Object.entries(balances).map(([otherStoreId, stats]) => {
-          const sortedHistory = stats.history.sort((a: any, b: any) => new Date(a.date || '').getTime() - new Date(b.date || '').getTime());
+          const sortedHistory = stats.history.sort((a: any, b: any) => new Date(a.date || '').getTime() - new Date(b.date || '').getTime() || a.id.localeCompare(b.id));
           let runningBalance = 0;
           const historyWithBalance = sortedHistory.map(r => {
               runningBalance += (r as any).netImpact || 0;
@@ -257,7 +257,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               otherStoreName: filteredStores.find(s => s.id === otherStoreId)?.name || 'Local',
               storeId: otherStoreId,
               ...stats,
-              history: historyWithBalance.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime())
+              history: historyWithBalance.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime() || b.id.localeCompare(a.id))
           };
       }).filter(s => Math.abs(s.total) > 0.1);
   }, [records, filteredStores]);
@@ -1123,7 +1123,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                     <div key={record.id} className="flex justify-between text-[9px] border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0 items-center">
                                                         <div className="flex flex-col min-w-0 pr-2">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-gray-400 font-black uppercase text-[7px]">{getLocalDateString(record.date)}</span>
+                                                                    <span className="text-[6px] font-bold text-accent">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
+                                                                </div>
                                                                 <span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span>
                                                             </div>
                                                             <span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>

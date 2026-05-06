@@ -426,15 +426,39 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
 
         {/* Resumen por Categoría Compacto */}
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm">
-            <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <ReceiptIcon className="w-4 h-4 text-accent" /> Existencias por Categoría
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <ReceiptIcon className="w-4 h-4 text-accent" /> Existencias por Categoría
+                </h3>
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 italic bg-slate-50 dark:bg-slate-800/50 px-2 py-0.5 rounded-full border border-slate-100 dark:border-slate-800">
+                    Haz clic en <TagIcon className="w-3 h-3 inline-block mx-0.5 text-accent" /> para imprimir todas las etiquetas de la categoría
+                </span>
+            </div>
             <div className="flex flex-wrap gap-2">
                 {categorySummary.length > 0 ? categorySummary.map((summary) => (
-                    <div key={summary.id} className="bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl flex items-baseline gap-2 border border-slate-200 dark:border-slate-700">
-                        <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{summary.name}</span>
-                        <span className="font-black text-accent text-base">{summary.totalStock}</span>
-                        <span className="text-[10px] text-gray-400 uppercase font-bold">uds</span>
+                    <div key={summary.id} className="bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl flex items-center gap-3 border border-slate-200 dark:border-slate-700 transition-all hover:border-accent/40 hover:bg-slate-200 dark:hover:bg-slate-800">
+                        <div className="flex items-baseline gap-2">
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{summary.name}</span>
+                            <span className="font-black text-accent text-base">{summary.totalStock}</span>
+                            <span className="text-[10px] text-gray-400 uppercase font-bold">uds</span>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                const categoryProducts = inventory.filter(p => p.categoryId === summary.id && p.stock > 0 && !p.isDisabled);
+                                if (categoryProducts.length === 0) {
+                                    alert('No hay productos con stock en esta categoría.');
+                                    return;
+                                }
+                                const newSelection = new Set<string>();
+                                categoryProducts.forEach(p => newSelection.add(p.id));
+                                setSelectedIds(newSelection);
+                                setIsLabelModalOpen(true);
+                            }}
+                            className="p-1.5 bg-accent/20 text-accent rounded-lg hover:bg-accent hover:text-white transition-all shadow-sm"
+                            title={`Imprimir etiquetas de ${summary.name}`}
+                        >
+                            <TagIcon className="w-3.5 h-3.5" />
+                        </button>
                     </div>
                 )) : <p className="text-xs text-gray-400 italic">No hay productos con stock actualmente.</p>}
             </div>
