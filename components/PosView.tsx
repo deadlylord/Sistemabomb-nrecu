@@ -506,8 +506,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     setSearchTerm(val);
                                 }}
                                 onKeyDown={e => {
-                                    if (e.key === 'Enter' && searchTerm.length > 2) {
-                                        const product = props.inventory.find(p => p.sku === searchTerm);
+                                    const trimmedSearch = searchTerm.trim();
+                                    if (e.key === 'Enter' && trimmedSearch.length > 0) {
+                                        const normalizedTerm = normalizeText(trimmedSearch);
+                                        const product = props.inventory.find(p => 
+                                            p.sku && normalizeText(p.sku) === normalizedTerm
+                                        );
                                         if (product && product.stock > 0 && !product.isDisabled) {
                                             handleAddToCartWithAnimation(product);
                                             setSearchTerm('');

@@ -39,10 +39,22 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.47',
+    date: '2026-05-06',
+    description: 'Mejoras integrales en búsqueda por SKU y escaneo.',
+    isCurrent: true,
+    changes: [
+      'Se activó la búsqueda por SKU en el módulo de Inventario, permitiendo encontrar productos escaneando sus etiquetas.',
+      'Se flexibilizó la búsqueda por SKU en el POS para corregir fallos con lectores de códigos de barras (normalización y trimming).',
+      'Optimización de la respuesta del sistema al presionar Enter después de un escaneo.',
+      'Sincronización de versiones (1.1.47).'
+    ]
+  },
+  {
     version: '1.1.46',
     date: '2026-05-06',
     description: 'Estabilización dimensional de impresión de etiquetas.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se implementó una restricción de altura rígida por etiqueta para evitar desplazamientos verticales.',
       'Sincronización de cuadrícula mediante medidas absolutas (mm) en lugar de fracciones proporcionales.',

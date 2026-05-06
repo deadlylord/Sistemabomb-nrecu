@@ -293,7 +293,8 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     let filteredProducts = productsWithVelocity.filter(product => {
       const normalizedSearch = normalizeText(searchTerm);
       const matchesSearch = normalizeText(product.name).includes(normalizedSearch) ||
-                            (product.supplier && normalizeText(product.supplier).includes(normalizedSearch));
+                            (product.supplier && normalizeText(product.supplier).includes(normalizedSearch)) ||
+                            (product.sku && normalizeText(product.sku).includes(normalizedSearch));
       const matchesCategory = filterCategoryId ? product.categoryId === filterCategoryId : true;
       const matchesVelocity = filterVelocity ? product.velocity.status === filterVelocity : true;
       const matchesStock = hideZeroStock ? product.stock > 0 : true;
