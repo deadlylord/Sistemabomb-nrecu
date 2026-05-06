@@ -14,7 +14,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onOpenVersio
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const currentVersion = useMemo(() => APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0', []);
+  const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
