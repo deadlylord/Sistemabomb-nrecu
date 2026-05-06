@@ -119,14 +119,31 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     printWindow.document.write(`
       <html>
         <head>
-          <title>Imprimir Etiquetas</title>
+          <title>Etiquetas - ${store.name}</title>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             @page { 
               size: ${totalWidth}mm ${config.height}mm; 
-              margin: 0; 
+              margin: 0 !important; 
             }
-            body { margin: 0; font-family: 'Courier New', Courier, monospace; }
+            @media print {
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              /* Aggressive hide headers/footers */
+              @page { margin: 0; }
+              header, footer, nav, aside { display: none !important; }
+            }
+            body { 
+              margin: 0; 
+              padding: 0;
+              font-family: 'Courier New', Courier, monospace; 
+              background-color: white;
+              -webkit-print-color-adjust: exact;
+            }
             .container {
               display: grid;
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
@@ -134,6 +151,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               width: ${totalWidth}mm;
               margin-left: ${config.horizontalOffset || 0}mm;
               page-break-after: always;
+              align-items: center;
+              justify-content: start;
             }
             .label { 
               width: ${config.width}mm; 
@@ -141,6 +160,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               box-sizing: border-box; 
               position: relative;
               overflow: hidden;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             }
             .label:nth-child(${config.columns}n+1) .label-inner {
               padding-left: ${2 + centerOffset}mm;
@@ -189,10 +211,11 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
           <script>
             window.onload = () => {
               JsBarcode(".barcode").init();
+              document.title = ""; // Try to clear title for print
               setTimeout(() => {
                 window.print();
                 window.close();
-              }, 500);
+              }, 600);
             };
           </script>
         </body>

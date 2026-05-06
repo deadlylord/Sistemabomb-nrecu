@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.41',
+    date: '2026-05-06',
+    description: 'Solución a problemas de impresión y persistencia.',
+    isCurrent: true,
+    changes: [
+      'Se eliminaron los encabezados/pies de página del navegador (fecha, about:blank) al imprimir etiquetas.',
+      'Se corrigió la persistencia de la configuración de etiquetas en los ajustes.',
+      'Optimización de la carga de estilos de impresión para mayor fidelidad.'
+    ]
+  },
+  {
     version: '1.1.40',
     date: '2026-05-06',
     description: 'Mejora en la visibilidad de acceso a impresión por categorías.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se hizo permanente el botón de impresión en el resumen de categorías.',
       'Añadida leyenda informativa sobre el uso del icono de etiquetas por categoría.'

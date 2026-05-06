@@ -24,6 +24,8 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     showSupplier: false,
     barcodeWidth: 1.5,
     barcodeHeight: 25,
+    horizontalOffset: 0,
+    centerOffset: 0,
   };
 
   const [config, setConfig] = useState<LabelConfig>(store.labelConfig || DEFAULT_CONFIG);
@@ -110,14 +112,29 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     printWindow.document.write(`
       <html>
         <head>
-          <title>Prueba de Impresión</title>
+          <title>Prueba de Etiquetas</title>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             @page { 
               size: ${totalWidth}mm ${config.height}mm; 
-              margin: 0; 
+              margin: 0 !important; 
             }
-            body { margin: 0; font-family: 'Courier New', Courier, monospace; }
+            @media print {
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              header, footer, nav, aside { display: none !important; }
+            }
+            body { 
+              margin: 0; 
+              padding: 0;
+              font-family: 'Courier New', Courier, monospace; 
+              background-color: white;
+              -webkit-print-color-adjust: exact;
+            }
             .container {
               display: grid;
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
@@ -132,6 +149,9 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               border: 0.1mm solid #eee;
               position: relative;
               overflow: hidden;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             }
             .label:nth-child(${config.columns}n+1) .label-inner {
               padding-left: ${2 + centerOffset}mm;
@@ -179,10 +199,11 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           <script>
             window.onload = () => {
               JsBarcode(".barcode").init();
+              document.title = "";
               setTimeout(() => {
                 window.print();
                 window.close();
-              }, 500);
+              }, 600);
             };
           </script>
         </body>

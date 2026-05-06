@@ -200,8 +200,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   
   const handleLabelConfigSave = (config: LabelConfig) => {
     if (!localSettings) return;
-    setLocalSettings(prev => prev ? ({ ...prev, labelConfig: config }) : null);
-    onSave({ ...localSettings, labelConfig: config });
+    const updatedStore = { ...localSettings, labelConfig: config };
+    setLocalSettings(updatedStore);
+    onSave(updatedStore);
   };
 
   if (!localSettings) {
