@@ -138,6 +138,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
           <title> </title>
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             @page { 
               size: ${totalWidth}mm ${config.height}mm; 
               margin: 0 !important; 
@@ -148,8 +149,6 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 padding: 0 !important;
                 width: ${totalWidth}mm;
                 height: ${config.height}mm;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
               }
               header, footer, nav, aside { display: none !important; }
               @page { margin: 0; }
@@ -159,33 +158,28 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               padding: 0;
               font-family: 'Courier New', Courier, monospace; 
               background-color: white;
-              -webkit-print-color-adjust: exact;
             }
             .container {
               display: grid;
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
               column-gap: ${config.columnGap}mm;
               width: ${totalWidth}mm;
+              height: ${config.height}mm;
               margin-left: ${config.horizontalOffset || 0}mm;
               page-break-after: always;
+              break-after: page;
               align-items: center;
               justify-content: start;
+              overflow: hidden;
             }
             .label { 
               width: ${config.width}mm; 
               height: ${config.height}mm; 
-              box-sizing: border-box; 
               position: relative;
               overflow: hidden;
               display: flex;
               align-items: center;
               justify-content: center;
-            }
-            .label:nth-child(${config.columns}n+1) .label-inner {
-              padding-left: ${2 + centerOffset}mm;
-            }
-            .label:nth-child(${config.columns}n+${config.columns}) .label-inner {
-              padding-right: ${2 + centerOffset}mm;
             }
             .label-inner {
               display: flex; 
@@ -193,8 +187,11 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               justify-content: center; 
               align-items: center;
               text-align: center;
-              box-sizing: border-box;
-              padding: 2mm;
+              width: 100%;
+              height: 100%;
+              padding: 1mm;
+              overflow: hidden;
+              line-height: 1.1;
               ${config.orientation === 'landscape' ? `
                 width: ${config.height}mm;
                 height: ${config.width}mm;

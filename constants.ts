@@ -39,10 +39,21 @@ export const normalizeText = (text: string): string => {
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.43',
+    date: '2026-05-06',
+    description: 'Ajuste de precisión en la alineación de etiquetas.',
+    isCurrent: true,
+    changes: [
+      'Se corrigió el desbordamiento de contenido entre etiquetas al imprimir múltiples unidades.',
+      'Ajuste de rigidez en las dimensiones CSS (mm) para evitar saltos de página inesperados.',
+      'Optimización de la cuadrícula de impresión para configuraciones de múltiples columnas.'
+    ]
+  },
+  {
     version: '1.1.42',
     date: '2026-05-06',
     description: 'Mejoras críticas en impresión y persistencia.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se eliminaron definitivamente las cabeceras (Date/URL/about:blank) en la impresión de etiquetas mediante un parche de título invisible en el iframe.',
       'Se mejoró el parche de window.fetch en index.html para evitar errores de "getter-only" en navegadores específicos.',
