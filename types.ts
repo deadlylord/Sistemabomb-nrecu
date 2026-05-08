@@ -46,6 +46,7 @@ export interface FinancialRecord {
   isConfirmed?: boolean;
   debtStoreId?: string; // ID del local que debe este dinero o al que pertenece el movimiento
   affectsCashBalance?: boolean; // Si es false, el registro existe para deuda y stats pero no resta/suma al saldo de caja
+  excludeFromAccounting?: boolean; // Si es true, el registro no se suma en los cálculos de contabilidad
 }
 
 export interface PendingDetailedVerification {

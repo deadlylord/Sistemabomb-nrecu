@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -139,6 +139,7 @@ const App: React.FC = () => {
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
   const [accountingChatHistory, setAccountingChatHistory] = useState<any[]>([]);
+  const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
 
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
@@ -387,6 +388,7 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('purchases'), setPurchases);
+            attach(storeSpecificQuery('financialRecords'), setFinancialRecords);
             
             const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
             unsubscribers.push(onSnapshot(chatRef, (doc) => {
@@ -1661,19 +1663,27 @@ const App: React.FC = () => {
     try {
       const batch = writeBatch(db);
       const usedSkus = new Set<string>();
+      const skuByName = new Map<string, string>(); // Mapa para mantener consistencia del SKU basado en el nombre
       
       // Ordenamos por nombre para que los prefijos sean coherentes si hay repetidos
       const sortedInventory = [...inventory].sort((a, b) => a.name.localeCompare(b.name));
       
       sortedInventory.forEach(product => {
-        const newSku = generateUniqueSku(product.name, usedSkus);
-        usedSkus.add(newSku);
+        const uniqueKey = product.name.trim().toLowerCase();
+        let newSku = skuByName.get(uniqueKey);
+        
+        if (!newSku) {
+          newSku = generateUniqueSku(product.name, usedSkus);
+          usedSkus.add(newSku);
+          skuByName.set(uniqueKey, newSku);
+        }
+        
         const productRef = doc(db, 'inventory', product.id);
         batch.update(productRef, { sku: newSku });
       });
       
       await batch.commit();
-      alert(`Éxito: Se han regenerado ${sortedInventory.length} SKUs.`);
+      alert(`Éxito: Se han reconsolidado y regenerado ${sortedInventory.length} SKUs de forma consistente en todos los locales.`);
     } catch (error) {
       console.error("Error al regenerar SKUs:", error);
       alert('Hubo un error al regenerar los SKUs. Por favor, intenta de nuevo.');
@@ -1685,10 +1695,28 @@ const App: React.FC = () => {
   const handleBulkAddProducts = async (products: any[], storeId: string) => {
       const batch = writeBatch(db);
       const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
+      const skuByName = new Map<string, string>();
+      
+      // Llenamos el mapa con los SKUs de los productos que ya existen en inventario
+      inventory.forEach(p => {
+        if (p.name && p.sku) {
+          skuByName.set(p.name.trim().toLowerCase(), p.sku);
+        }
+      });
+      
       products.forEach(p => {
+          const uniqueKey = p.name ? p.name.trim().toLowerCase() : '';
+          let sku = skuByName.get(uniqueKey);
+          
+          if (!sku) {
+            sku = generateUniqueSku(p.name, existingSkus);
+            existingSkus.add(sku);
+            if (uniqueKey) {
+              skuByName.set(uniqueKey, sku);
+            }
+          }
+          
           const newRef = doc(collection(db, 'inventory'));
-          const sku = generateUniqueSku(p.name, existingSkus);
-          existingSkus.add(sku);
           batch.set(newRef, cleanObject({ ...p, id: newRef.id, sku, storeId, isDisabled: false }));
       });
       await batch.commit();
@@ -1709,12 +1737,14 @@ const App: React.FC = () => {
     let globalImage = '';
     let globalDesc = 'Sin descripción...';
     let globalCategoryId = productInfo.categoryId;
+    let globalSku = '';
 
     if (!globalSnap.empty) {
         const d = globalSnap.docs[0].data() as Product;
         globalImage = d.imageUrl;
         globalDesc = d.description;
         globalCategoryId = d.categoryId;
+        globalSku = d.sku || '';
     }
 
     const batch = writeBatch(db);
@@ -1754,7 +1784,8 @@ const App: React.FC = () => {
                 productId = newProductRef.id;
                 
                 const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
-                const sku = generateUniqueSku(inputName, existingSkus);
+                const sku = globalSku || generateUniqueSku(inputName, existingSkus);
+                if (!globalSku) globalSku = sku; // So other iterations also use it!
                 
                 batch.set(newProductRef, cleanObject({
                     id: productId,
@@ -1933,17 +1964,68 @@ const App: React.FC = () => {
   const handleUpdateCustomer = async (id: string, name: string, phone: string) => await updateDoc(doc(db, 'customers', id), { name, phone });
 
   const handleAddExpense = async (expenseData: Omit<Expense, 'id'>) => {
-      if (!currentStoreId) return;
-      const newRef = doc(collection(db, 'expenses'));
-      await setDoc(newRef, { ...expenseData, id: newRef.id, storeId: currentStoreId });
+      if (!currentStoreId || !currentUser) return;
+      const newRef = doc(collection(db, 'financialRecords'));
+      // Mapeamos Expense a FinancialRecord
+      const financialRecord: FinancialRecord = {
+        id: newRef.id,
+        date: expenseData.date === 'TEMPLATE' ? new Date().toISOString() : expenseData.date,
+        storeId: currentStoreId,
+        accountType: 'cash', // Por defecto a caja si se crea desde contabilidad, o podrías pedirlo
+        amount: -Math.abs(expenseData.amount),
+        type: 'expense',
+        description: expenseData.description,
+        subCategory: expenseData.category,
+        registeredBy: currentUser.name,
+        isConfirmed: true,
+        affectsCashBalance: true
+      };
+      
+      // Si es una plantilla, seguimos guardándola en 'expenses' para persistencia de plantillas
+      if (expenseData.isRecurring) {
+        const templateRef = doc(collection(db, 'expenses'));
+        await setDoc(templateRef, { ...expenseData, id: templateRef.id, storeId: currentStoreId });
+      } else {
+        await setDoc(newRef, cleanObject(financialRecord));
+      }
   };
 
   const handleUpdateExpense = async (expense: Expense) => {
-      await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
+      // Si es plantilla, actualizamos en 'expenses'
+      if (expense.isRecurring) {
+        await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
+        return;
+      }
+
+      // Si es un gasto real, actualizamos en 'financialRecords'
+      // Nota: el ID del gasto en SmartAccountantView ahora vendrá de financialRecords si cambiamos el mapeo
+      const recordRef = doc(db, 'financialRecords', expense.id);
+      await updateDoc(recordRef, {
+          description: expense.description,
+          amount: -Math.abs(expense.amount),
+          subCategory: expense.category,
+          date: expense.date
+      });
   };
 
   const handleDeleteExpense = async (id: string) => {
-      if (window.confirm('¿Eliminar este registro de gasto?')) await deleteDoc(doc(db, 'expenses', id));
+      if (!window.confirm('¿Eliminar este registro de gasto?')) return;
+      
+      // Intentamos borrar de ambos por si acaso (o verificamos existencia)
+      const expenseRef = doc(db, 'expenses', id);
+      const financialRef = doc(db, 'financialRecords', id);
+      
+      const expenseDoc = await getDoc(expenseRef);
+      if (expenseDoc.exists()) {
+        await deleteDoc(expenseRef);
+      } else {
+        await deleteDoc(financialRef);
+      }
+  };
+
+  const handleToggleFinancialRecordAccounting = async (id: string, exclude: boolean) => {
+    const recordRef = doc(db, 'financialRecords', id);
+    await updateDoc(recordRef, { excludeFromAccounting: exclude });
   };
 
   const handleUpdateAccountingChat = async (messages: any[]) => {
@@ -1995,6 +2077,7 @@ const App: React.FC = () => {
             payrollHistory={payrollHistory} 
             inventory={inventory} 
             purchases={purchases} 
+            financialRecords={financialRecords}
             currentStore={currentStore} 
             currentUser={currentUser} 
             onAddExpense={handleAddExpense} 
@@ -2078,4 +2161,4 @@ const App: React.FC = () => {
 
 export default App;
 
-// VERSION: 1.1.47
+// VERSION: 1.1.49

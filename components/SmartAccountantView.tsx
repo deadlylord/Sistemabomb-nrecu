@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod, FinancialRecord } from '../types';
 import { formatCOP } from '../constants';
 import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
@@ -12,6 +12,7 @@ interface SmartAccountantViewProps {
   payrollHistory: PayrollRecord[];
   inventory: Product[];
   purchases: Purchase[];
+  financialRecords: FinancialRecord[];
   currentStore: Store | undefined;
   currentUser: Seller;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
@@ -22,11 +23,38 @@ interface SmartAccountantViewProps {
   onDeleteExpenseCategory: (id: string) => void;
   chatMessages: ChatMessage[];
   onUpdateChatMessages: (messages: ChatMessage[]) => Promise<void>;
+  onToggleFinancialRecordAccounting?: (id: string, exclude: boolean) => Promise<void>;
 }
 
 interface ChatMessage {
     role: 'user' | 'model';
     content: string;
+}
+
+interface AccountingStats {
+  periodo: string;
+  storeName?: string;
+  accountLabels?: { cash: string; qr: string };
+  totalRevenue: number;
+  monthlyCogs: number;
+  grossProfit: number;
+  totalExpenses: number;
+  netProfit: number;
+  margin: number;
+  monthlyManualExpenses: number;
+  monthlyPayroll: number;
+  monthlyPurchases: number;
+  totalInventoryValue: number;
+  expensesByCategory: Record<string, number>;
+  expenseDetails: {
+    id: string;
+    description: string;
+    amount: number;
+    category: string;
+    account: string;
+    date: string;
+    excludeFromAccounting?: boolean;
+  }[];
 }
 
 const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
@@ -52,6 +80,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   payrollHistory,
   inventory,
   purchases,
+  financialRecords,
   currentStore,
   currentUser,
   onAddExpense,
@@ -61,7 +90,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   onUpdateExpenseCategory,
   onDeleteExpenseCategory,
   chatMessages,
-  onUpdateChatMessages
+  onUpdateChatMessages,
+  onToggleFinancialRecordAccounting
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'categories' | 'ai'>('summary');
   
@@ -111,7 +141,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, isAiLoading, activeTab]);
 
-  const stats = useMemo(() => {
+  const stats = useMemo<AccountingStats>(() => {
     const startOfSelected = new Date(selectedYear, selectedMonth, 1);
     const endOfSelected = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
     
@@ -139,25 +169,49 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             return sum + itemsArray.reduce((iSum, item) => iSum + ((item.cost || 0) * (item.quantity || 0)), 0);
         }, 0);
 
-    const monthlyManualExpenses = expenses
-        .filter(e => {
-            if (e.isRecurring) return false;
-            const d = new Date(e.date);
-            return !isNaN(d.getTime()) && d >= startOfSelected && d <= endOfSelected;
+    // Gastos y Compras desde Conciliación
+    const monthlyReconciledExpenses = financialRecords
+        .filter(r => {
+            const d = new Date(r.date);
+            const isExpense = r.amount < 0 && !r.excludeFromAccounting;
+            const isInPeriod = d >= startOfSelected && d <= endOfSelected;
+            const isNotPayroll = r.subCategory !== 'Personal'; 
+            const isNotInterStore = r.subCategory !== 'Cruce Sedes' && r.subCategory !== 'Préstamo a Sede';
+            const isNotPurchase = r.subCategory !== 'Mercancía/Compras';
+            return isExpense && isInPeriod && isNotPayroll && isNotInterStore && isNotPurchase;
         })
-        .reduce((sum, e) => sum + e.amount, 0);
+        .reduce((sum, r) => sum + Math.abs(r.amount), 0);
 
     const monthlyPayroll = payrollHistory
         .filter(p => new Date(p.paidAt) >= startOfSelected && new Date(p.paidAt) <= endOfSelected)
         .reduce((sum, p) => sum + p.totalToPay, 0);
 
-    const monthlyPurchases = purchases
-        .filter(p => new Date(p.createdAt) >= startOfSelected && new Date(p.createdAt) <= endOfSelected)
-        .reduce((sum, p) => sum + p.totalCost, 0);
+    const monthlyPurchases = financialRecords
+        .filter(r => {
+            const d = new Date(r.date);
+            const isPurchase = r.subCategory === 'Mercancía/Compras' && !r.excludeFromAccounting;
+            const isInPeriod = d >= startOfSelected && d <= endOfSelected;
+            return isPurchase && isInPeriod;
+        })
+        .reduce((sum, r) => sum + Math.abs(r.amount), 0);
 
-    const totalExpenses = monthlyManualExpenses + monthlyPayroll;
+    const expensesByCategory = financialRecords
+        .filter(r => {
+            const d = new Date(r.date);
+            const isExpense = r.amount < 0 && !r.excludeFromAccounting;
+            const isInPeriod = d >= startOfSelected && d <= endOfSelected;
+            const isNotPayroll = r.subCategory !== 'Personal';
+            return isExpense && isInPeriod && isNotPayroll;
+        })
+        .reduce((acc, r) => {
+            const cat = r.subCategory || 'Otras';
+            acc[cat] = (acc[cat] || 0) + Math.abs(r.amount);
+            return acc;
+        }, {} as Record<string, number>);
+
+    const totalExpenses = monthlyReconciledExpenses + monthlyPayroll;
     const grossProfit = totalRevenue - monthlyCogs;
-    const netProfit = grossProfit - totalExpenses;
+    const netProfit = grossProfit - totalExpenses - monthlyPurchases;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
     
     // Asset info
@@ -166,20 +220,34 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     return { 
         periodo: `${currentMonthName} ${selectedYear}`,
         storeName: currentStore?.name,
-        accountLabels: currentStore?.accountLabels,
+        accountLabels: currentStore?.accountNames,
         totalRevenue, 
         monthlyCogs, 
         grossProfit, 
         totalExpenses, 
         netProfit, 
         margin, 
-        monthlyManualExpenses, 
+        monthlyManualExpenses: monthlyReconciledExpenses, 
         monthlyPayroll,
         monthlyPurchases,
         totalInventoryValue,
-        expenseDetails: expenses.filter(e => !e.isRecurring && new Date(e.date) >= startOfSelected && new Date(e.date) <= endOfSelected).map(e => ({ desc: e.description, amount: e.amount, cat: e.category }))
+        expensesByCategory,
+        expenseDetails: financialRecords
+            .filter(r => {
+              const d = new Date(r.date);
+              return r.amount < 0 && d >= startOfSelected && d <= endOfSelected;
+            })
+            .map(r => ({ 
+                id: r.id,
+                description: r.description, 
+                amount: Math.abs(r.amount), 
+                category: r.subCategory || 'S/C', 
+                account: r.accountType,
+                date: r.date,
+                excludeFromAccounting: r.excludeFromAccounting
+            }))
     };
-  }, [sales, layaways, expenses, payrollHistory, inventory, purchases, selectedMonth, selectedYear, currentMonthName]);
+  }, [sales, layaways, financialRecords, payrollHistory, inventory, selectedMonth, selectedYear, currentMonthName, currentStore, expenses]);
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,12 +432,27 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     if (activeTab === 'templates') {
         return expenses.filter(e => e.isRecurring === true);
     }
-    return expenses.filter(e => {
-        if (e.isRecurring) return false;
-        const d = new Date(e.date);
-        return !isNaN(d.getTime()) && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-    }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, activeTab, selectedMonth, selectedYear]);
+    
+    // Si estamos en la pestaña de Gastos del Mes, mostramos lo de conciliación
+    const reconciledList = financialRecords
+        .filter(r => {
+            const d = new Date(r.date);
+            return r.amount < 0 && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+        })
+        .map(r => ({
+            id: r.id,
+            description: r.description,
+            amount: Math.abs(r.amount),
+            category: r.subCategory || 'Otros',
+            date: r.date,
+            isRecurring: false,
+            // Guardamos campos extra para propósitos informativos o edición
+            accountType: r.accountType,
+            type: 'variable' as any 
+        }));
+
+    return reconciledList.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses, financialRecords, activeTab, selectedMonth, selectedYear]);
 
   const years = useMemo(() => {
     const currentY = new Date().getFullYear();
@@ -481,6 +564,35 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         <p className="text-xs text-gray-400 italic pt-2">Total gastos operativos: {formatCOP(stats.totalExpenses)}</p>
                     </div>
                 </div>
+
+                {/* Desglose por Categoría Detallado */}
+                <div className="bg-white dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                    <h3 className="font-black text-lg mb-6 flex items-center gap-2 text-gray-700 dark:text-gray-200">
+                        <PackageIcon className="w-6 h-6 text-accent"/> 
+                        Gastos por Categoría
+                    </h3>
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                        {(Object.entries(stats.expensesByCategory) as [string, number][]).sort((a,b) => b[1] - a[1]).map(([cat, amount]) => (
+                            <div key={cat} className="group">
+                                <div className="flex justify-between items-center mb-1.5">
+                                    <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors">{cat}</span>
+                                    <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
+                                </div>
+                                <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                                    <div 
+                                        className="bg-accent/60 h-full rounded-full transition-all duration-1000 group-hover:bg-accent" 
+                                        style={{width: `${(amount / (stats.totalExpenses + stats.monthlyPurchases || 1)) * 100}%`}}
+                                    ></div>
+                                </div>
+                            </div>
+                        ))}
+                        {Object.keys(stats.expensesByCategory || {}).length === 0 && (
+                            <div className="text-center py-10 text-gray-400 italic text-sm">
+                                No hay gastos registrados en este periodo
+                            </div>
+                        )}
+                    </div>
+                </div>
                 
                 <div className="bg-accent/5 p-8 rounded-2xl border border-accent/10 flex flex-col justify-center items-center text-center relative overflow-hidden">
                     <div className="absolute -right-10 -top-10 opacity-5">
@@ -569,6 +681,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                 <th className="px-6 py-4">Descripción</th>
                                 <th className="px-6 py-4">Categoría</th>
                                 <th className="px-6 py-4 text-right">Monto</th>
+                                <th className="px-6 py-4 text-center">Contab.</th>
                                 <th className="px-6 py-4 text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -579,7 +692,14 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                         {e.isRecurring ? (
                                             <span className="px-2 py-0.5 bg-accent/10 text-accent font-black rounded-md text-[10px]">FIJO</span>
                                         ) : (
-                                            <span className="text-xs text-gray-400 font-mono">{new Date(e.date).toLocaleDateString()}</span>
+                                            <div className="flex flex-col">
+                                                <span className="text-xs text-gray-400 font-mono">{new Date(e.date).toLocaleDateString()}</span>
+                                                {(e as any).accountType && (
+                                                    <span className="text-[9px] font-black text-accent/60 uppercase">
+                                                        {(stats.accountLabels as any)?.[(e as any).accountType] || (e as any).accountType}
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
@@ -592,6 +712,18 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right font-black text-red-500">{formatCOP(e.amount)}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        {!e.isRecurring && onToggleFinancialRecordAccounting && (
+                                            <button 
+                                                onClick={() => onToggleFinancialRecordAccounting(e.id, !(e as any).excludeFromAccounting)}
+                                                className={`p-1.5 rounded-lg transition-all ${!(e as any).excludeFromAccounting ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
+                                                title={!(e as any).excludeFromAccounting ? 'Excluir de contabilidad' : 'Incluir en contabilidad'}
+                                            >
+                                                {!(e as any).excludeFromAccounting ? <CheckIcon className="w-4 h-4"/> : <CrossIcon className="w-4 h-4"/>}
+                                            </button>
+                                        )}
+                                        {e.isRecurring && <span className="text-xs text-gray-300">-</span>}
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                                             <button onClick={() => handleEditClick(e)} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar"><EditIcon className="w-5 h-5"/></button>
