@@ -37,12 +37,44 @@ export const normalizeText = (text: string): string => {
     .replace(/[\u0300-\u036f]/g, "");
 };
 
+export const generateUniqueSku = (name: string, existingSkus: Set<string>): string => {
+  // Tomamos las primeras 3 letras, eliminamos caracteres especiales y normalizamos
+  const prefix = normalizeText(name.substring(0, 3)).toUpperCase().replace(/[^A-Z0-9]/g, 'X');
+  let sku = '';
+  let attempts = 0;
+  
+  // Si el nombre es muy corto, usamos un prefijo genérico
+  const finalPrefix = prefix.length >= 2 ? prefix : 'PRO';
+
+  do {
+    // Generamos 4 dígitos aleatorios
+    const random = Math.floor(1000 + Math.random() * 9000);
+    sku = `${finalPrefix}${random}`;
+    attempts++;
+  } while (existingSkus.has(sku) && attempts < 100);
+
+  return sku;
+};
+
 export const APP_VERSIONS: VersionLog[] = [
+  {
+    version: '1.1.48',
+    date: '2026-05-08',
+    description: 'Refactorización de SKUs y mejoras UX en búsqueda.',
+    isCurrent: true,
+    changes: [
+      'Se implementó un nuevo generador de SKUs más cortos, coherentes y garantizados como únicos (Formato: PREF1234).',
+      'Nueva funcionalidad para Administradores: "Regenerar SKUs" masivamente para corregir códigos largos o inconsistentes en el inventario.',
+      'Se habilitó la edición manual de SKUs desde el modal de edición de producto para correcciones puntuales.',
+      'Mejora UX: El buscador (POS e Inventario) mantiene el foco automáticamente al limpiar el texto con la "X".',
+      'Optimización de escaneo: La búsqueda por SKU en el POS ahora ignora los filtros de categoría si se encuentra una coincidencia exacta de SKU.'
+    ]
+  },
   {
     version: '1.1.47',
     date: '2026-05-06',
     description: 'Mejoras integrales en búsqueda por SKU y escaneo.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se activó la búsqueda por SKU en el módulo de Inventario, permitiendo encontrar productos escaneando sus etiquetas.',
       'Se flexibilizó la búsqueda por SKU en el POS para corregir fallos con lectores de códigos de barras (normalización y trimming).',

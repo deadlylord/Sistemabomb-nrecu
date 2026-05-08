@@ -44,7 +44,7 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase } from '../constants';
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import DashboardView from './DashboardView';
@@ -130,6 +130,7 @@ const App: React.FC = () => {
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
@@ -1545,8 +1546,8 @@ const App: React.FC = () => {
           });
       });
 
-      const namePrefix = inputName.substring(0, 3).toUpperCase();
-      const sku = existingSku || `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
+      const sku = existingSku || generateUniqueSku(inputName, existingSkus);
       const existingStoreIds = snapshot.docs.map(d => (d.data() as Product).storeId);
 
       selectedStoreIds.forEach(storeId => {
@@ -1650,12 +1651,44 @@ const App: React.FC = () => {
 
   const handleDeleteProduct = async (productId: string) => { await deleteDoc(doc(db, 'inventory', productId)); };
   
+  const handleRegenerateAllSkus = async () => {
+    if (!isAdmin) return;
+    if (!window.confirm('¿ESTÁS ABSOLUTAMENTE SEGURO? Esta acción reemplazará TODOS los SKUs actuales (incluyendo los que están bien) por formatos cortos y coherentes (PREF1234). Los códigos de barras impresos anteriormente dejarán de funcionar. Esta acción no se puede deshacer.')) {
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const batch = writeBatch(db);
+      const usedSkus = new Set<string>();
+      
+      // Ordenamos por nombre para que los prefijos sean coherentes si hay repetidos
+      const sortedInventory = [...inventory].sort((a, b) => a.name.localeCompare(b.name));
+      
+      sortedInventory.forEach(product => {
+        const newSku = generateUniqueSku(product.name, usedSkus);
+        usedSkus.add(newSku);
+        const productRef = doc(db, 'inventory', product.id);
+        batch.update(productRef, { sku: newSku });
+      });
+      
+      await batch.commit();
+      alert(`Éxito: Se han regenerado ${sortedInventory.length} SKUs.`);
+    } catch (error) {
+      console.error("Error al regenerar SKUs:", error);
+      alert('Hubo un error al regenerar los SKUs. Por favor, intenta de nuevo.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   const handleBulkAddProducts = async (products: any[], storeId: string) => {
       const batch = writeBatch(db);
+      const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
       products.forEach(p => {
           const newRef = doc(collection(db, 'inventory'));
-          const namePrefix = p.name.substring(0, 3).toUpperCase();
-          const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const sku = generateUniqueSku(p.name, existingSkus);
+          existingSkus.add(sku);
           batch.set(newRef, cleanObject({ ...p, id: newRef.id, sku, storeId, isDisabled: false }));
       });
       await batch.commit();
@@ -1719,8 +1752,9 @@ const App: React.FC = () => {
                 const newProductRef = doc(collection(db, 'inventory'));
                 productRef = newProductRef;
                 productId = newProductRef.id;
-                const namePrefix = inputName.substring(0, 3).toUpperCase();
-                const sku = `${namePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+                
+                const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
+                const sku = generateUniqueSku(inputName, existingSkus);
                 
                 batch.set(newProductRef, cleanObject({
                     id: productId,
@@ -1939,8 +1973,8 @@ const App: React.FC = () => {
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
       <main className="container mx-auto p-4 pb-20 lg:pb-4">
         {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} />}
-        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} />}
+        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} />}
+        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}

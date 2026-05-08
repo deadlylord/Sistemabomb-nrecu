@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import { InventoryTable } from './InventoryTable';
 import CategoryManager from './CategoryManager';
@@ -47,6 +47,7 @@ interface InventoryViewProps {
   showDisabledProducts: boolean;
   onShowDisabledProductsChange: (show: boolean) => void;
   onReactivateInconsistentProducts: (productIds: string[]) => void;
+  onRegenerateAllSkus?: () => Promise<void>;
 }
 
 type SortConfig = {
@@ -55,8 +56,12 @@ type SortConfig = {
 };
 
 
-const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts }) => {
+const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
+  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
   const [filterCategoryId, setFilterCategoryId] = useState('');
   const [filterVelocity, setFilterVelocity] = useState(''); 
   const [historyModalProduct, setHistoryModalProduct] = useState<Product | null>(null);
@@ -68,9 +73,6 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDiscontinueConfirm, setShowBulkDiscontinueConfirm] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
-
-  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -423,6 +425,11 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             <button onClick={() => scrollToSection('category-management-section')} className="px-4 py-2 text-sm font-black bg-purple-600 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2">
                 <SettingsIcon className="w-4 h-4" /> Gestionar Categorías
             </button>
+            {isAdmin && onRegenerateAllSkus && (
+                <button onClick={onRegenerateAllSkus} className="px-4 py-2 text-sm font-black bg-amber-500 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2 ml-auto">
+                    <PowerIcon className="w-4 h-4" /> Regenerar SKUs
+                </button>
+            )}
         </div>
 
         {/* Resumen por Categoría Compacto */}
@@ -508,6 +515,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div className="relative">
                 <input 
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Buscar por nombre o proveedor..."
                   value={searchTerm}
@@ -524,7 +532,10 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
                 </div>
                 {searchTerm && (
                     <button
-                        onClick={() => setSearchTerm('')}
+                        onClick={() => {
+                            setSearchTerm('');
+                            searchInputRef.current?.focus();
+                        }}
                         className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-slate-500 hover:text-slate-800 dark:hover:text-white"
                         aria-label="Limpiar búsqueda"
                     >

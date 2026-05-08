@@ -18,6 +18,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
     price: product.price.toString(),
     cost: product.cost.toString(),
     stock: product.stock.toString(),
+    sku: product.sku || '',
     description: product.description,
     categoryId: product.categoryId.toString(),
     supplier: product.supplier || '',
@@ -32,6 +33,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
       price: product.price.toString(),
       cost: product.cost.toString(),
       stock: product.stock.toString(),
+      sku: product.sku || '',
       description: product.description,
       categoryId: product.categoryId.toString(),
       supplier: product.supplier || '',
@@ -94,13 +96,13 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
       <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-lg overflow-y-auto max-h-[90vh]">
         <div className="flex justify-between items-start">
             <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2 w-full">Editar Producto</h2>
-            <div className="text-right ml-4">
-                <span className="text-xs text-gray-500 dark:text-text-dark">SKU</span>
-                <p className="font-mono text-accent font-bold">{product.sku}</p>
-            </div>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="sku" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">SKU (Código de Barras)</label>
+              <input type="text" name="sku" id="sku" value={formData.sku} onChange={handleChange} className="w-full font-mono bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-bold text-accent" required />
+            </div>
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Nombre del Producto</label>
               <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" required />

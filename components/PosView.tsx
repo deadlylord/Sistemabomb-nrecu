@@ -53,6 +53,7 @@ interface PosViewProps {
   giftVouchers: GiftVoucher[];
   onCreateGiftVoucher: (voucher: Omit<GiftVoucher, 'id'>) => Promise<void>;
   onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
+  onRegenerateAllSkus?: () => Promise<void>;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
@@ -332,29 +333,36 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
                     normalizeText(p.sku).includes(normalizedSearch)
                   : true;
-              return matchesSearch;
+              const isExactSkuMatch = p.sku && normalizeText(p.sku) === normalizedSearch;
+              return isExactSkuMatch || matchesSearch;
           });
       } else if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
           result = props.inventory.filter(p => {
               const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
+              const normalizedSku = normalizeText(p.sku);
+              const isExactSkuMatch = p.sku && normalizedSku === normalizedSearch;
+              
               const matchesSearch = normalizedSearch
                   ? normalizeText(p.name).includes(normalizedSearch) ||
                     (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
-                    normalizeText(p.sku).includes(normalizedSearch)
+                    normalizedSku.includes(normalizedSearch)
                   : true;
-              return matchesDiscount && matchesSearch;
+              return isExactSkuMatch || (matchesDiscount && matchesSearch);
           });
       } else {
           result = props.inventory
             .filter(p => {
               if (p.isDisabled) return false;
+              const normalizedSku = normalizeText(p.sku);
+              const isExactSkuMatch = p.sku && normalizedSku === normalizedSearch;
+              
               const matchesCategory = selectedCategoryId ? p.categoryId === selectedCategoryId : true;
               const matchesSearch = normalizedSearch
                 ? normalizeText(p.name).includes(normalizedSearch) ||
                   (p.supplier && normalizeText(p.supplier).includes(normalizedSearch)) ||
-                  normalizeText(p.sku).includes(normalizedSearch)
+                  normalizedSku.includes(normalizedSearch)
                 : true;
-              return matchesCategory && matchesSearch;
+              return isExactSkuMatch || (matchesCategory && matchesSearch);
             });
       }
 
@@ -525,7 +533,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
                             </div>
                             {searchTerm && (
                                 <button
-                                    onClick={() => setSearchTerm('')}
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        searchInputRef.current?.focus();
+                                    }}
                                     className="absolute top-0 right-0 inline-flex items-center justify-center h-full w-10 text-gray-500 hover:text-gray-800 dark:hover:text-white"
                                     aria-label="Limpiar búsqueda"
                                 >
