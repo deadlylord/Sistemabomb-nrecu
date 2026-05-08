@@ -175,6 +175,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             const d = new Date(r.date);
             const isExpense = r.amount < 0 && !r.excludeFromAccounting;
             const isInPeriod = d >= startOfSelected && d <= endOfSelected;
+            // Excluimos Categorías que se manejan aparte en el KPI o son transferencias
             const isNotPayroll = r.subCategory !== 'Personal'; 
             const isNotInterStore = r.subCategory !== 'Cruce Sedes' && r.subCategory !== 'Préstamo a Sede';
             const isNotPurchase = r.subCategory !== 'Mercancía/Compras';
@@ -182,9 +183,14 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         })
         .reduce((sum, r) => sum + Math.abs(r.amount), 0);
 
-    const monthlyPayroll = payrollHistory
-        .filter(p => new Date(p.paidAt) >= startOfSelected && new Date(p.paidAt) <= endOfSelected)
-        .reduce((sum, p) => sum + p.totalToPay, 0);
+    const monthlyPayrollFromConciliation = financialRecords
+        .filter(r => {
+            const d = new Date(r.date);
+            const isPayroll = r.subCategory === 'Personal';
+            const isInPeriod = d >= startOfSelected && d <= endOfSelected;
+            return isPayroll && isInPeriod && !r.excludeFromAccounting;
+        })
+        .reduce((sum, r) => sum + Math.abs(r.amount), 0);
 
     const monthlyPurchases = financialRecords
         .filter(r => {
@@ -200,8 +206,9 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             const d = new Date(r.date);
             const isExpense = r.amount < 0 && !r.excludeFromAccounting;
             const isInPeriod = d >= startOfSelected && d <= endOfSelected;
-            const isNotPayroll = r.subCategory !== 'Personal';
-            return isExpense && isInPeriod && isNotPayroll;
+            const isNotInterStore = r.subCategory !== 'Cruce Sedes' && r.subCategory !== 'Préstamo a Sede';
+            const isNotPurchase = r.subCategory !== 'Mercancía/Compras';
+            return isExpense && isInPeriod && isNotInterStore && isNotPurchase;
         })
         .reduce((acc, r) => {
             const cat = r.subCategory || 'Otras';
@@ -209,7 +216,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             return acc;
         }, {} as Record<string, number>);
 
-    const totalExpenses = monthlyReconciledExpenses + monthlyPayroll;
+    const totalExpenses = monthlyReconciledExpenses + monthlyPayrollFromConciliation;
     const grossProfit = totalRevenue - monthlyCogs;
     const netProfit = grossProfit - totalExpenses - monthlyPurchases;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
@@ -228,7 +235,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         netProfit, 
         margin, 
         monthlyManualExpenses: monthlyReconciledExpenses, 
-        monthlyPayroll,
+        monthlyPayroll: monthlyPayrollFromConciliation,
         monthlyPurchases,
         totalInventoryValue,
         expensesByCategory,
@@ -573,97 +580,78 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
-                    <h3 className="font-black text-lg mb-6 flex items-center gap-2 text-gray-700 dark:text-gray-200">
-                        <ChartBarIcon className="w-6 h-6 text-accent"/> 
-                        Costos Operativos (Fijos y Variables)
-                    </h3>
-                    <div className="space-y-4">
-                        <div className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                                <span className="font-bold flex items-center gap-1.5">
-                                    Costo de Mercancía Vendida (COGS)
-                                    <div className="group relative inline-block">
-                                        <HistoryIcon className="w-3.5 h-3.5 text-gray-400 cursor-help"/>
-                                        <div className="absolute bottom-full mb-2 left-0 w-48 p-2 bg-gray-900 text-white text-[9px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-snug">
-                                            Lo que te costó comprar la mercancía que vendiste este mes. Restar esto de las ventas da la "Utilidad Bruta".
+                <div className="bg-white dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm col-span-1 lg:col-span-2">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <h3 className="font-black text-xl flex items-center gap-2 text-gray-700 dark:text-gray-200">
+                            <ChartBarIcon className="w-7 h-7 text-accent"/> 
+                            Distribución de Gastos (Conciliación)
+                        </h3>
+                        <div className="px-4 py-2 bg-accent/10 rounded-xl">
+                            <span className="text-xs font-black text-accent uppercase tracking-widest">Total Operativo: {formatCOP(stats.totalExpenses)}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="space-y-6">
+                            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Breakdown por Categoría</h4>
+                            <div className="space-y-5 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
+                                {(Object.entries(stats.expensesByCategory) as [string, number][]).sort((a,b) => b[1] - a[1]).map(([cat, amount]) => (
+                                    <div key={cat} className="group">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-2 h-2 rounded-full ${cat === 'Personal' ? 'bg-purple-500' : 'bg-accent'}`}></div>
+                                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors">{cat}</span>
+                                            </div>
+                                            <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`${cat === 'Personal' ? 'bg-purple-500/60' : 'bg-accent/60'} h-full rounded-full transition-all duration-1000 group-hover:opacity-100`} 
+                                                style={{width: `${(amount / (stats.totalExpenses || 1)) * 100}%`}}
+                                            ></div>
                                         </div>
                                     </div>
-                                </span>
-                                <span className="font-black text-gray-600 dark:text-gray-300">{formatCOP(stats.monthlyCogs)}</span>
+                                ))}
+                                {Object.keys(stats.expensesByCategory).length === 0 && (
+                                    <div className="text-center py-10 text-gray-400 italic text-sm">
+                                        No hay gastos operativos registrados este mes
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        <div className="h-px bg-gray-200 dark:bg-gray-700/50 my-2"></div>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="font-bold">Gastos Operativos (Servicios, Local, etc)</span>
-                                <span className="text-accent font-black">{formatCOP(stats.monthlyManualExpenses)}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-                                <div className="bg-blue-500 h-full rounded-full transition-all duration-1000" style={{width: `${(stats.monthlyManualExpenses / (stats.totalExpenses || 1)) * 100}%`}}></div>
-                            </div>
-                            <p className="text-[10px] text-gray-500 italic">Registros confirmados en conciliación (excluyendo nómina y compras)</p>
-                        </div>
-
-                        <div className="space-y-2 pt-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="font-bold">Gastos de Personal (Nómina Pagada)</span>
-                                <span className="text-accent font-black">{formatCOP(stats.monthlyPayroll)}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-                                <div className="bg-purple-500 h-full rounded-full transition-all duration-1000" style={{width: `${(stats.monthlyPayroll / (stats.totalExpenses || 1)) * 100}%`}}></div>
-                            </div>
-                            <p className="text-[10px] text-gray-500 italic">Total de sueldos y bonificaciones efectivamente pagadas este mes</p>
-                        </div>
-                        
-                        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                            <span className="text-xs font-black text-gray-400 uppercase">Total Egresos Operativos</span>
-                            <span className="text-lg font-black text-red-500">{formatCOP(stats.totalExpenses)}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Desglose por Categoría Detallado */}
-                <div className="bg-white dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <h3 className="font-black text-lg mb-6 flex items-center gap-2 text-gray-700 dark:text-gray-200">
-                        <PackageIcon className="w-6 h-6 text-accent"/> 
-                        Gastos por Categoría
-                    </h3>
-                    <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
-                        {(Object.entries(stats.expensesByCategory) as [string, number][]).sort((a,b) => b[1] - a[1]).map(([cat, amount]) => (
-                            <div key={cat} className="group">
-                                <div className="flex justify-between items-center mb-1.5">
-                                    <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors">{cat}</span>
-                                    <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
-                                </div>
-                                <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-                                    <div 
-                                        className="bg-accent/60 h-full rounded-full transition-all duration-1000 group-hover:bg-accent" 
-                                        style={{width: `${(amount / (stats.totalExpenses + stats.monthlyPurchases || 1)) * 100}%`}}
-                                    ></div>
+                        <div className="flex flex-col justify-between gap-8">
+                            <div className="bg-gray-50 dark:bg-gray-900/40 p-6 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Resumen de Impacto</h4>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+                                        <span className="text-sm font-bold text-gray-500">Costo de Ventas (COGS)</span>
+                                        <span className="text-sm font-black text-orange-500">{formatCOP(stats.monthlyCogs)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border-l-4 border-purple-500">
+                                        <span className="text-sm font-bold text-gray-500">Gasto de Personal</span>
+                                        <span className="text-sm font-black text-purple-500">{formatCOP(stats.monthlyPayroll)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border-l-4 border-blue-500">
+                                        <span className="text-sm font-bold text-gray-500">Otros Operativos</span>
+                                        <span className="text-sm font-black text-blue-500">{formatCOP(stats.monthlyManualExpenses)}</span>
+                                    </div>
                                 </div>
                             </div>
-                        ))}
-                        {Object.keys(stats.expensesByCategory || {}).length === 0 && (
-                            <div className="text-center py-10 text-gray-400 italic text-sm">
-                                No hay gastos registrados en este periodo
+
+                            <div className="bg-accent/5 p-8 rounded-2xl border border-accent/10 flex flex-col justify-center items-center text-center relative overflow-hidden flex-1">
+                                <div className="absolute -right-10 -top-10 opacity-5">
+                                    <SparklesIcon className="w-40 h-40 text-accent" />
+                                </div>
+                                <p className="text-gray-500 font-bold uppercase tracking-widest text-[10px] mb-2">Rentabilidad Operativa</p>
+                                <p className={`text-6xl font-black ${stats.margin > 20 ? 'text-green-500' : 'text-accent'} tracking-tighter`}>
+                                    {stats.margin.toFixed(1)}<span className="text-2xl">%</span>
+                                </p>
+                                <div className="mt-4 px-4 py-1 bg-white dark:bg-gray-800 rounded-full text-[10px] font-black text-gray-400 shadow-sm border border-gray-100 dark:border-gray-700 uppercase">
+                                    {stats.margin > 20 ? '💎 Excelente' : stats.margin > 10 ? '✅ Saludable' : '🔥 Por mejorar'}
+                                </div>
                             </div>
-                        )}
-                    </div>
-                </div>
-                
-                <div className="bg-accent/5 p-8 rounded-2xl border border-accent/10 flex flex-col justify-center items-center text-center relative overflow-hidden">
-                    <div className="absolute -right-10 -top-10 opacity-5">
-                        <SparklesIcon className="w-40 h-40 text-accent" />
-                    </div>
-                    <p className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-2">Rentabilidad Operativa</p>
-                    <p className={`text-7xl font-black ${stats.margin > 20 ? 'text-green-500' : 'text-accent'} tracking-tighter`}>
-                        {stats.margin.toFixed(1)}<span className="text-3xl">%</span>
-                    </p>
-                    <div className="mt-4 px-4 py-1 bg-white dark:bg-gray-800 rounded-full text-xs font-bold text-gray-500 shadow-sm border border-gray-100 dark:border-gray-700">
-                        {stats.margin > 20 ? '💎 Negocio Brillante' : stats.margin > 10 ? '✅ En buen camino' : '🔥 Revisar estructura'}
+                        </div>
                     </div>
                 </div>
             </div>
