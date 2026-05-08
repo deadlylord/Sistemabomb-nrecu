@@ -513,26 +513,62 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-gradient-to-br from-green-50 to-white dark:from-green-900/10 dark:to-gray-800 p-5 rounded-2xl border border-green-100 dark:border-green-800/30 shadow-sm">
-                <p className="text-xs font-black text-green-600 dark:text-green-400 uppercase mb-2">Ingresos Reales</p>
+                <div className="flex justify-between items-start mb-2">
+                  <p className="text-xs font-black text-green-600 dark:text-green-400 uppercase">Ingresos Totales (Recaudo)</p>
+                  <div className="group relative">
+                    <HistoryIcon className="w-4 h-4 text-green-400 cursor-help"/>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                      Suma de todos los pagos recibidos de Ventas y Apartados en este mes. No incluye bonos.
+                    </div>
+                  </div>
+                </div>
                 <p className="text-3xl font-black text-green-600">{formatCOP(stats.totalRevenue)}</p>
                 <div className="mt-2 h-1 w-full bg-green-200 dark:bg-green-900/50 rounded-full overflow-hidden">
                     <div className="h-full bg-green-500" style={{width: '100%'}}></div>
                 </div>
+                <p className="text-[10px] text-gray-400 mt-2 font-medium">Ventas + Abonados de Apartados</p>
               </div>
+
               <div className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/10 dark:to-gray-800 p-5 rounded-2xl border border-orange-100 dark:border-orange-800/30 shadow-sm">
-                <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase mb-2">Inversión en Compras</p>
+                <div className="flex justify-between items-start mb-2">
+                  <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase">Inversión en Mercancía</p>
+                  <div className="group relative">
+                    <PackageIcon className="w-4 h-4 text-orange-400 cursor-help"/>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                      Dinero gastado en compras de mercancía registrado en el apartado de Conciliación.
+                    </div>
+                  </div>
+                </div>
                 <p className="text-3xl font-black text-orange-600">{formatCOP(stats.monthlyPurchases)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">Nuevos ingresos de mercancía</p>
+                <p className="text-[10px] text-gray-400 mt-1 font-medium italic">Extraído de Registros de Conciliación</p>
               </div>
+
               <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-gray-800 p-5 rounded-2xl border border-blue-100 dark:border-blue-800/30 shadow-sm">
-                <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase mb-2">Valor de Inventario</p>
+                <div className="flex justify-between items-start mb-2">
+                  <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase">Activos (Inventario)</p>
+                  <div className="group relative">
+                    <ReceiptIcon className="w-4 h-4 text-blue-400 cursor-help"/>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                      Valorización total de los productos que tienes en stock actualmente (Costo x Cantidad).
+                    </div>
+                  </div>
+                </div>
                 <p className="text-3xl font-black text-blue-600">{formatCOP(stats.totalInventoryValue)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">Activo actual en bodega</p>
+                <p className="text-[10px] text-gray-400 mt-1 font-medium tracking-tight">Valor actual de mercancía en bodega</p>
               </div>
+
               <div className="bg-accent/5 p-5 rounded-2xl border-2 border-accent/20 shadow-lg ring-4 ring-accent/5">
-                <p className="text-xs font-black text-accent uppercase mb-2">Utilidad Neta</p>
+                <div className="flex justify-between items-start mb-2">
+                  <p className="text-xs font-black text-accent uppercase">Ganancia Neta (Final)</p>
+                  <div className="group relative">
+                    <SparklesIcon className="w-4 h-4 text-accent/60 cursor-help"/>
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                      Lo que queda después de pagar: Costo de mercancía vendida, Nómina, Gastos de Conciliación y Compras.
+                    </div>
+                  </div>
+                </div>
                 <p className={`text-3xl font-black ${stats.netProfit >= 0 ? 'text-accent' : 'text-red-600'}`}>{formatCOP(stats.netProfit)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">Dinero real en bolsillo</p>
+                <p className="text-[10px] text-gray-400 mt-1 font-black uppercase tracking-widest">Utilidad Real del Periodo</p>
               </div>
             </div>
 
@@ -540,28 +576,52 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 <div className="bg-gray-50 dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                     <h3 className="font-black text-lg mb-6 flex items-center gap-2 text-gray-700 dark:text-gray-200">
                         <ChartBarIcon className="w-6 h-6 text-accent"/> 
-                        Desglose de Costos de Operación
+                        Costos Operativos (Fijos y Variables)
                     </h3>
-                    <div className="space-y-5">
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm font-bold">
-                                <span>Gastos Registrados Manualmente</span>
-                                <span className="text-accent">{formatCOP(stats.monthlyManualExpenses)}</span>
+                    <div className="space-y-4">
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                                <span className="font-bold flex items-center gap-1.5">
+                                    Costo de Mercancía Vendida (COGS)
+                                    <div className="group relative inline-block">
+                                        <HistoryIcon className="w-3.5 h-3.5 text-gray-400 cursor-help"/>
+                                        <div className="absolute bottom-full mb-2 left-0 w-48 p-2 bg-gray-900 text-white text-[9px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-snug">
+                                            Lo que te costó comprar la mercancía que vendiste este mes. Restar esto de las ventas da la "Utilidad Bruta".
+                                        </div>
+                                    </div>
+                                </span>
+                                <span className="font-black text-gray-600 dark:text-gray-300">{formatCOP(stats.monthlyCogs)}</span>
                             </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
+                        </div>
+
+                        <div className="h-px bg-gray-200 dark:bg-gray-700/50 my-2"></div>
+
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="font-bold">Gastos Operativos (Servicios, Local, etc)</span>
+                                <span className="text-accent font-black">{formatCOP(stats.monthlyManualExpenses)}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                                 <div className="bg-blue-500 h-full rounded-full transition-all duration-1000" style={{width: `${(stats.monthlyManualExpenses / (stats.totalExpenses || 1)) * 100}%`}}></div>
                             </div>
+                            <p className="text-[10px] text-gray-500 italic">Registros confirmados en conciliación (excluyendo nómina y compras)</p>
                         </div>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm font-bold">
-                                <span>Nómina del Mes</span>
-                                <span className="text-accent">{formatCOP(stats.monthlyPayroll)}</span>
+
+                        <div className="space-y-2 pt-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="font-bold">Gastos de Personal (Nómina Pagada)</span>
+                                <span className="text-accent font-black">{formatCOP(stats.monthlyPayroll)}</span>
                             </div>
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                                 <div className="bg-purple-500 h-full rounded-full transition-all duration-1000" style={{width: `${(stats.monthlyPayroll / (stats.totalExpenses || 1)) * 100}%`}}></div>
                             </div>
+                            <p className="text-[10px] text-gray-500 italic">Total de sueldos y bonificaciones efectivamente pagadas este mes</p>
                         </div>
-                        <p className="text-xs text-gray-400 italic pt-2">Total gastos operativos: {formatCOP(stats.totalExpenses)}</p>
+                        
+                        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <span className="text-xs font-black text-gray-400 uppercase">Total Egresos Operativos</span>
+                            <span className="text-lg font-black text-red-500">{formatCOP(stats.totalExpenses)}</span>
+                        </div>
                     </div>
                 </div>
 
