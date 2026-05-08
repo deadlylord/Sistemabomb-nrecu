@@ -48,7 +48,7 @@ const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes,
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Historial de Conteos de Inventario</h2>
+        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Auditorías / Conteos</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <select value={sellerFilter} onChange={e => setSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2">

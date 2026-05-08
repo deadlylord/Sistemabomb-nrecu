@@ -377,7 +377,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             <div className="space-y-4 w-full lg:w-1/2">
                 <h2 className="text-2xl font-black text-accent flex items-center gap-2">
                     <PackageIcon className="w-8 h-8" />
-                    Ingreso de Mercancía
+                    Registro de Compras
                 </h2>
                 <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Tiendas donde vas a comprar hoy:</label>

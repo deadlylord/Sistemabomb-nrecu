@@ -475,7 +475,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         {/* Filtros e Inventario */}
         <div id="inventory-table-container" className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-4 rounded-xl shadow-lg scroll-mt-24">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-            <h2 className="text-2xl font-bold text-accent">Inventario Actual</h2>
+            <h2 className="text-2xl font-bold text-accent">Stock de Productos</h2>
             <div className="flex items-center gap-2 flex-wrap">
               {isAdmin && inconsistentProducts.length > 0 && (
                 <button

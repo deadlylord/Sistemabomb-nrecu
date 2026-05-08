@@ -206,7 +206,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
     <>
       <div className="max-w-7xl mx-auto">
         <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-          <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Historial de Ventas</h2>
+          <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Operaciones de Venta</h2>
           
           <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mb-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

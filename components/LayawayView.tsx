@@ -255,7 +255,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
     return (
         <div className="max-w-4xl mx-auto">
             <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Gestión de Abonos</h2>
+                <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Apartados y Abonos</h2>
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <div className="relative flex-grow">
                         <input

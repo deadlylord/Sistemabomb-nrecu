@@ -1,7 +1,7 @@
 
 
 import React, { useState } from 'react';
-import { Role, View } from '../types';
+import { Role, View, VIEW_LABELS } from '../types';
 import { PlusCircleIcon } from './Icons';
 
 interface RoleManagerViewProps {
@@ -37,11 +37,13 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
     onUpdateRole({ ...selectedRole, permissions: newPermissions });
   };
   
-  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
+  // Removed capitalize as we use VIEW_LABELS now
 
 
   return (
-    <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <h2 className="text-3xl font-black text-accent uppercase tracking-tight ml-2">Control de Permisos</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Column 1: Role List and Creation */}
       <div className="lg:col-span-1 bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold text-accent mb-4 border-b-2 border-accent/30 pb-2">Roles</h2>
@@ -88,7 +90,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                       onChange={(e) => handlePermissionChange(view, e.target.checked)}
                       className="h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent"
                     />
-                    <span className="font-medium text-gray-800 dark:text-text-light">{capitalize(view)}</span>
+                    <span className="font-medium text-gray-800 dark:text-text-light">{VIEW_LABELS[view]}</span>
                   </label>
                 </div>
               ))}
@@ -99,6 +101,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
             <p className="text-gray-500 dark:text-text-dark">Selecciona un rol para editar sus permisos.</p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

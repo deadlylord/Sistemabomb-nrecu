@@ -168,7 +168,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
       <div className="max-w-6xl mx-auto">
         <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b-2 border-accent/30 pb-2 gap-4">
-            <h2 className="text-2xl font-bold text-accent">Gestión de Novedades</h2>
+            <h2 className="text-2xl font-bold text-accent">Novedades y Cambios</h2>
             <button onClick={() => setIsCreateModalOpen(true)} className="bg-accent text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover self-end sm:self-center">
               <PlusCircleIcon />
               <span>Crear Novedad</span>

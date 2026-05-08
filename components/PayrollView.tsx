@@ -503,7 +503,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Gestión de Pagos y Nómina</h2>
+        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Nómina y Comisiones</h2>
         
         <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl shadow-inner mb-6 overflow-x-auto scrollbar-hide">
             <button 

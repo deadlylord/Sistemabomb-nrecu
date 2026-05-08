@@ -91,9 +91,10 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   onDeleteExpenseCategory,
   chatMessages,
   onUpdateChatMessages,
-  onToggleFinancialRecordAccounting
+  onToggleFinancialRecordAccounting,
+  onNavigate
 }) => {
-  const [activeTab, setActiveTab] = useState<'summary' | 'expenses' | 'templates' | 'categories' | 'ai'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'templates' | 'categories' | 'ai'>('summary');
   
   // Maestro de Periodo
   const now = new Date();
@@ -440,7 +441,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         return expenses.filter(e => e.isRecurring === true);
     }
     
-    // Si estamos en la pestaña de Gastos del Mes, mostramos lo de conciliación
+    // Si no estamos en plantillas, mostramos lo de conciliación (Gastos del Mes)
     const reconciledList = financialRecords
         .filter(r => {
             const d = new Date(r.date);
@@ -453,6 +454,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             category: r.subCategory || 'Otros',
             date: r.date,
             isRecurring: false,
+            excludeFromAccounting: !!r.excludeFromAccounting,
             // Guardamos campos extra para propósitos informativos o edición
             accountType: r.accountType,
             type: 'variable' as any 
@@ -467,8 +469,17 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in text-gray-800 dark:text-gray-100">
       
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+        <h2 className="text-3xl font-black text-accent uppercase tracking-tight ml-2">Contabilidad Inteligente</h2>
+        <div className="flex gap-2">
+           <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+              🤖 Asistente IA
+           </button>
+        </div>
+      </div>
+
       {/* Selector de Periodo Global */}
       <div className="bg-accent/10 border border-accent/20 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-4">
@@ -508,8 +519,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             </div>
           </div>
           <div className="flex bg-gray-100 dark:bg-slate-800 p-1.5 rounded-xl shadow-inner w-full md:w-auto overflow-x-auto scrollbar-hide">
-            <button onClick={() => setActiveTab('summary')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'summary' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Resumen</button>
-            <button onClick={() => setActiveTab('expenses')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'expenses' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Gastos del Mes</button>
+            <button onClick={() => setActiveTab('summary')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'summary' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Costos Operativos</button>
             <button onClick={() => setActiveTab('templates')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'templates' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Plantillas Fijas</button>
             <button onClick={() => setActiveTab('categories')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Categorías</button>
             <button onClick={() => setActiveTab('ai')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'ai' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Auditoría IA Chat</button>
@@ -654,11 +664,85 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                         </div>
                     </div>
                 </div>
+
+                {/* Desglose Detallado de Gastos integrado en Costos Operativos */}
+                <div className="bg-white dark:bg-gray-800/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm mt-8">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 flex justify-between items-center border-b dark:border-gray-700">
+                        <h4 className="font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                             <ReceiptIcon className="w-5 h-5 text-accent"/>
+                             Detalle de Gastos Reales desde Conciliación {currentMonthName} {selectedYear}
+                        </h4>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-gray-800 text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
+                                <tr>
+                                    <th className="px-6 py-4">Información</th>
+                                    <th className="px-6 py-4">Descripción</th>
+                                    <th className="px-6 py-4">Categoría</th>
+                                    <th className="px-6 py-4 text-right">Monto</th>
+                                    <th className="px-6 py-4 text-center">Contab.</th>
+                                    <th className="px-6 py-4 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                {filteredExpensesList.filter(e => !e.isRecurring).map(e => (
+                                    <tr key={e.id} className="hover:bg-accent/5 transition-colors group">
+                                        <td className="px-6 py-4 text-xs">
+                                            <div className="flex flex-col">
+                                                <span className="text-gray-400 font-mono">{new Date(e.date).toLocaleDateString()}</span>
+                                                {(e as any).accountType && (
+                                                    <span className="text-[9px] font-black text-accent/60 uppercase">
+                                                        {(stats.accountLabels as any)?.[(e as any).accountType] || (e as any).accountType}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <p className="font-bold text-gray-800 dark:text-gray-200">{e.description}</p>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-[10px] uppercase font-black tracking-widest text-gray-500 dark:text-gray-400">
+                                                {e.category}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-black text-red-500">{formatCOP(e.amount)}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            {onToggleFinancialRecordAccounting && (
+                                                <button 
+                                                    onClick={() => onToggleFinancialRecordAccounting(e.id, !e.excludeFromAccounting)}
+                                                    className={`p-1.5 rounded-lg transition-all ${!e.excludeFromAccounting ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
+                                                    title={!e.excludeFromAccounting ? 'Incluido (Click para excluir)' : 'Excluido (Click para incluir)'}
+                                                >
+                                                    {!e.excludeFromAccounting ? <CheckIcon className="w-4 h-4"/> : <CrossIcon className="w-4 h-4"/>}
+                                                </button>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => handleEditClick(e)} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar"><EditIcon className="w-5 h-5"/></button>
+                                                <button onClick={() => onDeleteExpense(e.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50" title="Eliminar"><TrashIcon className="w-5 h-5"/></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {filteredExpensesList.filter(e => !e.isRecurring).length === 0 && (
+                        <div className="py-20 text-center space-y-4">
+                            <ReceiptIcon className="w-16 h-16 mx-auto text-gray-200" />
+                            <p className="text-gray-400 font-bold italic">
+                                No hay gastos registrados en {currentMonthName} {selectedYear}.
+                            </p>
+                        </div>
+                    )}
+                </div>
             </div>
           </div>
         )}
 
-        {(activeTab === 'expenses' || activeTab === 'templates') && (
+        {activeTab === 'templates' && (
           <div className="space-y-8 animate-fade-in">
             <div className={`bg-gray-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed ${editingExpense ? 'border-yellow-500 bg-yellow-500/5 shadow-xl ring-4 ring-yellow-500/10' : 'border-gray-300 dark:border-gray-600'}`}>
                 <div className="flex items-center justify-between mb-4">

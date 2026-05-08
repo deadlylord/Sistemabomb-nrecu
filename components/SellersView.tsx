@@ -67,7 +67,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
       <div className="max-w-4xl mx-auto">
         <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-center mb-6 border-b-2 border-accent/30 pb-2">
-            <h2 className="text-2xl font-bold text-accent">Gestionar Vendedores</h2>
+            <h2 className="text-2xl font-bold text-accent">Gestión de Equipo</h2>
             <button onClick={handleOpenAddModal} className="bg-accent text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover">
               <PlusCircleIcon />
               <span>Agregar Vendedor</span>

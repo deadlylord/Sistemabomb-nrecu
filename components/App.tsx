@@ -2088,6 +2088,8 @@ const App: React.FC = () => {
             onDeleteExpenseCategory={handleDeleteExpenseCategory}
             chatMessages={accountingChatHistory}
             onUpdateChatMessages={handleUpdateAccountingChat}
+            onToggleFinancialRecordAccounting={handleToggleFinancialRecordAccounting}
+            onNavigate={setCurrentView}
           />
         )}
         {currentView === View.FINANCIAL_RECONCILIATION && (

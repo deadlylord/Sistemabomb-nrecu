@@ -218,7 +218,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Ajustes Generales</h2>
+        <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Configuración General</h2>
         
         {isAdmin && stores.length > 1 && (
             <div className="mb-6">

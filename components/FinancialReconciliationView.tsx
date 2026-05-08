@@ -1056,7 +1056,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="flex items-center gap-3 sm:gap-4">
                     <div className="p-2 sm:p-3 bg-accent/10 rounded-2xl text-accent shadow-inner"><ChartBarIcon className="w-8 h-8 sm:w-10 sm:h-10" /></div>
                     <div>
-                        <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Conciliación</h2>
+                        <h2 className="text-xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight uppercase leading-none">Libro de Caja / Conciliación</h2>
                         <p className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest mt-1 sm:mt-2 flex items-center gap-1.5 truncate">
                             <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 h-4" /> SEDE: <span className="text-gray-900 dark:text-white px-1.5 py-0.5 bg-accent/5 rounded border border-accent/20">{activeStore?.name}</span>
                         </p>

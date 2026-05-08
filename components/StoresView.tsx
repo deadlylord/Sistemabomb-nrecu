@@ -39,7 +39,7 @@ const StoresView: React.FC<StoresViewProps> = ({ stores, onAddStore, onUpdateSto
       <div className="max-w-4xl mx-auto">
         <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-center mb-6 border-b-2 border-accent/30 pb-2">
-            <h2 className="text-2xl font-bold text-accent uppercase tracking-widest">Gestionar Sedes</h2>
+            <h2 className="text-2xl font-bold text-accent uppercase tracking-widest">Sedes y Almacenes</h2>
             <button onClick={handleOpenAddModal} className="bg-accent text-white font-black py-2.5 px-6 rounded-xl flex items-center justify-center space-x-2 transition-all hover:scale-105 shadow-lg shadow-accent/20 text-[10px] uppercase">
               <PlusCircleIcon />
               <span>Agregar Sede</span>

@@ -237,6 +237,26 @@ export enum View {
   GIFT_VOUCHERS = 'gift_vouchers',
 }
 
+export const VIEW_LABELS: Record<View, string> = {
+    [View.DASHBOARD]: 'Panel Directivo',
+    [View.POS]: 'Punto de Venta',
+    [View.INVENTORY]: 'Stock de Productos',
+    [View.INVENTORY_TRANSFER]: 'Traslados Internos',
+    [View.LAYAWAY]: 'Apartados y Abonos',
+    [View.PURCHASES]: 'Registro de Compras',
+    [View.SELLERS]: 'Gestión de Equipo',
+    [View.STORES]: 'Sedes y Almacenes',
+    [View.CUSTOMERS]: 'Gestión de Clientes',
+    [View.STOCK_TAKE_HISTORY]: 'Auditorías / Conteos',
+    [View.PAYROLL]: 'Nómina y Comisiones',
+    [View.SETTINGS]: 'Configuración General',
+    [View.INCIDENTS]: 'Novedades y Cambios',
+    [View.ROLE_MANAGER]: 'Control de Permisos',
+    [View.ACCOUNTING]: 'Contabilidad Inteligente',
+    [View.FINANCIAL_RECONCILIATION]: 'Libro de Caja / Conciliación',
+    [View.GIFT_VOUCHERS]: 'Bonos de Regalo',
+};
+
 export enum PaymentMethod {
     Efectivo = 'Efectivo',
     Nequi = 'Nequi',

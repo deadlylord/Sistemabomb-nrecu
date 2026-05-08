@@ -66,43 +66,43 @@ const Header: React.FC<HeaderProps> = ({
   const groups: NavGroup[] = useMemo(() => [
     {
         id: 'ops',
-        label: 'Ventas',
+        label: 'Operaciones de Venta',
         icon: ShoppingCartIcon,
         color: 'text-blue-500',
         items: [
             { view: View.POS, label: 'Punto de Venta', shortLabel: 'POS', description: 'Facturación rápida', icon: StoreIcon },
-            { view: View.LAYAWAY, label: 'Abonos y Apartados', shortLabel: 'Abonos', description: 'Gestionar pagos', icon: ReceiptIcon },
-            { view: View.INCIDENTS, label: 'Novedades / Cambios', shortLabel: 'Novedades', description: 'Garantías y cambios', icon: AlertTriangleIcon },
+            { view: View.LAYAWAY, label: 'Apartados y Abonos', shortLabel: 'Apartados', description: 'Gestionar pagos', icon: ReceiptIcon },
+            { view: View.INCIDENTS, label: 'Novedades y Cambios', shortLabel: 'Novedades', description: 'Garantías y devoluciones', icon: AlertTriangleIcon },
             { view: View.GIFT_VOUCHERS, label: 'Bonos de Regalo', shortLabel: 'Bonos', description: 'Administrar bonos', icon: TagIcon },
-            { view: View.CUSTOMERS, label: 'Mis Clientes', shortLabel: 'Clientes', description: 'Directorio', icon: ContactIcon },
+            { view: View.CUSTOMERS, label: 'Gestión de Clientes', shortLabel: 'Clientes', description: 'Directorio de clientes', icon: ContactIcon },
         ]
     },
     {
         id: 'inv',
-        label: 'Inventarios',
+        label: 'Control de Inventarios',
         icon: PackageIcon,
         color: 'text-orange-500',
         items: [
-            { view: View.INVENTORY, label: 'Existencias', shortLabel: 'Stock', description: 'Consulta stock', icon: InventoryIcon },
-            { view: View.PURCHASES, label: 'Compras', shortLabel: 'Compras', description: 'Ingreso mercancía', icon: TruckIcon },
-            { view: View.INVENTORY_TRANSFER, label: 'Traslados', shortLabel: 'Traslados', description: 'Mover entre sedes', icon: SwapIcon },
-            { view: View.STOCK_TAKE_HISTORY, label: 'Conteos Físicos', shortLabel: 'Conteos', description: 'Auditorías', icon: ClipboardListIcon },
+            { view: View.INVENTORY, label: 'Stock de Productos', shortLabel: 'Stock', description: 'Consulta de existencias', icon: InventoryIcon },
+            { view: View.PURCHASES, label: 'Registro de Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
+            { view: View.INVENTORY_TRANSFER, label: 'Traslados Internos', shortLabel: 'Traslados', description: 'Entre sedes', icon: SwapIcon },
+            { view: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', shortLabel: 'Auditorías', description: 'Control físico', icon: ClipboardListIcon },
         ]
     },
     {
         id: 'admin',
-        label: 'Gestión',
+        label: 'Administración y Finanzas',
         icon: DashboardIcon,
         color: 'text-purple-500',
         items: [
-            { view: View.DASHBOARD, label: 'Dashboard', shortLabel: 'Métricas', description: 'Rendimiento', icon: DashboardIcon },
-            { view: View.FINANCIAL_RECONCILIATION, label: 'Conciliación', shortLabel: 'Libro Mayor', description: 'Cruce de cuentas', icon: DollarIcon },
-            { view: View.ACCOUNTING, label: 'Contabilidad IA', shortLabel: 'PyG IA', description: 'Auditoría inteligente', icon: ChartPieIcon },
-            { view: View.PAYROLL, label: 'Nómina y Pagos', shortLabel: 'Nómina', description: 'Comisiones', icon: DollarIcon },
-            { view: View.SELLERS, label: 'Vendedores', shortLabel: 'Equipo', description: 'Personal', icon: UsersIcon },
-            { view: View.STORES, label: 'Sedes', shortLabel: 'Sedes', description: 'Ajustes sedes', icon: BuildingStorefrontIcon },
-            { view: View.ROLE_MANAGER, label: 'Permisos', shortLabel: 'Roles', description: 'Seguridad', icon: ShieldCheckIcon },
-            { view: View.SETTINGS, label: 'Ajustes', shortLabel: 'Ajustes', description: 'Opciones', icon: SettingsIcon },
+            { view: View.DASHBOARD, label: 'Resumen de Negocio', shortLabel: 'Dashboard', description: 'Métricas de ventas y rendimiento', icon: DashboardIcon },
+            { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja y Conciliación', shortLabel: 'Libro Caja', description: 'Registro de movimientos diarios', icon: DollarIcon },
+            { view: View.ACCOUNTING, label: 'Contabilidad e Informes', shortLabel: 'Contabilidad', description: 'Informes PyG y Auditoría IA', icon: ChartPieIcon },
+            { view: View.PAYROLL, label: 'Cálculo de Nómina', shortLabel: 'Nómina', description: 'Liquidación de personal', icon: DollarIcon },
+            { view: View.SELLERS, label: 'Gestión de Equipo', shortLabel: 'Vendedores', description: 'Personal y usuarios', icon: UsersIcon },
+            { view: View.STORES, label: 'Sedes y Almacenes', shortLabel: 'Sedes', description: 'Tiendas físicas', icon: BuildingStorefrontIcon },
+            { view: View.ROLE_MANAGER, label: 'Jerarquía y Permisos', shortLabel: 'Seguridad', description: 'Roles y accesos', icon: ShieldCheckIcon },
+            { view: View.SETTINGS, label: 'Configuración General', shortLabel: 'Ajustes', description: 'Opciones del sistema', icon: SettingsIcon },
         ]
     }
   ], []);
