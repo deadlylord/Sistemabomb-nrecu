@@ -861,7 +861,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.totalExpenses)}</p>
                         </div>
                     </div>
-                    <div className="bg-accent/5 dark:bg-accent/10 p-3 sm:p-4 rounded-xl border-2 border-accent/20 shadow-lg shadow-accent/5">
+                    <div className="bg-accent/5 dark:bg-accent/10 p-3 sm:p-4 rounded-xl border-2 border-accent shadow-lg shadow-accent/10 scale-[1.02] transform transition-transform">
                         <div className="text-left">
                             <p className="text-[8px] sm:text-[10px] text-accent font-black uppercase tracking-widest mb-1">Utilidad Neta</p>
                             <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.netProfit >= 0 ? 'text-accent' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.netProfit)}</p>

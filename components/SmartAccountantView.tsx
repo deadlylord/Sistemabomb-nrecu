@@ -220,7 +220,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
     const totalExpenses = monthlyReconciledExpenses + monthlyPayrollFromConciliation;
     const grossProfit = totalRevenue - monthlyCogs;
-    const netProfit = grossProfit - totalExpenses - monthlyPurchases;
+    const netProfit = grossProfit - totalExpenses;
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
     
     // Asset info
@@ -522,8 +522,16 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
               <DollarIcon className="w-10 h-10" />
             </div>
             <div>
-              <h2 className="text-3xl font-black text-gray-800 dark:text-white tracking-tight">Contador Inteligente</h2>
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-widest">{currentStore?.name} • {currentMonthName} {selectedYear}</p>
+              <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-white tracking-tight">Contador Inteligente</h2>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-widest">{currentStore?.name} • {currentMonthName} {selectedYear}</p>
+                <button 
+                  onClick={() => onNavigate?.(View.FINANCIAL_RECONCILIATION)}
+                  className="text-[10px] font-black text-accent hover:underline flex items-center gap-1 uppercase"
+                >
+                  <HistoryIcon className="w-3 h-3" /> Ir a Conciliación
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex bg-gray-100 dark:bg-slate-800 p-1.5 rounded-xl shadow-inner w-full md:w-auto overflow-x-auto scrollbar-hide">
@@ -556,16 +564,16 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
               <div className="bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/10 dark:to-gray-800 p-5 rounded-2xl border border-orange-100 dark:border-orange-800/30 shadow-sm">
                 <div className="flex justify-between items-start mb-2">
-                  <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase">Inversión en Mercancía</p>
+                  <p className="text-xs font-black text-orange-600 dark:text-orange-400 uppercase">Costo de Ventas (COGS)</p>
                   <div className="group relative">
                     <PackageIcon className="w-4 h-4 text-orange-400 cursor-help"/>
                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
-                      Dinero gastado en compras de mercancía registrado en el apartado de Conciliación.
+                      Costo total de la mercancía que se vendió en este periodo. Refleja la salida real de inventario.
                     </div>
                   </div>
                 </div>
-                <p className="text-3xl font-black text-orange-600">{formatCOP(stats.monthlyPurchases)}</p>
-                <p className="text-[10px] text-gray-400 mt-1 font-medium italic">Extraído de Registros de Conciliación</p>
+                <p className="text-3xl font-black text-orange-600">{formatCOP(stats.monthlyCogs)}</p>
+                <p className="text-[10px] text-gray-400 mt-1 font-medium italic">Calculado desde Facturación</p>
               </div>
 
               <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-gray-800 p-5 rounded-2xl border border-blue-100 dark:border-blue-800/30 shadow-sm">
@@ -620,7 +628,25 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                                 <div className={`w-2 h-2 rounded-full ${cat === 'Personal' ? 'bg-purple-500' : 'bg-accent'}`}></div>
                                                 <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors">{cat}</span>
                                             </div>
-                                            <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
+                                            <div className="flex items-center gap-3">
+                                                <button 
+                                                    onClick={async () => {
+                                                        if (window.confirm(`¿Excluir TODA la categoría "${cat}" de la contabilidad de este mes?`)) {
+                                                            const recordsToExclude = stats.expenseDetails.filter(d => d.category === cat);
+                                                            for (const record of recordsToExclude) {
+                                                                if (onToggleFinancialRecordAccounting) {
+                                                                    await onToggleFinancialRecordAccounting(record.id, true);
+                                                                }
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-tighter transition-all"
+                                                    title="Excluir categoría completa"
+                                                >
+                                                    [Descartar]
+                                                </button>
+                                                <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
+                                            </div>
                                         </div>
                                         <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                                             <div 

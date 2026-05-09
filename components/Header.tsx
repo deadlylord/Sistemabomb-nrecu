@@ -285,22 +285,26 @@ const Header: React.FC<HeaderProps> = ({
              </nav>
 
              {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-1.5">
+             <div className="lg:hidden flex items-center justify-center gap-2 w-full max-w-[280px]">
                 {filteredGroups.map((group, idx) => {
-                  const isActive = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
+                  const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
+                  const isCurrentActive = currentGroupIndex === idx;
                   const GroupIcon = group.icon;
+                  
                   return (
                     <button 
                       key={group.id}
                       onClick={() => handleMobileGroupClick(idx)}
-                      className={`flex flex-col items-center justify-center w-14 h-11 rounded-xl transition-all duration-300 border active:scale-90
-                        ${isActive 
+                      className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border-2 active:scale-95
+                        ${isActiveGroup 
                           ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-transparent hover:bg-slate-200'}`}
+                          : isCurrentActive
+                            ? 'bg-accent/5 text-accent border-accent/20'
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
                     >
-                      <GroupIcon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                      <span className="text-[7px] font-black uppercase tracking-tighter mt-1">
-                        {group.label.split(' ')[0]}
+                      <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-white' : isCurrentActive ? 'text-accent' : 'text-slate-400'}`} />
+                      <span className="text-[8px] font-black uppercase tracking-tighter mt-1">
+                        {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : 'Admin'}
                       </span>
                     </button>
                   );
@@ -308,11 +312,17 @@ const Header: React.FC<HeaderProps> = ({
 
                 {/* Dropdown for Mobile Submenus */}
                 {isMobileMenuOpen && displayedGroup && (
-                  <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-[95vw] max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
-                    <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                      <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
+                  <div className="absolute top-[72px] left-1/2 -translate-x-1/2 w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
+                    <div className="flex items-center justify-between px-4 py-3 bg-accent/5 rounded-2xl mb-2">
+                        <div className="flex items-center gap-2">
+                            <displayedGroup.icon className="w-5 h-5 text-accent" />
+                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">{displayedGroup.label}</span>
+                        </div>
+                        <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 rounded-full bg-accent/10 text-accent">
+                            <CrossIcon className="w-4 h-4" />
+                        </button>
                     </div>
-                    <div className="grid gap-1">
+                    <div className="grid grid-cols-1 gap-1 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
                        {displayedGroup.items.map(item => (
                          <NavButton key={item.view} item={item} isMobile />
                        ))}

@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '1.1.50',
+    version: '1.1.52',
+    date: '2026-05-09',
+    description: 'Mejoras de Navegación y Consolidación de Vistas',
+    isCurrent: true,
+    changes: [
+      'Navegación Móvil: Se implementó un nuevo menú de tres botones con submenús desplegables para mayor comodidad.',
+      'Consolidación de Sedes: Se eliminó el selector de sede redundante en la vista de conciliación para evitar confusiones, centralizando el control en la barra principal.',
+      'Atajos Rápidos: Se añadieron botones de acceso directo entre las vistas de Conciliación y Contabilidad Inteligente.',
+      'Interfaz de Dashboard: Las pestañas de informes en móvil ahora son más compactas (cuadros de a dos) para una lectura rápida.',
+      'Gestión de Gastos: Nueva opción para "Descartar" categorías de gastos directamente desde Contabilidad sin afectar los registros base.'
+    ]
+  },
+  {
+    version: '1.1.51',
     date: '2026-05-09',
     description: 'Optimización de reportes de rentabilidad y COGS.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se reemplazó "Inversión Stock" por "Utilidad Neta" en el tablero principal para mayor relevancia financiera.',
       'Cálculo de Utilidad Neta: Utilidad Bruta menos Gastos Operativos.',
