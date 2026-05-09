@@ -79,6 +79,8 @@ const STATIC_CATEGORIES: Record<string, string[]> = {
     'Otros': []
 };
 
+const EXCLUDED_OPERATING_CATEGORIES = ['MERCANCIA', 'COMPRA MERCANCIA', 'INVENTARIO', 'ACTIVOS', 'INVERSION'];
+
 const cleanObject = (obj: any) => {
   const newObj = { ...obj };
   Object.keys(newObj).forEach(key => {
@@ -1237,6 +1239,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             const percentage = (cat.value / maxVal) * 100;
                             const colorClass = summaryActiveTab === 'expense' ? 'bg-red-500' : 'bg-green-500';
                             const textColorClass = summaryActiveTab === 'expense' ? 'text-red-500' : 'text-green-500';
+                            const isDirectCost = summaryActiveTab === 'expense' && EXCLUDED_OPERATING_CATEGORIES.some(ex => cat.name.toUpperCase().includes(ex));
 
                             return (
                                 <div key={idx} className="space-y-0.5 group">
@@ -1249,7 +1252,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     >
                                         <div className="flex items-center gap-1.5 min-w-0">
                                             <ChevronDownIcon className={`w-3 h-3 text-gray-400 transition-transform ${expandedCategories[`${summaryActiveTab}_${cat.name}`] ? 'rotate-180' : ''}`} />
-                                            <span className="text-gray-600 dark:text-gray-300 truncate">{cat.name}</span>
+                                            <div className="flex flex-col">
+                                                <span className="text-gray-600 dark:text-gray-300 truncate">{cat.name}</span>
+                                                {isDirectCost && (
+                                                    <span className="text-[6px] text-orange-500 font-black tracking-[0.1em]">COSTO DIRECTO (P&L)</span>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
                                             <span className={textColorClass}>{formatCOP(cat.value)}</span>
@@ -1265,11 +1273,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         </div>
                                     </div>
                                     <div className="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden mb-1">
-                                        <div className={`${colorClass} h-full rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
+                                        <div className={`${isDirectCost ? 'bg-orange-400' : colorClass} h-full rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
                                     </div>
                                     
                                     {expandedCategories[`${summaryActiveTab}_${cat.name}`] && (
                                         <div className="ml-4 mt-1 mb-3 space-y-1 bg-gray-50 dark:bg-gray-800/40 p-2 rounded-xl border border-gray-100 dark:border-gray-800 animate-slide-in-top">
+                                            {isDirectCost && (
+                                                <div className="mb-2 p-1.5 bg-orange-50 dark:bg-orange-900/10 rounded-lg border border-orange-100 dark:border-orange-900/20">
+                                                    <p className="text-[7px] text-orange-600 dark:text-orange-400 font-black">ℹ️ ESTA CATEGORÍA SE EXCLUYE DE GASTOS OPERATIVOS</p>
+                                                    <p className="text-[6px] text-orange-400">Se considera inversión en activos o costo directo de venta.</p>
+                                                </div>
+                                            )}
                                             <div className="flex justify-between items-center mb-1 pb-1 border-b border-gray-200 dark:border-gray-700">
                                                 <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Desglose por Cuenta</span>
                                                 <button onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', cat.name)} className="text-[7px] font-black text-accent hover:underline uppercase">Ver en Libro</button>

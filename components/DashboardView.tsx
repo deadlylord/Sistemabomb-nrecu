@@ -418,8 +418,15 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         });
         const newActiveLayawaysInRange = layaways.filter(l => isWithinRange(l.createdAt) && l.status === 'active');
         
-        // Calculate Operating Expenses for the range
-        const totalExpenses = (expenses || []).filter(e => isWithinRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
+        // Calculate Operating Expenses (Excluding Direct Costs like Inventory/Merchandise to avoid double counting with COGS)
+        const EXCLUDED_OPERATING_CATEGORIES = ['MERCANCIA', 'COMPRA MERCANCIA', 'INVENTARIO', 'ACTIVOS', 'INVERSION'];
+        
+        const totalExpenses = (expenses || []).filter(e => {
+            if (!isWithinRange(e.date)) return false;
+            const cat = (e.category || '').toUpperCase();
+            // Si la categoría contiene palabras clave de inventario, la descartamos de Gastos Operativos
+            return !EXCLUDED_OPERATING_CATEGORIES.some(ex => cat.includes(ex));
+        }).reduce((sum, e) => sum + e.amount, 0);
 
         const allSoldItems = [...directSalesInRange.flatMap(s => s.items || []), ...newActiveLayawaysInRange.flatMap(l => l.items || [])].filter(Boolean);
         
@@ -475,7 +482,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         }, 0);
         const averageTicketSize = directSalesInRange.length > 0 ? totalDirectSalesValue / directSalesInRange.length : 0;
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
-        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue, totalExpenses, totalCogs };
+
+        // Calculate Net Profit: Gross Profit - Operating Expenses
+        const netProfit = totalProfit - totalExpenses;
+
+        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue, totalExpenses, totalCogs, netProfit };
     }, [sales, layaways, inventory, expenses, isWithinRange]);
   
   const cashBreakdown = useMemo(() => {
@@ -844,28 +855,28 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.totalProfit)}</p>
                         </div>
                     </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Costo Ventas (COGS)</p>
-                            <p className="text-lg sm:text-2xl font-black text-orange-500">{formatCOP(metricsForCurrentStore.totalCogs)}</p>
-                        </div>
-                    </div>
                     <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent shadow-sm">
                         <div className="text-left text-red-500">
                             <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Gastos Op.</p>
                             <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.totalExpenses)}</p>
                         </div>
                     </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
+                    <div className="bg-accent/5 dark:bg-accent/10 p-3 sm:p-4 rounded-xl border-2 border-accent/20 shadow-lg shadow-accent/5">
                         <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
-                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
+                            <p className="text-[8px] sm:text-[10px] text-accent font-black uppercase tracking-widest mb-1">Utilidad Neta</p>
+                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.netProfit >= 0 ? 'text-accent' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.netProfit)}</p>
                         </div>
                     </div>
                     <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
                         <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Inversión Stock</p>
-                            <p className="text-lg sm:text-2xl font-black text-accent">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Costo Ventas (COGS)</p>
+                            <p className="text-lg sm:text-2xl font-black text-orange-500">{formatCOP(metricsForCurrentStore.totalCogs)}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
+                        <div className="text-left">
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
+                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
                         </div>
                     </div>
                  </div>

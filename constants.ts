@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.50',
+    date: '2026-05-09',
+    description: 'Optimización de reportes de rentabilidad y COGS.',
+    isCurrent: true,
+    changes: [
+      'Se reemplazó "Inversión Stock" por "Utilidad Neta" en el tablero principal para mayor relevancia financiera.',
+      'Cálculo de Utilidad Neta: Utilidad Bruta menos Gastos Operativos.',
+      'Filtro inteligente de gastos: Se descartan automáticamente categorías de costo directo (Mercancía, Inventario) de los Gastos Operativos para evitar duplicidad con el COGS.',
+      'Priorización visual del COGS (Costo de Ventas) en los informes.',
+      'Mejoras en el diseño de tarjetas de métricas para dispositivos móviles.'
+    ]
+  },
+  {
     version: '1.1.49',
     date: '2026-05-09',
     description: 'Mejoras en conciliación financiera y navegación.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Selector de periodo mejorado con navegación rápida por meses y años.',
       'Categorización insensible a mayúsculas/minúsculas para sumatorias precisas.',
