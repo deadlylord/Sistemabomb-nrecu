@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, StockTake } from '../types';
+import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, StockTake, Expense } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
 import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
@@ -18,6 +18,7 @@ interface DashboardViewProps {
   onOpenReports: () => void;
   sales: Sale[];
   layaways: Layaway[];
+  expenses: Expense[];
   inventory: Product[];
   categories: Category[];
   sellers: Seller[];
@@ -150,7 +151,7 @@ const toYYYYMMDD = (date: Date) => {
 const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     stores, allLayaways, allIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
-    sales, layaways, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
+    sales, layaways, expenses, inventory, currentStore, sellers, onUpdateSale, onDeleteSale, onReprintSale,
     onOpenVerification, purchases, allSales, allInventory, categories, allStockTakes
   } = props;
 
@@ -416,7 +417,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             return true;
         });
         const newActiveLayawaysInRange = layaways.filter(l => isWithinRange(l.createdAt) && l.status === 'active');
+        
+        // Calculate Operating Expenses for the range
+        const totalExpenses = (expenses || []).filter(e => isWithinRange(e.date)).reduce((sum, e) => sum + e.amount, 0);
+
         const allSoldItems = [...directSalesInRange.flatMap(s => s.items || []), ...newActiveLayawaysInRange.flatMap(l => l.items || [])].filter(Boolean);
+        
+        // Calculate COGS (Cost of Goods Sold) for the range
+        const totalCogs = allSoldItems.reduce((sum, item) => {
+            if (!item || item.cost === undefined) return sum;
+            return sum + (item.cost * item.quantity);
+        }, 0);
+
         const unitsBySeller: { [key: string]: number } = {};
         [...directSalesInRange, ...newActiveLayawaysInRange].forEach(transaction => { 
             const seller = transaction.seller; 
@@ -463,8 +475,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         }, 0);
         const averageTicketSize = directSalesInRange.length > 0 ? totalDirectSalesValue / directSalesInRange.length : 0;
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
-        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue };
-    }, [sales, layaways, inventory, isWithinRange]);
+        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue, totalExpenses, totalCogs };
+    }, [sales, layaways, inventory, expenses, isWithinRange]);
   
   const cashBreakdown = useMemo(() => {
     const cashLikeMethods = [PaymentMethod.Efectivo];
@@ -816,36 +828,44 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2><button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen`}><ShareIcon className="w-5 h-5" /></button></div><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPaymentsReportVisible ? 'rotate-180' : ''}`} /></div>
         {isPaymentsReportVisible && (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
-                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700">
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-6">
+                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30">
                         <div className="flex justify-between items-start">
                             <div className="text-left">
-                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades Vendidas</p>
-                                <p className="text-2xl font-bold">{metricsForCurrentStore.totalUnitsSold}</p>
-                                <p className="text-[9px] text-gray-500 mt-1 leading-tight">Total de productos facturados en el periodo.</p>
+                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades</p>
+                                <p className="text-lg sm:text-2xl font-black">{metricsForCurrentStore.totalUnitsSold}</p>
                             </div>
-                            <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
+                            <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
                         </div>
                     </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg flex flex-col justify-between">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
                         <div className="text-left">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Utilidad Bruta (Ventas)</p>
-                            <p className={`text-2xl font-bold ${metricsForCurrentStore.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.totalProfit)}</p>
-                            <p className="text-[9px] text-gray-500 mt-1 leading-tight">Diferencia entre Precio de Venta y Precio de Costo.</p>
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Utilidad Bruta</p>
+                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.totalProfit)}</p>
                         </div>
                     </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg flex flex-col justify-between">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
                         <div className="text-left">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Promedio</p>
-                            <p className="text-2xl font-bold">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
-                            <p className="text-[9px] text-gray-500 mt-1 leading-tight">Valor promedio de compra por cliente.</p>
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Costo Ventas (COGS)</p>
+                            <p className="text-lg sm:text-2xl font-black text-orange-500">{formatCOP(metricsForCurrentStore.totalCogs)}</p>
                         </div>
                     </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg flex flex-col justify-between">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent shadow-sm">
+                        <div className="text-left text-red-500">
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Gastos Op.</p>
+                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.totalExpenses)}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
                         <div className="text-left">
-                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Inversión en Stock</p>
-                            <p className="text-2xl font-bold">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
-                            <p className="text-[9px] text-gray-500 mt-1 leading-tight">Costo acumulado de toda la mercancía actual.</p>
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
+                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
+                        <div className="text-left">
+                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Inversión Stock</p>
+                            <p className="text-lg sm:text-2xl font-black text-accent">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
                         </div>
                     </div>
                  </div>

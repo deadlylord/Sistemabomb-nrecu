@@ -1100,6 +1100,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     {isAdmin && (
                         <div className="flex gap-1.5">
                             <button 
+                                onClick={() => onNavigate?.(View.ACCOUNTING)}
+                                className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors flex items-center gap-1.5 border border-transparent hover:border-accent/20"
+                                title="Ir a Contabilidad Inteligente"
+                            >
+                                <SparklesIcon className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase hidden sm:inline">Contabilidad</span>
+                            </button>
+                            <button 
                                 onClick={() => setShowGlobalSummary(true)}
                                 className="p-2 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-accent/20"
                                 title="Ver estado general de todas las sedes"

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod, FinancialRecord } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod, FinancialRecord, View } from '../types';
 import { formatCOP } from '../constants';
 import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
@@ -24,6 +24,7 @@ interface SmartAccountantViewProps {
   chatMessages: ChatMessage[];
   onUpdateChatMessages: (messages: ChatMessage[]) => Promise<void>;
   onToggleFinancialRecordAccounting?: (id: string, exclude: boolean) => Promise<void>;
+  onNavigate?: (view: View) => void;
 }
 
 interface ChatMessage {
@@ -474,6 +475,13 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
         <h2 className="text-3xl font-black text-accent uppercase tracking-tight ml-2">Contabilidad Inteligente</h2>
         <div className="flex gap-2">
+           <button 
+             onClick={() => onNavigate?.(View.FINANCIAL_RECONCILIATION)} 
+             className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all bg-white dark:bg-gray-800 text-gray-500 hover:text-accent border border-gray-200 dark:border-gray-700 hover:border-accent flex items-center gap-2 shadow-sm"
+           >
+              <HistoryIcon className="w-4 h-4" />
+              <span>Conciliación</span>
+           </button>
            <button onClick={() => setActiveTab('chat')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
               🤖 Asistente IA
            </button>
