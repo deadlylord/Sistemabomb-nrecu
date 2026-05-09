@@ -2095,6 +2095,8 @@ const App: React.FC = () => {
         {currentView === View.FINANCIAL_RECONCILIATION && (
             <FinancialReconciliationView 
                 stores={stores} 
+                activeStoreId={currentStoreId || ''}
+                onSetActiveStoreId={handleSwitchStore}
                 sales={isAdmin ? allSales : sales} 
                 layaways={isAdmin ? allLayaways : layaways} 
                 expenses={expenses}

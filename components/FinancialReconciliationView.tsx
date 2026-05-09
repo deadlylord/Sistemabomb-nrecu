@@ -8,6 +8,8 @@ import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatc
 
 interface FinancialReconciliationViewProps {
   stores: Store[];
+  activeStoreId?: string;
+  onSetActiveStoreId?: (id: string) => void;
   sales: Sale[];
   layaways: Layaway[];
   expenses: Expense[];
@@ -15,6 +17,7 @@ interface FinancialReconciliationViewProps {
   currentUser: Seller;
   onNavigate?: (view: View) => void;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
+  onUpdateStore?: (store: Store) => void;
 }
 
 type AccountType = 'cash' | 'qr' | 'addi' | 'sistecredito';
@@ -86,9 +89,13 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
   const filteredStores = useMemo(() => stores.filter(s => !s.name.toLowerCase().includes('training')), [stores]);
-  const [activeStoreId, setActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
+  const [internalActiveStoreId, setInternalActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
+  
+  const activeStoreId = propsActiveStoreId || internalActiveStoreId;
+  const setActiveStoreId = onSetActiveStoreId || setInternalActiveStoreId;
+
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [allRecords, setAllRecords] = useState<FinancialRecord[]>([]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
@@ -1090,7 +1097,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5 w-full md:w-auto items-center">
-                    {stores.filter(s => !s.name.toLowerCase().includes('training')).map(s => (<button key={s.id} onClick={() => setActiveStoreId(s.id)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-[9px] sm:text-xs font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-1.5 ${activeStoreId === s.id ? 'bg-accent text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-60 hover:opacity-100'}`}><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.accentColor }}></div>{s.name}</button>))}
                     {isAdmin && (
                         <div className="flex gap-1.5">
                             <button 
