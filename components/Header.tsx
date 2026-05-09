@@ -52,7 +52,7 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
-  const [isMobileGroupDropdownOpen, setIsMobileGroupDropdownOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [previewGroupIndex, setPreviewGroupIndex] = useState<number>(-1);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -122,31 +122,21 @@ const Header: React.FC<HeaderProps> = ({
   }, [currentView, filteredGroups]);
 
   useEffect(() => {
-    if (isMobileGroupDropdownOpen && previewGroupIndex === -1) {
+    if (isMobileMenuOpen && previewGroupIndex === -1) {
         setPreviewGroupIndex(currentGroupIndex === -1 ? 0 : currentGroupIndex);
     }
-  }, [isMobileGroupDropdownOpen, currentGroupIndex]);
+  }, [isMobileMenuOpen, currentGroupIndex]);
 
   const displayedGroup = useMemo(() => {
     if (previewGroupIndex === -1) return filteredGroups[currentGroupIndex === -1 ? 0 : currentGroupIndex];
     return filteredGroups[previewGroupIndex] || filteredGroups[0];
   }, [filteredGroups, currentGroupIndex, previewGroupIndex]);
 
-  const handleMobileGroupClick = (index: number) => {
-    if (previewGroupIndex === index && isMobileGroupDropdownOpen) {
-        setIsMobileGroupDropdownOpen(false);
-    } else {
-        setPreviewGroupIndex(index);
-        setIsMobileGroupDropdownOpen(true);
-    }
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (userMenuRef.current && !userMenuRef.current.contains(target)) setIsUserDropdownOpen(false);
       if (storeMenuRef.current && !storeMenuRef.current.contains(target)) setIsStoreDropdownOpen(false);
-      if (groupMenuRef.current && !groupMenuRef.current.contains(target)) setIsMobileGroupDropdownOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -166,7 +156,7 @@ const Header: React.FC<HeaderProps> = ({
       <button
         onClick={() => {
           setCurrentView(item.view);
-          setIsMobileGroupDropdownOpen(false);
+          setIsMobileMenuOpen(false);
         }}
         className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left
           ${isActive 
@@ -220,48 +210,65 @@ const Header: React.FC<HeaderProps> = ({
         
         <div className="container mx-auto px-2 sm:px-4 flex items-center justify-between gap-1 sm:gap-4">
           
-          {/* LEFT: Sede Selector */}
-          <div className="flex items-center gap-1 sm:gap-4 flex-shrink-0" ref={storeMenuRef}>
+          {/* LEFT: Logo & Brand (Desktop) / Hamburger (Mobile) */}
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <button 
-              onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
-              className="px-1.5 py-1.5 sm:px-3 sm:py-2 rounded-xl flex items-center gap-1.5 sm:gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
-              style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
             >
-              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
-              <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
-                {currentStore?.name}
-              </span>
-              {isAdmin && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
+              <MenuIcon className="w-6 h-6" />
             </button>
 
-            {isStoreDropdownOpen && isAdmin && (
-              <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
-                <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
-                {stores.map(store => (
-                  <button
-                    key={store.id}
-                    onClick={() => {
-                      onSwitchStore(store.id);
-                      setIsStoreDropdownOpen(false);
-                    }}
-                    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-bold transition-all
-                      ${currentStore?.id === store.id 
-                        ? 'bg-accent/10 text-accent' 
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-                  >
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
-                    {store.name}
-                  </button>
-                ))}
+            <div className="hidden lg:flex items-center gap-2">
+              <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
+                <SparklesIcon className="w-6 h-6" />
               </div>
-            )}
+              <div className="hidden xl:block">
+                <h1 className="text-sm font-black uppercase tracking-tighter leading-none dark:text-white">Street/Bombón</h1>
+                <p className="text-[8px] font-bold text-accent uppercase tracking-widest mt-1">SISTEMA POS IA</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
+              <button 
+                onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                className="px-1.5 py-1.5 sm:px-3 sm:py-2 rounded-xl flex items-center gap-1.5 sm:gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+                style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
+              >
+                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
+                  {currentStore?.name}
+                </span>
+                {isAdmin && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
+              </button>
+
+              {isStoreDropdownOpen && isAdmin && (
+                <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+                  <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
+                  {stores.map(store => (
+                    <button
+                      key={store.id}
+                      onClick={() => {
+                        onSwitchStore(store.id);
+                        setIsStoreDropdownOpen(false);
+                      }}
+                      className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-bold transition-all
+                        ${currentStore?.id === store.id 
+                          ? 'bg-accent/10 text-accent' 
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                    >
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: store.accentColor }}></div>
+                      {store.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* CENTER: Menu (Replaces Logo) */}
-          <div className="flex-grow flex items-center justify-center overflow-hidden">
-             
-             {/* Desktop Navigation */}
-             <nav className="hidden lg:flex items-center gap-4 overflow-x-auto scrollbar-hide py-1">
+          {/* CENTER: Desktop Navigation */}
+          <div className="hidden lg:flex flex-grow items-center justify-center overflow-x-auto scrollbar-hide py-1">
+             <nav className="flex items-center gap-2">
                 {filteredGroups.map((group) => (
                     <div key={group.id} className="flex items-center gap-2 px-2 border-r border-slate-200 dark:border-slate-700 last:border-0">
                         <div className="flex items-center gap-1">
@@ -272,44 +279,6 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 ))}
              </nav>
-
-             {/* Mobile Navigation */}
-             <div className="lg:hidden flex items-center justify-center w-full overflow-x-auto scrollbar-hide" ref={groupMenuRef}>
-                 <div className="flex items-center gap-1 p-1">
-                    {filteredGroups.map((group, idx) => {
-                        const isCurrent = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx;
-                        const GroupIcon = group.icon;
-                        return (
-                        <button 
-                            key={group.id}
-                            onClick={() => handleMobileGroupClick(idx)}
-                            className={`flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full transition-all duration-300 flex-shrink-0
-                            ${isCurrent 
-                                ? 'bg-accent text-white shadow-md' 
-                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                        >
-                            <GroupIcon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isCurrent ? 'text-white' : ''}`} />
-                            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-tighter">
-                            {group.label}
-                            </span>
-                        </button>
-                        );
-                    })}
-                </div>
-                {isMobileGroupDropdownOpen && displayedGroup && (
-                    <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-[90vw] sm:w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
-                        <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
-                            <span className="text-[9px] sm:text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
-                        </div>
-                        <div className="space-y-1">
-                            {displayedGroup.items.map(item => (
-                                <NavButton key={item.view} item={item} isMobile />
-                            ))}
-                        </div>
-                    </div>
-                )}
-             </div>
-
           </div>
 
           {/* RIGHT: Actions */}
@@ -370,6 +339,60 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Mobile Drawer */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[200] lg:hidden animate-fade-in">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setIsMobileMenuOpen(false)}
+          ></div>
+          
+          {/* Sidebar content */}
+          <div className="absolute top-0 left-0 bottom-0 w-[85vw] max-w-sm bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-left">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-accent text-white">
+                <div className="flex items-center gap-2">
+                  <SparklesIcon className="w-6 h-6" />
+                  <h1 className="text-sm font-black uppercase tracking-tighter">Street/Bombón</h1>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <CrossIcon className="w-6 h-6" />
+                </button>
+            </div>
+            
+            <div className="flex-grow overflow-y-auto p-4 space-y-6">
+                {filteredGroups.map(group => (
+                  <div key={group.id} className="space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">{group.label}</h3>
+                    <div className="grid gap-2">
+                      {group.items.map(item => (
+                        <NavButton key={item.view} item={item} isMobile />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+            
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center font-black">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <div className="flex-grow">
+                      <p className="text-sm font-black text-gray-900 dark:text-white">{currentUser.name}</p>
+                      <p className="text-[10px] font-bold text-accent uppercase tracking-widest">Sede: {currentStore?.name}</p>
+                    </div>
+                </div>
+                <button onClick={() => { onLogout(); setIsMobileMenuOpen(false); }} className="w-full py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                  <LogoutIcon className="w-5 h-5" />
+                  Cerrar Sesión
+                </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="h-20 lg:h-20"></div>
     </>
   );
