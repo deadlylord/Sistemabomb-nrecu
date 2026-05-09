@@ -137,10 +137,20 @@ const Header: React.FC<HeaderProps> = ({
       const target = event.target as Node;
       if (userMenuRef.current && !userMenuRef.current.contains(target)) setIsUserDropdownOpen(false);
       if (storeMenuRef.current && !storeMenuRef.current.contains(target)) setIsStoreDropdownOpen(false);
+      if (groupMenuRef.current && !groupMenuRef.current.contains(target)) setIsMobileMenuOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleMobileGroupClick = (index: number) => {
+    if (previewGroupIndex === index && isMobileMenuOpen) {
+      setIsMobileMenuOpen(false);
+    } else {
+      setPreviewGroupIndex(index);
+      setIsMobileMenuOpen(true);
+    }
+  };
 
   const pendingCount = useMemo(() => {
     return incidents.filter(i => 
@@ -210,15 +220,8 @@ const Header: React.FC<HeaderProps> = ({
         
         <div className="container mx-auto px-2 sm:px-4 flex items-center justify-between gap-1 sm:gap-4">
           
-          {/* LEFT: Logo & Brand (Desktop) / Hamburger (Mobile) */}
+          {/* LEFT: Logo & Brand (Desktop) / Sede Selector (Both) */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <button 
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-            >
-              <MenuIcon className="w-6 h-6" />
-            </button>
-
             <div className="hidden lg:flex items-center gap-2">
               <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
                 <SparklesIcon className="w-6 h-6" />
@@ -266,9 +269,10 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* CENTER: Desktop Navigation */}
-          <div className="hidden lg:flex flex-grow items-center justify-center overflow-x-auto scrollbar-hide py-1">
-             <nav className="flex items-center gap-2">
+          {/* CENTER: Navigation (Desktop & Mobile) */}
+          <div className="flex-grow flex items-center justify-center overflow-x-auto scrollbar-hide py-1 px-2" ref={groupMenuRef}>
+             {/* Desktop Navigation */}
+             <nav className="hidden lg:flex items-center gap-2">
                 {filteredGroups.map((group) => (
                     <div key={group.id} className="flex items-center gap-2 px-2 border-r border-slate-200 dark:border-slate-700 last:border-0">
                         <div className="flex items-center gap-1">
@@ -279,51 +283,99 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 ))}
              </nav>
+
+             {/* Mobile Navigation (Three Main Buttons) */}
+             <div className="lg:hidden flex items-center justify-center gap-1.5">
+                {filteredGroups.map((group, idx) => {
+                  const isActive = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
+                  const GroupIcon = group.icon;
+                  return (
+                    <button 
+                      key={group.id}
+                      onClick={() => handleMobileGroupClick(idx)}
+                      className={`flex flex-col items-center justify-center w-14 h-11 rounded-xl transition-all duration-300 border active:scale-90
+                        ${isActive 
+                          ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-transparent hover:bg-slate-200'}`}
+                    >
+                      <GroupIcon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="text-[7px] font-black uppercase tracking-tighter mt-1">
+                        {group.label.split(' ')[0]}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* Dropdown for Mobile Submenus */}
+                {isMobileMenuOpen && displayedGroup && (
+                  <div className="absolute top-16 left-1/2 -translate-x-1/2 mt-2 w-[95vw] max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-2 z-[200]">
+                    <div className="flex items-center justify-center px-2 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-1.5 border border-slate-100 dark:border-slate-700">
+                      <span className="text-[10px] font-black text-accent uppercase tracking-[0.2em]">{displayedGroup.label}</span>
+                    </div>
+                    <div className="grid gap-1">
+                       {displayedGroup.items.map(item => (
+                         <NavButton key={item.view} item={item} isMobile />
+                       ))}
+                    </div>
+                  </div>
+                )}
+             </div>
           </div>
 
-          {/* RIGHT: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* RIGHT: User Actions & System Info */}
+          <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
+             <button 
+               onClick={toggleTheme}
+               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 border-2 border-transparent hover:border-accent transition-all active:scale-90"
+             >
+               {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-500" /> : <MoonIcon className="w-5 h-5" />}
+             </button>
+             
              {isAdmin && (
                 <button 
                   onClick={onToggleGlobalMode}
-                  title="Modo Multisede"
-                  className={`p-1.5 sm:p-2 rounded-xl border transition-all ${isGlobalMode ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                  title={isGlobalMode ? "Modo Multisede Activo" : "Activar Modo Multisede"}
+                  className={`p-2 rounded-xl transition-all border-2 active:scale-90
+                    ${isGlobalMode 
+                      ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20' 
+                      : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400 hover:text-accent hover:border-accent'}`}
                 >
-                  <BuildingStorefrontIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <BuildingStorefrontIcon className="w-5 h-5" />
                 </button>
              )}
 
              {pendingCount > 0 && (
-                <button onClick={onOpenBriefing} className="relative p-1.5 sm:p-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:scale-105 transition-all">
-                  <AlertTriangleIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="absolute -top-1 -right-1 h-3 sm:h-3.5 w-3 sm:w-3.5 bg-red-600 text-[7px] sm:text-[8px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                <button 
+                  onClick={onOpenBriefing}
+                  className="relative p-2 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-100 dark:border-orange-800 text-orange-600 hover:scale-105 active:scale-95 transition-all"
+                >
+                  <AlertTriangleIcon className="w-5 h-5" />
+                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-[10px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm">
                     {pendingCount}
                   </span>
                 </button>
              )}
 
              <div className="relative" ref={userMenuRef}>
-                <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center gap-1 sm:gap-2 p-0.5 sm:p-1 pl-1.5 sm:pl-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:shadow-md transition-all">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent text-white flex items-center justify-center font-black text-[10px] sm:text-xs shadow-inner">
+                <button 
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 border-transparent hover:border-accent transition-all active:scale-90"
+                >
+                  <div className="text-accent font-black text-sm">
                     {currentUser.name.charAt(0)}
                   </div>
-                  <ChevronDownIcon className={`w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {isUserDropdownOpen && (
-                  <div className="absolute top-12 right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in z-[200]">
+                  <div className="absolute top-14 right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in z-[200]">
                     <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b dark:border-slate-800">
                         <p className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest mb-1">Sesión Activa</p>
                         <p className="text-sm font-black text-gray-900 dark:text-white truncate">{currentUser.name}</p>
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
                     <div className="p-2 space-y-1">
-                      <button onClick={toggleTheme} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
-                        {theme === 'dark' ? <SunIcon className="w-4 h-4 text-yellow-500" /> : <MoonIcon className="w-4 h-4" />}
-                        Modo {theme === 'dark' ? 'Claro' : 'Oscuro'}
-                      </button>
                       <button onClick={() => { onOpenVersionHistory(); setIsUserDropdownOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
-                        <SparklesIcon className="w-4 h-4 text-accent" />
+                        <SparklesIcon className="w-5 h-5 text-accent" />
                         Versión v{currentVersion}
                       </button>
                     </div>
@@ -340,58 +392,6 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Mobile Drawer */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[200] lg:hidden animate-fade-in">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setIsMobileMenuOpen(false)}
-          ></div>
-          
-          {/* Sidebar content */}
-          <div className="absolute top-0 left-0 bottom-0 w-[85vw] max-w-sm bg-white dark:bg-slate-900 shadow-2xl flex flex-col animate-slide-in-left">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-accent text-white">
-                <div className="flex items-center gap-2">
-                  <SparklesIcon className="w-6 h-6" />
-                  <h1 className="text-sm font-black uppercase tracking-tighter">Street/Bombón</h1>
-                </div>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <CrossIcon className="w-6 h-6" />
-                </button>
-            </div>
-            
-            <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                {filteredGroups.map(group => (
-                  <div key={group.id} className="space-y-3">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">{group.label}</h3>
-                    <div className="grid gap-2">
-                      {group.items.map(item => (
-                        <NavButton key={item.view} item={item} isMobile />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-            
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center font-black">
-                      {currentUser.name.charAt(0)}
-                    </div>
-                    <div className="flex-grow">
-                      <p className="text-sm font-black text-gray-900 dark:text-white">{currentUser.name}</p>
-                      <p className="text-[10px] font-bold text-accent uppercase tracking-widest">Sede: {currentStore?.name}</p>
-                    </div>
-                </div>
-                <button onClick={() => { onLogout(); setIsMobileMenuOpen(false); }} className="w-full py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2">
-                  <LogoutIcon className="w-5 h-5" />
-                  Cerrar Sesión
-                </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="h-20 lg:h-20"></div>
     </>

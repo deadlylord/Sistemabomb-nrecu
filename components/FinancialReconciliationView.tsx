@@ -115,6 +115,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const [isEditingNames, setIsEditingNames] = useState(false);
   const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', addi: '' });
@@ -204,26 +205,38 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const categoryStats = useMemo(() => {
-      const expenseStats: Record<string, number> = {};
-      const incomeStats: Record<string, number> = {};
+      const expenseStats: Record<string, { total: number, accounts: Record<string, number> }> = {};
+      const incomeStats: Record<string, { total: number, accounts: Record<string, number> }> = {};
       const startOfMonth = new Date(selectedYear, selectedMonth, 1);
       const endOfMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
 
       records.forEach(r => {
           const d = new Date(r.date);
           if (d.getTime() >= startOfMonth.getTime() && d.getTime() <= endOfMonth.getTime()) {
-              const cat = r.subCategory || 'Sin Categoría';
+              const rawCat = r.subCategory || 'Sin Categoría';
+              // Normalizar categoría (Mayúsculas y sin espacios extra)
+              const cat = rawCat.trim().toUpperCase();
+              const account = r.accountType || 'cash';
+              
               if (r.amount < 0 && r.subCategory !== 'Cruce Sedes') {
-                expenseStats[cat] = (expenseStats[cat] || 0) + Math.abs(r.amount);
+                if (!expenseStats[cat]) expenseStats[cat] = { total: 0, accounts: {} };
+                expenseStats[cat].total += Math.abs(r.amount);
+                expenseStats[cat].accounts[account] = (expenseStats[cat].accounts[account] || 0) + Math.abs(r.amount);
               } else if (r.amount > 0 && r.subCategory !== 'Cruce Sedes') {
-                incomeStats[cat] = (incomeStats[cat] || 0) + r.amount;
+                if (!incomeStats[cat]) incomeStats[cat] = { total: 0, accounts: {} };
+                incomeStats[cat].total += r.amount;
+                incomeStats[cat].accounts[account] = (incomeStats[cat].accounts[account] || 0) + r.amount;
               }
           }
       });
 
-      const transform = (stats: Record<string, number>) => Object.entries(stats)
-        .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
-        .map(([name, value]) => ({ name, value }));
+      const transform = (stats: Record<string, { total: number, accounts: Record<string, number> }>) => Object.entries(stats)
+        .sort((a, b) => b[1].total - a[1].total)
+        .map(([name, data]) => ({ 
+            name, 
+            value: data.total, 
+            accounts: data.accounts 
+        }));
 
       return {
           expenses: transform(expenseStats),
@@ -858,6 +871,20 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       setSearchTerm(catName || '');
   }
 
+  const changeMonth = (delta: number) => {
+      let newMonth = selectedMonth + delta;
+      let newYear = selectedYear;
+      if (newMonth < 0) {
+          newMonth = 11;
+          newYear--;
+      } else if (newMonth > 11) {
+          newMonth = 0;
+          newYear++;
+      }
+      setSelectedMonth(newMonth);
+      setSelectedYear(newYear);
+  };
+
   return (
     <div className="w-full space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-4 lg:px-8">
         {/* Modal de Edición de Nombres de Cuentas */}
@@ -1198,26 +1225,49 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             const textColorClass = summaryActiveTab === 'expense' ? 'text-red-500' : 'text-green-500';
 
                             return (
-                                <div key={idx} className="space-y-0.5 group cursor-pointer" onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', cat.name)}>
-                                    <div className="flex justify-between items-center text-[9px] sm:text-[11px] font-bold uppercase tracking-tight">
-                                        <span className="text-gray-600 dark:text-gray-300 truncate max-w-[150px]">{cat.name}</span>
-                                            <div className="flex items-center gap-1">
-                                                <span className={textColorClass}>{formatCOP(cat.value)}</span>
-                                                {summaryActiveTab === 'expense' && (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleExportCategoryToAccounting(cat.name, cat.value); }}
-                                                        className="p-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent hover:text-white transition-all flex items-center gap-1 border border-accent/20"
-                                                        title="Añadir a Contabilidad IA"
-                                                    >
-                                                        <SparklesIcon className="w-3 h-3" />
-                                                        <span className="text-[7px] font-black uppercase hidden sm:inline">Exportar</span>
-                                                    </button>
-                                                )}
-                                            </div>
+                                <div key={idx} className="space-y-0.5 group">
+                                    <div 
+                                        className="flex justify-between items-center text-[9px] sm:text-[11px] font-bold uppercase tracking-tight cursor-pointer hover:bg-accent/5 p-1 rounded transition-all"
+                                        onClick={() => {
+                                            const key = `${summaryActiveTab}_${cat.name}`;
+                                            setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }));
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <ChevronDownIcon className={`w-3 h-3 text-gray-400 transition-transform ${expandedCategories[`${summaryActiveTab}_${cat.name}`] ? 'rotate-180' : ''}`} />
+                                            <span className="text-gray-600 dark:text-gray-300 truncate">{cat.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <span className={textColorClass}>{formatCOP(cat.value)}</span>
+                                            {summaryActiveTab === 'expense' && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleExportCategoryToAccounting(cat.name, cat.value); }}
+                                                    className="p-1 font-black text-accent bg-accent/10 rounded hover:bg-accent hover:text-white transition-all text-[7px]"
+                                                    title="Exportar a Contabilidad"
+                                                >
+                                                    <SparklesIcon className="w-2.5 h-2.5 inline mr-0.5"/> EXP
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="w-full bg-gray-100 dark:bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                                    <div className="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden mb-1">
                                         <div className={`${colorClass} h-full rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
                                     </div>
+                                    
+                                    {expandedCategories[`${summaryActiveTab}_${cat.name}`] && (
+                                        <div className="ml-4 mt-1 mb-3 space-y-1 bg-gray-50 dark:bg-gray-800/40 p-2 rounded-xl border border-gray-100 dark:border-gray-800 animate-slide-in-top">
+                                            <div className="flex justify-between items-center mb-1 pb-1 border-b border-gray-200 dark:border-gray-700">
+                                                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest">Desglose por Cuenta</span>
+                                                <button onClick={() => handleFilterBySummary(summaryActiveTab === 'expense' ? 'expense' : 'income', cat.name)} className="text-[7px] font-black text-accent hover:underline uppercase">Ver en Libro</button>
+                                            </div>
+                                            {Object.entries(cat.accounts).map(([acc, val]) => (
+                                                <div key={acc} className="flex justify-between items-center text-[9px]">
+                                                    <span className="text-gray-500 font-bold uppercase">{getAccountName(acc as AccountType)}:</span>
+                                                    <span className="font-black text-gray-700 dark:text-gray-200">{formatCOP(val as number)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         }) : (
@@ -1248,9 +1298,20 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 </button>
                             )}
                         </div>
+                        <div className="flex flex-col gap-2">
+                           <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                              <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg text-accent transition-all"><ChevronLeftIcon className="w-5 h-5"/></button>
+                              <div className="text-center flex-grow">
+                                <span className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-gray-200">{monthNames[selectedMonth]} {selectedYear}</span>
+                              </div>
+                              <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg text-accent transition-all"><ChevronRightIcon className="w-5 h-5"/></button>
+                           </div>
+                           <div className="flex gap-2">
+                              <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none border border-gray-200 dark:border-gray-700">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
+                              <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none border border-gray-200 dark:border-gray-700">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                           </div>
+                        </div>
                         <div className="flex flex-wrap gap-2">
-                             <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
-                             <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
                              <button 
                                 onClick={() => setShowBothClosures(!showBothClosures)}
                                 className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all flex items-center gap-1.5 ${showBothClosures ? 'bg-accent text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent'}`}

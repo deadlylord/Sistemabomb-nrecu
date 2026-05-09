@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.49',
+    date: '2026-05-09',
+    description: 'Mejoras en conciliación financiera y navegación.',
+    isCurrent: true,
+    changes: [
+      'Selector de periodo mejorado con navegación rápida por meses y años.',
+      'Categorización insensible a mayúsculas/minúsculas para sumatorias precisas.',
+      'Desglose detallado por cuenta en el resumen de ingresos y gastos con vista expandible.',
+      'Corrección en la visualización de la versión del sistema.',
+      'Sincronización de menús móviles optimizados.'
+    ]
+  },
+  {
     version: '1.1.48',
     date: '2026-05-08',
     description: 'Refactorización de SKUs y mejoras UX en búsqueda.',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se implementó un nuevo generador de SKUs más cortos, coherentes y garantizados como únicos (Formato: PREF1234).',
       'Nueva funcionalidad para Administradores: "Regenerar SKUs" masivamente para corregir códigos largos o inconsistentes en el inventario.',
