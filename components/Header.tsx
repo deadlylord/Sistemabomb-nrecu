@@ -197,16 +197,17 @@ const Header: React.FC<HeaderProps> = ({
     return (
       <button
         onClick={() => setCurrentView(item.view)}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all group whitespace-nowrap
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all group whitespace-nowrap
           ${isActive 
             ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105' 
             : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
+        title={item.label}
       >
-        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-accent'}`} />
-        <span className="text-[11px] font-black uppercase tracking-tight">{item.shortLabel}</span>
+        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-accent'}`} />
+        <span className="text-[10px] font-black uppercase tracking-tighter">{item.shortLabel}</span>
         {item.view === View.INCIDENTS && pendingCount > 0 && (
-            <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[8px] font-black ${isActive ? 'bg-white text-accent' : 'bg-red-500 text-white animate-pulse'}`}>
+            <span className={`flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded-full text-[7px] font-black ${isActive ? 'bg-white text-accent' : 'bg-red-500 text-white animate-pulse'}`}>
                 {pendingCount}
             </span>
         )}
@@ -270,18 +271,32 @@ const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* CENTER: Navigation (Desktop & Mobile) */}
-          <div className="flex-grow flex items-center justify-center overflow-x-auto scrollbar-hide py-1 px-2" ref={groupMenuRef}>
+          <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2" ref={groupMenuRef}>
              {/* Desktop Navigation */}
-             <nav className="hidden lg:flex items-center gap-2">
-                {filteredGroups.map((group) => (
-                    <div key={group.id} className="flex items-center gap-2 px-2 border-r border-slate-200 dark:border-slate-700 last:border-0">
-                        <div className="flex items-center gap-1">
-                            {group.items.map(item => (
-                                <DesktopNavButton key={item.view} item={item} />
-                            ))}
+             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 px-2">
+                {filteredGroups.map((group, gIdx) => {
+                    const isGroupActive = group.items.some(i => i.view === currentView);
+                    const GroupIcon = group.icon;
+                    
+                    return (
+                        <div key={group.id} className={`flex items-center gap-1.5 px-2 py-1 rounded-xl transition-all border
+                            ${isGroupActive ? 'bg-accent/5 border-accent/20' : 'border-transparent'}`}>
+                            
+                            <div className="flex flex-col items-center justify-center mr-1 opacity-40 group">
+                                <GroupIcon className={`w-3.5 h-3.5 ${isGroupActive ? 'text-accent opacity-100' : 'text-slate-400'}`} />
+                                <span className={`text-[7px] font-black uppercase tracking-tighter ${isGroupActive ? 'text-accent' : 'text-slate-500'}`}>
+                                    {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : 'Admin'}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                                {group.items.map(item => (
+                                    <DesktopNavButton key={item.view} item={item} />
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
              </nav>
 
              {/* Mobile Navigation (Three Main Buttons) */}

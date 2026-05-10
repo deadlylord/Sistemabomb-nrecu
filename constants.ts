@@ -58,10 +58,34 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.54',
+    date: '2026-05-09',
+    description: 'Mejoras de Visibilidad y Desplazamiento en Escritorio',
+    isCurrent: true,
+    changes: [
+      'Scroll de Navegación: Se habilitó el desplazamiento horizontal en la barra de pestañas para asegurar que todos los módulos sean accesibles en cualquier resolución.',
+      'Alineación de Pestañas: Se ajustó la alineación a la izquierda para evitar que el contenido se oculte al desbordar el contenedor.',
+      'Visibilidad de Scroll: Se restauró la barra de desplazamiento en escritorio para facilitar la navegación entre grupos de módulos.'
+    ]
+  },
+  {
+    version: '1.1.53',
+    date: '2026-05-09',
+    description: 'Mejoras de Visibilidad en Escritorio y Navegación',
+    isCurrent: false,
+    changes: [
+      'Visibilidad en Escritorio: Se compactaron las pestañas de navegación y se agruparon por categorías para asegurar que todos los módulos sean visibles en pantallas de laptop.',
+      'Ajuste de Desbordamiento: La barra de navegación ahora se alinea correctamente si el contenido supera el ancho de la pantalla.',
+      'Navegación Móvil: Se implementó un nuevo menú de tres botones con submenús desplegables para mayor comodidad.',
+      'Consolidación de Sedes: Se eliminó el selector de sede redundante en la vista de conciliación para evitar confusiones.',
+      'Atajos Rápidos: Se añadieron botones de acceso directo entre las vistas de Conciliación y Contabilidad Inteligente.'
+    ]
+  },
+  {
     version: '1.1.52',
     date: '2026-05-09',
     description: 'Mejoras de Navegación y Consolidación de Vistas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Navegación Móvil: Se implementó un nuevo menú de tres botones con submenús desplegables para mayor comodidad.',
       'Consolidación de Sedes: Se eliminó el selector de sede redundante en la vista de conciliación para evitar confusiones, centralizando el control en la barra principal.',
