@@ -38,10 +38,22 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
 
   const filteredIncidents = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
     return [...incidents]
       .filter(i => {
         const matchesStatus = filter === 'ALL' ? true : i.status === filter;
         
+        // Restriction for non-admins: Only current month
+        if (!isAdmin) {
+          const createdAt = new Date(i.createdAt);
+          if (createdAt.getMonth() !== currentMonth || createdAt.getFullYear() !== currentYear) {
+            return false;
+          }
+        }
+
         const matchesSearch = normalizedSearch ? 
             normalizeText(i.description).includes(normalizedSearch) ||
             (i.productName && normalizeText(i.productName).includes(normalizedSearch)) ||
@@ -53,7 +65,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
         return matchesStatus && matchesSearch;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [incidents, filter, searchTerm]);
+  }, [incidents, filter, searchTerm, isAdmin]);
   
   const handleEditClick = (incident: Incident) => {
     setEditingIncident(incident);
@@ -260,7 +272,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                             <HistoryIcon />
                           </button>
                         )}
-                        <button onClick={() => handleEditClick(incident)} className="text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors" title="Editar Novedad">
+                        <button onClick={() => handleEditClick(incident)} className={`${isAdmin ? '' : 'hidden'} text-gray-500 dark:text-text-dark hover:text-accent p-2 rounded-full hover:bg-accent/10 transition-colors`} title="Editar Novedad">
                           <EditIcon />
                         </button>
                         {isAdmin && (

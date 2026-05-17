@@ -213,7 +213,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const today = new Date();
   const [startDate, setStartDate] = useState(toYYYYMMDD(today));
   const [endDate, setEndDate] = useState(toYYYYMMDD(today));
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string | null>(null);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string[]>([]);
   const [isPaymentsReportVisible, setIsPaymentsReportVisible] = useState(true);
   const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(false);
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
@@ -309,8 +309,38 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                 const storeSales = filteredSales.filter(s => s.storeId === store.id);
                 const storeInventory = inventoryToAnalyze.filter(p => p.storeId === store.id);
                 const productsSold = new Map<string, { name: string, quantity: number, revenue: number }>();
-                storeSales.forEach(sale => { (sale.items || []).forEach(item => { if(!item) return; const existing = productsSold.get(item.id); if (existing) { existing.quantity += item.quantity; existing.revenue += item.price * item.quantity; } else { productsSold.set(item.id, { name: item.name, quantity: item.quantity, revenue: item.price * item.quantity }); } }); });
-                return { nombreTienda: store.name, totalVentas: storeSales.reduce((sum, s) => sum + s.totalAmount, 0), productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue).slice(0, 10), productosEstancados: storeInventory.filter(p => p.stock > 0 && !productsSold.has(p.id)).slice(0, 5).map(p => p.name) };
+                
+                let totalUnitsSold = 0;
+                const biweeklyUnits = { q1: 0, q2: 0 };
+                const firstQuincenaEnd = new Date(start.getFullYear(), start.getMonth(), 15, 23, 59, 59);
+
+                storeSales.forEach(sale => { 
+                    const saleDate = new Date(sale.createdAt);
+                    const items = (sale.items || []) as CartItem[];
+                    items.forEach(item => { 
+                        if(!item) return; 
+                        totalUnitsSold += (item.quantity || 0);
+                        if (saleDate <= firstQuincenaEnd) biweeklyUnits.q1 += (item.quantity || 0);
+                        else biweeklyUnits.q2 += (item.quantity || 0);
+
+                        const existing = productsSold.get(item.id); 
+                        if (existing) { 
+                            existing.quantity += item.quantity; 
+                            existing.revenue += item.price * item.quantity; 
+                        } else { 
+                            productsSold.set(item.id, { name: item.name, quantity: item.quantity, revenue: item.price * item.quantity }); 
+                        } 
+                    }); 
+                });
+                
+                return { 
+                    nombreTienda: store.name, 
+                    totalVentas: storeSales.reduce((sum, s) => sum + s.totalAmount, 0), 
+                    totalUnidadesVendidas: totalUnitsSold,
+                    unidadesPorQuincena: biweeklyUnits,
+                    productosVendidos: Array.from(productsSold.values()).sort((a,b) => b.revenue - a.revenue).slice(0, 10), 
+                    productosEstancados: storeInventory.filter(p => p.stock > 0 && !productsSold.has(p.id)).slice(0, 5).map(p => p.name) 
+                };
             })
         };
         const result = await analyzeSalesData(dataForAI, customAIQuery);
@@ -542,7 +572,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
 
     allPayments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const filteredTransactions = paymentMethodFilter ? allPayments.filter(p => p.paymentMethod === paymentMethodFilter) : allPayments;
+    const filteredTransactions = paymentMethodFilter.length > 0 ? allPayments.filter(p => paymentMethodFilter.includes(String(p.paymentMethod))) : allPayments;
     const groupedTransactions: { [date: string]: { total: number; items: UnifiedTransaction[] } } = {};
     filteredTransactions.forEach(t => { const dateKey = new Date(t.date).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' }); if (!groupedTransactions[dateKey]) groupedTransactions[dateKey] = { total: 0, items: [] }; if (t.paymentMethod !== PaymentMethod.Bono && t.paymentMethod !== 'Recaudo Sistecredito') groupedTransactions[dateKey].total += t.amount; groupedTransactions[dateKey].items.push(t); });
     
@@ -559,6 +589,19 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   const totalPeriodIncome = useMemo(() => Object.entries(detailedReportData.totalsByMethod).reduce((sum, [method, total]) => (method !== 'Recaudo Sistecredito' && method !== PaymentMethod.Bono) ? sum + (total as number) : sum, 0), [detailedReportData.totalsByMethod]);
   const totalRecaudos = useMemo(() => (detailedReportData.totalsByMethod['Recaudo Sistecredito'] as number) || 0, [detailedReportData.totalsByMethod]);
+
+  const togglePaymentMethodFilter = (method: string) => {
+    setPaymentMethodFilter(prev => 
+      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
+    );
+  };
+
+  const getDayTotalForFilteredMethods = (items: UnifiedTransaction[]) => {
+      return items
+        .filter(t => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(t.paymentMethod)))
+        .filter(t => t.paymentMethod !== PaymentMethod.Bono && t.paymentMethod !== 'Recaudo Sistecredito')
+        .reduce((sum, item) => sum + item.amount, 0);
+  };
 
   const priceVariationReportData = useMemo(() => {
     const reportItems: PriceVariationItem[] = [];
@@ -621,11 +664,71 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const forecastAnalysis = useMemo(() => {
         const now = new Date(); const currentDay = now.getDate(); const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1); const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const firstQuincenaEnd = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59);
+        
         let totalPaymentsThisMonth = 0;
-        sales.forEach(sale => { const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; if (payments) { payments.forEach(p => { const paymentDate = new Date(p.date); if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) totalPaymentsThisMonth += Number(p.amount); }); } else if (sale.paymentMethod && !sale.layawayId) { const saleDate = new Date(sale.createdAt); if (saleDate >= startOfMonth && saleDate <= endOfMonth) totalPaymentsThisMonth += sale.totalAmount; } });
-        layaways.forEach(layaway => { const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; if (payments) { payments.forEach(p => { const paymentDate = new Date(p.date); if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) totalPaymentsThisMonth += Number(p.amount); }); } });
+        let currentUnitsSold = 0;
+        let q1Units = 0;
+        let q2Units = 0;
+
+        sales.forEach(sale => { 
+            const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; 
+            if (payments) { 
+                payments.forEach(p => { 
+                    const paymentDate = new Date(p.date); 
+                    if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) totalPaymentsThisMonth += Number(p.amount); 
+                }); 
+            } else if (sale.paymentMethod && !sale.layawayId) { 
+                const saleDate = new Date(sale.createdAt); 
+                if (saleDate >= startOfMonth && saleDate <= endOfMonth) totalPaymentsThisMonth += sale.totalAmount; 
+            } 
+
+            const createdAt = new Date(sale.createdAt);
+            if (createdAt >= startOfMonth && createdAt <= endOfMonth) {
+                const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[];
+                const units = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                currentUnitsSold += units;
+                if (createdAt <= firstQuincenaEnd) q1Units += units;
+                else q2Units += units;
+            }
+        });
+
+        layaways.forEach(layaway => { 
+            const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; 
+            if (payments) { 
+                payments.forEach(p => { 
+                    const paymentDate = new Date(p.date); 
+                    if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) totalPaymentsThisMonth += Number(p.amount); 
+                }); 
+            } 
+        });
+
         const dailyAverage = currentDay > 0 ? totalPaymentsThisMonth / currentDay : 0;
-        return { currentTotal: totalPaymentsThisMonth, projectedTotal: dailyAverage * totalDaysInMonth, dailyAverage, monthProgress: (currentDay / totalDaysInMonth) * 100, daysRemaining: totalDaysInMonth - currentDay, strategies: currentDay <= 10 ? [{ title: "Impulso Inicial", desc: "Contacta a los 5 mejores clientes del mes pasado para mostrar novedades.", type: "marketing" as const }, { title: "Exhibición", desc: "Rota los maniquíes y vitrina para dar sensación de novedad total.", type: "sales" as const }, { title: "Metas Claras", desc: "Asegúrate que cada vendedor conozca su meta diaria para este mes.", type: "admin" as const }] : (currentDay <= 20 ? [{ title: "Movimiento de Stock", desc: "Identifica los 3 productos menos vendidos y ármalos en outfits atractivos.", type: "sales" as const }, { title: "Activación de Clientes", desc: "Envía mensajes de 'Te extrañamos' a clientes que no han venido en 2 meses.", type: "marketing" as const }, { title: "Revisión de Inventario", desc: "Haz un conteo rápido de las categorías más vendidas para evitar quiebres.", type: "admin" as const }] : [{ title: "Cierre de Mes", desc: "Enfócate en cerrar los abonos pendientes para sumar al flujo de caja.", type: "sales" as const }, { title: "Liquidación Express", desc: "Si la meta está lejos, considera una promo flash de fin de semana.", type: "marketing" as const }, { title: "Pre-Venta", desc: "Ofrece apartar prendas de la próxima colección para asegurar ventas futuras.", type: "sales" as const }]) };
+        const dailyUnitsAverage = currentDay > 0 ? currentUnitsSold / currentDay : 0;
+        const projectedTotal = dailyAverage * totalDaysInMonth;
+        const projectedUnits = Math.round(dailyUnitsAverage * totalDaysInMonth);
+
+        return { 
+            currentTotal: totalPaymentsThisMonth, 
+            projectedTotal,
+            ambitiousTotal: projectedTotal * 1.15,
+            eliteTotal: projectedTotal * 1.30,
+            currentUnits: currentUnitsSold,
+            projectedUnits,
+            ambitiousUnits: Math.round(projectedUnits * 1.15),
+            eliteUnits: Math.round(projectedUnits * 1.30),
+            q1Units,
+            q2Units,
+            dailyAverage, 
+            monthProgress: (currentDay / totalDaysInMonth) * 100, 
+            daysRemaining: totalDaysInMonth - currentDay, 
+            incentives: [
+                { tier: 'BASE', target: projectedTotal, reward: 'Bono Standard', units: projectedUnits },
+                { tier: 'AMBICIOSA', target: projectedTotal * 1.15, reward: 'Incentivo 15% + Día Libre', units: Math.round(projectedUnits * 1.15) },
+                { tier: 'ÉLITE', target: projectedTotal * 1.30, reward: 'Mega-Incentivo 30% + Premio Especial', units: Math.round(projectedUnits * 1.30) }
+            ],
+            strategies: currentDay <= 10 ? [{ title: "Impulso Inicial", desc: "Contacta a los 5 mejores clientes del mes pasado para mostrar novedades.", type: "marketing" as const }, { title: "Exhibición", desc: "Rota los maniquíes y vitrina para dar sensación de novedad total.", type: "sales" as const }, { title: "Metas Claras", desc: "Asegúrate que cada vendedor conozca su meta diaria para este mes.", type: "admin" as const }] : (currentDay <= 20 ? [{ title: "Movimiento de Stock", desc: "Identifica los 3 productos menos vendidos y ármalos en outfits atractivos.", type: "sales" as const }, { title: "Activación de Clientes", desc: "Envía mensajes de 'Te extrañamos' a clientes que no han venido en 2 meses.", type: "marketing" as const }, { title: "Revisión de Inventario", desc: "Haz un conteo rápido de las categorías más vendidas para evitar quiebres.", type: "admin" as const }] : [{ title: "Cierre de Mes", desc: "Enfócate en cerrar los abonos pendientes para sumar al flujo de caja.", type: "sales" as const }, { title: "Liquidación Express", desc: "Si la meta está lejos, considera una promo flash de fin de semana.", type: "marketing" as const }, { title: "Pre-Venta", desc: "Ofrece apartar prendas de la próxima colección para asegurar ventas futuras.", type: "sales" as const }]) 
+        };
     }, [sales, layaways]);
 
   const churnAnalysis = useMemo(() => {
@@ -834,13 +937,99 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                             </div>
                         </>
                     ) : activeAITab === 'forecast' ? (
-                        <div className="w-full flex flex-col md:flex-row gap-4 animate-fade-in">
-                            <div className="md:w-1/2 space-y-3">
-                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Proyección de Cierre</h4><p className="text-2xl font-extrabold text-accent">{formatCOP(forecastAnalysis.projectedTotal)}</p></div>
-                                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><h4 className="text-xs font-bold text-purple-500 uppercase mb-1">Franjas de Mayor Demanda</h4><div className="space-y-2 mt-2">{aiInsights?.peakHour1 ? (<div className="flex justify-between items-center text-sm"><span className="font-bold text-gray-800 dark:text-white">1. {aiInsights.peakHour1.range}</span><span className="bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded-full font-bold text-xs">{aiInsights.peakHour1.count} vtas</span></div>) : <p className="text-xs text-gray-400">Sin datos</p>}{aiInsights?.peakHour2 && (<div className="flex justify-between items-center text-sm opacity-80"><span className="font-semibold text-gray-600 dark:text-gray-300 text-xs">2. {aiInsights.peakHour2.range}</span><span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-semibold text-[10px]">{aiInsights.peakHour2.count} vtas</span></div>)}</div></div>
-                                <div className="space-y-1"><div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-300"><span>Progreso del Mes</span><span>{Math.round(forecastAnalysis.monthProgress)}%</span></div><div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden"><div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" style={{ width: `${forecastAnalysis.monthProgress}%` }}></div></div></div>
+                        <div className="w-full animate-fade-in">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="space-y-3">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Escenarios de Cierre</h4>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {forecastAnalysis.incentives.map((tier, idx) => (
+                                            <div key={idx} className={`p-3 rounded-xl border transition-all ${idx === 0 ? 'bg-white dark:bg-gray-800 border-gray-100' : idx === 1 ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/50' : 'bg-accent/5 dark:bg-accent/10 border-accent/20 shadow-sm'}`}>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded ${idx === 0 ? 'bg-gray-100 text-gray-500' : idx === 1 ? 'bg-amber-100 text-amber-600' : 'bg-accent text-white'}`}>
+                                                        META {tier.tier}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-gray-400">Objetivo: {tier.units} uds</span>
+                                                </div>
+                                                <div className="flex justify-between items-end">
+                                                    <div>
+                                                        <p className="text-xl font-black text-gray-800 dark:text-white leading-none">{formatCOP(tier.target)}</p>
+                                                        <p className="text-[10px] font-bold text-accent mt-1 flex items-center gap-1">
+                                                            <SparklesIcon className="w-2.5 h-2.5" />
+                                                            Premio: {tier.reward}
+                                                        </p>
+                                                        <div className="mt-2 flex gap-2">
+                                                            <span className="text-[9px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded font-bold">Q1: {Math.round(tier.units / 2)} uds</span>
+                                                            <span className="text-[9px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded font-bold">Q2: {Math.round(tier.units / 2)} uds</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Faltante para Meta</p>
+                                                        <p className={`text-xs font-black ${tier.target <= forecastAnalysis.currentTotal ? 'text-green-500' : 'text-gray-500'}`}>
+                                                            {tier.target <= forecastAnalysis.currentTotal ? 'ALCANZADA ✓' : formatCOP(tier.target - forecastAnalysis.currentTotal)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30 border-l-4 border-l-blue-500">
+                                        <h4 className="text-[10px] font-black text-blue-500 uppercase mb-1 tracking-widest">Estado Actual de Unidades</h4>
+                                        <div className="flex justify-between items-end">
+                                            <p className="text-2xl font-black text-blue-600 leading-none">{forecastAnalysis.currentUnits} <span className="text-xs uppercase font-bold">uds vendidas</span></p>
+                                            <p className="text-[10px] text-gray-400 font-bold">Quincena {new Date().getDate() <= 15 ? '1' : '2'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                                        <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                            <span>Progreso Temporal del Mes</span>
+                                            <span className="text-accent">{Math.round(forecastAnalysis.monthProgress)}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                            <div className="bg-accent h-full rounded-full transition-all duration-1000" style={{ width: `${forecastAnalysis.monthProgress}%` }}></div>
+                                        </div>
+                                        <p className="text-[9px] text-gray-400 mt-1 italic text-right">Faltan {forecastAnalysis.daysRemaining} días. Promedio diario ideal: {formatCOP((forecastAnalysis.projectedTotal - forecastAnalysis.currentTotal) / Math.max(forecastAnalysis.daysRemaining, 1))}</p>
+                                    </div>
+                                    
+                                    <div className="bg-gray-100/50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Desglose Quincenal de Unidades Real</h4>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
+                                                <p className="text-[9px] font-black text-gray-400 uppercase">Q1 (1-15)</p>
+                                                <p className="text-lg font-black text-gray-700 dark:text-gray-200">{forecastAnalysis.q1Units} <span className="text-[10px]">uds</span></p>
+                                            </div>
+                                            <div className="flex-1 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
+                                                <p className="text-[9px] font-black text-gray-400 uppercase">Q2 (16-Fin)</p>
+                                                <p className="text-lg font-black text-gray-700 dark:text-gray-200">{forecastAnalysis.q2Units} <span className="text-[10px]">uds</span></p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gradient-to-br from-accent/5 to-transparent p-3 rounded-lg border border-accent/10">
+                                        <h4 className="font-black text-[10px] text-accent uppercase tracking-widest mb-2">Estrategias de Impulso IA</h4>
+                                        <div className="space-y-2 max-h-[120px] overflow-y-auto pr-1 scrollbar-hide">
+                                            {forecastAnalysis.strategies.map((strat, idx) => (
+                                                <div key={idx} className="bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700 flex gap-2 items-start shadow-sm">
+                                                    <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : 'bg-green-500'}`}></div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-gray-700 dark:text-gray-200 leading-tight">{strat.title}</p>
+                                                        <p className="text-[9px] text-gray-500 leading-relaxed">{strat.desc}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => { setActiveAITab('query'); setCustomAIQuery("Dame una proyección estratégica detallada de unidades para la próxima quincena basada en los datos actuales."); }}
+                                        className="w-full py-2 bg-accent text-white text-[10px] font-black uppercase rounded-lg shadow-lg shadow-accent/20 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <SparklesIcon className="w-3 h-3" /> Generar Plan de Acción IA
+                                    </button>
+                                </div>
                             </div>
-                            <div className="md:w-1/2 space-y-2"><h4 className="font-bold text-sm text-gray-700 dark:text-gray-200">Estrategias</h4><div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">{forecastAnalysis.strategies.map((strat, idx) => (<div key={idx} className="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 flex gap-3 items-start"><div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : 'bg-green-500'}`}></div><div><p className="text-xs font-bold">{strat.title}</p><p className="text-[10px] text-gray-500">{strat.desc}</p></div></div>))}</div></div>
                         </div>
                     ) : activeAITab === 'clients' ? (
                         <div className="w-full animate-fade-in"><h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-3">Clientes en Riesgo de Fuga</h4><div className="max-h-[200px] overflow-y-auto pr-2">{churnAnalysis.length > 0 ? churnAnalysis.map((client, index) => (<div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border-l-4 border-l-red-500 flex justify-between items-center"><div><p className="font-bold text-sm">{client.name}</p><p className="text-xs text-gray-500">{client.phone}</p></div><div className="text-right"><p className="text-xs font-bold text-red-500">{client.daysSince} días</p><p className="text-[10px] text-gray-400">sin volver</p></div></div>)) : <p className="text-xs text-center text-gray-400">Todo bien por ahora.</p>}</div></div>
@@ -900,7 +1089,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     </div>
                  </div>
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
-                <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Desglose por Medio de Pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"><div className="bg-green-100 dark:bg-green-900/50 p-3 rounded-md text-left ring-2 ring-green-500/50"><p className="font-bold text-green-800 dark:text-green-300">Ingresos del Periodo</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(totalPeriodIncome)}</p></div><div className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 cursor-pointer ${paymentMethodFilter === 'Efectivo' ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter(paymentMethodFilter === 'Efectivo' ? null : 'Efectivo'); if (paymentMethodFilter !== 'Efectivo') setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => setPaymentMethodFilter(paymentMethodFilter === 'Recaudo Sistecredito' ? null : 'Recaudo Sistecredito')} className={`bg-purple-100 dark:bg-purple-900/30 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === 'Recaudo Sistecredito' ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => setPaymentMethodFilter(paymentMethodFilter === method ? null : method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter === method ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p></button>)})}</div>{paymentMethodFilter && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter(null); }} className="text-xs text-red-500 hover:underline">Cerrar Detalle</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Día: {formatCOP(group.total)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>))}</div></div>)}</div>
+                <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Desglose por Medio de Pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"><div className="bg-green-100 dark:bg-green-900/50 p-3 rounded-md text-left ring-2 ring-green-500/50"><p className="font-bold text-green-800 dark:text-green-300">Ingresos del Periodo</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(totalPeriodIncome)}</p></div><div className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 cursor-pointer ${paymentMethodFilter.includes('Efectivo') ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); togglePaymentMethodFilter('Efectivo'); if (!paymentMethodFilter.includes('Efectivo')) setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => togglePaymentMethodFilter('Recaudo Sistecredito')} className={`bg-purple-100 dark:bg-purple-900/30 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes('Recaudo Sistecredito') ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => togglePaymentMethodFilter(method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes(method) ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p></button>)})}</div>{paymentMethodFilter.length > 0 && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter.join('+')}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter([]); }} className="text-xs text-red-500 hover:underline">Limpiar Filtros</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => { const dayTotal = getDayTotalForFilteredMethods(group.items); if (dayTotal === 0 && paymentMethodFilter.length > 0 && !group.items.some(i => paymentMethodFilter.includes(String(i.paymentMethod)))) return null; return (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Seleccionado: {formatCOP(dayTotal)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.filter(i => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(i.paymentMethod))).map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>); })}</div></div>)}</div>
             </div>
         )}
       </div>

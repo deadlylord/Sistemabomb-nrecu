@@ -58,10 +58,56 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.59',
+    date: '2026-05-17',
+    description: 'Claridad en metas y desglose quincenal de proyecciones',
+    isCurrent: true,
+    changes: [
+      'Street AI: Se reemplazó el término técnico "Gap" por "Faltante para Meta" para mejor comprensión.',
+      'Metas Quincenales: Cada nivel de proyección (Base, Ambiciosa, Élite) ahora muestra el objetivo de unidades sugerido por quincena.',
+      'Interfaz: Mejora visual en las tarjetas de incentivos para destacar los objetivos de unidades.'
+    ]
+  },
+  {
+    version: '1.1.58',
+    date: '2026-05-17',
+    description: 'Metas ambiciosas e incentivos por IA',
+    isCurrent: false,
+    changes: [
+      'Street AI: Se añadieron 3 niveles de proyección (Base, Ambiciosa, Élite).',
+      'Incentivos: Cada nivel de proyección incluye una recomendación de incentivo para vendedores.',
+      'Unidades: Las proyecciones ahora calculan tanto ingresos monetarios como volumen de unidades.',
+      'Visualización: Nueva interfaz escalonada para seguimiento de metas y gaps de cierre.'
+    ]
+  },
+  {
+    version: '1.1.57',
+    date: '2026-05-17',
+    description: 'Análisis dinámico de pagos y proyecciones IA avanzadas',
+    isCurrent: false,
+    changes: [
+      'Novedades: Restricción confirmada para vendedores (solo mes actual y sin edición).',
+      'Abonos: Los vendedores ahora pueden visualizar abonos en estado "ACTIVO" y "POR TRAER".',
+      'Seguridad: Se mantienen las facultades administrativas completas en todos los módulos.'
+    ]
+  },
+  {
+    version: '1.1.55',
+    date: '2026-05-17',
+    description: 'Restricciones de seguridad y privacidad para vendedores',
+    isCurrent: false,
+    changes: [
+      'Novedades: Los vendedores ya no pueden editar novedades existentes.',
+      'Privacidad Novedades: Se restringió la vista de novedades para vendedores únicamente al mes actual.',
+      'Filtro de Abonos: Los vendedores ahora solo pueden visualizar abonos con estado "ACTIVO".',
+      'Seguridad: Los administradores conservan acceso total a todas las funciones y registros históricos.'
+    ]
+  },
+  {
     version: '1.1.54',
     date: '2026-05-09',
     description: 'Mejoras de Visibilidad y Desplazamiento en Escritorio',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Scroll de Navegación: Se habilitó el desplazamiento horizontal en la barra de pestañas para asegurar que todos los módulos sean accesibles en cualquier resolución.',
       'Alineación de Pestañas: Se ajustó la alineación a la izquierda para evitar que el contenido se oculte al desbordar el contenedor.',

@@ -233,8 +233,18 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
 
     const filteredLayaways = useMemo(() => {
         const normalizedSearch = normalizeText(searchTerm);
+        
+        const adminRole = roles.find(r => r.name === 'Administrator');
+        const isAdmin = currentUser.roleId === adminRole?.id;
+
         return layaways.filter(l => {
             const matchesFilter = filter === 'all' ? true : l.status === filter;
+            
+            // Restriction for sellers: Only active or pre-order layaways
+            if (!isAdmin && l.status !== 'active' && l.status !== 'pre-order') {
+                return false;
+            }
+
             const matchesSearch = normalizedSearch ?
                 normalizeText(l.customerName).includes(normalizedSearch) ||
                 l.customerPhone.includes(normalizedSearch) ||
@@ -242,7 +252,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
                 : true;
             return matchesFilter && matchesSearch;
         }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [layaways, searchTerm, filter]);
+    }, [layaways, searchTerm, filter, currentUser, roles]);
 
     const filterOptions: { value: Layaway['status'] | 'all', label: string }[] = [
         { value: 'all', label: 'Todos' },
