@@ -238,7 +238,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
           if (t.seller === currentName) {
             const dateStr = toLocalDateString(tDate);
             const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as any[];
-            const totalUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            // Exclude gift products (price 0) from commissionable units
+            const totalUnits = items.filter(item => item && (item.price || 0) > 0).reduce((sum, item) => sum + (item?.quantity || 0), 0);
             
             salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + totalUnits);
           }

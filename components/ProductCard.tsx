@@ -149,9 +149,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
               {product.discountPrice !== undefined && product.discountPrice !== product.price && (
                 <span className="text-[10px] text-slate-400 line-through leading-none">{formatCOP(product.price)}</span>
               )}
-              <p className="text-accent font-semibold text-base leading-none">
-                {formatCOP(product.discountPrice !== undefined ? product.discountPrice : product.price)}
-              </p>
+              {(product.discountPrice !== undefined ? product.discountPrice : product.price) === 0 ? (
+                <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Obsequio</span>
+              ) : (
+                <p className="text-accent font-semibold text-base leading-none">
+                  {formatCOP(product.discountPrice !== undefined ? product.discountPrice : product.price)}
+                </p>
+              )}
             </div>
           </div>
         </div>

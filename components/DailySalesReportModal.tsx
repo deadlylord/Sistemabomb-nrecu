@@ -133,7 +133,8 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
     [...directSalesForUnits, ...allTodaysNewLayaways].forEach(transaction => {
         const sellerReport = reportBySeller[transaction.seller];
         if (sellerReport) {
-            sellerReport.totalUnitsSold += transaction.items.reduce((sum, item) => sum + item.quantity, 0);
+            const saleItems = (transaction.items || []).filter(item => item && (item.price || 0) > 0);
+            sellerReport.totalUnitsSold += saleItems.reduce((sum, item) => sum + item.quantity, 0);
         }
     });
     
@@ -163,7 +164,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         .reduce((sum, p) => sum + p.amount, 0);
 
     const grandTotalUnitsSold = [...allTodaysSales.filter(s => !s.layawayId), ...allTodaysNewLayaways]
-        .flatMap(t => t.items)
+        .flatMap(t => (t.items || []).filter(item => item && (item.price || 0) > 0))
         .reduce((sum, item) => sum + (item?.quantity || 0), 0);
         
     const grandTotals = {

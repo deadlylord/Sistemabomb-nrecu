@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.60',
+    date: '2026-05-17',
+    description: 'Filtros dinámicos y gestión de obsequios',
+    isCurrent: true,
+    changes: [
+      'Reportes: Los filtros de Análisis de Precios ahora permiten selección múltiple para comparaciones complejas.',
+      'Obsequios: Se excluyen los productos con precio $0 de las unidades vendidas en Dashboard y Nómina.',
+      'Control: Los obsequios ahora se muestran por separado en las métricas para no afectar los KPIs de ventas.',
+      'Interfaz: Se añadió un indicador visual de "Obsequio" en el POS y Carrito para evitar confusiones.'
+    ]
+  },
+  {
     version: '1.1.59',
     date: '2026-05-17',
     description: 'Claridad en metas y desglose quincenal de proyecciones',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Street AI: Se reemplazó el término técnico "Gap" por "Faltante para Meta" para mejor comprensión.',
       'Metas Quincenales: Cada nivel de proyección (Base, Ambiciosa, Élite) ahora muestra el objetivo de unidades sugerido por quincena.',

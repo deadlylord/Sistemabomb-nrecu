@@ -226,8 +226,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
-  const [priceVariationSellerFilter, setPriceVariationSellerFilter] = useState('');
-  const [priceVariationPaymentMethodFilter, setPriceVariationPaymentMethodFilter] = useState('');
+  const [priceVariationSellerFilters, setPriceVariationSellerFilters] = useState<string[]>([]);
+  const [priceVariationPaymentMethodFilters, setPriceVariationPaymentMethodFilters] = useState<string[]>([]);
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
@@ -444,6 +444,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const metricsForCurrentStore = useMemo(() => {
         let totalDirectSalesValue = 0;
         let totalUnitsSold = 0;
+        let totalGiftUnits = 0;
         let totalProfit = 0;
         let totalCogs = 0;
         const unitsBySeller: { [key: string]: number } = {};
@@ -466,8 +467,16 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
         transactionsForUnits.forEach(t => {
             const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as CartItem[];
-            const tUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            
+            // Exclude gift products (price 0) from sales units
+            const saleItems = items.filter(item => item && (item.price || 0) > 0);
+            const giftItems = items.filter(item => item && (item.price || 0) === 0);
+            
+            const tUnits = saleItems.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            const tGifts = giftItems.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            
             totalUnitsSold += tUnits;
+            totalGiftUnits += tGifts;
             
             const seller = t.seller;
             unitsBySeller[seller] = (unitsBySeller[seller] || 0) + tUnits;
@@ -480,9 +489,15 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         allTransactionsForRevenue.filter(t => !currentStore?.id || t.storeId === currentStore.id).forEach(t => {
             const payments = (Array.isArray(t.payments) ? t.payments : Object.values(t.payments || {})) as Payment[];
             const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as CartItem[];
+            
+            // Exclude internal gift products from COGS calculations if needed (usually cost still counts, but user says ignore them everywhere)
+            // But they were ALREADY filtered out from profit because price is 0. 
+            // The user says "no debe sumar en el cierre ni en nómina ni en ninguna parte donde puedan afectar"
+            const saleItems = items.filter(item => item && (item.price || 0) > 0);
+            
             const totalTransactionAmount = Math.max(t.totalAmount, 1);
-            const totalTransactionCost = items.reduce((sum, item) => sum + ((item?.cost || 0) * (item?.quantity || 0)), 0);
-            const rawTransactionProfit = items.reduce((sum, item) => sum + (((item.price || 0) - (item.cost || 0)) * (item.quantity || 0)), 0);
+            const totalTransactionCost = saleItems.reduce((sum, item) => sum + ((item?.cost || 0) * (item?.quantity || 0)), 0);
+            const rawTransactionProfit = saleItems.reduce((sum, item) => sum + (((item.price || 0) - (item.cost || 0)) * (item.quantity || 0)), 0);
 
             payments.forEach(p => {
                 if (isWithinRange(p.date)) {
@@ -527,6 +542,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
         return { 
             totalUnitsSold: Math.round(totalUnitsSold), 
+            totalGiftUnits: Math.round(totalGiftUnits),
             totalProfit, 
             averageTicketSize, 
             totalInventoryValue, 
@@ -605,11 +621,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   const priceVariationReportData = useMemo(() => {
     const reportItems: PriceVariationItem[] = [];
-    sales.forEach(sale => { if (isWithinRange(sale.createdAt) && sale.items) { const paymentMethods = sale.payments && sale.payments.length > 0 ? [...new Set(sale.payments.map(p => p.method))] : (sale.paymentMethod ? [sale.paymentMethod] : []); const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; items.forEach(item => { if (!item) return; const productInInventory = inventory.find(p => p.id === item.id); if (!productInInventory) return; const variation = item.price - productInInventory.price; const totalVariation = variation * item.quantity; reportItems.push({ id: `${sale.id}-${item.id}`, date: sale.createdAt, invoiceNumber: sale.invoiceNumber, productName: item.name, seller: sale.seller, soldPrice: item.price, currentPrice: productInInventory.price, variation: variation, quantity: item.quantity, totalVariation: totalVariation, status: variation > 0 ? 'markup' : (variation < 0 ? 'discount' : 'normal'), paymentMethods: paymentMethods }); }); } });
-    const filteredItems = reportItems.filter(item => (priceVariationSellerFilter ? item.seller === priceVariationSellerFilter : true) && (priceVariationPaymentMethodFilter ? item.paymentMethods.includes(priceVariationPaymentMethodFilter as PaymentMethod) : true));
+    sales.forEach(sale => { if (isWithinRange(sale.createdAt) && sale.items) { const paymentMethods = sale.payments && sale.payments.length > 0 ? [...new Set(sale.payments.map(p => p.method))] : (sale.paymentMethod ? [sale.paymentMethod] : []); const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; items.forEach(item => { if (!item || (item.price || 0) === 0) return; const productInInventory = inventory.find(p => p.id === item.id); if (!productInInventory) return; const variation = item.price - productInInventory.price; const totalVariation = variation * item.quantity; reportItems.push({ id: `${sale.id}-${item.id}`, date: sale.createdAt, invoiceNumber: sale.invoiceNumber, productName: item.name, seller: sale.seller, soldPrice: item.price, currentPrice: productInInventory.price, variation: variation, quantity: item.quantity, totalVariation: totalVariation, status: variation > 0 ? 'markup' : (variation < 0 ? 'discount' : 'normal'), paymentMethods: paymentMethods }); }); } });
+    const filteredItems = reportItems.filter(item => (priceVariationSellerFilters.length > 0 ? priceVariationSellerFilters.includes(item.seller) : true) && (priceVariationPaymentMethodFilters.length > 0 ? item.paymentMethods.some(m => priceVariationPaymentMethodFilters.includes(String(m))) : true));
     const summary = filteredItems.reduce((acc, item) => { if (item.totalVariation > 0) acc.totalMarkup += item.totalVariation; else if (item.totalVariation < 0) acc.totalDiscount += item.totalVariation; return acc; }, { totalMarkup: 0, totalDiscount: 0 });
     return { items: filteredItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), summary: { ...summary, netDifference: summary.totalMarkup + summary.totalDiscount } };
-}, [sales, inventory, isWithinRange, priceVariationSellerFilter, priceVariationPaymentMethodFilter]);
+}, [sales, inventory, isWithinRange, priceVariationSellerFilters, priceVariationPaymentMethodFilters]);
 
   const categoryReport = useMemo(() => {
     const allTransactions = [...sales.filter(s => isWithinRange(s.createdAt)), ...layaways.filter(l => isWithinRange(l.createdAt))];
@@ -1048,11 +1064,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         {isPaymentsReportVisible && (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-6">
-                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30">
+                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group">
                         <div className="flex justify-between items-start">
                             <div className="text-left">
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades</p>
+                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades Vendidas</p>
                                 <p className="text-lg sm:text-2xl font-black">{metricsForCurrentStore.totalUnitsSold}</p>
+                                {metricsForCurrentStore.totalGiftUnits > 0 && (
+                                    <p className="text-[10px] text-accent font-bold mt-1">+{metricsForCurrentStore.totalGiftUnits} obsequios</p>
+                                )}
                             </div>
                             <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
                         </div>
@@ -1097,7 +1116,42 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Análisis de Precios y Diferencias</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} /></div>
         {isPriceAnalysisVisible && (
-            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6"><div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg border-l-4 border-green-500"><p className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase">Total Valorización (Markups)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p></div><div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-l-4 border-red-500"><p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase">Total Descuentos (Discounts)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p></div><div className={`p-4 rounded-lg border-l-4 ${priceVariationReportData.summary.netDifference >= 0 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'}`}><p className="text-sm font-semibold uppercase">Diferencia Neta</p><p className={`text-2xl font-extrabold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>{formatCOP(priceVariationReportData.summary.netDifference)}</p></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><select value={priceVariationSellerFilter} onChange={e => setPriceVariationSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md"><option value="">Todos los vendedores</option>{sellers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select><select value={priceVariationPaymentMethodFilter} onChange={e => setPriceVariationPaymentMethodFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-md"><option value="">Todos los métodos de pago</option>{Object.values(PaymentMethod).map(m => <option key={m} value={m}>{m}</option>)}</select></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-2 font-semibold">Fecha/Factura</th><th className="p-2 font-semibold">Producto</th><th className="p-2 font-semibold">Vendedor</th><th className="p-2 font-semibold text-right">P. Sistema</th><th className="p-2 font-semibold text-right">P. Venta</th><th className="p-2 font-semibold text-right">Dif. Unit</th><th className="p-2 font-semibold text-right">Dif. Total</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{priceVariationReportData.items.map(item => (<tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td className="p-2"><p className="font-mono text-xs">{new Date(item.date).toLocaleDateString()}</p><p className="text-accent font-bold">#{item.invoiceNumber}</p></td><td className="p-2 font-medium">{item.productName} <span className="text-gray-400">(x{item.quantity})</span></td><td className="p-2">{item.seller}</td><td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td><td className="p-2 text-right font-bold">{formatCOP(item.soldPrice)}</td><td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>{item.variation > 0 ? `+${formatCOP(item.variation)}` : formatCOP(item.variation)}</td><td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>{item.totalVariation > 0 ? `+${formatCOP(item.totalVariation)}` : formatCOP(item.totalVariation)}</td></tr>))}</tbody></table>{priceVariationReportData.items.length === 0 && <p className="text-center py-6 text-gray-500">Sin variaciones registradas.</p>}</div></div>
+            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6"><div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg border-l-4 border-green-500"><p className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase">Total Valorización (Markups)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p></div><div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-l-4 border-red-500"><p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase">Total Descuentos (Discounts)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p></div><div className={`p-4 rounded-lg border-l-4 ${priceVariationReportData.summary.netDifference >= 0 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'}`}><p className="text-sm font-semibold uppercase">Diferencia Neta</p><p className={`text-2xl font-extrabold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>{formatCOP(priceVariationReportData.summary.netDifference)}</p></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Filtrar por Vendedores</label>
+        <div className="flex flex-wrap gap-1 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-lg border border-gray-100 dark:border-gray-700">
+            {sellers.map(s => (
+                <button
+                    key={s.id}
+                    onClick={() => setPriceVariationSellerFilters(prev => prev.includes(s.name) ? prev.filter(f => f !== s.name) : [...prev, s.name])}
+                    className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${priceVariationSellerFilters.includes(s.name) ? 'bg-accent text-white shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                >
+                    {s.name}
+                </button>
+            ))}
+            {priceVariationSellerFilters.length > 0 && (
+                <button onClick={() => setPriceVariationSellerFilters([])} className="px-2 py-1 text-[10px] font-bold text-red-500 hover:underline ml-auto">Limpiar</button>
+            )}
+        </div>
+    </div>
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Filtrar por Métodos de Pago</label>
+        <div className="flex flex-wrap gap-1 bg-gray-50 dark:bg-gray-900/50 p-2 rounded-lg border border-gray-100 dark:border-gray-700">
+            {Object.values(PaymentMethod).map(m => (
+                <button
+                    key={m}
+                    onClick={() => setPriceVariationPaymentMethodFilters(prev => prev.includes(m) ? prev.filter(f => f !== m) : [...prev, m])}
+                    className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all ${priceVariationPaymentMethodFilters.includes(m) ? 'bg-accent text-white shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                >
+                    {m}
+                </button>
+            ))}
+            {priceVariationPaymentMethodFilters.length > 0 && (
+                <button onClick={() => setPriceVariationPaymentMethodFilters([])} className="px-2 py-1 text-[10px] font-bold text-red-500 hover:underline ml-auto">Limpiar</button>
+            )}
+        </div>
+    </div>
+</div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-2 font-semibold">Fecha/Factura</th><th className="p-2 font-semibold">Producto</th><th className="p-2 font-semibold">Vendedor</th><th className="p-2 font-semibold text-right">P. Sistema</th><th className="p-2 font-semibold text-right">P. Venta</th><th className="p-2 font-semibold text-right">Dif. Unit</th><th className="p-2 font-semibold text-right">Dif. Total</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{priceVariationReportData.items.map(item => (<tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td className="p-2"><p className="font-mono text-xs">{new Date(item.date).toLocaleDateString()}</p><p className="text-accent font-bold">#{item.invoiceNumber}</p></td><td className="p-2 font-medium">{item.productName} <span className="text-gray-400">(x{item.quantity})</span></td><td className="p-2">{item.seller}</td><td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td><td className="p-2 text-right font-bold">{formatCOP(item.soldPrice)}</td><td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>{item.variation > 0 ? `+${formatCOP(item.variation)}` : formatCOP(item.variation)}</td><td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>{item.totalVariation > 0 ? `+${formatCOP(item.totalVariation)}` : formatCOP(item.totalVariation)}</td></tr>))}</tbody></table>{priceVariationReportData.items.length === 0 && <p className="text-center py-6 text-gray-500">Sin variaciones registradas.</p>}</div></div>
         )}
       </div>
 

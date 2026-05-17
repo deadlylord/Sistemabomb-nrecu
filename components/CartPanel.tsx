@@ -153,14 +153,18 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                     ) : (
                     <div className="flex flex-col items-start">
                         <div className="flex items-baseline gap-2">
-                            <p className="text-sm text-accent cursor-pointer font-bold" onClick={() => handlePriceClick(item)}>
-                                {formatCOP(item.price)}
-                            </p>
+                            {item.price === 0 ? (
+                                <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">Obsequio</span>
+                            ) : (
+                                <p className="text-sm text-accent cursor-pointer font-bold" onClick={() => handlePriceClick(item)}>
+                                    {formatCOP(item.price)}
+                                </p>
+                            )}
                             {item.basePrice && item.basePrice > item.price && (
                                 <span className="text-[10px] text-slate-400 line-through">{formatCOP(item.basePrice)}</span>
                             )}
                         </div>
-                        {item.discountPrice && item.discountPrice === item.price && (
+                        {item.discountPrice && item.discountPrice === item.price && item.price > 0 && (
                             <span className="text-[10px] text-orange-500 font-black uppercase tracking-tighter animate-pulse">Liquidación</span>
                         )}
                     </div>
