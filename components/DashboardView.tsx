@@ -412,81 +412,100 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const isNextDayDisabled = useMemo(() => { const today = new Date(); today.setHours(0, 0, 0, 0); const currentSelectionEnd = new Date(endDate + 'T12:00:00'); currentSelectionEnd.setHours(0, 0, 0, 0); return currentSelectionEnd >= today; }, [endDate]);
 
     const metricsForCurrentStore = useMemo(() => {
-        const directSalesInRange = sales.filter(s => {
-            if (!isWithinRange(s.createdAt) || s.layawayId) return false;
-            return true;
-        });
-        const newActiveLayawaysInRange = layaways.filter(l => isWithinRange(l.createdAt) && l.status === 'active');
-        
-        // Calculate Operating Expenses (Excluding Direct Costs like Inventory/Merchandise to avoid double counting with COGS)
+        let totalDirectSalesValue = 0;
+        let totalUnitsSold = 0;
+        let totalProfit = 0;
+        let totalCogs = 0;
+        const unitsBySeller: { [key: string]: number } = {};
+
+        // Calculate Operating Expenses
         const EXCLUDED_OPERATING_CATEGORIES = ['MERCANCIA', 'COMPRA MERCANCIA', 'INVENTARIO', 'ACTIVOS', 'INVERSION'];
-        
         const totalExpenses = (expenses || []).filter(e => {
-            if (!isWithinRange(e.date)) return false;
+            const isStoreMatch = !currentStore?.id || e.storeId === currentStore.id;
+            if (!isStoreMatch || !isWithinRange(e.date)) return false;
             const cat = (e.category || '').toUpperCase();
-            // Si la categoría contiene palabras clave de inventario, la descartamos de Gastos Operativos
             return !EXCLUDED_OPERATING_CATEGORIES.some(ex => cat.includes(ex));
         }).reduce((sum, e) => sum + e.amount, 0);
 
-        const allSoldItems = [...directSalesInRange.flatMap(s => s.items || []), ...newActiveLayawaysInRange.flatMap(l => l.items || [])].filter(Boolean);
-        
-        // Calculate COGS (Cost of Goods Sold) for the range
-        const totalCogs = allSoldItems.reduce((sum, item) => {
-            if (!item || item.cost === undefined) return sum;
-            return sum + (item.cost * item.quantity);
-        }, 0);
+        // 1. Unidades vendidas y COGS: Basado en CREACIÓN (como el reporte diario)
+        // Pero excluyendo ventas que vienen de apartados para no duplicar unidades
+        const transactionsForUnits = [
+            ...sales.filter(s => !s.layawayId), 
+            ...layaways.filter(l => l.status !== 'cancelled' && l.status !== 'pre-order')
+        ].filter(t => (!currentStore?.id || t.storeId === currentStore.id) && isWithinRange(t.createdAt));
 
-        const unitsBySeller: { [key: string]: number } = {};
-        [...directSalesInRange, ...newActiveLayawaysInRange].forEach(transaction => { 
-            const seller = transaction.seller; 
-            if (!unitsBySeller[seller]) unitsBySeller[seller] = 0; 
-            const items = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[]; 
-            const transactionUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0); 
+        transactionsForUnits.forEach(t => {
+            const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as CartItem[];
+            const tUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            totalUnitsSold += tUnits;
             
-            const payments = (Array.isArray(transaction.payments) ? transaction.payments : Object.values(transaction.payments || {})) as Payment[];
-            const bonoPaymentTotal = payments.filter(p => p.method === PaymentMethod.Bono).reduce((sum, p) => sum + p.amount, 0);
-            const bonoRatio = transaction.totalAmount > 0 ? (bonoPaymentTotal / transaction.totalAmount) : 0;
-            const unitsToCount = transactionUnits * (1 - bonoRatio);
-            
-            unitsBySeller[seller] += unitsToCount; 
+            const seller = t.seller;
+            unitsBySeller[seller] = (unitsBySeller[seller] || 0) + tUnits;
         });
-        const sortedUnitsBySeller = Object.entries(unitsBySeller).map(([sellerName, units]) => ({ sellerName, units: Number(units.toFixed(2)) })).sort((a, b) => b.units - a.units);
-        const totalUnitsSold = allSoldItems.reduce((sum, item) => sum + (item as CartItem).quantity, 0);
-        const totalProfit = directSalesInRange.reduce((sum, sale) => { 
-            const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[]; 
-            const rawProfit = items.reduce((itemSum, item) => { 
-                if (!item || item.cost === undefined) return itemSum; 
-                return itemSum + ((item.price - item.cost) * item.quantity); 
-            }, 0); 
-            let saleCommission = 0; 
-            const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]; 
-            if (payments && payments.length > 0) { 
-                payments.forEach(payment => { 
-                    if (payment.method !== PaymentMethod.Bono) {
-                        const rate = COMMISSION_RATES[payment.method as PaymentMethod]; 
-                        if (rate) saleCommission += payment.amount * rate; 
-                    }
-                }); 
-            } else if (sale.paymentMethod) { 
-                const rate = COMMISSION_RATES[sale.paymentMethod as PaymentMethod]; 
-                if (rate) saleCommission += sale.totalAmount * rate; 
-            } 
-            
-            return sum + (rawProfit - saleCommission); 
-        }, 0);
-        
-        const totalDirectSalesValue = directSalesInRange.reduce((sum, s) => {
-            const payments = (Array.isArray(s.payments) ? s.payments : Object.values(s.payments || {})) as Payment[];
-            const bonoPaymentTotal = payments.filter(p => p.method === PaymentMethod.Bono).reduce((pSum, p) => pSum + p.amount, 0);
-            return sum + (s.totalAmount - bonoPaymentTotal);
-        }, 0);
-        const averageTicketSize = directSalesInRange.length > 0 ? totalDirectSalesValue / directSalesInRange.length : 0;
-        const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
 
-        // Calculate Net Profit: Gross Profit - Operating Expenses
+        // 2. Ingresos y Utilidad: Basado en PAGOS (como el reporte diario)
+        const allTransactionsForRevenue = [...sales, ...layaways.filter(l => l.status !== 'cancelled')];
+        const uniqueInvoicesInRange = new Set<string>();
+
+        allTransactionsForRevenue.filter(t => !currentStore?.id || t.storeId === currentStore.id).forEach(t => {
+            const payments = (Array.isArray(t.payments) ? t.payments : Object.values(t.payments || {})) as Payment[];
+            const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as CartItem[];
+            const totalTransactionAmount = Math.max(t.totalAmount, 1);
+            const totalTransactionCost = items.reduce((sum, item) => sum + ((item?.cost || 0) * (item?.quantity || 0)), 0);
+            const rawTransactionProfit = items.reduce((sum, item) => sum + (((item.price || 0) - (item.cost || 0)) * (item.quantity || 0)), 0);
+
+            payments.forEach(p => {
+                if (isWithinRange(p.date)) {
+                    const amount = Number(p.amount) || 0;
+                    const ratio = amount / totalTransactionAmount;
+                    
+                    if (p.method !== PaymentMethod.Bono) {
+                        totalDirectSalesValue += amount;
+                        uniqueInvoicesInRange.add(t.id);
+                        
+                        // Profit & COGS (Payment based)
+                        const rate = COMMISSION_RATES[p.method as PaymentMethod] || 0;
+                        const pCommission = amount * rate;
+                        
+                        totalProfit += (rawTransactionProfit * ratio) - pCommission;
+                        totalCogs += (totalTransactionCost * ratio);
+                    }
+                }
+            });
+        });
+
+        // Sumar Novedades de Caja (Recaudos e Ingresos)
+        const revenueAdjustments = allIncidents.filter(i => 
+            (!currentStore?.id || i.storeId === currentStore.id) && 
+            isWithinRange(i.createdAt) &&
+            (i.type === IncidentType.RECAUDO || (i.type === IncidentType.CASH_ADJUSTMENT && i.adjustmentType === 'income')) &&
+            i.status !== IncidentStatus.PENDIENTE_APROBACION
+        );
+
+        revenueAdjustments.forEach(adj => {
+            totalDirectSalesValue += (adj.adjustmentAmount || 0);
+            totalProfit += (adj.adjustmentAmount || 0); // Todo lo de recaudo es utilidad neta
+        });
+
+        const sortedUnitsBySeller = Object.entries(unitsBySeller)
+            .map(([sellerName, units]) => ({ sellerName, units: Number(units.toFixed(2)) }))
+            .sort((a, b) => b.units - a.units);
+
+        const averageTicketSize = uniqueInvoicesInRange.size > 0 ? totalDirectSalesValue / uniqueInvoicesInRange.size : 0;
+        const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
         const netProfit = totalProfit - totalExpenses;
 
-        return { totalUnitsSold, totalProfit, averageTicketSize, totalInventoryValue, unitsBySeller: sortedUnitsBySeller, totalDirectSalesValue, totalExpenses, totalCogs, netProfit };
+        return { 
+            totalUnitsSold: Math.round(totalUnitsSold), 
+            totalProfit, 
+            averageTicketSize, 
+            totalInventoryValue, 
+            unitsBySeller: sortedUnitsBySeller, 
+            totalDirectSalesValue, 
+            totalExpenses, 
+            totalCogs, 
+            netProfit 
+        };
     }, [sales, layaways, inventory, expenses, isWithinRange]);
   
   const cashBreakdown = useMemo(() => {

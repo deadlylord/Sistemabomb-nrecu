@@ -271,9 +271,9 @@ const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* CENTER: Navigation (Desktop & Mobile) */}
-          <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2" ref={groupMenuRef}>
+          <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
              {/* Desktop Navigation */}
-             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 px-2">
+             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 px-2 flex-nowrap">
                 {filteredGroups.map((group, gIdx) => {
                     const isGroupActive = group.items.some(i => i.view === currentView);
                     const GroupIcon = group.icon;

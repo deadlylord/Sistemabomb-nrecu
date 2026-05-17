@@ -227,35 +227,27 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
     const salesAndLayawaysByDay = new Map<string, number>();
 
-    sales.filter(sale => {
-        const saleDate = new Date(sale.createdAt);
-        return !sale.layawayId && sale.seller === currentName && saleDate >= startFilterDate && saleDate <= endFilterDate;
-    }).forEach(sale => {
-        const dateStr = toLocalDateString(new Date(sale.createdAt));
-        const saleUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+    const processTransactions = (transactions: (Sale | Layaway)[]) => {
+      transactions.forEach(t => {
+        // Solo contamos unidades si la transacción fue creada en el periodo
+        // Y si NO es una venta que viene de un apartado (para no duplicar unidades)
+        const isSettledLayaway = (t as Sale).layawayId;
+        const tDate = new Date(t.createdAt);
         
-        const payments = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as any[];
-        const bonoPaymentTotal = payments.filter(p => p.method === 'Bono de Regalo').reduce((sum, p) => sum + p.amount, 0);
-        const bonoRatio = sale.totalAmount > 0 ? (bonoPaymentTotal / sale.totalAmount) : 0;
-        const unitsToCount = saleUnits * (1 - bonoRatio);
-        
-        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + unitsToCount);
-    });
+        if (!isSettledLayaway && tDate >= startFilterDate && tDate <= endFilterDate) {
+          if (t.seller === currentName) {
+            const dateStr = toLocalDateString(tDate);
+            const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as any[];
+            const totalUnits = items.reduce((sum, item) => sum + (item?.quantity || 0), 0);
+            
+            salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + totalUnits);
+          }
+        }
+      });
+    };
 
-    layaways.filter(layaway => {
-        const layawayDate = new Date(layaway.createdAt);
-        return layaway.status === 'active' && layaway.seller === currentName && layawayDate >= startFilterDate && layawayDate <= endFilterDate;
-    }).forEach(layaway => {
-        const dateStr = toLocalDateString(new Date(layaway.createdAt));
-        const layawayUnits = layaway.items.reduce((sum, item) => sum + item.quantity, 0);
-        
-        const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as any[];
-        const bonoPaymentTotal = payments.filter(p => p.method === 'Bono de Regalo').reduce((sum, p) => sum + p.amount, 0);
-        const bonoRatio = layaway.totalAmount > 0 ? (bonoPaymentTotal / layaway.totalAmount) : 0;
-        const unitsToCount = layawayUnits * (1 - bonoRatio);
-        
-        salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + unitsToCount);
-    });
+    processTransactions(sales);
+    processTransactions(layaways.filter(l => l.status !== 'cancelled' && l.status !== 'pre-order'));
 
     const allDates = new Set<string>([...loginsByDay.keys(), ...salesAndLayawaysByDay.keys()]);
 

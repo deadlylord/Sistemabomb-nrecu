@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod, FinancialRecord, View } from '../types';
 import { formatCOP } from '../constants';
-import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon } from './Icons';
+import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon, ChevronDownIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
 
 interface SmartAccountantViewProps {
@@ -46,7 +46,7 @@ interface AccountingStats {
   monthlyPayroll: number;
   monthlyPurchases: number;
   totalInventoryValue: number;
-  expensesByCategory: Record<string, number>;
+  expensesByCategory: Record<string, { total: number; concepts: Record<string, number> }>;
   expenseDetails: {
     id: string;
     description: string;
@@ -55,6 +55,7 @@ interface AccountingStats {
     account: string;
     date: string;
     excludeFromAccounting?: boolean;
+    registeredBy?: string;
   }[];
 }
 
@@ -96,6 +97,8 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   onNavigate
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'templates' | 'categories' | 'ai'>('summary');
+  const [expandedConceptGroups, setExpandedConceptGroups] = useState<Record<string, boolean>>({});
+  const [expandedBreakdownCategories, setExpandedBreakdownCategories] = useState<Record<string, boolean>>({});
   
   // Maestro de Periodo
   const now = new Date();
@@ -213,10 +216,19 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             return isExpense && isInPeriod && isNotInterStore && isNotPurchase;
         })
         .reduce((acc, r) => {
-            const cat = r.subCategory || 'Otras';
-            acc[cat] = (acc[cat] || 0) + Math.abs(r.amount);
+            // Unificamos categorías (Mayúsculas y Recorte de espacios)
+            const cat = (r.subCategory || 'OTRAS').trim().toUpperCase();
+            const concept = (r.description || 'SIN DESCRIPCIÓN').trim().toUpperCase();
+            
+            if (!acc[cat]) {
+              acc[cat] = { total: 0, concepts: {} };
+            }
+            
+            acc[cat].total += Math.abs(r.amount);
+            acc[cat].concepts[concept] = (acc[cat].concepts[concept] || 0) + Math.abs(r.amount);
+            
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, { total: number; concepts: Record<string, number> }>);
 
     const totalExpenses = monthlyReconciledExpenses + monthlyPayrollFromConciliation;
     const grossProfit = totalRevenue - monthlyCogs;
@@ -248,15 +260,17 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             })
             .map(r => ({ 
                 id: r.id,
-                description: r.description, 
-                amount: Math.abs(r.amount), 
-                category: r.subCategory || 'S/C', 
-                account: r.accountType,
+                description: r.description,
+                amount: Math.abs(r.amount),
+                category: (r.subCategory || 'OTRAS').trim().toUpperCase(),
+                account: r.accountType || 'cash',
                 date: r.date,
-                excludeFromAccounting: r.excludeFromAccounting
+                excludeFromAccounting: !!r.excludeFromAccounting,
+                registeredBy: r.registeredBy
             }))
+            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     };
-  }, [sales, layaways, financialRecords, payrollHistory, inventory, selectedMonth, selectedYear, currentMonthName, currentStore, expenses]);
+}, [sales, layaways, financialRecords, payrollHistory, inventory, selectedMonth, selectedYear, currentMonthName, currentStore, expenses]);
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -464,6 +478,69 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     return reconciledList.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [expenses, financialRecords, activeTab, selectedMonth, selectedYear]);
 
+  const groupedExpenses = useMemo(() => {
+    const list = filteredExpensesList.filter(e => !e.isRecurring);
+    const groups: Record<string, { 
+      concept: string; 
+      total: number; 
+      category: string; 
+      items: typeof list; 
+      allExcluded: boolean;
+    }> = {};
+
+    list.forEach(e => {
+        const key = e.description.trim().toUpperCase();
+        if (!groups[key]) {
+            groups[key] = { 
+                concept: key, 
+                total: 0, 
+                category: e.category.toUpperCase(), 
+                items: [],
+                allExcluded: true
+            };
+        }
+        groups[key].total += e.amount;
+        groups[key].items.push(e);
+        if (!e.excludeFromAccounting) groups[key].allExcluded = false;
+    });
+
+    return Object.values(groups).sort((a, b) => b.total - a.total);
+  }, [filteredExpensesList]);
+
+  const handleDiscardCategory = async (categoryName: string) => {
+    if (!onToggleFinancialRecordAccounting) return;
+    const categoryUpper = categoryName.toUpperCase();
+    const recordsToDiscard = financialRecords.filter(r => 
+        r.subCategory?.trim().toUpperCase() === categoryUpper && 
+        new Date(r.date).getMonth() === selectedMonth && 
+        new Date(r.date).getFullYear() === selectedYear &&
+        !r.excludeFromAccounting
+    );
+
+    if (recordsToDiscard.length === 0) {
+        alert("No hay gastos activos en esta categoría para descartar.");
+        return;
+    }
+
+    if (window.confirm(`¿Deseas excluir todos los gastos (${recordsToDiscard.length}) de la categoría "${categoryUpper}" para la contabilidad de este mes? (No afecta conciliación)`)) {
+        for (const r of recordsToDiscard) {
+            await onToggleFinancialRecordAccounting(r.id, true);
+        }
+    }
+  };
+
+  const handleDiscardConceptGroup = async (group: typeof groupedExpenses[0]) => {
+    if (!onToggleFinancialRecordAccounting) return;
+    const recordsToDiscard = group.items.filter(i => !i.excludeFromAccounting);
+    if (recordsToDiscard.length === 0) return;
+
+    if (window.confirm(`¿Deseas excluir todos los movimientos de "${group.concept}" (${recordsToDiscard.length}) de la contabilidad?`)) {
+        for (const r of recordsToDiscard) {
+            await onToggleFinancialRecordAccounting(r.id, true);
+        }
+    }
+  };
+
   const years = useMemo(() => {
     const currentY = new Date().getFullYear();
     return Array.from({ length: 5 }, (_, i) => currentY - 2 + i);
@@ -620,40 +697,61 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                         <div className="space-y-6">
                             <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Breakdown por Categoría</h4>
-                            <div className="space-y-5 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
-                                {(Object.entries(stats.expensesByCategory) as [string, number][]).sort((a,b) => b[1] - a[1]).map(([cat, amount]) => (
-                                    <div key={cat} className="group">
-                                        <div className="flex justify-between items-center mb-1.5">
+                            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 scrollbar-hide">
+                                {(Object.entries(stats.expensesByCategory) as [string, { total: number; concepts: Record<string, number> }][])
+                                  .sort((a,b) => b[1].total - a[1].total)
+                                  .map(([cat, details]) => (
+                                    <div key={cat} className="group bg-gray-50/50 dark:bg-gray-800/20 rounded-xl p-3 border border-transparent hover:border-accent/10 transition-all">
+                                        <div 
+                                          className="flex justify-between items-center mb-1.5 cursor-pointer"
+                                          onClick={() => setExpandedBreakdownCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                                        >
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${cat === 'Personal' ? 'bg-purple-500' : 'bg-accent'}`}></div>
-                                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors">{cat}</span>
+                                                <ChevronDownIcon className={`w-3 h-3 text-gray-400 transition-transform ${expandedBreakdownCategories[cat] ? 'rotate-180' : ''}`} />
+                                                <div className={`w-2 h-2 rounded-full ${cat === 'PERSONAL' ? 'bg-purple-500' : 'bg-accent'}`}></div>
+                                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 group-hover:text-accent transition-colors uppercase">{cat}</span>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <button 
-                                                    onClick={async () => {
-                                                        if (window.confirm(`¿Excluir TODA la categoría "${cat}" de la contabilidad de este mes?`)) {
-                                                            const recordsToExclude = stats.expenseDetails.filter(d => d.category === cat);
-                                                            for (const record of recordsToExclude) {
-                                                                if (onToggleFinancialRecordAccounting) {
-                                                                    await onToggleFinancialRecordAccounting(record.id, true);
-                                                                }
-                                                            }
-                                                        }
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 text-[10px] font-black text-red-500 hover:text-red-700 uppercase tracking-tighter transition-all"
+                                                    onClick={(e) => { e.stopPropagation(); handleDiscardCategory(cat); }}
+                                                    className="opacity-0 group-hover:opacity-100 text-[9px] font-black text-red-500 hover:text-red-700 uppercase tracking-tighter transition-all"
                                                     title="Excluir categoría completa"
                                                 >
                                                     [Descartar]
                                                 </button>
-                                                <span className="text-sm font-black text-accent">{formatCOP(amount)}</span>
+                                                <span className="text-sm font-black text-accent">{formatCOP(details.total)}</span>
                                             </div>
                                         </div>
-                                        <div className="w-full bg-gray-100 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                                        <div 
+                                          className="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden mb-1 cursor-pointer"
+                                          onClick={() => setExpandedBreakdownCategories(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                                        >
                                             <div 
-                                                className={`${cat === 'Personal' ? 'bg-purple-500/60' : 'bg-accent/60'} h-full rounded-full transition-all duration-1000 group-hover:opacity-100`} 
-                                                style={{width: `${(amount / (stats.totalExpenses || 1)) * 100}%`}}
+                                                className={`${cat === 'PERSONAL' ? 'bg-purple-500/60' : 'bg-accent/60'} h-full rounded-full transition-all duration-1000 group-hover:opacity-100`} 
+                                                style={{width: `${(details.total / (stats.totalExpenses || 1)) * 100}%`}}
                                             ></div>
                                         </div>
+                                        
+                                        {expandedBreakdownCategories[cat] && (
+                                          <div className="mt-3 space-y-2 pl-6 animate-fade-in border-l-2 border-accent/10">
+                                            {(Object.entries(details.concepts) as [string, number][])
+                                              .sort((a,b) => b[1] - a[1])
+                                              .map(([concept, amount]) => (
+                                                <div key={concept} className="flex justify-between items-center text-[11px] group/item">
+                                                  <span className="text-gray-500 dark:text-gray-400 font-medium uppercase tracking-tight truncate max-w-[200px]">{concept}</span>
+                                                  <div className="flex items-center gap-2">
+                                                    <button 
+                                                      onClick={() => handleDiscardConceptGroup(concept)}
+                                                      className="opacity-0 group-hover/item:opacity-100 text-[8px] font-black text-red-400 hover:text-red-600 uppercase transition-all"
+                                                    >
+                                                      [Ocultar]
+                                                    </button>
+                                                    <span className="font-black text-gray-700 dark:text-gray-200">{formatCOP(amount)}</span>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                          </div>
+                                        )}
                                     </div>
                                 ))}
                                 {Object.keys(stats.expensesByCategory).length === 0 && (
@@ -720,45 +818,75 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {filteredExpensesList.filter(e => !e.isRecurring).map(e => (
-                                    <tr key={e.id} className="hover:bg-accent/5 transition-colors group">
-                                        <td className="px-6 py-4 text-xs">
-                                            <div className="flex flex-col">
-                                                <span className="text-gray-400 font-mono">{new Date(e.date).toLocaleDateString()}</span>
-                                                {(e as any).accountType && (
-                                                    <span className="text-[9px] font-black text-accent/60 uppercase">
-                                                        {(stats.accountLabels as any)?.[(e as any).accountType] || (e as any).accountType}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <p className="font-bold text-gray-800 dark:text-gray-200">{e.description}</p>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-[10px] uppercase font-black tracking-widest text-gray-500 dark:text-gray-400">
-                                                {e.category}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-black text-red-500">{formatCOP(e.amount)}</td>
-                                        <td className="px-6 py-4 text-center">
-                                            {onToggleFinancialRecordAccounting && (
-                                                <button 
-                                                    onClick={() => onToggleFinancialRecordAccounting(e.id, !e.excludeFromAccounting)}
-                                                    className={`p-1.5 rounded-lg transition-all ${!e.excludeFromAccounting ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
-                                                    title={!e.excludeFromAccounting ? 'Incluido (Click para excluir)' : 'Excluido (Click para incluir)'}
-                                                >
-                                                    {!e.excludeFromAccounting ? <CheckIcon className="w-4 h-4"/> : <CrossIcon className="w-4 h-4"/>}
-                                                </button>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                <button onClick={() => handleEditClick(e)} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar"><EditIcon className="w-5 h-5"/></button>
-                                                <button onClick={() => onDeleteExpense(e.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50" title="Eliminar"><TrashIcon className="w-5 h-5"/></button>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                {groupedExpenses.map(group => (
+                                    <React.Fragment key={group.concept}>
+                                        <tr className={`hover:bg-accent/5 transition-colors group cursor-pointer ${group.allExcluded ? 'opacity-50 grayscale bg-gray-50/50' : ''}`} onClick={() => setExpandedConceptGroups(prev => ({ ...prev, [group.concept]: !prev[group.concept] }))}>
+                                            <td className="px-6 py-4 text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedConceptGroups[group.concept] ? 'rotate-180' : ''}`} />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-gray-400 font-bold uppercase text-[9px]">{group.items.length} MOVIMIENTO(S)</span>
+                                                        <span className="text-[10px] text-gray-500 font-mono">{new Date(group.items[0].date).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <p className="font-black text-gray-800 dark:text-gray-200 uppercase tracking-tight text-[11px]">{group.concept}</p>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-[9px] uppercase font-black tracking-widest text-gray-500 dark:text-gray-400 border border-transparent group-hover:border-accent/20 transition-all">
+                                                    {group.category}
+                                                </span>
+                                            </td>
+                                            <td className={`px-6 py-4 text-right font-black ${group.allExcluded ? 'text-gray-400 line-through' : 'text-red-500'}`}>{formatCOP(group.total)}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDiscardConceptGroup(group); }}
+                                                        className={`px-2 py-1 rounded text-[8px] font-black uppercase transition-all shadow-sm ${!group.allExcluded ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                                        disabled={group.allExcluded}
+                                                    >
+                                                        {group.allExcluded ? 'EXCLUIDO' : 'DESCARTAR GRUPO'}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4"></td>
+                                        </tr>
+                                        {expandedConceptGroups[group.concept] && group.items.map(item => (
+                                            <tr key={item.id} className={`bg-gray-50/30 dark:bg-black/10 border-l-4 border-accent animate-fade-in ${item.excludeFromAccounting ? 'opacity-40' : ''}`}>
+                                                <td className="px-6 py-3 text-[10px]">
+                                                   <div className="flex flex-col">
+                                                        <span className="font-mono text-gray-400">{new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        <span className="text-[8px] font-black text-accent/60 uppercase">Registrado por: {item.registeredBy || 'Anon'}</span>
+                                                   </div>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <p className="text-gray-600 dark:text-gray-400 italic text-[10px]">{item.description}</p>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[8px] font-bold text-gray-400 uppercase">Cta:</span>
+                                                        <span className="text-[8px] font-black text-gray-500 uppercase">{item.account || 'cash'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className={`px-6 py-3 text-right text-[11px] font-bold ${item.excludeFromAccounting ? 'text-gray-400 line-through' : 'text-gray-600'}`}>{formatCOP(item.amount)}</td>
+                                                <td className="px-6 py-3 text-center">
+                                                    <button 
+                                                        onClick={() => onToggleFinancialRecordAccounting?.(item.id, !item.excludeFromAccounting)}
+                                                        className={`p-1 rounded transition-all ${!item.excludeFromAccounting ? 'text-green-500' : 'text-gray-300'}`}
+                                                    >
+                                                        {!item.excludeFromAccounting ? <CheckIcon className="w-3.5 h-3.5 shadow-sm"/> : <CrossIcon className="w-3.5 h-3.5"/>}
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-3 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5 shadow-sm">
+                                                        <button onClick={() => handleEditClick(item as any)} className="text-gray-400 hover:text-accent p-1 rounded-full"><EditIcon className="w-3.5 h-3.5" /></button>
+                                                        <button onClick={() => onDeleteExpense(item.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-full"><TrashIcon className="w-3.5 h-3.5" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
