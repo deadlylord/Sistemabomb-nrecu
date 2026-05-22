@@ -272,33 +272,6 @@ const Header: React.FC<HeaderProps> = ({
 
           {/* CENTER: Navigation (Desktop & Mobile) */}
           <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
-             {/* Desktop Navigation */}
-             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 px-2 flex-nowrap">
-                {filteredGroups.map((group, gIdx) => {
-                    const isGroupActive = group.items.some(i => i.view === currentView);
-                    const GroupIcon = group.icon;
-                    
-                    return (
-                        <div key={group.id} className={`flex items-center gap-1.5 px-2 py-1 rounded-xl transition-all border
-                            ${isGroupActive ? 'bg-accent/5 border-accent/20' : 'border-transparent'}`}>
-                            
-                            <div className="flex flex-col items-center justify-center mr-1 opacity-40 group">
-                                <GroupIcon className={`w-3.5 h-3.5 ${isGroupActive ? 'text-accent opacity-100' : 'text-slate-400'}`} />
-                                <span className={`text-[7px] font-black uppercase tracking-tighter ${isGroupActive ? 'text-accent' : 'text-slate-500'}`}>
-                                    {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : 'Admin'}
-                                </span>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                                {group.items.map(item => (
-                                    <DesktopNavButton key={item.view} item={item} />
-                                ))}
-                            </div>
-                        </div>
-                    );
-                })}
-             </nav>
-
              {/* Mobile Navigation (Three Main Buttons) */}
              <div className="lg:hidden flex items-center justify-center gap-2 w-full max-w-[280px]">
                 {filteredGroups.map((group, idx) => {
@@ -417,8 +390,57 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
+      {/* Beautiful Desktop Sidebar */}
+      <aside className="hidden lg:flex flex-col lg:w-64 fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-4 px-3 space-y-5 scrollbar-thin">
+        {filteredGroups.map((group) => {
+          const GroupIcon = group.icon;
+          return (
+            <div key={group.id} className="space-y-1">
+              {/* Group Title */}
+              <div className="flex items-center gap-2 px-3 py-1 text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1 mb-2">
+                <GroupIcon className="w-3.5 h-3.5 text-accent opacity-80" />
+                <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>
+              </div>
+              
+              {/* Group Items */}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = currentView === item.view;
+                  const Icon = item.icon;
+                  return (
+                     <button
+                       key={item.view}
+                       onClick={() => setCurrentView(item.view)}
+                       className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl transition-all duration-200 group text-left relative
+                         ${isActive 
+                           ? 'bg-accent text-white shadow-md shadow-accent/15 font-bold scale-[1.01]' 
+                           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                         }`}
+                     >
+                       <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}`}>
+                         <Icon className="w-4 h-4" />
+                       </div>
+                       <div className="flex-grow min-w-0">
+                         <p className="text-xs font-black leading-none">{item.label}</p>
+                         <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                           {item.description}
+                         </p>
+                       </div>
+                       {item.view === View.INCIDENTS && pendingCount > 0 && (
+                           <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-white text-accent animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
+                               {pendingCount}
+                           </span>
+                       )}
+                     </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </aside>
 
-      <div className="h-20 lg:h-20"></div>
+      <div className="h-16 lg:h-16"></div>
     </>
   );
 };

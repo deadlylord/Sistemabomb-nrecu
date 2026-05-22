@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.64',
+    date: '2026-05-22',
+    description: 'Menú Sidebar Profesional y Escritorios Fluidos',
+    isCurrent: true,
+    changes: [
+      'Menú PC: Se reemplazó la barra de navegación superior horizontal por un elegante menú lateral de escritorio (Sidebar) con agrupaciones claras.',
+      'Estructura: Los accesos están ordenados visualmente en bloques temáticos (Operaciones, Control de Stock, Administración/Finanzas).',
+      'Fluidificación: Se removió la restricción del contenedor centrado en PC para expandir la interfaz aprovechando el ancho total disponible en monitores grandes.',
+      'Claridad: Se agregaron títulos de sección y breves descripciones explicativas bajo de cada módulo en el menú.'
+    ]
+  },
+  {
     version: '1.1.63',
     date: '2026-05-22',
     description: 'Optimización de escaneo de productos en POS',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Escáner: Los productos escaneados por código de barras (SKU) ahora se agregan al carrito de compras de manera instantánea y automática.',
       'Buscador: Tras agregar un producto, se borra automáticamente el buscador y se devuelve el foco/cursor para estar listos para la siguiente lectura.',
