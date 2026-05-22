@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '1.1.60',
+    version: '1.1.62',
     date: '2026-05-17',
-    description: 'Filtros dinámicos y gestión de obsequios',
+    description: 'Ajuste fino en impresión de etiquetas',
     isCurrent: true,
+    changes: [
+      'Etiquetas: Se omite la última palabra del nombre del producto al imprimir para evitar incluir la marca de forma redundante.',
+      'Diseño: Mantenimiento de la estructura multi-línea para el resto del nombre.'
+    ]
+  },
+  {
+    version: '1.1.61',
+    date: '2026-05-17',
+    description: 'Mejoras en impresión de etiquetas',
+    isCurrent: false,
     changes: [
       'Reportes: Los filtros de Análisis de Precios ahora permiten selección múltiple para comparaciones complejas.',
       'Obsequios: Se excluyen los productos con precio $0 de las unidades vendidas en Dashboard y Nómina.',

@@ -93,22 +93,28 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     frameDoc.title = "\u200E";
 
     let labelsHtml = '';
-    const today = new Date().toISOString().split('T')[0].replace(/-/g, '').slice(2);
 
     for (let i = 0; i < allLabels.length; i += config.columns) {
       labelsHtml += '<div class="container">';
       for (let j = 0; j < config.columns; j++) {
-        const product = allLabels[i + j];
+        const product = allLabels[i + j] as Product & { lastPurchaseDate?: string };
         if (product) {
+          const purchaseDate = product.lastPurchaseDate ? new Date(product.lastPurchaseDate) : new Date();
+          const labelDate = purchaseDate.toISOString().split('T')[0].replace(/-/g, '').slice(2);
+          
           const encoded = encodePrice(product.price);
-          const cipherCode = `${today}-${encoded}`;
+          const cipherCode = `${labelDate}-${encoded}`;
           const barcodeValue = product.sku || product.id.slice(0, 8);
           
+          // Remove the last word of the product name (usually the brand)
+          const nameParts = product.name.trim().split(/\s+/);
+          const displayName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : product.name;
+
           labelsHtml += `
             <div class="label">
               <div class="label-inner">
                 <div class="store-name">${store.receiptName || store.name || 'Boutique'}</div>
-                ${config.showName ? `<div class="product-name">${product.name}</div>` : ''}
+                ${config.showName ? `<div class="product-name">${displayName}</div>` : ''}
                   <svg class="barcode" 
                     jsbarcode-value="${barcodeValue}"
                     jsbarcode-format="CODE128"
@@ -207,7 +213,20 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               `}
             }
             .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
-            .product-name { font-size: ${config.fontSize}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; white-space: nowrap; overflow: hidden; width: 100%; }
+            .product-name { 
+              font-size: ${config.fontSize}pt; 
+              font-weight: bold; 
+              text-transform: uppercase; 
+              margin-bottom: 0.5mm; 
+              white-space: normal; 
+              word-break: break-word;
+              overflow: hidden; 
+              width: 100%;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+              line-height: 1.1;
+            }
             .barcode { 
               width: auto;
               max-width: 98%; 

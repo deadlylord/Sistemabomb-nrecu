@@ -289,7 +289,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             }
         }
         
-        return { ...product, velocity: { status, days, trend } };
+        return { ...product, velocity: { status, days, trend }, lastPurchaseDate: lastPurchaseDate ? lastPurchaseDate.toISOString() : undefined };
     });
 
     let filteredProducts = productsWithVelocity.filter(product => {
@@ -719,7 +719,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
       <LabelPrintModal 
         isOpen={isLabelModalOpen}
         onClose={() => setIsLabelModalOpen(false)}
-        selectedProducts={inventory.filter(p => selectedIds.has(p.id))}
+        selectedProducts={processedInventory.filter(p => selectedIds.has(p.id))}
         store={stores.find(s => s.id === currentStoreId)!}
       />
     </>
