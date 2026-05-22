@@ -239,11 +239,37 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsCartPulsing(true);
     setSearchTerm(''); 
 
+    if (searchInputRef.current) {
+      searchInputRef.current.value = '';
+      searchInputRef.current.focus();
+    }
+
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.value = '';
+        searchInputRef.current.focus();
+      }
+    }, 30);
+
     setTimeout(() => {
       setJustAddedProductId(null);
       setIsCartPulsing(false);
     }, 700);
   };
+
+  // Efecto para buscar y añadir automáticamente un producto al detectar coincidencia exacta del SKU/Código de barras
+  useEffect(() => {
+    const trimmed = searchTerm.trim();
+    if (trimmed.length >= 3) {
+      const normalizedTerm = normalizeText(trimmed);
+      const product = props.inventory.find(p => 
+        p.sku && normalizeText(p.sku) === normalizedTerm
+      );
+      if (product && product.stock > 0 && !product.isDisabled) {
+        handleAddToCartWithAnimation(product);
+      }
+    }
+  }, [searchTerm, props.inventory]);
 
   const pendingPreOrders = useMemo(() => {
     return props.layaways.filter(l => l.status === 'pre-order');
@@ -515,14 +541,40 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 }}
                                 onKeyDown={e => {
                                     const trimmedSearch = searchTerm.trim();
-                                    if (e.key === 'Enter' && trimmedSearch.length > 0) {
-                                        const normalizedTerm = normalizeText(trimmedSearch);
-                                        const product = props.inventory.find(p => 
-                                            p.sku && normalizeText(p.sku) === normalizedTerm
-                                        );
-                                        if (product && product.stock > 0 && !product.isDisabled) {
-                                            handleAddToCartWithAnimation(product);
-                                            setSearchTerm('');
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (trimmedSearch.length > 0) {
+                                            const normalizedTerm = normalizeText(trimmedSearch);
+                                            // 1. Buscar coincidencia de SKU exacta (Código de barras)
+                                            let product = props.inventory.find(p => 
+                                                p.sku && normalizeText(p.sku) === normalizedTerm
+                                            );
+                                            
+                                            // 2. Buscar por ID de producto exacto
+                                            if (!product) {
+                                                product = props.inventory.find(p => 
+                                                    p.id === trimmedSearch
+                                                );
+                                            }
+                                            
+                                            // 3. Buscar si hay una sola coincidencia exacta en los resultados visibles y está en stock
+                                            if (!product && filteredInventory.length === 1) {
+                                                const candidate = filteredInventory[0];
+                                                if (candidate.stock > 0 && !candidate.isDisabled) {
+                                                    product = candidate;
+                                                }
+                                            }
+                                            
+                                            if (product && product.stock > 0 && !product.isDisabled) {
+                                                handleAddToCartWithAnimation(product);
+                                            } else {
+                                                // Si no coincide o no hay stock, limpiar el buscador para permitir intentar una nueva búsqueda/escaneo
+                                                setSearchTerm('');
+                                                if (searchInputRef.current) {
+                                                    searchInputRef.current.value = '';
+                                                    searchInputRef.current.focus();
+                                                }
+                                            }
                                         }
                                     }
                                 }}

@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.63',
+    date: '2026-05-22',
+    description: 'Optimización de escaneo de productos en POS',
+    isCurrent: true,
+    changes: [
+      'Escáner: Los productos escaneados por código de barras (SKU) ahora se agregan al carrito de compras de manera instantánea y automática.',
+      'Buscador: Tras agregar un producto, se borra automáticamente el buscador y se devuelve el foco/cursor para estar listos para la siguiente lectura.',
+      'Experiencia: Se introdujo detección de SKU en tiempo real para acelerar el flujo continuo de facturación en caja.'
+    ]
+  },
+  {
     version: '1.1.62',
     date: '2026-05-17',
     description: 'Ajuste fino en impresión de etiquetas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Etiquetas: Se omite la última palabra del nombre del producto al imprimir para evitar incluir la marca de forma redundante.',
       'Diseño: Mantenimiento de la estructura multi-línea para el resto del nombre.'
