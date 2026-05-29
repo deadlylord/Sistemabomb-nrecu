@@ -1,17 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Helper to initialize GoogleGenAI with appropriate headers and key
+const getAiClient = (): GoogleGenAI => {
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  return new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
+};
+
 export const generateDescription = async (productName: string): Promise<string> => {
   if (!productName.trim()) {
     throw new Error("Product name cannot be empty.");
   }
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAiClient();
   
   try {
     const prompt = `Genera una descripción de producto corta y atractiva para un sistema de punto de venta. El producto es: "${productName}". La descripción debe ser de una sola oración, máximo 20 palabras.`;
     
     const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.5-flash',
         contents: prompt,
     });
     
@@ -34,7 +47,7 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
     throw new Error("Sales data and user query cannot be empty.");
   }
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAiClient();
   
   try {
     const prompt = `
@@ -44,25 +57,25 @@ export const analyzeSalesData = async (salesData: any, userQuery: string): Promi
       1. **Optimización de Inventario:** Usa conceptos de modelo OTB (Open-to-Buy), análisis ABC (A-Top ventas, B-Media rotación, C-Lenta rotación) y control de stock muerto (deadstock).
       2. **Estrategia de Ventas:** Sugiere tácticas de up-selling, cross-selling y fidelización basadas en el ciclo de vida del producto.
       3. **Administración Financiera:** Evalúa KPIs como Sell-through rate y margen de contribución.
-
+ 
       **DATOS ACTUALES DEL NEGOCIO (JSON):**
       ${JSON.stringify(salesData, null, 2)}
-
+ 
       **CONSULTA DEL CLIENTE:**
       "${userQuery}"
-
+ 
       **INSTRUCCIONES CRÍTICAS DE RESPUESTA:**
       1. **Contextualización:** Si el query es vago o te faltan datos clave para ser preciso, haz una pregunta específica al inicio para profundizar.
       2. **Impacto de Negocio:** Siempre que sugieras una acción, explica su impacto esperado en el **flujo de caja (Cash Flow)** o en el **posicionamiento de marca**.
       3. **Formato:** Usa Markdown impecable. Títulos ##, subtítulos ###, negritas ** para cifras y conceptos clave.
       4. **Modernidad:** Integra conceptos de omnicanalidad y social commerce si son relevantes.
       5. **Tono:** Profesional, analítico, directo y altamente estratégico.
-
-      Responde en español, enfocándote en rentabilidad neta.
+ 
+      Responde en español, enfocándose en rentabilidad neta.
     `;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.5-flash',
       contents: prompt,
     });
     
@@ -85,17 +98,17 @@ export const generateStrategicReport = async (data: any): Promise<string> => {
     throw new Error("Data for report cannot be empty.");
   }
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = getAiClient();
   
   try {
     const prompt = `
       **PERSONA:** Actúa como un Senior Business Consultant y Estratega de Retail de Lujo y Moda. Tu especialidad es transformar datos crudos en estrategias accionables que aumenten el margen neto y la fidelización.
-
+ 
       **OBJETIVO:** Generar un "Reporte Estratégico de Alto Impacto" basado en los datos proporcionados.
-
+ 
       **DATOS DEL NEGOCIO:**
       ${JSON.stringify(data, null, 2)}
-
+ 
       **ESTRUCTURA DEL REPORTE (MANDATORIA):**
       1. **Resumen Ejecutivo (Executive Summary):** Una visión de 30,000 pies sobre la salud del negocio en este periodo.
       2. **Análisis de Ventas y Rentabilidad:** Identifica qué está moviendo la aguja y qué está drenando recursos.
@@ -103,19 +116,19 @@ export const generateStrategicReport = async (data: any): Promise<string> => {
       4. **Comportamiento del Cliente:** Análisis de retención y riesgo de fuga.
       5. **Plan de Acción (Actionable Strategies):** 3-5 estrategias concretas, numeradas, con pasos específicos a seguir mañana mismo.
       6. **Proyección y Recomendación:** ¿Hacia dónde vamos si seguimos así?
-
+ 
       **INSTRUCCIONES DE ESTILO:**
       - Usa Markdown editorial de alta calidad.
       - Títulos elegantes (##), subtítulos (###).
       - Usa **negritas** para cifras clave y conceptos estratégicos.
       - El tono debe ser inspirador pero basado en datos duros.
       - Sé conciso pero profundo. Evita generalidades.
-
+ 
       Responde en español.
     `;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.5-flash',
       contents: prompt,
     });
     
@@ -138,7 +151,7 @@ export const getAccountingChatResponse = async (
   history: { role: 'user' | 'model', parts: { text: string }[] }[], 
   userMessage: string
 ): Promise<string> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = getAiClient();
     
     try {
         const systemInstruction = `
@@ -164,7 +177,7 @@ export const getAccountingChatResponse = async (
         `;
 
         const chat = ai.chats.create({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-3.5-flash',
             config: {
                 systemInstruction: systemInstruction,
             },

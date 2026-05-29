@@ -130,6 +130,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [tempAccountNames, setTempAccountNames] = useState({ cash: '', qr: '', addi: '' });
   const [tempInitialBalances, setTempInitialBalances] = useState({ cash: 0, qr: 0, addi: 0 });
 
+  // Historial y restauración de auditoría para el libro mayor
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [historyActionFilter, setHistoryActionFilter] = useState<'all' | 'create' | 'update' | 'delete' | 'restore'>('all');
+
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string' && dateInput.length === 10 && dateInput.includes('-') && !dateInput.includes('T')) {
@@ -164,6 +170,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FinancialRecord));
         setAllRecords(list);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'financialRecordsHistory'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setHistoryLogs(list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     });
     return () => unsubscribe();
   }, []);
@@ -462,9 +477,23 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             const recordId = `daily_auto_${activeStoreId}_${idPrefix || type}_${item.date}`;
             const existing = records.find(r => r.id === recordId);
             if (existing && Math.abs(existing.amount - amount) > 0.1) {
-                batch.update(doc(db, 'financialRecords', recordId), { 
+                const updatedFields = { 
                     amount: amount,
                     description: `Cierre Diario ${idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(type))} (${item.date}) [SINCRONIZADO]`
+                };
+                batch.update(doc(db, 'financialRecords', recordId), updatedFields);
+
+                const historyRef = doc(collection(db, 'financialRecordsHistory'));
+                batch.set(historyRef, {
+                    id: historyRef.id,
+                    recordId: recordId,
+                    action: 'update',
+                    timestamp: new Date().toISOString(),
+                    changedBy: currentUser.name,
+                    previousState: existing,
+                    newState: { ...existing, ...updatedFields },
+                    storeId: activeStoreId,
+                    accountType: type
                 });
                 count++;
             }
@@ -542,12 +571,26 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 : `La cuenta del sistema (${accountType}) es diferente a la conciliada (${existing.accountType}).`;
 
             if (window.confirm(`${diffMsg} ¿Deseas actualizar el registro de conciliación?`)) {
-                await updateDoc(doc(db, 'financialRecords', recordId), { 
+                const updatedFields = { 
                     amount: amount,
                     accountType: accountType,
                     description: transaction 
                         ? `${transaction.description} (${getAccountName(accountType)}) [ACTUALIZADO]`
                         : `Cierre Diario ${idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(accountType))} (${dateStr}) [ACTUALIZADO]`
+                };
+                await updateDoc(doc(db, 'financialRecords', recordId), updatedFields);
+
+                const historyRef = doc(collection(db, 'financialRecordsHistory'));
+                await setDoc(historyRef, {
+                    id: historyRef.id,
+                    recordId: recordId,
+                    action: 'update',
+                    timestamp: new Date().toISOString(),
+                    changedBy: currentUser.name,
+                    previousState: existing,
+                    newState: { ...existing, ...updatedFields },
+                    storeId: activeStoreId,
+                    accountType: accountType
                 });
             }
             return;
@@ -582,6 +625,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         affectsCashBalance: true 
     };
     await setDoc(doc(db, 'financialRecords', recordId), newRecord);
+
+    const historyRef = doc(collection(db, 'financialRecordsHistory'));
+    await setDoc(historyRef, {
+        id: historyRef.id,
+        recordId: recordId,
+        action: 'create',
+        timestamp: new Date().toISOString(),
+        changedBy: currentUser.name,
+        newState: newRecord,
+        storeId: activeStoreId,
+        accountType: accountType
+    });
   };
 
   const initialBalanceValue = useMemo(() => {
@@ -705,7 +760,35 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const mainRecord: FinancialRecord = { id: mainRef.id, date: nowIso, storeId: activeStoreId, accountType: sourceAccount, amount: -amount, type: 'expense', description: `Cruce ${targetStoreName}: Pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: currentUser.name, isConfirmed: true, debtStoreId: targetStoreId, affectsCashBalance: true };
           const mirrorRecord: FinancialRecord = { id: mirrorRef.id, date: nowIso, storeId: targetStoreId, accountType: sourceAccount, amount: amount, type: 'income_manual', description: `Cruce ${activeStoreName}: Recibo pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: true };
           mainRecord.relatedRecordId = mirrorRef.id;
-          batch.set(mainRef, mainRecord); batch.set(mirrorRef, mirrorRecord);
+          
+          batch.set(mainRef, mainRecord); 
+          batch.set(mirrorRef, mirrorRecord);
+
+          // Log history
+          const hMainRef = doc(collection(db, 'financialRecordsHistory'));
+          batch.set(hMainRef, {
+              id: hMainRef.id,
+              recordId: mainRef.id,
+              action: 'create',
+              timestamp: nowIso,
+              changedBy: currentUser.name,
+              newState: cleanObject(mainRecord),
+              storeId: activeStoreId,
+              accountType: sourceAccount
+          });
+
+          const hMirrorRef = doc(collection(db, 'financialRecordsHistory'));
+          batch.set(hMirrorRef, {
+              id: hMirrorRef.id,
+              recordId: mirrorRef.id,
+              action: 'create',
+              timestamp: nowIso,
+              changedBy: `${currentUser.name} (vía ${activeStoreName})`,
+              newState: cleanObject(mirrorRecord),
+              storeId: targetStoreId,
+              accountType: sourceAccount
+          });
+
           await batch.commit();
           setPaymentSummary(null);
       } catch (error) { alert("Hubo un error al registrar el pago."); }
@@ -780,6 +863,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 affectsCashBalance: true 
             };
             batch.set(localRef, cleanObject(localRecord));
+
+            const historyRef = doc(collection(db, 'financialRecordsHistory'));
+            batch.set(historyRef, {
+                id: historyRef.id,
+                recordId: localRef.id,
+                action: 'create',
+                timestamp: new Date().toISOString(),
+                changedBy: currentUser.name,
+                newState: cleanObject(localRecord),
+                storeId: activeStoreId,
+                accountType: e.accountType
+            });
         }
 
         // 2. Registro de Cruce (si hay deuda)
@@ -811,11 +906,23 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             };
             batch.set(mainRef, cleanObject(mainRecord));
 
+            const mainHistoryRef = doc(collection(db, 'financialRecordsHistory'));
+            batch.set(mainHistoryRef, {
+                id: mainHistoryRef.id,
+                recordId: mainRef.id,
+                action: 'create',
+                timestamp: new Date().toISOString(),
+                changedBy: currentUser.name,
+                newState: cleanObject(mainRecord),
+                storeId: activeStoreId,
+                accountType: e.accountType
+            });
+
             const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -cruceAmountVal : cruceAmountVal;
             const affectsMirrorBalance = e.physicalStoreId === e.debtStoreId;
             const mirrorDescription = e.description ? `Cruce ${activeStoreName}: ${e.description}` : `Cruce ${activeStoreName}`;
             
-            batch.set(mirrorRef, cleanObject({ 
+            const mirrorRecord = { 
                 id: mirrorRef.id, 
                 date: dateTime, 
                 storeId: e.debtStoreId, 
@@ -829,7 +936,20 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 debtStoreId: activeStoreId, 
                 relatedRecordId: mainRef.id, 
                 affectsCashBalance: affectsMirrorBalance 
-            }));
+            };
+            batch.set(mirrorRef, cleanObject(mirrorRecord));
+
+            const mirrorHistoryRef = doc(collection(db, 'financialRecordsHistory'));
+            batch.set(mirrorHistoryRef, {
+                id: mirrorHistoryRef.id,
+                recordId: mirrorRef.id,
+                action: 'create',
+                timestamp: new Date().toISOString(),
+                changedBy: `${currentUser.name} (vía ${activeStoreName})`,
+                newState: cleanObject(mirrorRecord),
+                storeId: e.debtStoreId,
+                accountType: e.accountType
+            });
         }
     });
     await batch.commit();
@@ -854,7 +974,25 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const amountVal = parseFloat(amountString || '0');
       const dateTime = `${dateString || getLocalDateString(new Date())}T${timeString || '12:00'}:00`;
       recordToSave.date = dateTime; recordToSave.amount = amountVal;
+
+      const originalRecord = allRecords.find(r => r.id === recordToSave.id);
       await setDoc(doc(db, 'financialRecords', recordToSave.id), recordToSave, { merge: true });
+
+      if (originalRecord) {
+          const historyRef = doc(collection(db, 'financialRecordsHistory'));
+          await setDoc(historyRef, {
+              id: historyRef.id,
+              recordId: recordToSave.id,
+              action: 'update',
+              timestamp: new Date().toISOString(),
+              changedBy: currentUser.name,
+              previousState: originalRecord,
+              newState: recordToSave,
+              storeId: recordToSave.storeId || activeStoreId,
+              accountType: recordToSave.accountType
+          });
+      }
+
       setEditingRecord(null);
   };
 
@@ -862,8 +1000,62 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   const confirmDelete = async () => {
       if (recordToDelete) {
+          const historyRef = doc(collection(db, 'financialRecordsHistory'));
+          await setDoc(historyRef, {
+              id: historyRef.id,
+              recordId: recordToDelete.id,
+              action: 'delete',
+              timestamp: new Date().toISOString(),
+              changedBy: currentUser.name,
+              previousState: recordToDelete,
+              storeId: recordToDelete.storeId || activeStoreId,
+              accountType: recordToDelete.accountType
+          });
+
           await deleteDoc(doc(db, 'financialRecords', recordToDelete.id));
           setRecordToDelete(null);
+      }
+  };
+
+  const handleRestoreRecord = async (log: any) => {
+      const confirmMsg = log.action === 'delete' 
+          ? `¿Estás seguro de que deseas restaurar este registro? Se volverá a registrar exactamente como estaba en el libro de caja.`
+          : `¿Estás seguro de que deseas volver este registro a su versión anterior? Esto revertirá los cambios hechos por ${log.changedBy}.`;
+      if (!window.confirm(confirmMsg)) return;
+
+      try {
+          const recordId = log.recordId;
+          const recordToRestore = log.previousState;
+          if (!recordToRestore) {
+              alert("No hay estado anterior capturado para restaurar.");
+              return;
+          }
+
+          // Fetch the current record first to see if it still exists (and log current state as previousState in the restore log)
+          const currentRecord = allRecords.find(r => r.id === recordId);
+
+          // Restore record in Firestore
+          await setDoc(doc(db, 'financialRecords', recordId), recordToRestore);
+
+          // Log restore action
+          const historyRef = doc(collection(db, 'financialRecordsHistory'));
+          await setDoc(historyRef, {
+              id: historyRef.id,
+              recordId: recordId,
+              action: 'restore',
+              timestamp: new Date().toISOString(),
+              changedBy: currentUser.name,
+              previousState: currentRecord || null,
+              newState: recordToRestore,
+              storeId: log.storeId,
+              accountType: log.accountType,
+              description: `Restaurado a la versión modificada el ${new Date(log.timestamp).toLocaleString()}`
+          });
+
+          alert("Registro restaurado exitosamente.");
+      } catch (error) {
+          console.error("Error restoring record:", error);
+          alert("Hubo un error al restaurar el registro.");
       }
   };
 
@@ -1086,7 +1278,204 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 </div>
             </div>
         )}
-        
+
+        {/* Modal de Historial de Auditoría y Restauración */}
+        {showHistoryModal && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-secondary w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden border border-accent/20 flex flex-col max-h-[90vh]">
+                    <div className="p-4 sm:p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 shrink-0">
+                        <div>
+                            <h3 className="text-lg sm:text-xl font-black text-accent uppercase tracking-widest flex items-center gap-2">
+                                <HistoryIcon className="w-6 h-6" /> Historial de Auditoría y Restauración
+                            </h3>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mt-1">Control de modificaciones, eliminaciones y restauración de todas las cuentas del Libro Mayor</p>
+                        </div>
+                        <button onClick={() => setShowHistoryModal(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-white dark:bg-gray-800 rounded-full shadow-sm"><CrossIcon className="w-6 h-6" /></button>
+                    </div>
+
+                    {/* Filtros de Historial */}
+                    <div className="p-4 border-b dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row gap-3 items-center shrink-0 w-full">
+                        <div className="relative w-full sm:w-64">
+                            <input 
+                                type="text" 
+                                placeholder="Buscar por concepto o usuario..." 
+                                value={historySearchTerm} 
+                                onChange={e => setHistorySearchTerm(e.target.value)} 
+                                className="w-full bg-white dark:bg-gray-800 border-2 border-transparent outline-none focus:border-accent rounded-xl py-1.5 px-8 text-xs font-bold shadow-inner" 
+                            />
+                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        </div>
+                        <div className="flex gap-1 overflow-x-auto w-full sm:w-auto scrollbar-hide">
+                            {(['all', 'create', 'update', 'delete', 'restore'] as const).map(action => {
+                                const actionLabels = {
+                                    all: 'TODOS',
+                                    create: 'CREACIONES',
+                                    update: 'EDICIONES',
+                                    delete: 'ELIMINACIONES',
+                                    restore: 'RESTAURACIONES'
+                                };
+                                const colors = {
+                                    all: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+                                    create: 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400',
+                                    update: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
+                                    delete: 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400',
+                                    restore: 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+                                };
+                                const activeColors = {
+                                    all: 'bg-gray-800 text-white dark:bg-gray-200 dark:text-black',
+                                    create: 'bg-green-600 text-white border-green-700',
+                                    update: 'bg-blue-600 text-white border-blue-700',
+                                    delete: 'bg-red-600 text-white border-red-700',
+                                    restore: 'bg-purple-600 text-white border-purple-700'
+                                };
+                                const isActive = historyActionFilter === action;
+                                return (
+                                    <button
+                                        key={action}
+                                        onClick={() => setHistoryActionFilter(action)}
+                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${isActive ? activeColors[action] : colors[action]} hover:scale-[1.02] border border-transparent shrink-0`}
+                                    >
+                                        {actionLabels[action]}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    
+                    {/* Lista de Registros */}
+                    <div className="p-4 sm:p-6 overflow-y-auto scrollbar-hide flex-grow space-y-3">
+                        {historyLogs.filter(log => {
+                            const matchesAction = historyActionFilter === 'all' || log.action === historyActionFilter;
+                            const desc = (log.newState?.description || log.previousState?.description || log.description || '').toLowerCase();
+                            const user = (log.changedBy || '').toLowerCase();
+                            const matchesSearch = desc.includes(historySearchTerm.toLowerCase()) || user.includes(historySearchTerm.toLowerCase());
+                            return matchesAction && matchesSearch;
+                        }).length === 0 ? (
+                            <div className="text-center py-12">
+                                <p className="text-xs text-gray-400 italic">No se encontraron registros de auditoría que coincidan con los filtros.</p>
+                            </div>
+                        ) : (
+                            historyLogs.filter(log => {
+                                const matchesAction = historyActionFilter === 'all' || log.action === historyActionFilter;
+                                const desc = (log.newState?.description || log.previousState?.description || log.description || '').toLowerCase();
+                                const user = (log.changedBy || '').toLowerCase();
+                                const matchesSearch = desc.includes(historySearchTerm.toLowerCase()) || user.includes(historySearchTerm.toLowerCase());
+                                return matchesAction && matchesSearch;
+                            }).map(log => {
+                                const logDate = new Date(log.timestamp);
+                                const actionColors = {
+                                    create: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200',
+                                    update: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200',
+                                    delete: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200',
+                                    restore: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200'
+                                };
+                                const actionLabels = {
+                                    create: 'CREADO',
+                                    update: 'MODIFICADO',
+                                    delete: 'ELIMINADO',
+                                    restore: 'RESTAURADO'
+                                };
+                                const stateToShow = log.newState || log.previousState;
+
+                                // Compare fields for updates to show dynamic audit diffs
+                                const showDiffs = log.action === 'update' && log.previousState && log.newState;
+                                const diffList = [];
+                                if (showDiffs) {
+                                    if (log.previousState.amount !== log.newState.amount) {
+                                        diffList.push({ field: 'Monto', from: formatCOP(log.previousState.amount), to: formatCOP(log.newState.amount) });
+                                    }
+                                    if (log.previousState.description !== log.newState.description) {
+                                        diffList.push({ field: 'Concepto', from: log.previousState.description, to: log.newState.description });
+                                    }
+                                    if (log.previousState.accountType !== log.newState.accountType) {
+                                        diffList.push({ field: 'Cuenta', from: getAccountName(log.previousState.accountType), to: getAccountName(log.newState.accountType) });
+                                    }
+                                    if (log.previousState.subCategory !== log.newState.subCategory) {
+                                        diffList.push({ field: 'Categoría', from: log.previousState.subCategory, to: log.newState.subCategory });
+                                    }
+                                    if (log.previousState.date !== log.newState.date) {
+                                        diffList.push({ field: 'Fecha', from: new Date(log.previousState.date).toLocaleString(), to: new Date(log.newState.date).toLocaleString() });
+                                    }
+                                }
+
+                                return (
+                                    <div key={log.id} className="p-4 bg-gray-50 dark:bg-gray-900/20 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col md:flex-row justify-between gap-4 hover:border-accent/10 transition-all items-start md:items-center">
+                                        <div className="flex flex-col space-y-1.5 flex-grow min-w-0 pr-4">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg ${actionColors[log.action as 'create' | 'update' | 'delete' | 'restore']}`}>
+                                                    {actionLabels[log.action as 'create' | 'update' | 'delete' | 'restore']}
+                                                </span>
+                                                <span className="text-[7px] sm:text-[9px] font-black text-gray-400 uppercase">
+                                                    {logDate.toLocaleDateString()} a las {logDate.toLocaleTimeString()}
+                                                </span>
+                                                <span className="text-[7px] sm:text-[9px] text-accent font-black uppercase">
+                                                    POR: {log.changedBy}
+                                                </span>
+                                                {log.storeId && (
+                                                    <span className="text-[7px] sm:text-[9px] text-gray-400 font-extrabold bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded uppercase">
+                                                        Sede: {stores.find(s => s.id === log.storeId)?.name || 'Sede Local'}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Concepto / Actividad:</span>
+                                                <p className="truncate sm:whitespace-normal font-black">{stateToShow?.description || log.description || 'Sin concepto'}</p>
+                                            </div>
+
+                                            {showDiffs && diffList.length > 0 ? (
+                                                <div className="mt-2 p-3 bg-white dark:bg-slate-900/40 rounded-xl border border-gray-100 dark:border-gray-800 text-[10px] space-y-1.5">
+                                                    <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest block mb-1">Cambios realizados en edición:</span>
+                                                    {diffList.map((d, i) => (
+                                                        <div key={i} className="flex justify-between gap-2 border-b border-gray-50 dark:border-gray-900/50 pb-1 last:border-none last:pb-0">
+                                                            <span className="font-extrabold text-gray-400 uppercase text-[8px]">{d.field}:</span>
+                                                            <span className="text-gray-600 dark:text-gray-400 truncate max-w-[40%] font-semibold italic">{d.from}</span>
+                                                            <span className="text-gray-400">➡️</span>
+                                                            <span className="text-gray-800 dark:text-white font-black truncate max-w-[40%]">{d.to}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[9px] bg-white dark:bg-slate-900/40 p-2 rounded-xl mt-1.5 max-w-fit">
+                                                    <div>
+                                                        <span className="text-gray-400 font-bold uppercase">Monto: </span>
+                                                        <span className={`font-black ${stateToShow?.amount < 0 ? 'text-red-500' : 'text-green-600'}`}>{formatCOP(stateToShow?.amount || 0)}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-gray-400 font-bold uppercase">Cuenta: </span>
+                                                        <span className="font-black uppercase text-gray-600 dark:text-gray-300">{getAccountName(stateToShow?.accountType || 'cash')}</span>
+                                                    </div>
+                                                    {stateToShow?.subCategory && (
+                                                        <div>
+                                                            <span className="text-gray-400 font-bold uppercase">Categoría: </span>
+                                                            <span className="font-black uppercase text-blue-500">{stateToShow.subCategory}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="shrink-0 flex items-center md:self-stretch">
+                                            {(log.action === 'delete' || log.action === 'update') ? (
+                                                <button
+                                                    onClick={() => handleRestoreRecord(log)}
+                                                    className="w-full md:w-auto px-4 py-2 bg-accent hover:bg-accent/80 text-white text-[10px] font-black uppercase rounded-2xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all hover:scale-105"
+                                                >
+                                                    <ArrowPathIcon className="w-4 h-4" /> Restaurar
+                                                </button>
+                                            ) : (
+                                                <span className="text-[8px] font-bold text-gray-400 italic uppercase">No restaurable</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
         <div className="sticky top-0 z-[60] bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm -mx-2 px-2 py-3 mb-4 shadow-md sm:mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-secondary p-4 sm:p-6 rounded-2xl shadow-lg border-b-8" style={{ borderBottomColor: activeStore?.accentColor || '#ff007f' }}>
                 <div className="flex items-center gap-3 sm:gap-4">
@@ -1116,6 +1505,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             >
                                 <ChartBarIcon className="w-4 h-4" />
                                 <span className="text-[9px] font-black uppercase hidden sm:inline">Estado General</span>
+                            </button>
+                            <button 
+                                onClick={() => setShowHistoryModal(true)}
+                                className="p-2 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-accent/20"
+                                title="Historial de Auditoría y Restauración"
+                            >
+                                <HistoryIcon className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase hidden sm:inline">Historial/Auditoría</span>
                             </button>
                             <button 
                                 onClick={handleOpenEditNames}
@@ -1938,12 +2335,43 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         )}
         
         {editingRecord && (
-             <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-lg overflow-hidden border border-accent/20">
-                    <div className="p-4 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-5 h-5" /></button></div>
-                    <form onSubmit={handleUpdateSingleRecord} className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4"><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Fecha</label><input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent"/></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Hora</label><input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm outline-none focus:border-accent" /></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Cuenta</label><select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent" ><option value="cash">Efectivo</option><option value="qr">QR</option></select></div><div className="col-span-1"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Monto $</label><input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2 rounded-lg border dark:border-gray-700 font-black text-sm text-right outline-none focus:border-accent" /></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Categoría</label><input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/></div><div className="col-span-2"><label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Descripción</label><input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-2.5 rounded-lg border dark:border-gray-700 font-medium text-sm outline-none focus:border-accent" /></div></div>
-                        <div className="flex gap-2 pt-4 border-t dark:border-gray-700"><button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button><button type="submit" className="flex-1 bg-accent text-white font-black p-3 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-xs">Guardar Cambios</button></div>
+             <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm lg:pl-64">
+                <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-accent/20 animate-scale-up">
+                    <div className="p-3.5 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest text-xs sm:text-sm">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-4 h-4" /></button></div>
+                    <form onSubmit={handleUpdateSingleRecord} className="p-4 sm:p-5 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-1">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Fecha</label>
+                                <input type="date" value={editingRecord.dateString} onChange={e => setEditingRecord({...editingRecord, dateString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border dark:border-gray-700 font-bold text-xs outline-none focus:border-accent"/>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Hora</label>
+                                <input type="time" value={editingRecord.timeString} onChange={e => setEditingRecord({...editingRecord, timeString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border dark:border-gray-700 font-bold text-xs outline-none focus:border-accent" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Cuenta</label>
+                                <select value={editingRecord.accountType} onChange={e => setEditingRecord({...editingRecord, accountType: e.target.value as AccountType})} className="w-full bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border dark:border-gray-700 font-bold text-xs uppercase outline-none focus:border-accent" >
+                                    <option value="cash">Efectivo</option>
+                                    <option value="qr">QR</option>
+                                </select>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Monto $</label>
+                                <input type="number" inputMode="decimal" value={editingRecord.amountString} onChange={e => setEditingRecord({...editingRecord, amountString: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border dark:border-gray-700 font-black text-xs text-right outline-none focus:border-accent" />
+                            </div>
+                            <div className="col-span-2">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Categoría</label>
+                                <input type="text" value={editingRecord.subCategory} onChange={e => setEditingRecord({...editingRecord, subCategory: e.target.value})} className="w-full bg-accent/5 dark:bg-accent/10 p-1.5 rounded-lg border border-accent/20 font-bold text-xs uppercase text-accent outline-none" placeholder="Ej: SERVICIOS, NOMINA..."/>
+                            </div>
+                            <div className="col-span-2">
+                                <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Descripción</label>
+                                <input type="text" value={editingRecord.description} onChange={e => setEditingRecord({...editingRecord, description: e.target.value})} className="w-full bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border dark:border-gray-700 font-medium text-xs outline-none focus:border-accent" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2 pt-3 border-t dark:border-gray-700">
+                            <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-2 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
+                            <button type="submit" className="flex-1 bg-accent text-white font-black p-2 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-[10px]">Guardar Cambios</button>
+                        </div>
                     </form>
                 </div>
              </div>

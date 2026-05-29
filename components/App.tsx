@@ -1987,31 +1987,62 @@ const App: React.FC = () => {
         await setDoc(templateRef, { ...expenseData, id: templateRef.id, storeId: currentStoreId });
       } else {
         await setDoc(newRef, cleanObject(financialRecord));
+
+        // Log history
+        const historyRef = doc(collection(db, 'financialRecordsHistory'));
+        await setDoc(historyRef, {
+            id: historyRef.id,
+            recordId: newRef.id,
+            action: 'create',
+            timestamp: new Date().toISOString(),
+            changedBy: currentUser?.name || 'Sistema',
+            newState: financialRecord,
+            storeId: currentStoreId,
+            accountType: 'cash'
+        });
       }
   };
 
   const handleUpdateExpense = async (expense: Expense) => {
-      // Si es plantilla, actualizamos en 'expenses'
       if (expense.isRecurring) {
         await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
         return;
       }
 
-      // Si es un gasto real, actualizamos en 'financialRecords'
-      // Nota: el ID del gasto en SmartAccountantView ahora vendrá de financialRecords si cambiamos el mapeo
       const recordRef = doc(db, 'financialRecords', expense.id);
-      await updateDoc(recordRef, {
+      const docSnap = await getDoc(recordRef);
+      let previousState = null;
+      if (docSnap.exists()) {
+        previousState = docSnap.data();
+      }
+
+      const updateData = {
           description: expense.description,
           amount: -Math.abs(expense.amount),
           subCategory: expense.category,
           date: expense.date
-      });
+      };
+      await updateDoc(recordRef, updateData);
+
+      if (previousState) {
+        const historyRef = doc(collection(db, 'financialRecordsHistory'));
+        await setDoc(historyRef, {
+            id: historyRef.id,
+            recordId: expense.id,
+            action: 'update',
+            timestamp: new Date().toISOString(),
+            changedBy: currentUser?.name || 'Sistema',
+            previousState: previousState,
+            newState: { ...previousState, ...updateData },
+            storeId: currentStoreId,
+            accountType: previousState.accountType || 'cash'
+        });
+      }
   };
 
   const handleDeleteExpense = async (id: string) => {
       if (!window.confirm('¿Eliminar este registro de gasto?')) return;
       
-      // Intentamos borrar de ambos por si acaso (o verificamos existencia)
       const expenseRef = doc(db, 'expenses', id);
       const financialRef = doc(db, 'financialRecords', id);
       
@@ -2019,6 +2050,21 @@ const App: React.FC = () => {
       if (expenseDoc.exists()) {
         await deleteDoc(expenseRef);
       } else {
+        const docSnap = await getDoc(financialRef);
+        if (docSnap.exists()) {
+          const previousState = docSnap.data() as FinancialRecord;
+          const historyRef = doc(collection(db, 'financialRecordsHistory'));
+          await setDoc(historyRef, {
+              id: historyRef.id,
+              recordId: id,
+              action: 'delete',
+              timestamp: new Date().toISOString(),
+              changedBy: currentUser?.name || 'Sistema',
+              previousState: previousState,
+              storeId: currentStoreId,
+              accountType: previousState.accountType || 'cash'
+          });
+        }
         await deleteDoc(financialRef);
       }
   };
