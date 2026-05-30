@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -140,6 +140,7 @@ const App: React.FC = () => {
 
   const [accountingChatHistory, setAccountingChatHistory] = useState<any[]>([]);
   const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
 
   const handleToggleProductVerification = (productId: string) => {
     setVerifiedProducts(prev => {
@@ -389,6 +390,7 @@ const App: React.FC = () => {
             attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('financialRecords'), setFinancialRecords);
+            attach(storeSpecificQuery('loans'), setLoans);
             
             const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
             unsubscribers.push(onSnapshot(chatRef, (doc) => {
@@ -2080,6 +2082,27 @@ const App: React.FC = () => {
     await setDoc(chatRef, { messages, lastUpdated: new Date().toISOString() });
   };
 
+  const handleAddLoan = async (loanData: Omit<Loan, 'id' | 'storeId' | 'createdAt'>) => {
+    if (!currentStoreId) return;
+    const ref = doc(collection(db, 'loans'));
+    const finalLoan: Loan = {
+      ...loanData,
+      id: ref.id,
+      storeId: currentStoreId,
+      createdAt: new Date().toISOString()
+    };
+    await setDoc(ref, cleanObject(finalLoan));
+  };
+
+  const handleUpdateLoan = async (loan: Loan) => {
+    await updateDoc(doc(db, 'loans', loan.id), { ...cleanObject(loan) });
+  };
+
+  const handleDeleteLoan = async (id: string) => {
+    if (!window.confirm('¿Deseas eliminar este préstamo?')) return;
+    await deleteDoc(doc(db, 'loans', id));
+  };
+
   const handleLogin = (sellerName: string, passwordAttempt: string) => {
     const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
     if (seller && seller.password.trim() === passwordAttempt.trim()) {
@@ -2119,19 +2142,19 @@ const App: React.FC = () => {
             sales={sales} 
             layaways={layaways} 
             expenses={expenses} 
-            expenseCategories={expenseCategories} 
             payrollHistory={payrollHistory} 
             inventory={inventory} 
             purchases={purchases} 
             financialRecords={financialRecords}
+            loans={loans}
             currentStore={currentStore} 
             currentUser={currentUser} 
             onAddExpense={handleAddExpense} 
             onUpdateExpense={handleUpdateExpense} 
             onDeleteExpense={handleDeleteExpense} 
-            onAddExpenseCategory={handleAddExpenseCategory} 
-            onUpdateExpenseCategory={handleUpdateExpenseCategory} 
-            onDeleteExpenseCategory={handleDeleteExpenseCategory}
+            onAddLoan={handleAddLoan}
+            onUpdateLoan={handleUpdateLoan}
+            onDeleteLoan={handleDeleteLoan}
             chatMessages={accountingChatHistory}
             onUpdateChatMessages={handleUpdateAccountingChat}
             onToggleFinancialRecordAccounting={handleToggleFinancialRecordAccounting}

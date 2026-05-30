@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, ExpenseCategory, Product, Purchase, PaymentMethod, FinancialRecord, View } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, Product, Purchase, PaymentMethod, FinancialRecord, View, Loan } from '../types';
 import { formatCOP } from '../constants';
 import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon, ChevronDownIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
@@ -8,19 +8,19 @@ interface SmartAccountantViewProps {
   sales: Sale[];
   layaways: Layaway[];
   expenses: Expense[];
-  expenseCategories: ExpenseCategory[];
   payrollHistory: PayrollRecord[];
   inventory: Product[];
   purchases: Purchase[];
   financialRecords: FinancialRecord[];
+  loans: Loan[];
   currentStore: Store | undefined;
   currentUser: Seller;
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
   onUpdateExpense: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
-  onAddExpenseCategory: (name: string) => void;
-  onUpdateExpenseCategory: (id: string, name: string) => void;
-  onDeleteExpenseCategory: (id: string) => void;
+  onAddLoan: (loan: Omit<Loan, 'id' | 'storeId' | 'createdAt'>) => void;
+  onUpdateLoan: (loan: Loan) => void;
+  onDeleteLoan: (id: string) => void;
   chatMessages: ChatMessage[];
   onUpdateChatMessages: (messages: ChatMessage[]) => Promise<void>;
   onToggleFinancialRecordAccounting?: (id: string, exclude: boolean) => Promise<void>;
@@ -57,6 +57,9 @@ interface AccountingStats {
     excludeFromAccounting?: boolean;
     registeredBy?: string;
   }[];
+  activeLoans: Loan[];
+  totalDebt: number;
+  monthlyDebtPayment: number;
 }
 
 const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
@@ -78,25 +81,25 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   sales,
   layaways,
   expenses,
-  expenseCategories,
   payrollHistory,
   inventory,
   purchases,
   financialRecords,
+  loans,
   currentStore,
   currentUser,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
-  onAddExpenseCategory,
-  onUpdateExpenseCategory,
-  onDeleteExpenseCategory,
+  onAddLoan,
+  onUpdateLoan,
+  onDeleteLoan,
   chatMessages,
   onUpdateChatMessages,
   onToggleFinancialRecordAccounting,
   onNavigate
 }) => {
-  const [activeTab, setActiveTab] = useState<'summary' | 'templates' | 'categories' | 'ai'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'loans' | 'ai'>('summary');
   const [expandedConceptGroups, setExpandedConceptGroups] = useState<Record<string, boolean>>({});
   const [expandedBreakdownCategories, setExpandedBreakdownCategories] = useState<Record<string, boolean>>({});
   
@@ -114,10 +117,15 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
-  // Category Management States
-  const [newCatName, setNewCatName] = useState('');
-  const [editingCatId, setEditingCatId] = useState<string | null>(null);
-  const [editingCatName, setEditingCatName] = useState('');
+  // Loan Management States
+  const [lenderName, setLenderName] = useState('');
+  const [loanType, setLoanType] = useState<'bank' | 'personal'>('bank');
+  const [totalAmount, setTotalAmount] = useState('');
+  const [currentBalance, setCurrentBalance] = useState('');
+  const [monthlyPayment, setMonthlyPayment] = useState('');
+  const [loanNotes, setLoanNotes] = useState('');
+  const [isLoanPaid, setIsLoanPaid] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
 
   // Local state for immediate UI feedback in chat
   const [userInput, setUserInput] = useState('');
@@ -126,20 +134,6 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const currentMonthName = monthNames[selectedMonth];
-
-  // Sync isRecurring with Active Tab
-  useEffect(() => {
-    if (!editingExpense) {
-      setIsRecurring(activeTab === 'templates');
-    }
-  }, [activeTab, editingExpense]);
-
-  // Set default category
-  useEffect(() => {
-    if (!expenseCategory && expenseCategories.length > 0) {
-        setExpenseCategory(expenseCategories[0].name);
-    }
-  }, [expenseCategories, expenseCategory]);
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -238,6 +232,12 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     // Asset info
     const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
 
+    // Debt & Loans computation (Filtered by current store)
+    const storeLoans = loans.filter(l => l.storeId === currentStore?.id);
+    const activeLoans = storeLoans.filter(l => !l.isPaid);
+    const totalDebt = activeLoans.reduce((sum, l) => sum + (Number(l.currentBalance) || 0), 0);
+    const monthlyDebtPayment = activeLoans.reduce((sum, l) => sum + (Number(l.monthlyPayment) || 0), 0);
+
     return { 
         periodo: `${currentMonthName} ${selectedYear}`,
         storeName: currentStore?.name,
@@ -268,9 +268,12 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
                 excludeFromAccounting: !!r.excludeFromAccounting,
                 registeredBy: r.registeredBy
             }))
-            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        activeLoans,
+        totalDebt,
+        monthlyDebtPayment
     };
-}, [sales, layaways, financialRecords, payrollHistory, inventory, selectedMonth, selectedYear, currentMonthName, currentStore, expenses]);
+}, [sales, layaways, financialRecords, payrollHistory, inventory, selectedMonth, selectedYear, currentMonthName, currentStore, expenses, loans]);
 
   const handleAddOrUpdateExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,61 +321,59 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           setExpenseDate(new Date(expense.date).toISOString().split('T')[0]);
       }
       setIsRecurring(!!expense.isRecurring);
-      setActiveTab(expense.isRecurring ? 'templates' : 'expenses');
+      setActiveTab('summary');
   };
 
-  const handleApplyTemplates = () => {
-    const templates = expenses.filter(e => e.isRecurring);
-    if (templates.length === 0) {
-        alert("No hay plantillas de gastos fijos creadas.");
-        return;
-    }
-    if (window.confirm(`¿Seguro que deseas aplicar ${templates.length} gastos fijos a ${currentMonthName} ${selectedYear}?`)) {
-        // Usar el primer día del mes seleccionado
-        const targetDate = new Date(selectedYear, selectedMonth, 1, 12, 0, 0).toISOString();
-        
-        templates.forEach(t => {
-            onAddExpense({
-                description: `[FIJO] ${t.description}`,
-                amount: t.amount,
-                type: 'fixed',
-                category: t.category,
-                date: targetDate,
-                storeId: currentStore?.id || '',
-                registeredBy: currentUser.name,
-                isRecurring: false 
-            });
-        });
-        alert("Plantillas aplicadas correctamente al mes seleccionado.");
-        setActiveTab('expenses');
-    }
-  };
-
-  // Category CRUD
-  const handleAddCat = (e: React.FormEvent) => {
+  // --- Loan functions ---
+  const handleAddOrUpdateLoan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newCatName.trim()) {
-        onAddExpenseCategory(newCatName.trim());
-        setNewCatName('');
-    }
-  };
+    if (!lenderName.trim() || !totalAmount || !currentBalance || !monthlyPayment) return;
 
-  const handleUpdateCat = (id: string) => {
-    if (editingCatName.trim()) {
-        onUpdateExpenseCategory(id, editingCatName.trim());
-        setEditingCatId(null);
-        setEditingCatName('');
-    }
-  };
+    const tAmt = parseFloat(totalAmount);
+    const cBal = parseFloat(currentBalance);
+    const mPay = parseFloat(monthlyPayment);
 
-  const handleDeleteCat = (id: string, name: string) => {
-    const inUse = expenses.some(e => e.category === name);
-    if (inUse) {
-        if (!window.confirm(`La categoría "${name}" está siendo usada por algunos gastos. ¿Seguro que deseas eliminarla?`)) return;
+    if (editingLoan) {
+      onUpdateLoan({
+        ...editingLoan,
+        lenderName: lenderName.trim(),
+        loanType,
+        totalAmount: tAmt,
+        currentBalance: cBal,
+        monthlyPayment: mPay,
+        notes: loanNotes.trim(),
+        isPaid: isLoanPaid
+      });
+      setEditingLoan(null);
     } else {
-        if (!window.confirm(`¿Deseas eliminar la categoría "${name}"?`)) return;
+      onAddLoan({
+        lenderName: lenderName.trim(),
+        loanType,
+        totalAmount: tAmt,
+        currentBalance: cBal,
+        monthlyPayment: mPay,
+        notes: loanNotes.trim(),
+        isPaid: false
+      });
     }
-    onDeleteExpenseCategory(id);
+
+    setLenderName('');
+    setTotalAmount('');
+    setCurrentBalance('');
+    setMonthlyPayment('');
+    setLoanNotes('');
+    setIsLoanPaid(false);
+  };
+
+  const handleEditLoanClick = (loan: Loan) => {
+    setEditingLoan(loan);
+    setLenderName(loan.lenderName);
+    setLoanType(loan.loanType);
+    setTotalAmount(loan.totalAmount.toString());
+    setCurrentBalance(loan.currentBalance.toString());
+    setMonthlyPayment(loan.monthlyPayment.toString());
+    setLoanNotes(loan.notes || '');
+    setIsLoanPaid(!!loan.isPaid);
   };
 
   // --- Chat Functions ---
@@ -613,8 +614,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           </div>
           <div className="flex bg-gray-100 dark:bg-slate-800 p-1.5 rounded-xl shadow-inner w-full md:w-auto overflow-x-auto scrollbar-hide">
             <button onClick={() => setActiveTab('summary')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'summary' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Costos Operativos</button>
-            <button onClick={() => setActiveTab('templates')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'templates' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Plantillas Fijas</button>
-            <button onClick={() => setActiveTab('categories')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'categories' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Categorías</button>
+            <button onClick={() => setActiveTab('loans')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'loans' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Préstamos Bancarios y Personales</button>
             <button onClick={() => setActiveTab('ai')} className={`flex-1 md:flex-none px-6 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === 'ai' ? 'bg-white dark:bg-gray-700 text-accent shadow-md scale-105' : 'text-gray-500'}`}>Auditoría IA Chat</button>
           </div>
         </div>
@@ -904,208 +904,252 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
           </div>
         )}
 
-        {activeTab === 'templates' && (
+        {activeTab === 'loans' && (
           <div className="space-y-8 animate-fade-in">
-            <div className={`bg-gray-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed ${editingExpense ? 'border-yellow-500 bg-yellow-500/5 shadow-xl ring-4 ring-yellow-500/10' : 'border-gray-300 dark:border-gray-600'}`}>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                        {editingExpense ? <EditIcon className="w-5 h-5 text-yellow-500"/> : <PlusCircleIcon className="w-5 h-5 text-accent"/>}
-                        {editingExpense ? `Editando: ${editingExpense.description}` : (activeTab === 'templates' ? 'Nueva Plantilla de Gasto Fijo' : 'Registrar Nuevo Gasto')}
-                    </h3>
-                    {editingExpense && (
-                        <button onClick={() => {setEditingExpense(null); setExpenseDesc(''); setExpenseAmount('');}} className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-all" title="Cancelar edición">
-                            <CrossIcon className="w-6 h-6" />
-                        </button>
-                    )}
-                </div>
-                <form onSubmit={handleAddOrUpdateExpense} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div className="lg:col-span-2">
-                        <input type="text" value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)} placeholder="Descripción (Arriendo, Internet, Servicios...)" className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-medium shadow-sm" required />
-                    </div>
-                    <div>
-                        <input type="number" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="Monto $" className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-bold shadow-sm" required />
-                    </div>
-                    <div>
-                        <select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm" required>
-                            {expenseCategories.map(cat => (
-                                <option key={cat.id} value={cat.name}>{cat.name}</option>
-                            ))}
-                            {expenseCategories.length === 0 && <option value="" disabled>Cargando categorías...</option>}
-                        </select>
-                    </div>
-                    
-                    {!isRecurring ? (
-                        <div>
-                             <input type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm" required />
-                        </div>
-                    ) : <div></div>}
+            {/* Resumen KPI de Endeudamiento */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-gray-150 dark:border-gray-700 shadow-sm">
+                <p className="text-xs font-black text-red-650 dark:text-red-400 uppercase">Deuda Total Activa</p>
+                <p className="text-3xl font-black text-red-500 mt-2">{formatCOP(stats.totalDebt)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Suma del saldo pendiente de créditos vigentes</p>
+              </div>
 
-                    <div className="flex flex-col gap-2 lg:col-span-1">
-                        <button type="submit" className={`${editingExpense ? 'bg-yellow-600' : 'bg-accent'} text-white font-black rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95 py-3 h-full`}>
-                            {editingExpense ? <CheckIcon className="w-6 h-6"/> : <PlusCircleIcon className="w-6 h-6"/>}
-                            {editingExpense ? 'GUARDAR CAMBIOS' : 'AGREGAR'}
-                        </button>
-                        {!editingExpense && (
-                             <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="rounded text-accent h-4 w-4" />
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">¿Guardar como Plantilla Fija?</span>
-                             </label>
-                        )}
-                    </div>
-                </form>
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-gray-250 dark:border-gray-700 shadow-sm">
+                <p className="text-xs font-black text-orange-655 dark:text-orange-400 uppercase">Obligación Mensual (Cuota)</p>
+                <p className="text-3xl font-black text-orange-600 mt-2">{formatCOP(stats.monthlyDebtPayment)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">Total a pagar mensualmente al flujo de caja</p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-2xl border border-gray-250 dark:border-gray-700 shadow-sm">
+                <p className="text-xs font-black text-indigo-650 dark:text-indigo-400 uppercase">Créditos Registrados</p>
+                <p className="text-3xl font-black text-indigo-600 mt-2">
+                  {(loans.filter(l => l.storeId === currentStore?.id && !l.isPaid).length)} <span className="text-sm text-gray-400 font-medium font-sans">Activos</span>
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1">Con saldo pendiente por pagar</p>
+              </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 flex justify-between items-center border-b dark:border-gray-700">
-                    <h4 className="font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                        {activeTab === 'templates' ? <HistoryIcon className="w-5 h-5 text-accent"/> : <ReceiptIcon className="w-5 h-5 text-accent"/>}
-                        {activeTab === 'templates' ? 'Lista de Gastos Fijos (Plantillas)' : `Gastos Reales de ${currentMonthName} ${selectedYear}`}
-                    </h4>
-                    {activeTab === 'templates' && filteredExpensesList.length > 0 && (
-                        <button onClick={handleApplyTemplates} className="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-green-700 transition-all shadow-md active:scale-95">
-                            <CheckIcon className="w-4 h-4"/> Aplicar plantillas a {currentMonthName}
-                        </button>
-                    )}
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-gray-50 dark:bg-gray-800 text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
-                            <tr>
-                                <th className="px-6 py-4">Información</th>
-                                <th className="px-6 py-4">Descripción</th>
-                                <th className="px-6 py-4">Categoría</th>
-                                <th className="px-6 py-4 text-right">Monto</th>
-                                <th className="px-6 py-4 text-center">Contab.</th>
-                                <th className="px-6 py-4 text-center">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                            {filteredExpensesList.map(e => (
-                                <tr key={e.id} className="hover:bg-accent/5 transition-colors group">
-                                    <td className="px-6 py-4">
-                                        {e.isRecurring ? (
-                                            <span className="px-2 py-0.5 bg-accent/10 text-accent font-black rounded-md text-[10px]">FIJO</span>
-                                        ) : (
-                                            <div className="flex flex-col">
-                                                <span className="text-xs text-gray-400 font-mono">{new Date(e.date).toLocaleDateString()}</span>
-                                                {(e as any).accountType && (
-                                                    <span className="text-[9px] font-black text-accent/60 uppercase">
-                                                        {(stats.accountLabels as any)?.[(e as any).accountType] || (e as any).accountType}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <p className="font-bold text-gray-800 dark:text-gray-200">{e.description}</p>
-                                        <p className="text-[10px] text-gray-400">Por: {e.registeredBy}</p>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-[10px] uppercase font-black tracking-widest text-gray-500 dark:text-gray-400">
-                                            {e.category}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-black text-red-500">{formatCOP(e.amount)}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        {!e.isRecurring && onToggleFinancialRecordAccounting && (
-                                            <button 
-                                                onClick={() => onToggleFinancialRecordAccounting(e.id, !(e as any).excludeFromAccounting)}
-                                                className={`p-1.5 rounded-lg transition-all ${!(e as any).excludeFromAccounting ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}
-                                                title={!(e as any).excludeFromAccounting ? 'Excluir de contabilidad' : 'Incluir en contabilidad'}
-                                            >
-                                                {!(e as any).excludeFromAccounting ? <CheckIcon className="w-4 h-4"/> : <CrossIcon className="w-4 h-4"/>}
-                                            </button>
-                                        )}
-                                        {e.isRecurring && <span className="text-xs text-gray-300">-</span>}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => handleEditClick(e)} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar"><EditIcon className="w-5 h-5"/></button>
-                                            <button onClick={() => onDeleteExpense(e.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50" title="Eliminar"><TrashIcon className="w-5 h-5"/></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                {filteredExpensesList.length === 0 && (
-                    <div className="py-20 text-center space-y-4">
-                        <ReceiptIcon className="w-16 h-16 mx-auto text-gray-200" />
-                        <p className="text-gray-400 font-bold italic">
-                            {activeTab === 'templates' ? 'No tienes plantillas creadas. Agrega los pagos fijos aquí.' : `No hay gastos registrados en ${currentMonthName} ${selectedYear}.`}
-                        </p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Formulario de registro/edición */}
+              <div className="bg-white dark:bg-gray-800/20 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm h-fit">
+                <h3 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2 mb-4" id="loan_form_title">
+                  {editingLoan ? <EditIcon className="w-5 h-5 text-yellow-500"/> : <PlusCircleIcon className="w-5 h-5 text-accent"/>}
+                  {editingLoan ? `Editando: ${editingLoan.lenderName}` : 'Registrar Crédito'}
+                </h3>
+
+                <form onSubmit={handleAddOrUpdateLoan} className="space-y-4 shadow-sm" id="loan-management-form">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre del Acreedor / Entidad</label>
+                    <input 
+                      type="text" 
+                      id="loan_lender"
+                      value={lenderName} 
+                      onChange={e => setLenderName(e.target.value)} 
+                      placeholder="Ej: Banco de Bogotá, Juan Pérez" 
+                      className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-medium shadow-sm text-sm" 
+                      required 
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo de Crédito</label>
+                      <select 
+                        id="loan_type_select"
+                        value={loanType} 
+                        onChange={e => setLoanType(e.target.value as 'bank' | 'personal')} 
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 font-bold shadow-sm text-sm"
+                      >
+                        <option value="bank">Bancario</option>
+                        <option value="personal">Personal</option>
+                      </select>
                     </div>
-                )}
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto Desembolsado</label>
+                      <input 
+                        type="number" 
+                        id="loan_total_amount"
+                        value={totalAmount} 
+                        onChange={e => setTotalAmount(e.target.value)} 
+                        placeholder="$ Desembolso" 
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-bold shadow-sm text-sm" 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Saldo Pendiente Actual</label>
+                      <input 
+                        type="number" 
+                        id="loan_current_balance"
+                        value={currentBalance} 
+                        onChange={e => setCurrentBalance(e.target.value)} 
+                        placeholder="$ Saldo actual" 
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-bold shadow-sm text-sm" 
+                        required 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Cuota Mensual</label>
+                      <input 
+                        type="number" 
+                        id="loan_monthly_payment"
+                        value={monthlyPayment} 
+                        onChange={e => setMonthlyPayment(e.target.value)} 
+                        placeholder="$ Cuota mensual" 
+                        className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-bold shadow-sm text-sm" 
+                        required 
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Notas / Observaciones</label>
+                    <textarea 
+                      id="loan_notes"
+                      value={loanNotes} 
+                      onChange={e => setLoanNotes(e.target.value)} 
+                      placeholder="Fecha de pago mensual, tasa de interés, etc." 
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-medium shadow-sm text-xs" 
+                    />
+                  </div>
+
+                  {editingLoan && (
+                    <div className="flex items-center gap-2 select-none border-t border-gray-100 dark:border-gray-700 pt-3">
+                      <input 
+                        type="checkbox" 
+                        id="loan_is_paid_check" 
+                        checked={isLoanPaid} 
+                        onChange={e => setIsLoanPaid(e.target.checked)} 
+                        className="rounded text-accent h-4 w-4" 
+                      />
+                      <span className="text-xs font-bold text-gray-500 uppercase font-sans">¿Crédito completamente pagado?</span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    {editingLoan && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setEditingLoan(null);
+                          setLenderName('');
+                          setTotalAmount('');
+                          setCurrentBalance('');
+                          setMonthlyPayment('');
+                          setLoanNotes('');
+                          setIsLoanPaid(false);
+                        }} 
+                        className="flex-1 border border-red-200 text-red-500 font-bold py-2.5 rounded-xl text-xs hover:bg-red-50 hover:dark:bg-red-950/10 transition-all uppercase"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                    <button 
+                      type="submit" 
+                      id="loan_submit_btn"
+                      className={`flex-grow py-2.5 rounded-xl font-black text-xs text-white shadow-md hover:opacity-90 transition-all flex items-center justify-center gap-2 ${editingLoan ? 'bg-yellow-600' : 'bg-accent'}`}
+                    >
+                      {editingLoan ? <CheckIcon className="w-5 h-5"/> : <PlusCircleIcon className="w-5 h-5"/>}
+                      {editingLoan ? 'GUARDAR CAMBIOS' : 'REGISTRAR CRÉDITO'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Lista de créditos vigentes */}
+              <div className="bg-white dark:bg-gray-800/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm lg:col-span-2">
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 flex justify-between items-center border-b dark:border-gray-700">
+                  <h4 className="font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                    <ReceiptIcon className="w-5 h-5 text-accent"/>
+                    Préstamos Bancarios y Personales Activos
+                  </h4>
+                  <span className="px-2.5 py-1 bg-white dark:bg-gray-700 font-mono text-[10px] text-gray-500 rounded border dark:border-gray-600">
+                    Sede: {currentStore?.name}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 dark:bg-gray-800 text-gray-400 text-[10px] font-black uppercase tracking-widest border-b dark:border-gray-700">
+                      <tr>
+                        <th className="px-4 py-3">Acreedor</th>
+                        <th className="px-4 py-3 text-right">Monto Total</th>
+                        <th className="px-4 py-3 text-right">Saldo Restante</th>
+                        <th className="px-4 py-3 text-right">Pago Mensual</th>
+                        <th className="px-4 py-3 text-center">Estado</th>
+                        <th className="px-4 py-3 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800 text-xs">
+                      {loans.filter(l => l.storeId === currentStore?.id).map(loan => (
+                        <tr key={loan.id} className="hover:bg-accent/5 transition-colors group">
+                          <td className="px-4 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-black text-gray-800 dark:text-gray-100 uppercase">{loan.lenderName}</span>
+                              <span className="text-[9px] font-black text-indigo-500 uppercase">{loan.loanType === 'bank' ? '🏦 BANCO' : '👤 PERSONAL'}</span>
+                              {loan.notes && <p className="text-[10px] text-gray-400 italic mt-1 max-w-[150px] truncate" title={loan.notes}>{loan.notes}</p>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-right font-bold text-gray-600">{formatCOP(loan.totalAmount)}</td>
+                          <td className="px-4 py-4 text-right font-black text-red-600">{formatCOP(loan.currentBalance)}</td>
+                          <td className="px-4 py-4 text-right font-bold text-orange-600">{formatCOP(loan.monthlyPayment)}</td>
+                          <td className="px-4 py-4 text-center">
+                            <button
+                              onClick={() => onUpdateLoan({ ...loan, isPaid: !loan.isPaid })}
+                              className={`px-2 py-1 rounded text-[9px] font-black uppercase shadow-sm transition-colors ${
+                                loan.isPaid 
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                  : 'bg-red-100 text-red-700 hover:bg-red-200'
+                              }`}
+                              title="Haz clic para alternar estado de pago"
+                            >
+                              {loan.isPaid ? 'PAGADO' : 'PENDIENTE'}
+                            </button>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
+                              <button 
+                                onClick={() => handleEditLoanClick(loan)} 
+                                className="text-gray-400 hover:text-accent p-1.5 rounded-full hover:bg-accent/10" 
+                                title="Editar Crédito"
+                              >
+                                <EditIcon className="w-4 h-4"/>
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (window.confirm(`¿Seguro que deseas eliminar el crédito de ${loan.lenderName}?`)) {
+                                    onDeleteLoan(loan.id);
+                                  }
+                                }} 
+                                className="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-red-50" 
+                                title="Eliminar"
+                              >
+                                <TrashIcon className="w-4 h-4"/>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {loans.filter(l => l.storeId === currentStore?.id).length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="py-16 text-center text-gray-400">
+                            <p className="font-bold italic">No hay créditos registrados para esta sede.</p>
+                            <p className="text-[10px] text-gray-400 mt-1">Registra arriba tus pasivos bancarios o personales para que la IA los considere.</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
-        )}
-
-        {activeTab === 'categories' && (
-            <div className="animate-fade-in space-y-6">
-                <div className="bg-gray-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600">
-                    <h3 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2 mb-4">
-                        <PlusCircleIcon className="w-5 h-5 text-accent"/>
-                        Agregar Nueva Categoría de Gastos
-                    </h3>
-                    <form onSubmit={handleAddCat} className="flex gap-4">
-                        <input 
-                            type="text" 
-                            value={newCatName}
-                            onChange={e => setNewCatName(e.target.value)}
-                            placeholder="Nombre de la categoría (ej: Papelería, Transporte...)"
-                            className="flex-grow p-3 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 outline-none focus:ring-2 focus:ring-accent font-medium shadow-sm"
-                            required
-                        />
-                        <button type="submit" className="bg-accent text-white font-black px-8 rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95">
-                            <PlusCircleIcon className="w-6 h-6"/>
-                            CREAR
-                        </button>
-                    </form>
-                </div>
-
-                <div className="bg-white dark:bg-gray-800/20 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 flex items-center gap-2 border-b dark:border-gray-700">
-                        <SettingsIcon className="w-5 h-5 text-accent"/>
-                        <h4 className="font-bold text-gray-600 dark:text-gray-300">Categorías Disponibles</h4>
-                    </div>
-                    <div className="divide-y dark:divide-gray-800">
-                        {expenseCategories.map(cat => (
-                            <div key={cat.id} className="p-4 flex items-center justify-between hover:bg-accent/5 transition-colors group">
-                                {editingCatId === cat.id ? (
-                                    <div className="flex-grow flex gap-2">
-                                        <input 
-                                            type="text"
-                                            value={editingCatName}
-                                            onChange={e => setEditingCatName(e.target.value)}
-                                            className="flex-grow p-2 rounded-lg bg-white dark:bg-gray-700 border border-accent focus:ring-2 focus:ring-accent outline-none font-bold"
-                                            autoFocus
-                                        />
-                                        <button onClick={() => handleUpdateCat(cat.id)} className="p-2 text-green-500 hover:bg-green-50 rounded-full">
-                                            <CheckIcon className="w-6 h-6"/>
-                                        </button>
-                                        <button onClick={() => setEditingCatId(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-full">
-                                            <CrossIcon className="w-6 h-6"/>
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <p className="font-bold text-gray-800 dark:text-gray-200">{cat.name}</p>
-                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }} className="text-gray-400 hover:text-accent p-2 rounded-full hover:bg-accent/10" title="Editar">
-                                                <EditIcon className="w-5 h-5"/>
-                                            </button>
-                                            <button onClick={() => handleDeleteCat(cat.id, cat.name)} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50" title="Eliminar">
-                                                <TrashIcon className="w-5 h-5"/>
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
         )}
 
         {activeTab === 'ai' && (

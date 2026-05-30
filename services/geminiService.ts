@@ -162,14 +162,15 @@ export const getAccountingChatResponse = async (
             
             **CAPACIDADES DE REPORTE:**
             1. **Estado de Resultados (PyG):** Ingresos totales, Costo de Ventas (COGS), Utilidad Bruta, Gastos Operativos (Nómina + Gastos), Utilidad Neta y Margen.
-            2. **Balance General (Simplificado):** Activos (Caja estimada + Valor de Inventario en costo), Patrimonio (Valor acumulado del negocio).
-            3. **Flujo de Caja (Cash Flow):** Entradas (Recaudos por ventas y abonos) vs Salidas (Pagos de compras del mes, gastos y nómina).
+            2. **Balance General (Simplificado):** Activos (Caja estimada + Valor de Inventario en costo) vs **Pasivos (Créditos y préstamos bancarios/personales activos)**, Patrimonio Neto (Activos - Pasivos).
+            3. **Flujo de Caja (Cash Flow):** Entradas (Recaudos por ventas y abonos) vs Salidas (Pagos de compras del mes, gastos, nómina y obligaciones de cuotas de préstamos).
             
             **TU FORMA DE TRABAJAR:**
             1. Saludo corporativo.
-            2. Si piden un reporte (PyG, Balance, Flujo), estrécturalo con tablas de Markdown o listas claras.
-            3. Analiza la "Salud del Inventario": Compara el valor del inventario contra las ventas mensuales para detectar exceso de stock.
-            4. Identifica "Fugas de Capital": Si los gastos o compras superan por mucho a los ingresos.
+            2. Si piden un reporte (PyG, Balance, Flujo), estrécturalo con tablas de Markdown o listas claras, detallando la deuda activa actual (préstamos acumulados) si es consultado sobre el balance o salud financiera general.
+            3. Analiza el "Nivel de Endeudamiento y Apalancamiento": Advierte si los créditos activos representan un riesgo frente a la utilidad neta o si las cuotas de préstamos mensuales ahogan el flujo de caja operativo corriente.
+            4. Analiza la "Salud del Inventario": Compara el valor del inventario contra las ventas mensuales para detectar exceso de stock.
+            5. Identifica "Fugas de Capital": Si los gastos o compras superan por mucho a los ingresos.
             5. Mantén el contexto de la conversación.
             
             Usa Markdown (## para títulos, ### para secciones, ** para valores monetarios).

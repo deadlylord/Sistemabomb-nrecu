@@ -469,3 +469,16 @@ export interface GiftVoucher {
   createdBy: string;
   saleId?: string;
 }
+
+export interface Loan {
+  id: string;
+  lenderName: string; // Nombre del prestamista/banco
+  loanType: 'bank' | 'personal'; // 'bank' | 'personal'
+  totalAmount: number; // Monto desembolsado
+  currentBalance: number; // Saldo deudor actual
+  monthlyPayment: number; // Valor de la cuota mensual
+  isPaid?: boolean; // Si ya fue pagado en su totalidad
+  notes?: string; // Observaciones del crédito
+  storeId: string;
+  createdAt: string; // Fecha de creación/desembolso
+}
