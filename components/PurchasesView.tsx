@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon, TagIcon } from './Icons';
+import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon, TagIcon, PrintIcon, CalendarIcon } from './Icons';
 import { formatCOP, encodePrice, normalizeText } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
@@ -58,6 +58,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [labelPurchase, setLabelPurchase] = useState<Purchase | null>(null);
   const [labelQuantity, setLabelQuantity] = useState(1);
+  const [bulkLabelsData, setBulkLabelsData] = useState<{
+    products: Product[];
+    quantities: Record<string, number>;
+    storeId: string;
+  } | null>(null);
   
   const [startDate, setStartDate] = useState(toYYYYMMDD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [endDate, setEndDate] = useState(toYYYYMMDD(new Date()));
@@ -348,6 +353,88 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         key,
         direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
     }));
+  };
+
+  const uniquePurchaseDates = useMemo(() => {
+    const datesSet = new Set<string>();
+    filteredPurchases.forEach(p => {
+      const dateStr = new Date(p.createdAt).toLocaleDateString();
+      datesSet.add(dateStr);
+    });
+    return Array.from(datesSet).sort((a, b) => {
+      const parseDate = (d: string) => {
+        const parts = d.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          return new Date(year, month, day).getTime();
+        }
+        return new Date(d).getTime();
+      };
+      return parseDate(b) - parseDate(a);
+    });
+  }, [filteredPurchases]);
+
+  const handlePrintDayLabels = (dateStr: string) => {
+    const targetDate = dateStr.includes('T') || dateStr.includes('-')
+      ? new Date(dateStr).toLocaleDateString()
+      : dateStr;
+    
+    const dayPurchases = purchases.filter(p => new Date(p.createdAt).toLocaleDateString() === targetDate);
+    
+    if (dayPurchases.length === 0) {
+      alert("No se encontraron compras para este día.");
+      return;
+    }
+
+    const productMap: Record<string, Product> = {};
+    const quantitiesMap: Record<string, number> = {};
+
+    dayPurchases.forEach(p => {
+      const prod = inventory.find(inv => inv.id === p.productId);
+      if (prod) {
+        productMap[prod.id] = prod;
+        quantitiesMap[prod.id] = (quantitiesMap[prod.id] || 0) + p.quantity;
+      }
+    });
+
+    const productsToPrint = Object.values(productMap);
+    if (productsToPrint.length === 0) {
+      alert("No se encontraron productos en el inventario para las compras de este día.");
+      return;
+    }
+
+    setBulkLabelsData({
+      products: productsToPrint,
+      quantities: quantitiesMap,
+      storeId: currentStoreId || dayPurchases[0].storeId
+    });
+  };
+
+  const handlePrintAllFilteredLabels = () => {
+    const productMap: Record<string, Product> = {};
+    const quantitiesMap: Record<string, number> = {};
+
+    filteredPurchases.forEach(p => {
+      const prod = inventory.find(inv => inv.id === p.productId);
+      if (prod) {
+        productMap[prod.id] = prod;
+        quantitiesMap[prod.id] = (quantitiesMap[prod.id] || 0) + p.quantity;
+      }
+    });
+
+    const productsToPrint = Object.values(productMap);
+    if (productsToPrint.length === 0) {
+      alert("No se encontraron productos en el inventario para las compras.");
+      return;
+    }
+
+    setBulkLabelsData({
+      products: productsToPrint,
+      quantities: quantitiesMap,
+      storeId: currentStoreId || filteredPurchases[0].storeId
+    });
   };
 
   const SortHeader = ({ k, label }: { k: HistorySortKey, label: string }) => {
@@ -685,6 +772,55 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-sm"/>
           </div>
 
+          {/* Panel de Impresión de Etiquetas por Lote / Día */}
+          {uniquePurchaseDates.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800/40 dark:to-slate-800/20 p-4 rounded-xl border border-blue-100 dark:border-indigo-800/40 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-100 dark:bg-indigo-900/40 p-2.5 rounded-xl flex-shrink-0">
+                  <PrintIcon className="w-5 h-5 text-accent" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-gray-800 dark:text-gray-200 uppercase tracking-wide">Impresión de Etiquetas por Lote</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Imprime todas las etiquetas de los productos comprados un mismo día para evitar errores uno a uno.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Comprados el:</span>
+                  <select 
+                    id="bulk_print_date_select"
+                    className="bg-white dark:bg-gray-800 border border-gray-250 dark:border-gray-700 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-accent min-w-[180px] shadow-sm cursor-pointer"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handlePrintDayLabels(e.target.value);
+                        e.target.value = ""; // Reset value for reuse
+                      }
+                    }}
+                  >
+                    <option value="">-- Selecciona una fecha --</option>
+                    {uniquePurchaseDates.map(dStr => {
+                      const count = filteredPurchases.filter(p => new Date(p.createdAt).toLocaleDateString() === dStr).length;
+                      const text = `${dStr} (${count} ${count === 1 ? 'compra registrada' : 'compras registradas'})`;
+                      return (
+                        <option key={dStr} value={dStr}>
+                          {text}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <button 
+                  onClick={handlePrintAllFilteredLabels} 
+                  className="bg-accent text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                  title="Cargar etiquetas de todas las compras mostradas abajo en lote"
+                >
+                  <TagIcon className="w-4 h-4 text-white" />
+                  Imprimir todo lo filtrado
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto rounded-xl border dark:border-gray-700">
               <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
@@ -737,7 +873,14 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                               <td className="p-3 text-right font-black text-accent">{formatCOP(p.totalCost)}</td>
                               <td className="p-3 text-center">
                                   <div className="flex justify-center items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                      <button onClick={() => { setLabelPurchase(p); setLabelQuantity(p.quantity); }} className="p-1.5 text-gray-400 hover:text-blue-500" title="Generar Etiquetas"><TagIcon className="w-4 h-4"/></button>
+                                      <button 
+                                          onClick={() => handlePrintDayLabels(p.createdAt)} 
+                                          className="p-1.5 text-gray-400 hover:text-indigo-500 transition-colors" 
+                                          title={`Imprimir todas las etiquetas compradas el mismo día (${new Date(p.createdAt).toLocaleDateString()})`}
+                                      >
+                                          <PrintIcon className="w-4 h-4 text-indigo-550 dark:text-indigo-400" />
+                                      </button>
+                                      <button onClick={() => { setLabelPurchase(p); setLabelQuantity(p.quantity); }} className="p-1.5 text-gray-400 hover:text-blue-500" title="Generar Etiquetas de esta compra sola"><TagIcon className="w-4 h-4"/></button>
                                       <button onClick={() => setEditingPurchase(p)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4"/></button>
                                       <button onClick={() => onDeletePurchase(p.id)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4"/></button>
                                   </div>
@@ -792,6 +935,16 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
             selectedProducts={[inventory.find(p => p.id === labelPurchase.productId)!]}
             store={stores.find(s => s.id === labelPurchase.storeId)!}
             initialQuantities={{ [labelPurchase.productId]: labelPurchase.quantity }}
+        />
+      )}
+
+      {bulkLabelsData && (
+        <LabelPrintModal 
+            isOpen={!!bulkLabelsData}
+            onClose={() => setBulkLabelsData(null)}
+            selectedProducts={bulkLabelsData.products}
+            store={stores.find(s => s.id === bulkLabelsData.storeId) || stores[0]}
+            initialQuantities={bulkLabelsData.quantities}
         />
       )}
 
