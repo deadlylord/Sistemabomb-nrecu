@@ -1,73 +1,70 @@
-const CACHE_NAME = 'bombon-pos-cache-v8';
+const CACHE_NAME = 'bombon-pos-cache-v1.1.65-network-first';
 const urlsToCache = [
     '/',
     '/index.html',
     '/manifest.json',
-    '/index.tsx', // The main app code
     '/assets/icon.svg',
     '/assets/maskable_icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Force the new service worker to activate immediately
+    self.skipWaiting(); // Force the new service worker to activate immediately without waiting
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
-                console.log('Opened cache and caching local resources');
-                return cache.addAll(urlsToCache);
-            })
-            .catch(error => {
-                console.error('Failed to cache local resources during install:', error);
+                console.log('Opened cache and caching basic offline resources');
+                return cache.addAll(urlsToCache).catch(err => {
+                    console.warn('Some resource failed to cache, continuing...', err);
+                });
             })
     );
 });
 
 self.addEventListener('activate', (event) => {
-    const cacheWhitelist = [CACHE_NAME];
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
-                    if (cacheWhitelist.indexOf(cacheName) === -1) {
+                    if (cacheName !== CACHE_NAME) {
                         console.log('Deleting old cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
-        }).then(() => self.clients.claim()) // Take control of all open clients
+        }).then(() => self.clients.claim()) // Claim control of clients immediately
     );
 });
 
 self.addEventListener('fetch', (event) => {
-    // Use a "cache falling back to network, then cache" strategy for performance and offline capability.
-    event.respondWith(
-        caches.match(event.request).then((response) => {
-            // If we have a cached response, return it.
-            if (response) {
-                return response;
-            }
+    // Only handle GET requests and same-origin URLs
+    if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
+        return;
+    }
 
-            // If not, fetch from the network.
-            return fetch(event.request).then(
-                (networkResponse) => {
-                    // Check if we received a valid response
-                    if (networkResponse && networkResponse.status === 200) {
-                        const responseToCache = networkResponse.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                // Cache the new resource for next time.
-                                cache.put(event.request, responseToCache);
-                            });
+    // Network-First strategy: try the network, fall back to cache when offline
+    event.respondWith(
+        fetch(event.request)
+            .then((networkResponse) => {
+                // If we get a valid response, cache it and return
+                if (networkResponse && networkResponse.status === 200) {
+                    const responseToCache = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseToCache);
+                    });
+                }
+                return networkResponse;
+            })
+            .catch(() => {
+                // If network fails (offline), try matching in the cache
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        return cachedResponse;
                     }
-                    return networkResponse;
-                }
-            ).catch(() => {
-                // This will be triggered on network failure if the resource is not cached.
-                // For page navigation, we can provide a fallback to the root.
-                if (event.request.mode === 'navigate') {
-                    return caches.match('/');
-                }
-            });
-        })
+                    // If not in cache and navigating, fall back to / (index.html)
+                    if (event.request.mode === 'navigate') {
+                        return caches.match('/');
+                    }
+                });
+            })
     );
 });

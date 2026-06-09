@@ -93,44 +93,43 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
             <PackageIcon className="w-1/2 h-1/2 text-slate-400 dark:text-slate-600" />
           </div>
         )}
-        {/* Botón de Compartir en WhatsApp - Siempre Visible y Altamente Destacado */}
-        <div className="absolute top-1.5 left-1.5 z-30">
+        {/* Controles de Acción en Esquina Superior Izquierda (WhatsApp y Edición) */}
+        <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+            {/* Botón de Compartir en WhatsApp - Siempre Visible y Destacado */}
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="p-1.8 w-7.5 h-7.5 bg-green-500 hover:bg-green-600 hover:scale-110 active:scale-95 text-white rounded-full shadow-lg border border-white/20 transition-all flex items-center justify-center cursor-pointer"
+              className="w-8 h-8 bg-green-500 hover:bg-green-600 hover:scale-110 active:scale-95 text-white rounded-full shadow-lg border border-white/20 transition-all flex items-center justify-center cursor-pointer"
               title="Compartir por WhatsApp (Tallas y colores sin precios)"
             >
               <WhatsAppIcon className="w-4 h-4 text-white" />
             </a>
-        </div>
 
-        {/* Botones de Edición - Visibles en Hover en PC o siempre en móvil, ubicados al lado */}
-        <div className="absolute top-1.5 left-10.5 z-20 flex space-x-1.5 opacity-100 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
-            <button
-              onClick={(e) => {
-                  e.stopPropagation();
-                  onEditImage(product);
-                }
-              }
-              className="p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full backdrop-blur-sm transition-colors"
-              aria-label={`Editar imagen de ${product.name}`}
-            >
-              <CameraIcon className="w-4 h-4"/>
-            </button>
-            {isAdmin && (
-                <>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onEditProduct(product); }}
-                        className="p-1.5 bg-black/50 hover:bg-black/75 text-white rounded-full backdrop-blur-sm transition-colors"
-                        aria-label={`Editar detalles de ${product.name}`}
-                    >
-                        <EditIcon className="w-4 h-4"/>
-                    </button>
-                </>
-            )}
+            {/* Botones de Edición - Visibles en Hover en PC o siempre en móvil */}
+            <div className="flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
+                <button
+                  onClick={(e) => {
+                      e.stopPropagation();
+                      onEditImage(product);
+                    }
+                  }
+                  className="w-8 h-8 bg-black/50 hover:bg-black/75 text-white rounded-full backdrop-blur-sm transition-colors flex items-center justify-center"
+                  aria-label={`Editar imagen de ${product.name}`}
+                >
+                  <CameraIcon className="w-4 h-4"/>
+                </button>
+                {isAdmin && (
+                  <button
+                      onClick={(e) => { e.stopPropagation(); onEditProduct(product); }}
+                      className="w-8 h-8 bg-black/50 hover:bg-black/75 text-white rounded-full backdrop-blur-sm transition-colors flex items-center justify-center"
+                      aria-label={`Editar detalles de ${product.name}`}
+                  >
+                      <EditIcon className="w-4 h-4"/>
+                  </button>
+                )}
+            </div>
         </div>
 
         {isAdmin && (
