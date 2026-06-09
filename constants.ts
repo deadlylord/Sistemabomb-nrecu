@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.65',
+    date: '2026-06-09',
+    description: 'Actualización de WhatsApp y Compatibilidad PWA',
+    isCurrent: true,
+    changes: [
+      'Compartido en POS: Botón inalámbrico siempre visible en cada producto para enviar detalles (tallas, colores/detalles) por WhatsApp sin incluir precios.',
+      'Sincronización PWA: Configuración de servicios de instalación en dispositivos Android y computadores para solucionar problemas de caché.',
+      'Responsividad: Se mejoró la visualización de ventanas emergentes (pop-ups) de facturas y de conciliaciones bancarias para que no se oculten ni se corten.'
+    ]
+  },
+  {
     version: '1.1.64',
     date: '2026-05-22',
     description: 'Menú Sidebar Profesional y Escritorios Fluidos',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Menú PC: Se reemplazó la barra de navegación superior horizontal por un elegante menú lateral de escritorio (Sidebar) con agrupaciones claras.',
       'Estructura: Los accesos están ordenados visualmente en bloques temáticos (Operaciones, Control de Stock, Administración/Finanzas).',
