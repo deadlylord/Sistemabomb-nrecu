@@ -53,7 +53,7 @@ const RecaudoReceiptModal: React.FC<RecaudoReceiptModalProps> = ({ incident, sto
 
   return (
     <div id="receipt-modal-container" className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4" onClick={handleOverlayClick}>
-      <div className="bg-white dark:bg-secondary rounded-lg shadow-xl w-full max-w-sm flex flex-col">
+      <div className="bg-white dark:bg-secondary rounded-lg shadow-xl w-full max-w-sm flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center print:hidden">
             <h2 className="text-xl font-bold text-accent">Recaudo Registrado</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white">
@@ -61,7 +61,7 @@ const RecaudoReceiptModal: React.FC<RecaudoReceiptModalProps> = ({ incident, sto
             </button>
         </div>
 
-        <div id="receipt-to-print" className="p-6 bg-white dark:bg-primary text-black dark:text-text-light font-mono text-sm">
+        <div id="receipt-to-print" className="p-6 bg-white dark:bg-primary text-black dark:text-text-light font-mono text-sm overflow-y-auto flex-grow">
            <div className="text-center mb-4">
                 {store.logo && <img src={store.logo} alt="Logo" className="mx-auto max-h-20 mb-2" />}
                 <h1 className="text-2xl font-bold text-accent dark:text-accent">{store.receiptName || store.name}</h1>

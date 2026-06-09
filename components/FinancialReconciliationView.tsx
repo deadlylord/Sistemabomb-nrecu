@@ -2233,7 +2233,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         {/* MODAL INGRESOS MANUALES */}
         {showAddModal && (
-            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
+            <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">
                     <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
                     <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0"><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p><p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p></div><div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p><p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{activeTab.toUpperCase()}</p></div></div>
@@ -2335,7 +2335,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         )}
         
         {editingRecord && (
-             <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm lg:pl-64">
+             <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-accent/20 animate-scale-up">
                     <div className="p-3.5 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest text-xs sm:text-sm">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-4 h-4" /></button></div>
                     <form onSubmit={handleUpdateSingleRecord} className="p-4 sm:p-5 space-y-3">
@@ -2378,7 +2378,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         )}
 
         {paymentSummary && (
-             <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+             <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                  <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-accent/20">
                      <div className="p-6 text-center space-y-4">
                          <div className="w-16 h-16 bg-accent/10 text-accent rounded-full flex items-center justify-center mx-auto mb-2">
@@ -2433,7 +2433,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         )}
 
         {recordToDelete && (
-            <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+            <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-red-500/20">
                     <div className="p-6 text-center space-y-4">
                         <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
