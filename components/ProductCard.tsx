@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Product } from '../types';
-import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon } from './Icons';
+import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon, WhatsAppIcon } from './Icons';
 import { formatCOP } from '../constants';
 
 interface ProductCardProps {
@@ -18,9 +18,45 @@ interface ProductCardProps {
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
+  // Preparar mensaje de WhatsApp sin precios
+  const getWhatsAppShareUrl = () => {
+    const originalDesc = product.description || '';
+    // Eliminar menciones de precios, por ejemplo signos de pesos seguidos de números, eg. $35.000, $ 35000, etc.
+    const cleanDesc = originalDesc
+      .replace(/\$\s?\d+([.,]\d+)*(?!\w)/g, '')
+      .replace(/\b\d+([.,]\d+)*\s?(COP|pesos|mil)\b/gi, '')
+      .trim();
+
+    const textLines = [
+      `*¡Hola! Te comparto este producto:*`,
+      ``,
+      `*🛍️ ${product.name.toUpperCase()}*`,
+    ];
+
+    if (cleanDesc) {
+      textLines.push(``);
+      textLines.push(`*Tallas y Colores / Detalles:*`);
+      textLines.push(cleanDesc);
+    }
+
+    if (product.imageUrl) {
+      textLines.push(``);
+      textLines.push(`*Ver imagen:* ${product.imageUrl}`);
+    }
+
+    const fullText = textLines.join('\n');
+    return `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`;
+  };
+
+  const whatsappUrl = getWhatsAppShareUrl();
+
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent adding to cart if an admin button or the checkbox was clicked
-    if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.verification-checkbox-wrapper')) {
+    // Prevent adding to cart if an admin button, the checkbox, or link was clicked
+    if (
+      (e.target as HTMLElement).closest('button') || 
+      (e.target as HTMLElement).closest('a') || 
+      (e.target as HTMLElement).closest('.verification-checkbox-wrapper')
+    ) {
       return;
     }
     if (product.stock > 0) { // Also prevent adding if out of stock
@@ -57,7 +93,17 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
             <PackageIcon className="w-1/2 h-1/2 text-slate-400 dark:text-slate-600" />
           </div>
         )}
-        <div className="absolute top-1.5 left-1.5 z-20 flex space-x-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity">
+        <div className="absolute top-1.5 left-1.5 z-20 flex space-x-1.5 opacity-100 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="p-1.5 bg-green-500 hover:bg-green-600 active:scale-95 text-white rounded-full shadow-lg transition-all flex items-center justify-center cursor-pointer"
+              title="Compartir por WhatsApp (Tallas y colores sin precios)"
+            >
+              <WhatsAppIcon className="w-4 h-4 text-white" />
+            </a>
             <button
               onClick={(e) => {
                   e.stopPropagation();
