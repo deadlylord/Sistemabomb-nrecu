@@ -176,7 +176,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             const isInPeriod = d >= startOfSelected && d <= endOfSelected;
             // Excluimos Categorías que se manejan aparte en el KPI o son transferencias
             const isNotPayroll = r.subCategory !== 'Personal'; 
-            const isNotInterStore = r.subCategory !== 'Cruce Sedes' && r.subCategory !== 'Préstamo a Sede';
+            const subCatLower = (r.subCategory || '').toLowerCase();
+            const isNotInterStore = subCatLower !== 'cruce sedes' && 
+                                    subCatLower !== 'préstamo a sede' && 
+                                    !subCatLower.startsWith('cruce') && 
+                                    !subCatLower.includes('préstamo');
             const isNotPurchase = r.subCategory !== 'Mercancía/Compras';
             return isExpense && isInPeriod && isNotPayroll && isNotInterStore && isNotPurchase;
         })
@@ -205,7 +209,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
             const d = new Date(r.date);
             const isExpense = r.amount < 0 && !r.excludeFromAccounting;
             const isInPeriod = d >= startOfSelected && d <= endOfSelected;
-            const isNotInterStore = r.subCategory !== 'Cruce Sedes' && r.subCategory !== 'Préstamo a Sede';
+            const subCatLower = (r.subCategory || '').toLowerCase();
+            const isNotInterStore = subCatLower !== 'cruce sedes' && 
+                                    subCatLower !== 'préstamo a sede' && 
+                                    !subCatLower.startsWith('cruce') && 
+                                    !subCatLower.includes('préstamo');
             const isNotPurchase = r.subCategory !== 'Mercancía/Compras';
             return isExpense && isInPeriod && isNotInterStore && isNotPurchase;
         })

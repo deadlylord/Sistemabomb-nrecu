@@ -275,7 +275,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           if (otherStoreId) {
               if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
               const b = balances[otherStoreId]!;
-              const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') ? -r.amount : r.amount;
+              const subCatLower = (r.subCategory || '').toLowerCase();
+              const isInterStore = subCatLower === 'préstamo a sede' || 
+                                  subCatLower === 'cruce sedes' || 
+                                  subCatLower.startsWith('cruce') || 
+                                  subCatLower.includes('préstamo');
+              const netImpact = isInterStore ? -r.amount : r.amount;
               b.total += netImpact;
               b.history.push({ ...r, netImpact } as any);
               if (r.accountType === 'cash') b.cash += netImpact;
@@ -323,7 +328,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const balances: Record<string, number> = {};
       storeRecords.forEach(r => {
         if (r.debtStoreId) {
-          const netImpact = (r.subCategory === 'Préstamo a Sede' || r.subCategory === 'Cruce Sedes') ? -r.amount : r.amount;
+          const subCatLower = (r.subCategory || '').toLowerCase();
+          const isInterStore = subCatLower === 'préstamo a sede' || 
+                              subCatLower === 'cruce sedes' || 
+                              subCatLower.startsWith('cruce') || 
+                              subCatLower.includes('préstamo');
+          const netImpact = isInterStore ? -r.amount : r.amount;
           balances[r.debtStoreId] = (balances[r.debtStoreId] || 0) + netImpact;
         }
       });
@@ -882,7 +892,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             const mainRef = doc(collection(db, 'financialRecords'));
             const mirrorRef = doc(collection(db, 'financialRecords'));
             
-            const mainSubCategory = e.subCategory !== 'Cruce Sedes' ? 'Préstamo a Sede' : 'Cruce Sedes';
+            const mainSubCategory = e.subCategory === 'Cruce Sedes' ? 'Cruce Sedes' : `Cruce ${targetStoreName}`;
             const affectsMainBalance = e.physicalStoreId === activeStoreId;
 
             const mainDescription = e.description 
@@ -918,9 +928,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 accountType: e.accountType
             });
 
-            const mirrorAmount = e.subCategory === 'Cruce Sedes' ? -cruceAmountVal : cruceAmountVal;
+            const isPureTransfer = !e.subCategory || e.subCategory === 'Cruce Sedes' || e.subCategory === 'Préstamo a Sede' || (e.subCategory && e.subCategory.toLowerCase().startsWith('cruce'));
+            const mirrorAmount = isPureTransfer ? -cruceAmountVal : cruceAmountVal;
             const affectsMirrorBalance = e.physicalStoreId === e.debtStoreId;
             const mirrorDescription = e.description ? `Cruce ${activeStoreName}: ${e.description}` : `Cruce ${activeStoreName}`;
+            
+            const mirrorSubCategory = isPureTransfer 
+                ? (e.subCategory === 'Cruce Sedes' ? 'Cruce Sedes' : `Cruce ${activeStoreName}`)
+                : (e.subCategory || 'Varios');
             
             const mirrorRecord = { 
                 id: mirrorRef.id, 
@@ -930,7 +945,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 amount: mirrorAmount, 
                 type: mirrorAmount < 0 ? 'expense' : 'income_manual', 
                 description: mirrorDescription, 
-                subCategory: e.subCategory || 'Varios', 
+                subCategory: mirrorSubCategory, 
                 registeredBy: `${currentUser.name} (vía ${activeStoreName})`, 
                 isConfirmed: true, 
                 debtStoreId: activeStoreId, 
@@ -2187,7 +2202,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <p className="font-bold text-gray-800 dark:text-gray-200 uppercase text-[9px] sm:text-[11px] leading-snug break-words flex-grow">{record.description}</p>
-                                                    {record.debtStoreId && <span className="px-1 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0">CRUCE</span>}
+                                                    {record.debtStoreId && (
+                                                        <span className="px-1.5 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0 whitespace-nowrap">
+                                                            CRUCE {filteredStores.find(s => s.id === record.debtStoreId)?.name || 'SEDE'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
                                             </div>
