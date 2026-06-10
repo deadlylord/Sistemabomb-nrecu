@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.67',
+    date: '2026-06-10',
+    description: 'Compatibilidad de Instalación PWA Absoluta en Android',
+    isCurrent: true,
+    changes: [
+      'PWA Cache: Se corrigieron las rutas de los iconos PWA (/assets/icon.svg) moviendo los SVG estáticos a la carpeta pública de distribución (/public/assets/), lo cual elimina los errores 404 del Service Worker al cachear.',
+      'Instalabilidad: Solucionado el problema que causaba que Android Chrome solo mostrara "Crear acceso directo" debido a fallos de inicialización del Service Worker en la instalación del caché.'
+    ]
+  },
+  {
     version: '1.1.66',
     date: '2026-06-10',
     description: 'Valor del Inventario en Panel de Control y Guía de Instalación Celular',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Panel de Control: Se corrigió e integró el valor total del inventario en pesos COP dentro de las métricas del Informe de Pagos en tiempo real.',
       'Navegación: Al hacer clic en el valor del inventario en el Panel de Control, te redirige automáticamente a la sección del gráfico de valorización de stock.',

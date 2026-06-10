@@ -304,7 +304,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       const registerServiceWorker = () => {
-        const swUrl = new URL('/sw.js?v=1.1.66', window.location.origin);
+        const swUrl = new URL('/sw.js?v=1.1.67', window.location.origin);
         navigator.serviceWorker.register(swUrl).then(registration => {
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
         }, err => {
