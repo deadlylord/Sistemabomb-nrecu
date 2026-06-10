@@ -1063,7 +1063,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2><button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen`}><ShareIcon className="w-5 h-5" /></button></div><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPaymentsReportVisible ? 'rotate-180' : ''}`} /></div>
         {isPaymentsReportVisible && (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-6">
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-4 mb-6">
                     <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group">
                         <div className="flex justify-between items-start">
                             <div className="text-left">
@@ -1104,6 +1104,22 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         <div className="text-left">
                             <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
                             <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
+                        </div>
+                    </div>
+                    <div 
+                        onClick={() => {
+                            sessionStorage.setItem('scroll_to_section', 'analysis-section');
+                            onNavigate(View.INVENTORY);
+                        }}
+                        className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group"
+                        title="Ver gráfica del inventario"
+                    >
+                        <div className="flex justify-between items-start">
+                            <div className="text-left">
+                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Valor Inventario</p>
+                                <p className="text-lg sm:text-2xl font-black text-blue-600 dark:text-blue-400">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
+                            </div>
+                            <ChartBarIcon className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                         </div>
                     </div>
                  </div>

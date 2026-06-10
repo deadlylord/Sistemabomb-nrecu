@@ -55,6 +55,7 @@ import SmartAccountantView from './SmartAccountantView';
 import VersionHistoryModal from './VersionHistoryModal';
 import FinancialReconciliationView from './FinancialReconciliationView';
 import GiftVouchersView from './GiftVouchersView';
+import { PwaInstallModal } from './PwaInstallModal';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -135,6 +136,21 @@ const App: React.FC = () => {
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent standard browser bar from displaying
+      e.preventDefault();
+      // Store the event so it can be triggered later
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
@@ -2121,7 +2137,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} onOpenInstallGuide={() => setIsInstallModalOpen(true)} />
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
         {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} />}
@@ -2228,6 +2244,13 @@ const App: React.FC = () => {
             onClose={() => setIsVersionModalOpen(false)} 
         />
       )}
+
+      {/* Custom Installation Assistant for Android and iPhone */}
+      <PwaInstallModal 
+          isOpen={isInstallModalOpen} 
+          onClose={() => setIsInstallModalOpen(false)} 
+          deferredPrompt={deferredPrompt}
+      />
     </div>
   );
 };

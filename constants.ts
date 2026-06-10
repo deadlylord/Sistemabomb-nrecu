@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.66',
+    date: '2026-06-10',
+    description: 'Valor del Inventario en Panel de Control y Guía de Instalación Celular',
+    isCurrent: true,
+    changes: [
+      'Panel de Control: Se corrigió e integró el valor total del inventario en pesos COP dentro de las métricas del Informe de Pagos en tiempo real.',
+      'Navegación: Al hacer clic en el valor del inventario en el Panel de Control, te redirige automáticamente a la sección del gráfico de valorización de stock.',
+      'Gráfico de Valorización: Ahora cuenta con un selector dinámico para elegir el rango de tiempo visualizado (últimos 30, 60, 90, 180, 365 días o todo el historial).',
+      'Guía de Instalación Móvil: Se incorporó una guía interactiva detallada para solucionar cuando los navegadores integrados (como WhatsApp/Instagram) sólo permiten crear accesos directos, explicando cómo instalar como App nativa en Chrome (Android) y Safari (iPhone).'
+    ]
+  },
+  {
     version: '1.1.65',
     date: '2026-06-09',
     description: 'Actualización de WhatsApp y Compatibilidad PWA',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Compartido en POS: Botón inalámbrico siempre visible en cada producto para enviar detalles (tallas, colores/detalles) por WhatsApp sin incluir precios.',
       'Sincronización PWA: Configuración de servicios de instalación en dispositivos Android y computadores para solucionar problemas de caché.',

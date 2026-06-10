@@ -73,6 +73,20 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDiscontinueConfirm, setShowBulkDiscontinueConfirm] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+  const [valuationRange, setValuationRange] = useState<number>(30);
+
+  React.useEffect(() => {
+    const sectionToScroll = sessionStorage.getItem('scroll_to_section');
+    if (sectionToScroll) {
+      sessionStorage.removeItem('scroll_to_section');
+      setTimeout(() => {
+        const element = document.getElementById(sectionToScroll);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 500);
+    }
+  }, []);
 
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -357,10 +371,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
   }, [inventory, categories]);
 
   const inventoryCostHistory = useMemo(() => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-
+    let days = valuationRange;
     const valueEvents: { date: Date; valueChange: number }[] = [];
 
     purchases.forEach(p => {
@@ -378,18 +389,35 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
             valueEvents.push({ date: new Date(l.createdAt), valueChange: -layawayCost });
         }
     });
+
+    if (days === 0) {
+      if (valueEvents.length > 0) {
+        const oldestDate = new Date(Math.min(...valueEvents.map(e => e.date.getTime())));
+        oldestDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - oldestDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        days = Math.max(30, diffDays + 1);
+      } else {
+        days = 30;
+      }
+    }
+
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    startDate.setDate(startDate.getDate() - (days - 1));
     
-    const netChangeLast30Days = valueEvents
-        .filter(e => e.date >= thirtyDaysAgo)
+    const netChangeInPeriod = valueEvents
+        .filter(e => e.date >= startDate)
         .reduce((sum, e) => sum + e.valueChange, 0);
 
     const currentValue = inventory.reduce((sum, p) => sum + p.cost * p.stock, 0);
-    const startingValue = currentValue - netChangeLast30Days;
+    const startingValue = currentValue - netChangeInPeriod;
     
     const dailyChanges: { [date: string]: number } = {};
     
     valueEvents
-        .filter(e => e.date >= thirtyDaysAgo)
+        .filter(e => e.date >= startDate)
         .forEach(e => {
             const dateStr = e.date.toISOString().split('T')[0];
             dailyChanges[dateStr] = (dailyChanges[dateStr] || 0) + e.valueChange;
@@ -398,8 +426,8 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     const finalData: { date: string; value: number }[] = [];
     let runningTotal = startingValue;
     
-    for (let i = 0; i < 30; i++) {
-        const d = new Date(thirtyDaysAgo);
+    for (let i = 0; i < days; i++) {
+        const d = new Date(startDate);
         d.setDate(d.getDate() + i);
         const dateStr = d.toISOString().split('T')[0];
         
@@ -408,7 +436,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     }
 
     return finalData;
-  }, [inventory, sales, purchases, layaways]);
+  }, [inventory, sales, purchases, layaways, valuationRange]);
 
   return (
     <>
@@ -662,9 +690,23 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
         {/* Sección Inferior de Análisis y Gestión */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
             <div id="analysis-section" className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-6 rounded-xl shadow-lg scroll-mt-24">
-                <h3 className="text-xl font-bold text-accent mb-3 flex items-center gap-2">
-                    <ChartBarIcon className="w-6 h-6" /> Valorización (Últimos 30 días)
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <h3 className="text-xl font-bold text-accent flex items-center gap-2">
+                        <ChartBarIcon className="w-6 h-6" /> Valorización del Inventario
+                    </h3>
+                    <select
+                        value={valuationRange}
+                        onChange={(e) => setValuationRange(Number(e.target.value))}
+                        className="text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg py-1.5 px-3 text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:ring-2 focus:ring-accent transition-all shrink-0"
+                    >
+                        <option value={30}>Últimos 30 días</option>
+                        <option value={60}>Últimos 60 días</option>
+                        <option value={90}>Últimos 90 días</option>
+                        <option value={180}>Último semestre (180 días)</option>
+                        <option value={365}>Último año (365 días)</option>
+                        <option value={0}>Todo el historial</option>
+                    </select>
+                </div>
                 <InventoryCostChart data={inventoryCostHistory} />
             </div>
             
