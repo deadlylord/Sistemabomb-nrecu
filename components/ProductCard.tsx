@@ -15,9 +15,12 @@ interface ProductCardProps {
   justAddedProductId: string | null;
   isVerified: boolean;
   onToggleVerification: (productId: string) => void;
+  recentSales30d?: number;
+  isTrending?: boolean;
+  needsRebuy?: boolean;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
+const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification, recentSales30d, isTrending, needsRebuy }) => {
   const [isSharing, setIsSharing] = React.useState(false);
 
   // Preparar mensaje de WhatsApp sin precios
@@ -229,6 +232,22 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
                     />
                 </div>
             </div>
+        )}
+
+        {/* Floating Badges for Admin Insights */}
+        {isAdmin && (isTrending || needsRebuy) && (
+          <div className="absolute bottom-2 left-2 z-10 flex flex-col gap-1">
+            {isTrending && (
+              <span className="bg-rose-500/95 border border-rose-400 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 shadow-sm font-sans">
+                🔥 TENDENCIA {recentSales30d ? `(${recentSales30d})` : ''}
+              </span>
+            )}
+            {needsRebuy && (
+              <span className="bg-amber-500/95 border border-amber-400 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 shadow-sm font-sans animate-pulse">
+                🚨 RECOMPRAR
+              </span>
+            )}
+          </div>
         )}
 
       </div>

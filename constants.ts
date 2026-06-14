@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.69',
+    date: '2026-06-14',
+    description: 'Rendimiento POS Inteligente y Alertas de Recompra para Administradores',
+    isCurrent: true,
+    changes: [
+      'POS Inteligente: Se incorporó una barra de ordenación administrativa (Inteligente, Tendencias, Recompra Urgente, Alfabético) que calcula las métricas en un período crítico de 30 días para evitar sesgos por ventas antiguas.',
+      'Indicadores Visuales: Añadidas insignias dinámicas flotantes en tiempo real ("TENDENCIA" y "RECOMPRAR") para que el administrador identifique de un solo vistazo el estado de la mercancía.',
+      'Sugerencias de Abastecimiento: Integración de un asistente inteligente de reabastecimiento en el modal de rendimiento, sugiriendo lotes de compra exactos evaluando la rotación en los últimos 30 días.'
+    ]
+  },
+  {
     version: '1.1.68',
     date: '2026-06-13',
     description: 'Control de Sesión Único para Vendedores',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Seguridad: Se implementó un control para que los Vendedores solo puedan iniciar sesión en un dispositivo o pestaña a la vez. Si intentan ingresar en otro, serán bloqueados.',
       'Excepción: Los administradores conservan acceso para mantener múltiples sesiones abiertas de forma simultánea.',

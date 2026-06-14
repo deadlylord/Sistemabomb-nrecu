@@ -180,6 +180,51 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
                         </div>
                     </div>
 
+                    {/* Dynamic Intelligent Recommendation Box */}
+                    {isAdmin && (
+                        <div className={`p-4 rounded-3xl border ${
+                            product.stock <= 0 && performance.recentUnitsSold > 0
+                                ? 'bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30'
+                                : product.stock <= 2 && performance.recentUnitsSold > 0
+                                ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30'
+                                : performance.recentUnitsSold === 0 && product.stock > 10
+                                ? 'bg-indigo-50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900/30'
+                                : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30'
+                        }`}>
+                            <div className="flex items-start gap-3">
+                                <div className="mt-0.5">
+                                    {product.stock <= 2 && performance.recentUnitsSold > 0 ? (
+                                        <span className="text-lg">🚨</span>
+                                    ) : performance.recentUnitsSold === 0 && product.stock > 10 ? (
+                                        <span className="text-lg">⚠️</span>
+                                    ) : (
+                                        <span className="text-lg">💡</span>
+                                    )}
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-705 dark:text-slate-300">
+                                        {product.stock <= 0 && performance.recentUnitsSold > 0
+                                            ? 'Abastecimiento Crítico / Agotado'
+                                            : product.stock <= 2 && performance.recentUnitsSold > 0
+                                            ? 'Recompra Sugerida Urgente'
+                                            : performance.recentUnitsSold === 0 && product.stock > 10
+                                            ? 'Alerta de Bajo Movimiento'
+                                            : 'Estado de Inventario Saludable'}
+                                    </h4>
+                                    <p className="text-xs font-bold text-slate-600 dark:text-slate-405 leading-relaxed">
+                                        {product.stock <= 0 && performance.recentUnitsSold > 0
+                                            ? `Este producto está completamente AGOTADO, pero se vendieron ${performance.recentUnitsSold} unidades en el último mes. Te sugerimos re-comprar urgentemente al menos ${Math.round(performance.recentUnitsSold * 1.5)} unidades.`
+                                            : product.stock <= 2 && performance.recentUnitsSold > 0
+                                            ? `Quedan solo ${product.stock} unidades de este producto y has vendido ${performance.recentUnitsSold} en los últimos 30 días. Te recomendamos pedir un lote de ${Math.round(performance.recentUnitsSold * 1.5 - product.stock)} unidades para re-abastecer la demanda estimada.`
+                                            : performance.recentUnitsSold === 0 && product.stock > 10
+                                            ? `Este artículo no ha registrado ventas en el último mes y tienes un exceso de stock (${product.stock} u.). Te recomendamos aplicar un descuento o clasificarlo como liquidación.`
+                                            : `El nivel actual de stock es de ${product.stock} unidades con una venta reciente de ${performance.recentUnitsSold} unidades en los últimos 30 días. El flujo de abastecimiento se mantiene estable y saludable.`}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Stats Grid */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
