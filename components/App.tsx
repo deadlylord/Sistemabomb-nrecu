@@ -139,6 +139,16 @@ const App: React.FC = () => {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // Session tracking to ensure vendedores can only have one active session at a time
+  const clientSessionToken = useMemo(() => {
+    let token = sessionStorage.getItem('client_session_token');
+    if (!token) {
+      token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      sessionStorage.setItem('client_session_token', token);
+    }
+    return token;
+  }, []);
+
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       // Prevent standard browser bar from displaying
@@ -319,6 +329,48 @@ const App: React.FC = () => {
     const unsubscribe = attachFirestoreListener(q, setIncidents);
     return () => unsubscribe();
   }, [currentUser, currentStoreId]);
+
+  // Keep the active session alive for vendedores with a periodic heartbeat and clean up on close
+  useEffect(() => {
+    if (!currentUser || !roles.length) return;
+    const userRole = roles.find(role => role.id === currentUser.roleId);
+    const isVendedor = userRole && userRole.name.toLowerCase() === 'vendedor';
+    if (!isVendedor) return;
+
+    // Primary initial heartbeat
+    updateDoc(doc(db, 'sellers', currentUser.id), {
+      isOnline: true,
+      sessionToken: clientSessionToken,
+      lastActiveAt: new Date().toISOString()
+    }).catch(err => {
+      console.error("Error setting initial session heartbeat:", err);
+    });
+
+    const interval = setInterval(() => {
+      updateDoc(doc(db, 'sellers', currentUser.id), {
+        isOnline: true,
+        sessionToken: clientSessionToken,
+        lastActiveAt: new Date().toISOString()
+      }).catch(err => {
+        console.error("Error updating session heartbeat:", err);
+      });
+    }, 30000);
+
+    const handleBeforeUnload = () => {
+      updateDoc(doc(db, 'sellers', currentUser.id), {
+        isOnline: false,
+        sessionToken: null,
+        lastActiveAt: null
+      }).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [currentUser, roles, clientSessionToken]);
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentStoreId || !currentUser || userPermissions.length === 0) return;
@@ -2119,19 +2171,72 @@ const App: React.FC = () => {
     await deleteDoc(doc(db, 'loans', id));
   };
 
-  const handleLogin = (sellerName: string, passwordAttempt: string) => {
+  const handleLogin = async (sellerName: string, passwordAttempt: string) => {
     const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
     if (seller && seller.password.trim() === passwordAttempt.trim()) {
-      setCurrentUser(seller); handleSwitchStore(seller.storeId);
       const sellerRole = roles.find(role => role.id === seller.roleId);
-      if (sellerRole && sellerRole.name.toLowerCase() === 'vendedor') setCurrentView(View.POS);
+      const isVendedor = sellerRole && sellerRole.name.toLowerCase() === 'vendedor';
+
+      if (isVendedor) {
+        try {
+          const sellerDocRef = doc(db, 'sellers', seller.id);
+          const sellerDocSnap = await getDoc(sellerDocRef);
+          if (sellerDocSnap.exists()) {
+            const freshSeller = sellerDocSnap.data() as Seller;
+            const lastActiveEpoch = freshSeller.lastActiveAt ? new Date(freshSeller.lastActiveAt).getTime() : 0;
+            const diffMs = Date.now() - lastActiveEpoch;
+            const isSessionActive = freshSeller.isOnline && (diffMs < 90000); // 90 seconds window
+
+            if (isSessionActive && freshSeller.sessionToken !== clientSessionToken) {
+              alert('Error: Este vendedor ya tiene una sesión activa abierta en otro dispositivo o pestaña.');
+              return;
+            }
+          }
+
+          // Lock the session
+          await updateDoc(doc(db, 'sellers', seller.id), {
+            isOnline: true,
+            sessionToken: clientSessionToken,
+            lastActiveAt: new Date().toISOString()
+          });
+        } catch (error) {
+          console.error("Error setting online status:", error);
+          alert('Error de conexión al iniciar sesión. Por favor intenta de nuevo.');
+          return;
+        }
+      }
+
+      setCurrentUser(seller); 
+      handleSwitchStore(seller.storeId);
+      if (isVendedor) setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
+      
       const newLoginRecord: Omit<LoginRecord, 'id'> = { sellerId: seller.id, sellerName: seller.name, date: new Date().toISOString(), storeId: seller.storeId };
       addDoc(collection(db, 'loginHistory'), newLoginRecord);
     } else alert('Usuario o contraseña incorrecta.');
   };
   
-  const handleLogout = () => { setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { 
+    if (currentUser) {
+      const userRole = roles.find(role => role.id === currentUser.roleId);
+      const isVendedor = userRole && userRole.name.toLowerCase() === 'vendedor';
+      if (isVendedor) {
+        updateDoc(doc(db, 'sellers', currentUser.id), {
+          isOnline: false,
+          sessionToken: null,
+          lastActiveAt: null
+        }).catch(err => {
+          console.error("Error clearing session on logout:", err);
+        });
+      }
+    }
+    setCurrentUser(null); 
+    setCurrentStoreId(null); 
+    localStorage.removeItem('currentStoreId'); 
+    setIsGlobalMode(false); 
+    setInventory([]); 
+    setHasShownBriefing(false); 
+  };
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />{isVersionModalOpen && <VersionHistoryModal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} />}</div>;
 

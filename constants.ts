@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.68',
+    date: '2026-06-13',
+    description: 'Control de Sesión Único para Vendedores',
+    isCurrent: true,
+    changes: [
+      'Seguridad: Se implementó un control para que los Vendedores solo puedan iniciar sesión en un dispositivo o pestaña a la vez. Si intentan ingresar en otro, serán bloqueados.',
+      'Excepción: Los administradores conservan acceso para mantener múltiples sesiones abiertas de forma simultánea.',
+      'Sincronización: Se integró un sistema de latencia/heartbeat y un detector de cierre de pestaña para liberar la sesión automáticamente al salir o cerrar el navegador.'
+    ]
+  },
+  {
     version: '1.1.67',
     date: '2026-06-10',
     description: 'Compatibilidad de Instalación PWA Absoluta en Android',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'PWA Cache: Se corrigieron las rutas de los iconos PWA (/assets/icon.svg) moviendo los SVG estáticos a la carpeta pública de distribución (/public/assets/), lo cual elimina los errores 404 del Service Worker al cachear.',
       'Instalabilidad: Solucionado el problema que causaba que Android Chrome solo mostrara "Crear acceso directo" debido a fallos de inicialización del Service Worker en la instalación del caché.'
