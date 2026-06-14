@@ -472,7 +472,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
   
-  const CartAndActionsContent = ({ isMobile = false }) => (
+  const renderCartAndActionsContent = (isMobile: boolean = false) => (
     <div className="space-y-3">
         {(pendingApprovals.length > 0 || activeWarranties.length > 0 || pendingPreOrders.length > 0) && (
             <div className="space-y-2">
@@ -748,7 +748,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
         <div className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
              <div className="h-full overflow-y-auto pr-2 space-y-3 -mr-2">
-                <CartAndActionsContent isMobile={false} />
+                {renderCartAndActionsContent(false)}
             </div>
         </div>
       </div>
@@ -785,7 +785,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             </div>
             <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-24">
                 <div className="p-4">
-                    <CartAndActionsContent isMobile={true} />
+                    {renderCartAndActionsContent(true)}
                 </div>
             </div>
         </div>
