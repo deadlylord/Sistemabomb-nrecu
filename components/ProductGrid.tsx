@@ -14,12 +14,9 @@ interface ProductGridProps {
   justAddedProductId: string | null;
   verifiedProducts: Set<string>;
   onToggleProductVerification: (productId: string) => void;
-  recentSales30dMap?: Record<string, number>;
-  trendingProductIds?: Set<string>;
-  rebuyProductIds?: Set<string>;
 }
 
-const ProductGrid: React.FC<ProductGridProps> = ({ products, performanceTrends, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, verifiedProducts, onToggleProductVerification, recentSales30dMap, trendingProductIds, rebuyProductIds }) => {
+const ProductGrid: React.FC<ProductGridProps> = ({ products, performanceTrends, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, verifiedProducts, onToggleProductVerification }) => {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {products.map(product => (
@@ -35,9 +32,6 @@ const ProductGrid: React.FC<ProductGridProps> = ({ products, performanceTrends, 
             justAddedProductId={justAddedProductId}
             isVerified={verifiedProducts.has(product.id)}
             onToggleVerification={onToggleProductVerification}
-            recentSales30d={recentSales30dMap?.[product.id]}
-            isTrending={trendingProductIds?.has(product.id)}
-            needsRebuy={rebuyProductIds?.has(product.id)}
         />
       ))}
     </div>

@@ -163,9 +163,6 @@ export interface Seller {
   roleId: string;
   storeId: string;
   isDisabled?: boolean;
-  isOnline?: boolean;
-  sessionToken?: string | null;
-  lastActiveAt?: string | null;
 }
 
 export interface Product {

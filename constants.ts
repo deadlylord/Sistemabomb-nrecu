@@ -58,42 +58,10 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '1.1.70',
-    date: '2026-06-14',
-    description: 'Estabilidad en Punto de Venta (POS)',
-    isCurrent: true,
-    changes: [
-      'POS de Alta Disponibilidad: Se resolvió un problema crítico de reconciliación de React en el que el panel de carrito y el panel de pagos se desmontaban y reiniciaban ante cualquier actualización en tiempo real del personal (latencia o heartbeat).',
-      'Persistencia de Formularios: El ingreso de datos de clientes, bonos, y desglose de formas de pago en el checkout ahora se preserva y mantiene estable de manera ininterrumpida.'
-    ]
-  },
-  {
-    version: '1.1.69',
-    date: '2026-06-14',
-    description: 'Rendimiento POS Inteligente y Alertas de Recompra para Administradores',
-    isCurrent: false,
-    changes: [
-      'POS Inteligente: Se incorporó una barra de ordenación administrativa (Inteligente, Tendencias, Recompra Urgente, Alfabético) que calcula las métricas en un período crítico de 30 días para evitar sesgos por ventas antiguas.',
-      'Indicadores Visuales: Añadidas insignias dinámicas flotantes en tiempo real ("TENDENCIA" y "RECOMPRAR") para que el administrador identifique de un solo vistazo el estado de la mercancía.',
-      'Sugerencias de Abastecimiento: Integración de un asistente inteligente de reabastecimiento en el modal de rendimiento, sugiriendo lotes de compra exactos evaluando la rotación en los últimos 30 días.'
-    ]
-  },
-  {
-    version: '1.1.68',
-    date: '2026-06-13',
-    description: 'Control de Sesión Único para Vendedores',
-    isCurrent: false,
-    changes: [
-      'Seguridad: Se implementó un control para que los Vendedores solo puedan iniciar sesión en un dispositivo o pestaña a la vez. Si intentan ingresar en otro, serán bloqueados.',
-      'Excepción: Los administradores conservan acceso para mantener múltiples sesiones abiertas de forma simultánea.',
-      'Sincronización: Se integró un sistema de latencia/heartbeat y un detector de cierre de pestaña para liberar la sesión automáticamente al salir o cerrar el navegador.'
-    ]
-  },
-  {
     version: '1.1.67',
     date: '2026-06-10',
     description: 'Compatibilidad de Instalación PWA Absoluta en Android',
-    isCurrent: false,
+    isCurrent: true,
     changes: [
       'PWA Cache: Se corrigieron las rutas de los iconos PWA (/assets/icon.svg) moviendo los SVG estáticos a la carpeta pública de distribución (/public/assets/), lo cual elimina los errores 404 del Service Worker al cachear.',
       'Instalabilidad: Solucionado el problema que causaba que Android Chrome solo mostrara "Crear acceso directo" debido a fallos de inicialización del Service Worker en la instalación del caché.'

@@ -66,7 +66,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [editingProductImage, setEditingProductImage] = useState<Product | null>(null);
   const [editingProductDetails, setEditingProductDetails] = useState<Product | null>(null);
   const [performanceProduct, setPerformanceProduct] = useState<Product | null>(null);
-  const [adminSortType, setAdminSortType] = useState<'smart' | 'trending' | 'rebuy' | 'name'>('smart');
   const [saleDate, setSaleDate] = useState(new Date());
   const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
@@ -304,9 +303,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return `${year}-${month}-${day}`;
   };
 
-    const { filteredInventory, performanceTrends, recentSales30dMap, trendingProductIds, rebuyProductIds } = useMemo(() => {
+    const { filteredInventory, performanceTrends } = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
       const DESCUENTOS_CATEGORY_ID = 'descuentos';
+      const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
       
       // Calculate performance trends
       const now = new Date();
@@ -338,40 +338,15 @@ const PosView: React.FC<PosViewProps> = (props) => {
           else trends[p.id] = 'stable';
       });
 
-      // Calculate trend-classification and re-buy thresholds (based on 30 days)
-      const trendingProductIds = new Set<string>();
-      const rebuyProductIds = new Set<string>();
-
-      const activeSalesValues = Object.values(recentSalesMap).filter(v => v > 0).sort((a, b) => a - b);
-      const percentileIndex = Math.floor(activeSalesValues.length * 0.82); // Top 18% is trend
-      const trendThreshold = activeSalesValues.length > 0 ? Math.max(3, activeSalesValues[percentileIndex]) : 3;
-
-      props.inventory.forEach(p => {
-          const sales30d = recentSalesMap[p.id] || 0;
-          if (sales30d >= trendThreshold) {
-              trendingProductIds.add(p.id);
-          }
-          if (sales30d > 0 && p.stock <= 2) {
-              rebuyProductIds.add(p.id);
-          }
-      });
-
-      // Pre-calculate smart scores for sorting
-      const smartScoreMap: Record<string, number> = {};
-      props.inventory.forEach(p => {
-          const sales30d = recentSalesMap[p.id] || 0;
-          let score = sales30d * 10;
-          if (sales30d > 0) {
-              if (p.stock <= 0) {
-                  score += 200; // Peak critical: in-demand but out of stock
-              } else if (p.stock <= 2) {
-                  score += 100; // Urgent critical: low stock
-              } else if (p.stock <= 5) {
-                  score += 40;  // Normal warning
-              }
-          }
-          smartScoreMap[p.id] = score;
-      });
+      // Pre-calculate performance map if admin and "All" category
+      let performanceMap: Record<string, number> = {};
+      if (isAdmin && !selectedCategoryId) {
+          props.sales.forEach(sale => {
+              sale.items.forEach(item => {
+                  performanceMap[item.id] = (performanceMap[item.id] || 0) + item.quantity;
+              });
+          });
+      }
   
       let result: Product[] = [];
 
@@ -418,61 +393,27 @@ const PosView: React.FC<PosViewProps> = (props) => {
       }
 
       const sortedResult = result.sort((a, b) => {
-          if (isAdmin) {
-              if (adminSortType === 'smart') {
-                  const scoreA = smartScoreMap[a.id] || 0;
-                  const scoreB = smartScoreMap[b.id] || 0;
-                  if (scoreA !== scoreB) return scoreB - scoreA;
-              } else if (adminSortType === 'trending') {
-                  const salesA = recentSalesMap[a.id] || 0;
-                  const salesB = recentSalesMap[b.id] || 0;
-                  if (salesA !== salesB) return salesB - salesA;
-                  
-                  // Keep stock > 0 on top for same-sales products
-                  if (a.stock > 0 && b.stock <= 0) return -1;
-                  if (a.stock <= 0 && b.stock > 0) return 1;
-              } else if (adminSortType === 'rebuy') {
-                  const salesA = recentSalesMap[a.id] || 0;
-                  const salesB = recentSalesMap[b.id] || 0;
-                  const isRebuyA = salesA > 0 && a.stock <= 2;
-                  const isRebuyB = salesB > 0 && b.stock <= 2;
-                  
-                  if (isRebuyA && !isRebuyB) return -1;
-                  if (!isRebuyA && isRebuyB) return 1;
-                  if (isRebuyA && isRebuyB) {
-                      if (salesA !== salesB) return salesB - salesA;
-                  }
-                  
-                  if (a.stock > 0 && b.stock <= 0) return -1;
-                  if (a.stock <= 0 && b.stock > 0) return 1;
-              } else {
-                  // Name (original alphabetical)
-                  if (a.stock > 0 && b.stock <= 0) return -1;
-                  if (a.stock <= 0 && b.stock > 0) return 1;
-              }
-          } else {
-              // Standard vendor / non-admin sorting
-              if (a.stock > 0 && b.stock <= 0) return -1;
-              if (a.stock <= 0 && b.stock > 0) return 1;
+          if (a.stock > 0 && b.stock <= 0) return -1;
+          if (a.stock <= 0 && b.stock > 0) return 1;
+          
+          // Sort by performance if admin and "All" category
+          if (isAdmin && !selectedCategoryId) {
+              const perfA = performanceMap[a.id] || 0;
+              const perfB = performanceMap[b.id] || 0;
+              if (perfA !== perfB) return perfB - perfA; // Higher performance first
           }
 
           return a.name.localeCompare(b.name);
       });
 
-      return { 
-          filteredInventory: sortedResult, 
-          performanceTrends: trends,
-          recentSales30dMap: recentSalesMap,
-          trendingProductIds,
-          rebuyProductIds
-      };
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales, adminSortType]);
+      return { filteredInventory: sortedResult, performanceTrends: trends };
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
   
-  const renderCartAndActionsContent = (isMobile: boolean = false) => (
+  const CartAndActionsContent = ({ isMobile = false }) => (
     <div className="space-y-3">
         {(pendingApprovals.length > 0 || activeWarranties.length > 0 || pendingPreOrders.length > 0) && (
             <div className="space-y-2">
@@ -673,57 +614,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 </button>
                             ))}
                         </div>
-
-                        {isAdmin && (
-                            <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 dark:bg-slate-800/20 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800/60 mt-2">
-                                <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mr-2 flex items-center gap-1 select-none">
-                                    <svg className="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-                                    </svg>
-                                    Orden Admin (30 Días):
-                                </span>
-                                <button
-                                    onClick={() => setAdminSortType('smart')}
-                                    className={`px-3 py-1 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${
-                                        adminSortType === 'smart' 
-                                            ? 'bg-accent/10 text-accent border border-accent/20 shadow-sm font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
-                                    }`}
-                                >
-                                    🔥 Inteligente
-                                </button>
-                                <button
-                                    onClick={() => setAdminSortType('trending')}
-                                    className={`px-3 py-1 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${
-                                        adminSortType === 'trending' 
-                                            ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 shadow-sm font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
-                                    }`}
-                                >
-                                    📈 Tendencias
-                                </button>
-                                <button
-                                    onClick={() => setAdminSortType('rebuy')}
-                                    className={`px-3 py-1 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${
-                                        adminSortType === 'rebuy' 
-                                            ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20 shadow-sm font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
-                                    }`}
-                                >
-                                    🚨 Recompra Urgente
-                                </button>
-                                <button
-                                    onClick={() => setAdminSortType('name')}
-                                    className={`px-3 py-1 text-xs font-black uppercase tracking-widest rounded-lg transition-all ${
-                                        adminSortType === 'name' 
-                                            ? 'border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white bg-slate-100 dark:bg-slate-800 shadow-sm font-black' 
-                                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
-                                    }`}
-                                >
-                                    🔤 Alfabético
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </div>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
@@ -738,9 +628,6 @@ const PosView: React.FC<PosViewProps> = (props) => {
                         justAddedProductId={justAddedProductId}
                         verifiedProducts={props.verifiedProducts}
                         onToggleProductVerification={props.onToggleProductVerification}
-                        recentSales30dMap={recentSales30dMap}
-                        trendingProductIds={trendingProductIds}
-                        rebuyProductIds={rebuyProductIds}
                     />
                 </div>
             </div>
@@ -748,7 +635,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
         <div className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
              <div className="h-full overflow-y-auto pr-2 space-y-3 -mr-2">
-                {renderCartAndActionsContent(false)}
+                <CartAndActionsContent isMobile={false} />
             </div>
         </div>
       </div>
@@ -785,7 +672,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             </div>
             <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-24">
                 <div className="p-4">
-                    {renderCartAndActionsContent(true)}
+                    <CartAndActionsContent isMobile={true} />
                 </div>
             </div>
         </div>
