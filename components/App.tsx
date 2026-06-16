@@ -198,6 +198,14 @@ const App: React.FC = () => {
       const adminRole = roles.find(r => r.name === 'Administrator');
       return currentUser.roleId === adminRole?.id;
   }, [currentUser, roles]);
+
+  const isVendedor = useMemo(() => {
+      if (!currentUser || !roles.length) return false;
+      const userRole = roles.find(r => r.id === currentUser.roleId);
+      if (!userRole) return false;
+      const name = userRole.name.toLowerCase();
+      return name === 'vendedor' || name === 'vendedores';
+  }, [currentUser, roles]);
   
   const fetchOnceFromFirestore = useCallback(<T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
     getDocs(query).then(snapshot => {
@@ -2211,6 +2219,7 @@ const App: React.FC = () => {
           <InventoryVerificationModal
               isOpen={isVerificationModalOpen}
               isAdmin={isAdmin}
+              isVendedor={isVendedor}
               currentStore={currentStore}
               onClose={() => setIsVerificationModalOpen(false)}
               inventory={inventory}

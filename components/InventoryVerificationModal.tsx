@@ -10,6 +10,7 @@ interface InventoryVerificationModalProps {
   sellers: Seller[];
   isOpen: boolean;
   isAdmin: boolean;
+  isVendedor?: boolean;
   currentStore?: Store;
   onClose: () => void;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => Promise<void>;
@@ -24,6 +25,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   sellers,
   isOpen,
   isAdmin,
+  isVendedor = false,
   currentStore,
   onClose,
   onSaveStockTake,
@@ -177,7 +179,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     }
   };
 
-  const isDetailedVerificationVisible = isAdmin || !localHideDetailed;
+  const isDetailedVerificationVisible = !isVendedor || !localHideDetailed;
 
   const handleSaveDraftWithSnapshot = async (catId: string, productCounts: Record<string, number>) => {
       // Tomamos una "foto" del stock del sistema actual para todos los productos de la categoría
