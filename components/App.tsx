@@ -830,7 +830,7 @@ const App: React.FC = () => {
               changedBy: currentUser?.name || 'Sistema',
               timestamp: new Date().toISOString(),
               changeType: ProductChangeType.PRE_ORDER_FULFILLED,
-              details: `Encargo #${layaway.invoiceNumber} recibido y stock rebajado: -${item.quantity}.`
+              details: `Encargo #${layaway.invoiceNumber} recibido. Cantidad: -${item.quantity}.`
           };
           batch.set(logRef, log);
       });

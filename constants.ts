@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.68',
+    date: '2026-06-17',
+    description: 'Corrección en Historial de Producto para Encargos (Pre-Orders) Recibidos',
+    isCurrent: true,
+    changes: [
+      'Historial de Inventario: Se corrigió la lógica inversa de cálculo en la columna "Stock Final" del historial del producto para eventos de tipo "Abono Recibido (Pre-orden)". Ahora se suma correctamente el stock de forma retroactiva al auditar el flujo de existencias.',
+      'Detalles de Log: Se estandarizó el formato de registro de eventos para pre-órdenes recibidas asegurando una extracción precisa de la cantidad de productos devueltos/ingresados en las auditorías de inventario.'
+    ]
+  },
+  {
     version: '1.1.67',
     date: '2026-06-10',
     description: 'Compatibilidad de Instalación PWA Absoluta en Android',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'PWA Cache: Se corrigieron las rutas de los iconos PWA (/assets/icon.svg) moviendo los SVG estáticos a la carpeta pública de distribución (/public/assets/), lo cual elimina los errores 404 del Service Worker al cachear.',
       'Instalabilidad: Solucionado el problema que causaba que Android Chrome solo mostrara "Crear acceso directo" debido a fallos de inicialización del Service Worker en la instalación del caché.'

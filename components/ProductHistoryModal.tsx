@@ -42,7 +42,8 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
         log.changeType === ProductChangeType.TRANSFER_OUT || 
         log.changeType === ProductChangeType.DAMAGED ||
         log.changeType === ProductChangeType.EXCHANGE_OUT ||
-        log.changeType === ProductChangeType.LAYAWAY_RESERVED) {
+        log.changeType === ProductChangeType.LAYAWAY_RESERVED ||
+        log.changeType === ProductChangeType.PRE_ORDER_FULFILLED) {
       const qty = extractQty(log.details);
       currentRunningStock += qty;
     } else if (log.changeType === ProductChangeType.SALE_DELETED || 
@@ -51,7 +52,6 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
                log.changeType === ProductChangeType.EXCHANGE_IN ||
                log.changeType === ProductChangeType.DAMAGED_RETURNED ||
                log.changeType === ProductChangeType.LAYAWAY_DELETED ||
-               log.changeType === ProductChangeType.PRE_ORDER_FULFILLED ||
                log.changeType === ProductChangeType.RETURN) {
       const qty = extractQty(log.details);
       currentRunningStock -= qty;
