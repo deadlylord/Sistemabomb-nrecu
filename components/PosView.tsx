@@ -89,8 +89,16 @@ const PosView: React.FC<PosViewProps> = (props) => {
       const diff = now - lastKeyTimeRef.current;
       lastKeyTimeRef.current = now;
 
-      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      const isInput = 
+        e.target instanceof HTMLInputElement || 
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable);
       const isSearchInput = e.target === searchInputRef.current;
+      
+      if (isInput && !isSearchInput) {
+        return;
+      }
       
       if (e.key === 'Enter') {
         const buffer = barcodeBufferRef.current;

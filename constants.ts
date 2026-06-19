@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.70',
+    date: '2026-06-18',
+    description: 'Solución a Fuga de Foco en Formularios y Modales',
+    isCurrent: true,
+    changes: [
+      'POS View: Se corrigió el comportamiento del escuchador de teclado (keydown listener) que capturaba pulsaciones durante la escritura en otros elementos de entrada (inputs, textareas, dropdowns, y modales) y desviaba el cursor al buscador de productos.',
+      'Control de Foco: Implementada una condicional de control para ignorar la acumulación de datos de escáner en el búfer si el foco actual reside en un formulario de edición de ventas, clientes, o novedades.'
+    ]
+  },
+  {
     version: '1.1.69',
     date: '2026-06-18',
     description: 'Solución a Cierre Involuntario de Modales de Venta / Apartados',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'POS View: Se corrigió un re-montaje involuntario de componentes React en el panel lateral de venta. Ahora las vistas de carrito y modales persistirán en memoria de forma segura sin cerrarse solos al interactuar con campos o inputs de clientes y vendedores.',
       'Optimización de Render: Se eliminó el patrón de declaración de componentes hijos anidados en fase de renders de React, normalizando llamadas directas que conservan el estado original e incrementan el rendimiento global.'
