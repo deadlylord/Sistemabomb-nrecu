@@ -635,7 +635,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
         <div className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
              <div className="h-full overflow-y-auto pr-2 space-y-3 -mr-2">
-                <CartAndActionsContent isMobile={false} />
+                {CartAndActionsContent({ isMobile: false })}
             </div>
         </div>
       </div>
@@ -672,7 +672,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             </div>
             <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-24">
                 <div className="p-4">
-                    <CartAndActionsContent isMobile={true} />
+                    {CartAndActionsContent({ isMobile: true })}
                 </div>
             </div>
         </div>

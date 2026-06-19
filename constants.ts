@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.69',
+    date: '2026-06-18',
+    description: 'Solución a Cierre Involuntario de Modales de Venta / Apartados',
+    isCurrent: true,
+    changes: [
+      'POS View: Se corrigió un re-montaje involuntario de componentes React en el panel lateral de venta. Ahora las vistas de carrito y modales persistirán en memoria de forma segura sin cerrarse solos al interactuar con campos o inputs de clientes y vendedores.',
+      'Optimización de Render: Se eliminó el patrón de declaración de componentes hijos anidados en fase de renders de React, normalizando llamadas directas que conservan el estado original e incrementan el rendimiento global.'
+    ]
+  },
+  {
     version: '1.1.68',
     date: '2026-06-17',
     description: 'Corrección en Historial de Producto para Encargos (Pre-Orders) Recibidos',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Historial de Inventario: Se corrigió la lógica inversa de cálculo en la columna "Stock Final" del historial del producto para eventos de tipo "Abono Recibido (Pre-orden)". Ahora se suma correctamente el stock de forma retroactiva al auditar el flujo de existencias.',
       'Detalles de Log: Se estandarizó el formato de registro de eventos para pre-órdenes recibidas asegurando una extracción precisa de la cantidad de productos devueltos/ingresados en las auditorías de inventario.'
