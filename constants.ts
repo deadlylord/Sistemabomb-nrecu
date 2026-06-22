@@ -58,30 +58,10 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
-    version: '1.1.72',
-    date: '2026-06-22',
-    description: 'Visualización y Edición de Método de Pago en Novedades de Recaudo y Ajuste',
-    isCurrent: true,
-    changes: [
-      'Visualización de Método de Pago: Ahora el método de pago se muestra en tiempo real directamente en la lista de novedades (para Ajustes de Efectivo, Recaudos y Cambios con Excedente).',
-      'Edición del Método de Pago: Se habilitó el campo de selección del Método de Pago dentro de la edición de novedades de Recaudo y Ajustes de Caja para que el Administrador pueda corregir errores de pago sin problemas.'
-    ]
-  },
-  {
-    version: '1.1.71',
-    date: '2026-06-22',
-    description: 'Edición de Métodos de Pago y Edición de Excedente Manual en Cambios',
-    isCurrent: false,
-    changes: [
-      'Edición de Novedades de Cambio: Se habilitó la edición del método de pago de un excedente de cambio (ej. de Nequi a QR), visible y editable exclusivamente para el Administrador.',
-      'Control de Excedente Manual: Se corrigió una fuga lógica que sobreescribía automáticamente el excedente de cambio registrado en la base de datos con el valor calculado, permitiendo ahora re-editar y guardar cualquier monto manual de excedente sin perderlo.'
-    ]
-  },
-  {
     version: '1.1.70',
     date: '2026-06-18',
     description: 'Solución a Fuga de Foco en Formularios y Modales',
-    isCurrent: false,
+    isCurrent: true,
     changes: [
       'POS View: Se corrigió el comportamiento del escuchador de teclado (keydown listener) que capturaba pulsaciones durante la escritura en otros elementos de entrada (inputs, textareas, dropdowns, y modales) y desviaba el cursor al buscador de productos.',
       'Control de Foco: Implementada una condicional de control para ignorar la acumulación de datos de escáner en el búfer si el foco actual reside en un formulario de edición de ventas, clientes, o novedades.'
