@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Incident, IncidentType, Product, Sale, ExchangedItem, CartItem, PaymentMethod, IncidentStatus } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon, SearchIcon, CrossIcon } from './Icons';
@@ -10,6 +10,7 @@ interface EditExchangeIncidentModalProps {
   inventory: Product[];
   sales: Sale[];
   onUpdateIncident: (incident: Incident) => void;
+  isAdmin: boolean;
 }
 
 const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
@@ -18,7 +19,8 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
   incident,
   inventory,
   sales,
-  onUpdateIncident
+  onUpdateIncident,
+  isAdmin
 }) => {
   // State for all editable fields
   const [description, setDescription] = useState('');
@@ -36,6 +38,9 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
   // UI State
   const [takenItemSearch, setTakenItemSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const isLoadedRef = useRef(false);
+  const prevDifferenceRef = useRef<number | null>(null);
 
   // Populate state from prop on open
   useEffect(() => {
@@ -59,6 +64,9 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
       setSurplusPaymentMethod(incident.paymentMethod || '');
       setManualSurplus(incident.adjustmentAmount ? incident.adjustmentAmount.toString() : '');
       setStatus(incident.status);
+
+      isLoadedRef.current = false;
+      prevDifferenceRef.current = null;
     }
   }, [incident, sales]);
 
@@ -100,7 +108,16 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
   }, [returnedItems, takenItems]);
 
   useEffect(() => {
+    if (!isLoadedRef.current) {
+      isLoadedRef.current = true;
+      prevDifferenceRef.current = difference;
+      return;
+    }
+
+    if (difference !== prevDifferenceRef.current) {
       setManualSurplus(difference > 0 ? difference.toFixed(0) : '');
+      prevDifferenceRef.current = difference;
+    }
   }, [difference]);
 
 
@@ -167,10 +184,10 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
       alert("El número de celular debe tener exactamente 10 dígitos.");
       return;
     }
-    const surplusPaidAmount = difference > 0 ? parseFloat(manualSurplus) : 0;
+    const surplusPaidAmount = parseFloat(manualSurplus) || 0;
     if (!originalSale || returnedItems.length === 0 || takenItems.length === 0) { alert('Completa todos los campos para el cambio.'); return; }
-    if (difference > 0 && !surplusPaymentMethod) { alert('Selecciona un método de pago para el excedente.'); return; }
-    if (difference > 0 && (isNaN(surplusPaidAmount) || surplusPaidAmount <= 0)) { alert('Ingresa un valor de excedente válido.'); return; }
+    if (surplusPaidAmount > 0 && !surplusPaymentMethod) { alert('Selecciona un método de pago para el excedente.'); return; }
+    if (surplusPaidAmount > 0 && (isNaN(surplusPaidAmount) || surplusPaidAmount <= 0)) { alert('Ingresa un valor de excedente válido.'); return; }
 
     const { adjustmentAmount: oldAdjustment, paymentMethod: oldPaymentMethod, ...restOfIncident } = incident;
 
@@ -264,19 +281,25 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
                            <p>Total Devuelto: <span className="text-red-500">{formatCOP(returnedTotal)}</span></p>
                            <p>Total a Llevar: <span className="text-green-500">{formatCOP(takenTotal)}</span></p>
                            <div className={'mt-1 pt-1 border-t border-dashed'}>
-                               {difference > 0 ? (
+                               {(difference > 0 || parseFloat(manualSurplus) > 0 || !!surplusPaymentMethod) ? (
                                    <div className='space-y-2 text-red-500'>
                                        <div className="flex items-center justify-center gap-2">
                                            <label htmlFor="manualSurplus" className="font-bold">Paga Excedente:</label>
                                            <input id="manualSurplus" type="number" value={manualSurplus} onChange={e => setManualSurplus(e.target.value)} className="w-32 bg-white dark:bg-primary p-1 rounded-md text-center font-bold text-red-500 border border-gray-300 dark:border-gray-600 focus:ring-accent focus:border-accent" min="0" step="1000" />
                                        </div>
-                                       <div className="mt-2">
-                                           <label className="text-xs font-normal">Paga con:</label>
-                                           <select value={surplusPaymentMethod} onChange={e => setSurplusPaymentMethod(e.target.value as PaymentMethod)} className="ml-2 p-1 text-sm rounded" required>
-                                               <option value="" disabled>Método de Pago</option>
-                                               {Object.values(PaymentMethod).map(method => (<option key={method} value={method}>{method}</option>))}
-                                           </select>
-                                       </div>
+                                       {isAdmin ? (
+                                           <div className="mt-2">
+                                               <label className="text-xs font-normal">Paga con:</label>
+                                               <select value={surplusPaymentMethod} onChange={e => setSurplusPaymentMethod(e.target.value as PaymentMethod)} className="ml-2 p-1 text-sm rounded bg-white dark:bg-primary text-slate-800 dark:text-slate-100 border border-gray-200 dark:border-gray-700" required>
+                                                   <option value="" disabled>Método de Pago</option>
+                                                   {Object.values(PaymentMethod).map(method => (<option key={method} value={method}>{method}</option>))}
+                                               </select>
+                                           </div>
+                                       ) : surplusPaymentMethod ? (
+                                           <div className="mt-2 text-xs font-normal">
+                                               Paga con: <span className="font-bold">{surplusPaymentMethod}</span>
+                                           </div>
+                                       ) : null}
                                    </div>
                                ) : (<p className="text-green-500">Saldo a Favor: {formatCOP(Math.abs(difference))}</p>)}
                            </div>
