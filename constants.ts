@@ -58,10 +58,51 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.74',
+    date: '2026-06-22',
+    description: 'Edición Ágil de Método de Pago en Cambios',
+    isCurrent: true,
+    changes: [
+      'Sin Bloqueos por Selección de Prendas: Se removieron por completo las alertas que obligaban a ingresar prendas a devolver o prendas a llevar al momento de editar la novedad.',
+      'Búsqueda Flexible sin Stock: Ahora puedes buscar y agregar prendas de cambio incluso si el inventario actual de dicho artículo es 0 (lo cual sucede si el cambio físico en tienda real ya se entregó al cliente).',
+      'Celular Opcional: Se flexibilizó la validación del teléfono inteligente para que no bloquee la edición si el usuario prefiere dejar el dato del celular en blanco.'
+    ]
+  },
+  {
+    version: '1.1.73',
+    date: '2026-06-22',
+    description: 'Edición Sin Bloqueo de Novedades de Cambio',
+    isCurrent: false,
+    changes: [
+      'Independencia de Facturas: Se modificó el motor de edición de novedades de cambio para que no dependa estrictamente de que la factura original esté cargada en la vista activa local. Esto te permite editar directamente el método de pago, el valor del excedente, el estado, la fecha o la descripción sin tener que realizar de nuevo toda la novedad ni volver a buscar e ingresar las prendas.',
+      'Persistencia de Prendas: Los artículos que ya se ingresaron en el cambio (tanto los devueltos como los que el cliente lleva) permanecen 100% visibles y editables en el formulario, eliminando la molesta pérdida de datos o limpieza automática al abrir la edición.'
+    ]
+  },
+  {
+    version: '1.1.72',
+    date: '2026-06-22',
+    description: 'Visualización y Edición de Método de Pago en Novedades de Recaudo y Ajuste',
+    isCurrent: false,
+    changes: [
+      'Visualización de Método de Pago: Ahora el método de pago se muestra en tiempo real directamente en la lista de novedades (para Ajustes de Efectivo, Recaudos y Cambios con Excedente).',
+      'Edición del Método de Pago: Se habilitó el campo de selección del Método de Pago dentro de la edición de novedades de Recaudo y Ajustes de Caja para que el Administrador pueda corregir errores de pago sin problemas.'
+    ]
+  },
+  {
+    version: '1.1.71',
+    date: '2026-06-22',
+    description: 'Edición de Métodos de Pago y Edición de Excedente Manual en Cambios',
+    isCurrent: false,
+    changes: [
+      'Edición de Novedades de Cambio: Se habilitó la edición del método de pago de un excedente de cambio (ej. de Nequi a QR), visible y editable exclusivamente para el Administrador.',
+      'Control de Excedente Manual: Se corrigió una fuga lógica que sobreescribía automáticamente el excedente de cambio registrado en la base de datos con el valor calculado, permitiendo ahora re-editar y guardar cualquier monto manual de excedente sin perderlo.'
+    ]
+  },
+  {
     version: '1.1.70',
     date: '2026-06-18',
     description: 'Solución a Fuga de Foco en Formularios y Modales',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'POS View: Se corrigió el comportamiento del escuchador de teclado (keydown listener) que capturaba pulsaciones durante la escritura en otros elementos de entrada (inputs, textareas, dropdowns, y modales) y desviaba el cursor al buscador de productos.',
       'Control de Foco: Implementada una condicional de control para ignorar la acumulación de datos de escáner en el búfer si el foco actual reside en un formulario de edición de ventas, clientes, o novedades.'

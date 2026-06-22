@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Incident, IncidentStatus, IncidentType } from '../types';
+import { Incident, IncidentStatus, IncidentType, PaymentMethod } from '../types';
 import { formatCOP } from '../constants';
 
 interface EditIncidentModalProps {
@@ -15,6 +15,7 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
   const [createdAt, setCreatedAt] = useState('');
   const [adjustmentAmount, setAdjustmentAmount] = useState('');
   const [status, setStatus] = useState<IncidentStatus>(incident.status);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
 
   useEffect(() => {
     if (incident) {
@@ -25,6 +26,7 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
       setCreatedAt(incidentDate.toISOString().slice(0, 16));
       setAdjustmentAmount(incident.adjustmentAmount ? incident.adjustmentAmount.toString() : '');
       setStatus(incident.status);
+      setPaymentMethod(incident.paymentMethod || '');
     }
   }, [incident]);
 
@@ -52,7 +54,12 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
             alert('El monto ingresado no es válido.');
             return;
         }
+        if (!paymentMethod) {
+            alert('Por favor selecciona un método de pago.');
+            return;
+        }
         updatedIncident.adjustmentAmount = newAmount;
+        updatedIncident.paymentMethod = paymentMethod as PaymentMethod;
     } else if (oldAmount !== undefined) {
         updatedIncident.adjustmentAmount = oldAmount;
     }
@@ -101,21 +108,40 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
               </div>
             )}
             {(incident.type === IncidentType.RECAUDO || incident.type === IncidentType.CASH_ADJUSTMENT) && (
-              <div>
-                <label htmlFor="adjustmentAmount" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">
-                  Monto del {incident.type === IncidentType.RECAUDO ? 'Recaudo' : 'Ajuste'}
-                </label>
-                <input
-                  type="number"
-                  id="adjustmentAmount"
-                  value={adjustmentAmount}
-                  onChange={e => setAdjustmentAmount(e.target.value)}
-                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
-                  required
-                  min="0"
-                  step="1"
-                />
-              </div>
+              <>
+                <div>
+                  <label htmlFor="adjustmentAmount" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">
+                    Monto del {incident.type === IncidentType.RECAUDO ? 'Recaudo' : 'Ajuste'}
+                  </label>
+                  <input
+                    type="number"
+                    id="adjustmentAmount"
+                    value={adjustmentAmount}
+                    onChange={e => setAdjustmentAmount(e.target.value)}
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                    required
+                    min="0"
+                    step="1"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="paymentMethod font-semibold" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">
+                    Método de Pago
+                  </label>
+                  <select
+                    id="paymentMethod"
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none text-slate-800 dark:text-slate-100"
+                    required
+                  >
+                    <option value="" disabled>Selecciona el Método de Pago</option>
+                    {Object.values(PaymentMethod).map(method => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
             )}
           <div>
             <label htmlFor="createdAt" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">

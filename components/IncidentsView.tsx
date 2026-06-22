@@ -132,10 +132,13 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
               );
           case IncidentType.CASH_ADJUSTMENT:
               return (
-                  <p className={`font-bold ${incident.adjustmentType === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                    {incident.adjustmentType === 'income' ? '+' : '-'}
-                    {formatCOP(incident.adjustmentAmount || 0)}
-                  </p>
+                  <div>
+                    <p className={`font-bold ${incident.adjustmentType === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                      {incident.adjustmentType === 'income' ? '+' : '-'}
+                      {formatCOP(incident.adjustmentAmount || 0)}
+                    </p>
+                    {incident.paymentMethod && <p className="text-xs text-purple-500 dark:text-purple-300 font-semibold">Método: {incident.paymentMethod}</p>}
+                  </div>
               );
           case IncidentType.RECAUDO:
             return (
@@ -144,6 +147,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                         +{formatCOP(incident.adjustmentAmount || 0)}
                     </p>
                     <p className="text-xs text-gray-400">Cliente: {incident.customerName} ({incident.customerPhone})</p>
+                    {incident.paymentMethod && <p className="text-xs text-purple-500 dark:text-purple-300 font-semibold">Método: {incident.paymentMethod}</p>}
                 </div>
             );
           case IncidentType.PRODUCT_EXCHANGE:
@@ -154,6 +158,9 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
                     <p className="text-xs text-red-500">Devuelve: {returnedProductNames}</p>
                     <p className="text-xs text-green-500">Lleva: {takenProductNames}</p>
                     <p className="text-xs text-gray-400">Factura Orig: #{incident.originalSaleInvoiceNumber}</p>
+                    {incident.adjustmentAmount && incident.adjustmentAmount > 0 ? (
+                      <p className="text-xs text-orange-500 dark:text-orange-300 font-semibold">Excedente: {formatCOP(incident.adjustmentAmount)} ({incident.paymentMethod || 'Sin método'})</p>
+                    ) : null}
                   </div>
               );
           case IncidentType.INVENTORY_TRANSFER_REQUEST:
@@ -320,6 +327,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
             inventory={inventory}
             sales={sales}
             onUpdateIncident={onUpdateIncident}
+            isAdmin={isAdmin}
           />
       )}
 
