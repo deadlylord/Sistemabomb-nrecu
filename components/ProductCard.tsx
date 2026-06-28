@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Product } from '../types';
-import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon, WhatsAppIcon } from './Icons';
+import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon } from './Icons';
 import { formatCOP } from '../constants';
 
 interface ProductCardProps {
@@ -15,90 +15,26 @@ interface ProductCardProps {
   justAddedProductId: string | null;
   isVerified: boolean;
   onToggleVerification: (productId: string) => void;
+  isTrending?: boolean;
+  needsRecompra?: boolean;
+  recentSalesQty?: number;
 }
 
-const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, onAddToCart, onEditImage, onEditProduct, onShowPerformance, isAdmin, justAddedProductId, isVerified, onToggleVerification }) => {
-  const [isSharing, setIsSharing] = React.useState(false);
-
-  // Preparar mensaje de WhatsApp sin precios
-  const getWhatsAppShareUrl = () => {
-    const originalDesc = product.description || '';
-    // Eliminar menciones de precios, por ejemplo signos de pesos seguidos de números, eg. $35.000, $ 35000, etc.
-    const cleanDesc = originalDesc
-      .replace(/\$\s?\d+([.,]\d+)*(?!\w)/g, '')
-      .replace(/\b\d+([.,]\d+)*\s?(COP|pesos|mil)\b/gi, '')
-      .trim();
-
-    const textLines = [
-      `*¡Hola! Te comparto este producto:*`,
-      ``,
-      `*🛍️ ${product.name.toUpperCase()}*`,
-    ];
-
-    if (cleanDesc) {
-      textLines.push(``);
-      textLines.push(`*Tallas y Colores / Detalles:*`);
-      textLines.push(cleanDesc);
-    }
-
-    if (product.imageUrl) {
-      textLines.push(``);
-      textLines.push(`*Ver imagen:* ${product.imageUrl}`);
-    }
-
-    const fullText = textLines.join('\n');
-    return `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`;
-  };
-
-  const whatsappUrl = getWhatsAppShareUrl();
-
-  const handleShareClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (isSharing) return;
-
-    const originalDesc = product.description || '';
-    const cleanDesc = originalDesc
-      .replace(/\$\s?\d+([.,]\d+)*(?!\w)/g, '')
-      .replace(/\b\d+([.,]\d+)*\s?(COP|pesos|mil)\b/gi, '')
-      .trim();
-
-    const textHeader = `*🛍️ ${product.name.toUpperCase()}*${cleanDesc ? '\n\n*Tallas y Colores / Detalles:*\n' + cleanDesc : ''}`;
-
-    if (product.imageUrl && navigator.share && navigator.canShare) {
-      setIsSharing(true);
-      try {
-        const response = await fetch(product.imageUrl);
-        const blob = await response.blob();
-        
-        let ext = 'jpg';
-        if (blob.type === 'image/png') ext = 'png';
-        else if (blob.type === 'image/webp') ext = 'webp';
-        else if (blob.type === 'image/gif') ext = 'gif';
-        
-        const fileName = `${product.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${ext}`;
-        const file = new File([blob], fileName, { type: blob.type });
-
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: product.name,
-            text: textHeader
-          });
-          setIsSharing(false);
-          return;
-        }
-      } catch (err) {
-        console.warn("No se pudo compartir la imagen exacta como archivo debido a CORS o red. Usando fallback de texto.", err);
-      } finally {
-        setIsSharing(false);
-      }
-    }
-
-    // Fallback: abrir enlace de WhatsApp
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  };
+const ProductCard: React.FC<ProductCardProps> = ({ 
+  product, 
+  performanceTrend, 
+  onAddToCart, 
+  onEditImage, 
+  onEditProduct, 
+  onShowPerformance, 
+  isAdmin, 
+  justAddedProductId, 
+  isVerified, 
+  onToggleVerification,
+  isTrending,
+  needsRecompra,
+  recentSalesQty
+}) => {
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent adding to cart if an admin button, the checkbox, or link was clicked
@@ -143,31 +79,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
             <PackageIcon className="w-1/2 h-1/2 text-slate-400 dark:text-slate-600" />
           </div>
         )}
-        {/* Controles de Acción en Esquina Superior Izquierda (WhatsApp y Edición) */}
+        
+        {/* Controles de Acción en Esquina Superior Izquierda (Edición) */}
         <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
-            {/* Botón de Compartir en WhatsApp - Siempre Visible y Destacado */}
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleShareClick}
-              className={`w-8 h-8 rounded-full shadow-lg border border-white/20 transition-all flex items-center justify-center cursor-pointer ${
-                isSharing 
-                  ? 'bg-amber-500 animate-pulse' 
-                  : 'bg-green-500 hover:bg-green-600 hover:scale-110 active:scale-95 text-white'
-              }`}
-              title="Compartir por WhatsApp (Imagen y especificaciones)"
-            >
-              {isSharing ? (
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              ) : (
-                <WhatsAppIcon className="w-4 h-4 text-white" />
-              )}
-            </a>
-
             {/* Botones de Edición - Visibles en Hover en PC o siempre en móvil */}
             <div className="flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover/card:opacity-100 transition-opacity duration-200">
                 <button
@@ -191,6 +105,20 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, performanceTrend, on
                   </button>
                 )}
             </div>
+        </div>
+
+        {/* Insignias Visuales Dinámicas (Esquina inferior izquierda de la miniatura, autogestionadas de 30 días) */}
+        <div className="absolute bottom-2 left-2 z-20 flex flex-col gap-1 items-start pointer-events-none">
+          {isTrending && (
+            <span className="bg-amber-500/90 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
+              🔥 TENDENCIA ({recentSalesQty})
+            </span>
+          )}
+          {needsRecompra && (
+            <span className="bg-rose-600/95 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
+              🚨 RECOMPRAR
+            </span>
+          )}
         </div>
 
         {isAdmin && (

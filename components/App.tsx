@@ -559,7 +559,7 @@ const App: React.FC = () => {
 
   const handleClearCart = () => setActiveCart([]);
 
-  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[] }, saleDate: Date) => {
+  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
 
     try {
@@ -595,7 +595,10 @@ const App: React.FC = () => {
 
             const saleRef = doc(collection(db, 'sales'));
             const itemsToProcess = saleData.items || activeCart;
-            const totalAmount = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const subtotal = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const discountPercent = saleData.discountPercent || 0;
+            const discountAmount = saleData.discountAmount || (discountPercent > 0 ? Math.round(subtotal * (discountPercent / 100)) : 0);
+            const totalAmount = subtotal - discountAmount;
 
             const newSale: Sale = {
                 id: saleRef.id,
@@ -609,6 +612,8 @@ const App: React.FC = () => {
                 seller: saleData.seller,
                 createdAt: saleDate.toISOString(),
                 storeId: currentStoreId,
+                discountPercent,
+                discountAmount,
             };
 
             savedSale = newSale;

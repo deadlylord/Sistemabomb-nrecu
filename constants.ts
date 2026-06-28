@@ -58,10 +58,34 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.76',
+    date: '2026-06-28',
+    description: 'Inteligencia Administrativa y Badges de Negocio',
+    isCurrent: true,
+    changes: [
+      'Ordenación Administrativa Segmentada (30 días): Se implementó la lógica de rendimiento con un selector interactivo para administradores (Inteligente, Tendencias, Recompra Urgente, Alfabético).',
+      'Insignias Visuales Dinámicas: Las tarjetas de productos ahora muestran etiquetas en tiempo real de los últimos 30 días como "TENDENCIA (cantidad)" para el percentil superior de ventas, o "RECOMPRAR" para stock bajo en demanda.',
+      'Asistente de Abastecimiento Inteligente: Panel de análisis en el modal de rendimiento que evalúa automáticamente la velocidad de venta mensual contra existencias y provee recomendaciones de reabastecimiento exactas.',
+      'Optimización de Redes: Se eliminó el botón de compartir producto por WhatsApp de la tarjeta de producto conforme a las solicitudes.'
+    ]
+  },
+  {
+    version: '1.1.75',
+    date: '2026-06-28',
+    description: 'Descuento Global en el Punto de Venta (POS)',
+    isCurrent: false,
+    changes: [
+      'Porcentaje Seleccionable: Se añadió un selector con porcentajes de bono preestablecidos (5%, 10%, 15%, 20%, 25%, 30%, 40%, 50%) para aplicar un descuento global a la compra.',
+      'Porcentaje Personalizado: Permite ingresar cualquier valor de porcentaje manual seleccionando "Otro %" según lo requiera el cajero.',
+      'Sincronización de Totales: El descuento recalcula automáticamente el subtotal, el monto total del descuento, el total general a pagar and el cambio de devolución en tiempo real.',
+      'Visualización de Pago: El desglose se muestra detallado tanto en el resumen del carrito como en el modal de procesamiento de pago.'
+    ]
+  },
+  {
     version: '1.1.74',
     date: '2026-06-22',
     description: 'Edición Ágil de Método de Pago en Cambios',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Sin Bloqueos por Selección de Prendas: Se removieron por completo las alertas que obligaban a ingresar prendas a devolver o prendas a llevar al momento de editar la novedad.',
       'Búsqueda Flexible sin Stock: Ahora puedes buscar y agregar prendas de cambio incluso si el inventario actual de dicho artículo es 0 (lo cual sucede si el cambio físico en tienda real ya se entregó al cliente).',

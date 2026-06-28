@@ -10,16 +10,18 @@ interface PaymentModalProps {
   total: number;
   sellers: Seller[];
   customers: Customer[];
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
   saleDate: Date;
   onHoldSale: (data: { customer: { name: string; phone: string }; sellerName: string; }) => void;
   initialCustomerInfo: {name: string, phone: string} | null;
   currentStore: Store | undefined;
   giftVouchers: GiftVoucher[];
   onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
+  discountPercent?: number;
+  discountAmount?: number;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher, discountPercent, discountAmount }) => {
   const [payments, setPayments] = useState<Omit<Payment, 'date' | 'seller'>[]>([]);
   const [amountInput, setAmountInput] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -153,6 +155,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,
       seller: selectedSeller,
+      discountPercent,
+      discountAmount,
     }, saleDate);
     
     onClose();
@@ -189,9 +193,24 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col"
       >
         <div className="text-center border-b pb-4">
-          <h2 className="text-2xl font-bold text-accent mb-2">Procesar Pago</h2>
-          <p className="text-gray-500 dark:text-text-dark mb-2">Total a pagar</p>
-          <p className="text-4xl font-extrabold text-gray-900 dark:text-white">{formatCOP(total)}</p>
+          <h2 className="text-2xl font-bold text-accent mb-1">Procesar Pago</h2>
+          {discountPercent && discountPercent > 0 ? (
+            <div className="flex flex-col items-center justify-center space-y-1">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-text-dark">
+                <span>Subtotal: <span className="line-through">{formatCOP(total + (discountAmount || 0))}</span></span>
+                <span className="text-red-500 font-bold bg-red-100 dark:bg-red-950/50 px-2 py-0.5 rounded text-xs">
+                  Descuento: -{formatCOP(discountAmount || 0)} ({discountPercent}%)
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider">Total Final con Descuento</p>
+              <p className="text-4xl font-extrabold text-gray-900 dark:text-white">{formatCOP(total)}</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-gray-500 dark:text-text-dark mb-2">Total a pagar</p>
+              <p className="text-4xl font-extrabold text-gray-900 dark:text-white">{formatCOP(total)}</p>
+            </>
+          )}
         </div>
 
         <div className="flex-grow grid md:grid-cols-2 gap-6 py-4 overflow-y-auto">

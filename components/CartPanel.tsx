@@ -41,15 +41,48 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
   const [receivedAmount, setReceivedAmount] = useState('');
   const [layawayDescription, setLayawayDescription] = useState('');
   
+  // Discount State
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [customDiscount, setCustomDiscount] = useState<string>('');
+  const [showCustomDiscount, setShowCustomDiscount] = useState<boolean>(false);
+
   useEffect(() => {
     if (cartItems.length === 0) {
         setReceivedAmount('');
+        setDiscountPercent(0);
+        setCustomDiscount('');
+        setShowCustomDiscount(false);
     }
   }, [cartItems]);
 
-  const totalPrice = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  const discountAmount = discountPercent > 0 ? Math.round(subtotal * (discountPercent / 100)) : 0;
+  const totalPrice = subtotal - discountAmount;
   const received = parseFloat(receivedAmount) || 0;
   const change = showChangeCalculator && received > 0 ? received - totalPrice : 0;
+
+  const handleDiscountChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === 'custom') {
+      setShowCustomDiscount(true);
+      setDiscountPercent(parseFloat(customDiscount) || 0);
+    } else {
+      setShowCustomDiscount(false);
+      const percent = parseFloat(val) || 0;
+      setDiscountPercent(percent);
+    }
+  };
+
+  const handleCustomDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setCustomDiscount(val);
+    const percent = parseFloat(val) || 0;
+    if (percent >= 0 && percent <= 100) {
+      setDiscountPercent(percent);
+    } else if (!val) {
+      setDiscountPercent(0);
+    }
+  };
 
   const handleProcessSaleClick = () => {
     setIsPaymentModalOpen(true);
@@ -183,6 +216,52 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
             </div>
 
             <div id="cart-total-display" className="mt-4 border-t-2 dark:border-accent/30 border-accent/20 pt-3">
+              {/* Descuento de Compra */}
+              <div className="mb-3 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <TagIcon className="w-4 h-4 text-accent" /> Descuento de Compra
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={showCustomDiscount ? 'custom' : discountPercent.toString()}
+                      onChange={handleDiscountChange}
+                      className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 text-xs font-semibold focus:ring-2 focus:ring-accent outline-none text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="0">Sin Descuento (0%)</option>
+                      <option value="5">Bono 5%</option>
+                      <option value="10">Bono 10%</option>
+                      <option value="15">Bono 15%</option>
+                      <option value="20">Bono 20%</option>
+                      <option value="25">Bono 25%</option>
+                      <option value="30">Bono 30%</option>
+                      <option value="40">Bono 40%</option>
+                      <option value="50">Bono 50%</option>
+                      <option value="custom">Otro %</option>
+                    </select>
+                  </div>
+                </div>
+
+                {showCustomDiscount && (
+                  <div className="flex items-center justify-end gap-2">
+                    <label htmlFor="custom-discount-percent" className="text-xs text-slate-500 dark:text-slate-400 font-medium">Porcentaje:</label>
+                    <div className="relative w-24">
+                      <input
+                        id="custom-discount-percent"
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="Ej: 8"
+                        value={customDiscount}
+                        onChange={handleCustomDiscountChange}
+                        className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-md p-1.5 pr-6 text-right font-bold text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none text-slate-800 dark:text-slate-100"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="mb-2">
                   <label htmlFor="change-toggle" className="flex items-center justify-end cursor-pointer">
                       <span className="mr-3 text-sm font-medium text-slate-600 dark:text-slate-400">Calcular Devolución</span>
@@ -208,6 +287,19 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                           step="1000"
                       />
                   </div>
+              )}
+
+              {discountPercent > 0 && (
+                <div className="space-y-1 mb-2 border-b dark:border-slate-800 pb-2 text-right">
+                  <div className="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400 font-medium">
+                    <span>Subtotal:</span>
+                    <span>{formatCOP(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-red-500 dark:text-red-400 font-medium">
+                    <span>Descuento ({discountPercent}%):</span>
+                    <span>-{formatCOP(discountAmount)}</span>
+                  </div>
+                </div>
               )}
 
               <div className="flex justify-between items-center text-2xl font-bold mb-3">
@@ -262,6 +354,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         currentStore={currentStore}
         giftVouchers={giftVouchers}
         onUpdateGiftVoucher={onUpdateGiftVoucher}
+        discountPercent={discountPercent}
+        discountAmount={discountAmount}
       />
 
       {isLayawayModalOpen && (

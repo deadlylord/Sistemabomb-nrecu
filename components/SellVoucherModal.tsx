@@ -11,7 +11,7 @@ interface SellVoucherModalProps {
   customers: Customer[];
   currentStore: Store | undefined;
   onCreateGiftVoucher: (voucher: Omit<GiftVoucher, 'id'>) => Promise<void>;
-  onProcessSale: (saleData: { payments: any[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { payments: any[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
 }
 
 const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, sellers, customers, currentStore, onCreateGiftVoucher, onProcessSale }) => {

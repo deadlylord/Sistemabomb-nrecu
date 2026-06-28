@@ -105,6 +105,42 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
         };
     }, [product, sales, purchases]);
 
+    const supplyRecommendation = useMemo(() => {
+        const stock = product.stock;
+        const recent = performance.recentUnitsSold;
+        
+        if (recent > 0 && stock < recent) {
+            const recommendedQty = Math.max(Math.round(recent * 2 - stock), 5);
+            return {
+                type: 'warning',
+                title: '🚨 Reabastecimiento Urgente',
+                message: `Quedan solo ${stock} unidades de este producto y has vendido ${recent} en los últimos 30 días. Te recomendamos pedir un lote de ${recommendedQty} unidades para reabastecer.`,
+                color: 'bg-rose-50 dark:bg-rose-950/10 border-rose-200/50 dark:border-rose-800/40 text-rose-800 dark:text-rose-300'
+            };
+        } else if (recent === 0 && stock > 5) {
+            return {
+                type: 'overstock',
+                title: '⚠️ Exceso de Existencias / Estancado',
+                message: `Este producto no ha registrado ventas en los últimos 30 días y tienes un inventario de ${stock} unidades. Te sugerimos activar una promoción de descuento para incentivar su rotación.`,
+                color: 'bg-amber-50 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-800/40 text-amber-800 dark:text-amber-300'
+            };
+        } else if (recent > 0 && stock >= recent * 3) {
+            return {
+                type: 'overstock',
+                title: '📈 Rotación Baja (Overstock)',
+                message: `El ritmo de venta es bajo comparado con las existencias actuales (has vendido ${recent} unidades en los últimos 30 días pero tienes ${stock} en inventario). Te recomendamos una rebaja o promoción de liquidación.`,
+                color: 'bg-orange-50 dark:bg-orange-950/10 border-orange-200/50 dark:border-orange-800/40 text-orange-800 dark:text-orange-300'
+            };
+        } else {
+            return {
+                type: 'healthy',
+                title: '✅ Inventario Saludable',
+                message: `El nivel de existencias es saludable en relación con la demanda de los últimos 30 días (has vendido ${recent} unidades y te quedan ${stock}). Monitorea el flujo normal antes de realizar un nuevo pedido.`,
+                color: 'bg-emerald-50 dark:bg-emerald-950/10 border-emerald-200/50 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
+            };
+        }
+    }, [product.stock, performance.recentUnitsSold]);
+
     const handleApplyDiscount = async () => {
         setIsApplying(true);
         try {
@@ -229,7 +265,23 @@ const ProductPerformanceModal: React.FC<ProductPerformanceModalProps> = ({ isOpe
                                     <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Margen de Utilidad</span>
                                 </div>
                                 <span className="font-black text-purple-600 dark:text-purple-400">{performance.margin.toFixed(1)}%</span>
-                            </div>
+                             </div>
+                        </div>
+                    )}
+
+                    {/* Asistente de Abastecimiento Inteligente */}
+                    {isAdmin && (
+                        <div className={`p-5 rounded-3xl border ${supplyRecommendation.color} space-y-2 shadow-sm`}>
+                            <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 opacity-80">
+                                📊 Asistente de Abastecimiento Inteligente
+                            </h4>
+                            <div className="border-t border-current opacity-10 my-1"></div>
+                            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                                {supplyRecommendation.title}
+                            </h5>
+                            <p className="text-xs leading-relaxed font-bold">
+                                {supplyRecommendation.message}
+                            </p>
                         </div>
                     )}
 

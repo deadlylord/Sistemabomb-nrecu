@@ -306,6 +306,8 @@ export interface Sale {
   createdAt: string; // ISO string
   storeId: string;
   layawayId?: string;
+  discountPercent?: number;
+  discountAmount?: number;
 }
 
 export interface Purchase {

@@ -28,7 +28,7 @@ interface PosViewProps {
   onUpdateCartItemPrice: (productId: string, newPrice: number) => void;
   onRemoveFromCart: (productId: string) => void;
   onClearCart: () => void;
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
   onResumeSale: (heldCartId: string) => void;
   onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
@@ -58,6 +58,7 @@ interface PosViewProps {
 
 const PosView: React.FC<PosViewProps> = (props) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('inteligente');
   const [searchTerm, setSearchTerm] = useState('');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
@@ -155,7 +156,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, selectedDate: Date) => {
+  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, selectedDate: Date) => {
     const now = new Date();
     const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
     props.onProcessSale(saleData, finalDate);
@@ -221,7 +222,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsMobileCartOpen(false);
   };
 
-  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; }, currentSaleDate: Date) => {
+  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, currentSaleDate: Date) => {
       handleProcessSaleTransaction(saleData, currentSaleDate);
       setIsMobileCartOpen(false);
   };
@@ -311,10 +312,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return `${year}-${month}-${day}`;
   };
 
-    const { filteredInventory, performanceTrends } = useMemo(() => {
+    const { filteredInventory, performanceTrends, recentSalesMap, trendingProductIds } = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
       const DESCUENTOS_CATEGORY_ID = 'descuentos';
-      const lowerCaseSearchTerm = searchTerm.trim().toLowerCase();
       
       // Calculate performance trends
       const now = new Date();
@@ -346,15 +346,20 @@ const PosView: React.FC<PosViewProps> = (props) => {
           else trends[p.id] = 'stable';
       });
 
-      // Pre-calculate performance map if admin and "All" category
-      let performanceMap: Record<string, number> = {};
-      if (isAdmin && !selectedCategoryId) {
-          props.sales.forEach(sale => {
-              sale.items.forEach(item => {
-                  performanceMap[item.id] = (performanceMap[item.id] || 0) + item.quantity;
-              });
-          });
+      // Calculate trending products (percentil superior 80% of products with active sales in last 30 days)
+      const nonZeroQuantities = Object.values(recentSalesMap).filter(qty => qty > 0).sort((a, b) => a - b);
+      let threshold = Infinity;
+      if (nonZeroQuantities.length > 0) {
+          const pctIndex = Math.floor(nonZeroQuantities.length * 0.8);
+          threshold = nonZeroQuantities[pctIndex];
       }
+      const trendingProductIds = new Set<string>();
+      props.inventory.forEach(p => {
+          const qty = recentSalesMap[p.id] || 0;
+          if (qty > 0 && qty >= threshold) {
+              trendingProductIds.add(p.id);
+          }
+      });
   
       let result: Product[] = [];
 
@@ -400,22 +405,64 @@ const PosView: React.FC<PosViewProps> = (props) => {
             });
       }
 
-      const sortedResult = result.sort((a, b) => {
-          if (a.stock > 0 && b.stock <= 0) return -1;
-          if (a.stock <= 0 && b.stock > 0) return 1;
-          
-          // Sort by performance if admin and "All" category
-          if (isAdmin && !selectedCategoryId) {
-              const perfA = performanceMap[a.id] || 0;
-              const perfB = performanceMap[b.id] || 0;
-              if (perfA !== perfB) return perfB - perfA; // Higher performance first
+      const sortedResult = [...result].sort((a, b) => {
+          const isAOutOfStock = a.stock <= 0;
+          const isBOutOfStock = b.stock <= 0;
+
+          // Out-of-stock items go to the bottom for normal sellers OR when Alfabético is active
+          const forceOutOfStockToBottom = !isAdmin || businessSortMode === 'alfabetico';
+
+          if (forceOutOfStockToBottom) {
+              if (!isAOutOfStock && isBOutOfStock) return -1;
+              if (isAOutOfStock && !isBOutOfStock) return 1;
+          }
+
+          if (isAdmin) {
+              const salesA = recentSalesMap[a.id] || 0;
+              const salesB = recentSalesMap[b.id] || 0;
+
+              if (businessSortMode === 'inteligente') {
+                  // Hybrid scoring: recent sales * 10, with extra bonuses for low stock & out-of-stock with active demand
+                  const getIntelligentScore = (p: Product) => {
+                      const sales = recentSalesMap[p.id] || 0;
+                      if (sales === 0) return 0;
+                      let score = sales * 10;
+                      if (p.stock > 0 && p.stock <= 2) {
+                          score += 150; // High priority: popular items almost sold out
+                      } else if (p.stock <= 0) {
+                          score += 80;  // High priority: out of stock with high demand for admin replenishment
+                      }
+                      return score;
+                  };
+
+                  const scoreA = getIntelligentScore(a);
+                  const scoreB = getIntelligentScore(b);
+                  if (scoreA !== scoreB) return scoreB - scoreA;
+              } else if (businessSortMode === 'tendencias') {
+                  if (salesA !== salesB) return salesB - salesA;
+              } else if (businessSortMode === 'recompra') {
+                  // Highlight critical stock (<= 2) that has active demand (recent sales > 0)
+                  const isRecompraA = a.stock <= 2 && salesA > 0;
+                  const isRecompraB = b.stock <= 2 && salesB > 0;
+
+                  if (isRecompraA && !isRecompraB) return -1;
+                  if (!isRecompraA && isRecompraB) return 1;
+                  if (isRecompraA && isRecompraB) {
+                      if (salesA !== salesB) return salesB - salesA;
+                  }
+              }
           }
 
           return a.name.localeCompare(b.name);
       });
 
-      return { filteredInventory: sortedResult, performanceTrends: trends };
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales]);
+      return { 
+          filteredInventory: sortedResult, 
+          performanceTrends: trends, 
+          recentSalesMap, 
+          trendingProductIds 
+      };
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales, businessSortMode]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
@@ -622,6 +669,57 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 </button>
                             ))}
                         </div>
+                        {isAdmin && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/30 dark:border-slate-800/30">
+                                <span className="text-xs font-black text-slate-500 dark:text-slate-400 mr-2 uppercase tracking-wider flex items-center gap-1">
+                                  📊 Orden de Negocio (30 días):
+                                </span>
+                                <button
+                                    onClick={() => setBusinessSortMode('inteligente')}
+                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                        businessSortMode === 'inteligente'
+                                            ? 'bg-accent text-white ring-2 ring-accent/30'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="Híbrido de ventas recientes y bajas existencias"
+                                >
+                                    🔥 Inteligente
+                                </button>
+                                <button
+                                    onClick={() => setBusinessSortMode('tendencias')}
+                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                        businessSortMode === 'tendencias'
+                                            ? 'bg-accent text-white ring-2 ring-accent/30'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="Más vendidos en los últimos 30 días"
+                                >
+                                    📈 Tendencias
+                                </button>
+                                <button
+                                    onClick={() => setBusinessSortMode('recompra')}
+                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                        businessSortMode === 'recompra'
+                                            ? 'bg-accent text-white ring-2 ring-accent/30'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="Productos en demanda con stock crítico"
+                                >
+                                    🚨 Recompra Urgente
+                                </button>
+                                <button
+                                    onClick={() => setBusinessSortMode('alfabetico')}
+                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                        businessSortMode === 'alfabetico'
+                                            ? 'bg-accent text-white ring-2 ring-accent/30'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                    }`}
+                                    title="Orden alfabético de la A a la Z"
+                                >
+                                    🔤 Alfabético
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
@@ -636,6 +734,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
                         justAddedProductId={justAddedProductId}
                         verifiedProducts={props.verifiedProducts}
                         onToggleProductVerification={props.onToggleProductVerification}
+                        recentSalesMap={recentSalesMap}
+                        trendingProductIds={trendingProductIds}
                     />
                 </div>
             </div>
