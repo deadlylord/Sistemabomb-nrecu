@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.78',
+    date: '2026-06-29',
+    description: 'Optimización de Espacio en Modal de Procesamiento de Pago',
+    isCurrent: true,
+    changes: [
+      'Espacio Compacto en Pago: Rediseño del modal de pagos a un formato de dos columnas bento ultra-ajustado y limpio, maximizando el espacio de pantalla disponible en dispositivos de ventas.',
+      'Mejora de Inputs en Paralelo: Se colocaron los campos opcionales del cliente en una cuadrícula horizontal de dos columnas, reduciendo la altura ocupada a la mitad.',
+      'Sustitución de Alertas por Alertas de Estado Inline: Se eliminaron por completo las llamadas a alert() nativo para validaciones (falta de vendedor, códigos incorrectos, etc.) por avisos integrados e interactivos.'
+    ]
+  },
+  {
     version: '1.1.77',
     date: '2026-06-29',
     description: 'Resolución de Bloqueos de Recibos y Privacidad de Estadísticas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Corrección de Flujo de Recibo (Imprimir/WhatsApp): Se reemplazó el uso de alert() nativo (causante de bloqueos en iframes) por un sistema de advertencias inline no-bloqueantes. Se añadió un botón principal y destacado de "Listo / Nueva Venta" para cerrar los recibos de forma rápida.',
       'Privacidad de Estadísticas para Vendedores: Se restringió la visualización de insignias de stock de recompra ("RECOMPRAR") y productos en tendencia ("TENDENCIA") exclusivamente para administradores en las tarjetas de producto.'
