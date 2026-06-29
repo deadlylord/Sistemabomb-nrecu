@@ -4,6 +4,14 @@ import { Sale, Store } from '../types';
 import { formatCOP } from '../constants';
 import { PrintIcon, CrossIcon, WhatsAppIcon } from './Icons';
 
+const isInIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+};
+
 interface ReceiptModalProps {
   sale: Sale;
   store: Store | null;
@@ -57,6 +65,11 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   const handlePrint = () => {
+    if (isInIframe()) {
+      setErrorMsg("⚠️ No se puede imprimir directamente dentro de la vista previa de AI Studio. Por favor, abre la aplicación en una pestaña nueva (usando el botón de la esquina superior derecha) para imprimir sin bloqueos.");
+      setTimeout(() => setErrorMsg(null), 12000);
+      return;
+    }
     try {
       window.print();
     } catch (err) {
@@ -100,6 +113,11 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
 
     if (sale && store && !hasAutoInteracted.current) {
         hasAutoInteracted.current = true; // Set flag to prevent re-triggering
+
+        if (isInIframe()) {
+            console.warn("Auto-impresión y auto-envío de WhatsApp cancelados dentro de la vista previa iframe para evitar congelamiento del navegador.");
+            return;
+        }
 
         if (store.autoPrint) {
             printTimer = window.setTimeout(() => {

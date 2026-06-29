@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.79',
+    date: '2026-06-29',
+    description: 'Prevención de Bloqueos e Imposibilidad de Cierre de la Vista de Facturas en Vistas Previas',
+    isCurrent: true,
+    changes: [
+      'Seguridad Anti-Congelamiento en Vista Previa: Se detecta automáticamente si el software se ejecuta dentro de un iframe (como el de AI Studio) para desactivar la auto-impresión y auto-envío que suspenden el hilo de ejecución principal de Google Chrome de forma permanente.',
+      'Soporte Educativo para Impresión: En caso de clics manuales dentro de un iframe, se muestra un mensaje informativo interactivo sugiriendo abrir la aplicación en una pestaña nueva para poder realizar la impresión y envíos sin bloqueos del navegador.'
+    ]
+  },
+  {
     version: '1.1.78',
     date: '2026-06-29',
     description: 'Optimización de Espacio en Modal de Procesamiento de Pago',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Espacio Compacto en Pago: Rediseño del modal de pagos a un formato de dos columnas bento ultra-ajustado y limpio, maximizando el espacio de pantalla disponible en dispositivos de ventas.',
       'Mejora de Inputs en Paralelo: Se colocaron los campos opcionales del cliente en una cuadrícula horizontal de dos columnas, reduciendo la altura ocupada a la mitad.',

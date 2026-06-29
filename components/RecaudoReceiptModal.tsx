@@ -4,6 +4,14 @@ import { Incident, Store } from '../types';
 import { formatCOP } from '../constants';
 import { PrintIcon, CrossIcon, WhatsAppIcon } from './Icons';
 
+const isInIframe = () => {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+};
+
 interface RecaudoReceiptModalProps {
   incident: Incident;
   store: Store | null;
@@ -29,6 +37,11 @@ const RecaudoReceiptModal: React.FC<RecaudoReceiptModalProps> = ({ incident, sto
       `${store.contactInfo}`;
 
   const handlePrint = () => {
+    if (isInIframe()) {
+      setErrorMsg("⚠️ No se puede imprimir directamente dentro de la vista previa de AI Studio. Por favor, abre la aplicación en una pestaña nueva (usando el botón de la esquina superior derecha) para imprimir sin bloqueos.");
+      setTimeout(() => setErrorMsg(null), 12000);
+      return;
+    }
     try {
       window.print();
     } catch (err) {
