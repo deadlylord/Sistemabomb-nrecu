@@ -108,18 +108,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Insignias Visuales Dinámicas (Esquina inferior izquierda de la miniatura, autogestionadas de 30 días) */}
-        <div className="absolute bottom-2 left-2 z-20 flex flex-col gap-1 items-start pointer-events-none">
-          {isTrending && (
-            <span className="bg-amber-500/90 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
-              🔥 TENDENCIA ({recentSalesQty})
-            </span>
-          )}
-          {needsRecompra && (
-            <span className="bg-rose-600/95 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
-              🚨 RECOMPRAR
-            </span>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="absolute bottom-2 left-2 z-20 flex flex-col gap-1 items-start pointer-events-none">
+            {isTrending && (
+              <span className="bg-amber-500/90 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
+                🔥 TENDENCIA ({recentSalesQty})
+              </span>
+            )}
+            {needsRecompra && (
+              <span className="bg-rose-600/95 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
+                🚨 RECOMPRAR
+              </span>
+            )}
+          </div>
+        )}
 
         {isAdmin && (
             <div className="absolute top-1.5 right-1.5 z-20 flex flex-col items-end gap-1.5">

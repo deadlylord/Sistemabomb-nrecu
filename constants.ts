@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.77',
+    date: '2026-06-29',
+    description: 'Resolución de Bloqueos de Recibos y Privacidad de Estadísticas',
+    isCurrent: true,
+    changes: [
+      'Corrección de Flujo de Recibo (Imprimir/WhatsApp): Se reemplazó el uso de alert() nativo (causante de bloqueos en iframes) por un sistema de advertencias inline no-bloqueantes. Se añadió un botón principal y destacado de "Listo / Nueva Venta" para cerrar los recibos de forma rápida.',
+      'Privacidad de Estadísticas para Vendedores: Se restringió la visualización de insignias de stock de recompra ("RECOMPRAR") y productos en tendencia ("TENDENCIA") exclusivamente para administradores en las tarjetas de producto.'
+    ]
+  },
+  {
     version: '1.1.76',
     date: '2026-06-28',
     description: 'Inteligencia Administrativa y Badges de Negocio',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Ordenación Administrativa Segmentada (30 días): Se implementó la lógica de rendimiento con un selector interactivo para administradores (Inteligente, Tendencias, Recompra Urgente, Alfabético).',
       'Insignias Visuales Dinámicas: Las tarjetas de productos ahora muestran etiquetas en tiempo real de los últimos 30 días como "TENDENCIA (cantidad)" para el percentil superior de ventas, o "RECOMPRAR" para stock bajo en demanda.',

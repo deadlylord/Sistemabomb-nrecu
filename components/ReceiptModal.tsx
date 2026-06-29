@@ -54,8 +54,15 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
       `${store.contactInfo}`;
 
 
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
   const handlePrint = () => {
-    window.print();
+    try {
+      window.print();
+    } catch (err) {
+      console.error("Error calling window.print():", err);
+      setErrorMsg("No se pudo iniciar la impresión en este navegador.");
+    }
   };
   
   const handleWhatsAppSend = (isManual: boolean = false) => {
@@ -63,7 +70,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
 
     if (!phone || phone.length < 7) { // Loosened validation for local numbers
       if (isManual) {
-        alert('No se puede enviar por WhatsApp. El número de teléfono del cliente no es válido o no fue proporcionado.');
+        setErrorMsg('No se puede enviar por WhatsApp. El número de teléfono del cliente no es válido o no fue proporcionado.');
+        setTimeout(() => setErrorMsg(null), 6000);
       } else {
         console.warn('Auto-envío por WhatsApp omitido: número de teléfono inválido o no proporcionado.');
       }
@@ -78,7 +86,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
         ? `https://api.whatsapp.com/send?phone=${colombiaPhoneNumber}&text=${encodedText}`
         : `https://web.whatsapp.com/send?phone=${colombiaPhoneNumber}&text=${encodedText}`;
 
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    try {
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error("Error opening WhatsApp URL:", err);
+      setErrorMsg("No se pudo abrir WhatsApp automáticamente. Intenta hacer clic manualmente.");
+    }
   };
 
   useEffect(() => {
@@ -90,11 +103,21 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
 
         if (store.autoPrint) {
             printTimer = window.setTimeout(() => {
-                window.print();
+                try {
+                    window.print();
+                } catch (e) {
+                    console.warn("Auto-print failed or blocked:", e);
+                }
             }, 500);
         }
         if (store.autoSendWhatsApp) {
-            whatsappTimer = window.setTimeout(() => handleWhatsAppSend(false), 700);
+            whatsappTimer = window.setTimeout(() => {
+                try {
+                    handleWhatsAppSend(false);
+                } catch (e) {
+                    console.warn("Auto-send WhatsApp failed or blocked:", e);
+                }
+            }, 700);
         }
     }
     return () => {
@@ -172,23 +195,34 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
         </div>
         
         {/* Action buttons */}
-        <div className="p-4 bg-gray-100 dark:bg-gray-800 print:hidden">
-            <div className="flex justify-end space-x-3">
+        <div className="p-4 bg-gray-100 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 print:hidden flex flex-col gap-3">
+            {errorMsg && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl text-xs font-bold text-center">
+                    ⚠️ {errorMsg}
+                </div>
+            )}
+            <div className="flex items-center justify-between gap-2.5">
                  <button
                     onClick={() => handleWhatsAppSend(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+                    className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 bg-green-500 text-white text-xs font-bold rounded-xl hover:bg-green-600 transition-all shadow-sm hover:shadow active:scale-95 cursor-pointer"
                 >
                     <WhatsAppIcon />
                     <span>WhatsApp</span>
                 </button>
                 <button
                     onClick={handlePrint}
-                    className="flex items-center space-x-2 px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors"
+                    className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 bg-accent text-white text-xs font-bold rounded-xl hover:bg-accent-hover transition-all shadow-sm hover:shadow active:scale-95 cursor-pointer"
                 >
                     <PrintIcon />
                     <span>Imprimir</span>
                 </button>
             </div>
+            <button
+                onClick={onClose}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-black text-sm rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer uppercase tracking-wider text-center"
+            >
+                Listo / Nueva Venta
+            </button>
         </div>
       </div>
     </div>
