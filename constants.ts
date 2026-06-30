@@ -58,10 +58,19 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.80',
+    date: '2026-06-30',
+    description: 'Simplificación de Interfaz y Remoción de la Guía de Instalación Móvil',
+    isCurrent: true,
+    changes: [
+      'Remoción de Opción de Instalación Móvil: Se eliminaron por completo las opciones y guías de "Instalar en Celular" tanto en el menú lateral principal como en el perfil de usuario del vendedor, respondiendo a la simplificación de uso directo sin navegador.'
+    ]
+  },
+  {
     version: '1.1.79',
     date: '2026-06-29',
     description: 'Prevención de Bloqueos e Imposibilidad de Cierre de la Vista de Facturas en Vistas Previas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Seguridad Anti-Congelamiento en Vista Previa: Se detecta automáticamente si el software se ejecuta dentro de un iframe (como el de AI Studio) para desactivar la auto-impresión y auto-envío que suspenden el hilo de ejecución principal de Google Chrome de forma permanente.',
       'Soporte Educativo para Impresión: En caso de clics manuales dentro de un iframe, se muestra un mensaje informativo interactivo sugiriendo abrir la aplicación en una pestaña nueva para poder realizar la impresión y envíos sin bloqueos del navegador.'
