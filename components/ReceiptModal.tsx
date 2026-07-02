@@ -120,13 +120,18 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
         }
 
         if (store.autoPrint) {
-            printTimer = window.setTimeout(() => {
-                try {
-                    window.print();
-                } catch (e) {
-                    console.warn("Auto-print failed or blocked:", e);
-                }
-            }, 500);
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.warn("Auto-impresión cancelada en dispositivo móvil para evitar congelamiento.");
+            } else {
+                printTimer = window.setTimeout(() => {
+                    try {
+                        window.print();
+                    } catch (e) {
+                        console.warn("Auto-print failed or blocked:", e);
+                    }
+                }, 500);
+            }
         }
         if (store.autoSendWhatsApp) {
             whatsappTimer = window.setTimeout(() => {
@@ -235,12 +240,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
                     <span>Imprimir</span>
                 </button>
             </div>
-            <button
-                onClick={onClose}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-black text-sm rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer uppercase tracking-wider text-center"
-            >
-                Listo / Nueva Venta
-            </button>
         </div>
       </div>
     </div>

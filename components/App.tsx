@@ -1252,14 +1252,36 @@ const App: React.FC = () => {
       if (!currentUser) return;
       const batch = writeBatch(db);
       
+      const allKnownProducts = [...inventory, ...globalInventoryForSearch];
+
       originalSale.items.forEach(item => {
-          const productRef = doc(db, 'inventory', item.id);
-          batch.update(productRef, { stock: increment(item.quantity) });
+          if (item && item.id && !item.id.startsWith('voucher-')) {
+              // Only update if product still exists in DB (to avoid batch failure)
+              if (allKnownProducts.some(p => p.id === item.id)) {
+                  const productRef = doc(db, 'inventory', item.id);
+                  batch.update(productRef, { stock: increment(item.quantity) });
+              }
+          }
       });
 
       updatedSale.items.forEach(item => {
-          const productRef = doc(db, 'inventory', item.id);
-          batch.update(productRef, { stock: increment(-item.quantity) });
+          if (item && item.id && !item.id.startsWith('voucher-')) {
+              if (allKnownProducts.some(p => p.id === item.id)) {
+                  const productRef = doc(db, 'inventory', item.id);
+                  batch.update(productRef, { stock: increment(-item.quantity) });
+              }
+          } else if (item && item.id && item.id.startsWith('voucher-')) {
+              // Si están editando la fecha de la venta y contiene un bono, actualizamos la fecha del bono
+              if (updatedSale.createdAt !== originalSale.createdAt) {
+                  const voucherCode = item.id.replace('voucher-', '');
+                  const voucher = giftVouchers.find(v => v.code === voucherCode);
+                  if (voucher) {
+                      batch.update(doc(db, 'giftVouchers', voucher.id), {
+                          createdAt: updatedSale.createdAt
+                      });
+                  }
+              }
+          }
       });
 
       const saleRef = doc(db, 'sales', updatedSale.id);

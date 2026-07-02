@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.81',
+    date: '2026-07-02',
+    description: 'Solución a Congelamientos y Edición de Bonos de Regalo',
+    isCurrent: true,
+    changes: [
+      'Corrección Anti-Congelamiento Móvil: Se desactivó la función de Auto-Impresión específicamente para celulares y tablets, resolviendo el grave fallo nativo de los navegadores móviles donde abrir el diálogo de impresión congelaba por completo la aplicación (bloqueo total que forzaba reiniciar).',
+      'Eliminación de Botón Redundante: Se removió el botón inferior de "Listo / Nueva Venta" a solicitud para evitar confusiones en los modales de factura.',
+      'Soporte a Edición de Bonos de Regalo: Ahora es posible editar la fecha de una venta que contiene un bono de regalo, y la fecha de creación del bono asociado se actualizará correctamente de forma automática, sin fallar o deshacer la edición.'
+    ]
+  },
+  {
     version: '1.1.80',
     date: '2026-06-30',
     description: 'Simplificación de Interfaz y Remoción de la Guía de Instalación Móvil',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Remoción de Opción de Instalación Móvil: Se eliminaron por completo las opciones y guías de "Instalar en Celular" tanto en el menú lateral principal como en el perfil de usuario del vendedor, respondiendo a la simplificación de uso directo sin navegador.'
     ]
