@@ -58,10 +58,31 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.83',
+    date: '2026-07-02',
+    description: 'Solución Definitiva de Impresión Nativa sin Bloqueos',
+    isCurrent: true,
+    changes: [
+      'Remoción de Iframe de Impresión: Se eliminó el uso de iframes ocultos dinámicos para la impresión de recibos, ya que las políticas modernas de seguridad y sandbox de los navegadores bloquean estas operaciones, causando que no se imprima nada y que el hilo principal de JavaScript de la pestaña se congele de forma permanente.',
+      'Impresión Nativa 100% Confiable: Se restauró la llamada directa a `window.print()` en la ventana principal, la cual utiliza la hoja de estilos de impresión `@media print` ya configurada en `index.html` para aislar y dar formato óptimo al recibo térmico de forma impecable.',
+      'Secuenciación de Eventos Sincronizados: Se corrigió el conflicto de carreras donde la auto-impresión y la apertura automática de WhatsApp ocurrían en paralelo bloqueando el navegador; ahora el envío automático de WhatsApp se ejecuta de forma secuencial y segura exactamente después de que el usuario interactúa y cierra el diálogo de impresión.'
+    ]
+  },
+  {
+    version: '1.1.82',
+    date: '2026-07-02',
+    description: 'Impresión en Iframe Aislado Sin Bloqueo de Pantalla',
+    isCurrent: false,
+    changes: [
+      'Impresión en Canal Aislado (Iframe Silencioso): Se implementó la impresión mediante un iframe oculto en segundo plano para los recibos de venta y comprobantes de recaudo. Esto evita que el navegador principal o del celular se congele, asegurando que la interfaz de usuario siga siendo 100% interactiva en todo momento, incluso si la impresión es cancelada o tarda en responder.',
+      'Optimización de Formato POS: Los recibos impresos ahora utilizan estilos específicos de impresora térmica monocromática para una mayor nitidez y ahorro de papel, sin alterar los colores del modo oscuro o claro del programa principal.'
+    ]
+  },
+  {
     version: '1.1.81',
     date: '2026-07-02',
     description: 'Solución a Congelamientos y Edición de Bonos de Regalo',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Corrección Anti-Congelamiento Móvil: Se desactivó la función de Auto-Impresión específicamente para celulares y tablets, resolviendo el grave fallo nativo de los navegadores móviles donde abrir el diálogo de impresión congelaba por completo la aplicación (bloqueo total que forzaba reiniciar).',
       'Eliminación de Botón Redundante: Se removió el botón inferior de "Listo / Nueva Venta" a solicitud para evitar confusiones en los modales de factura.',

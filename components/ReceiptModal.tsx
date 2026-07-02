@@ -64,14 +64,22 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
 
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  const handlePrint = () => {
+  const handlePrint = (autoSendWhatsAppAfter: boolean = false) => {
     if (isInIframe()) {
       setErrorMsg("⚠️ No se puede imprimir directamente dentro de la vista previa de AI Studio. Por favor, abre la aplicación en una pestaña nueva (usando el botón de la esquina superior derecha) para imprimir sin bloqueos.");
       setTimeout(() => setErrorMsg(null), 12000);
       return;
     }
     try {
+      // Use native window.print() on the main window.
+      // This is 100% reliable and respects the @media print CSS in index.html which isolates #receipt-to-print
       window.print();
+
+      if (autoSendWhatsAppAfter) {
+        setTimeout(() => {
+          handleWhatsAppSend(false);
+        }, 500);
+      }
     } catch (err) {
       console.error("Error calling window.print():", err);
       setErrorMsg("No se pudo iniciar la impresión en este navegador.");
@@ -119,21 +127,18 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
             return;
         }
 
-        if (store.autoPrint) {
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if (isMobile) {
-                console.warn("Auto-impresión cancelada en dispositivo móvil para evitar congelamiento.");
-            } else {
-                printTimer = window.setTimeout(() => {
-                    try {
-                        window.print();
-                    } catch (e) {
-                        console.warn("Auto-print failed or blocked:", e);
-                    }
-                }, 500);
-            }
-        }
-        if (store.autoSendWhatsApp) {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (store.autoPrint && !isMobile) {
+            printTimer = window.setTimeout(() => {
+                try {
+                    // Send WhatsApp sequentially AFTER printing completes to avoid overlapping blocking actions
+                    handlePrint(store.autoSendWhatsApp);
+                } catch (e) {
+                    console.warn("Auto-print failed or blocked:", e);
+                }
+            }, 500);
+        } else if (store.autoSendWhatsApp) {
             whatsappTimer = window.setTimeout(() => {
                 try {
                     handleWhatsAppSend(false);

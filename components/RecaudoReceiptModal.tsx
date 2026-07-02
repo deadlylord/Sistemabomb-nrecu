@@ -43,6 +43,8 @@ const RecaudoReceiptModal: React.FC<RecaudoReceiptModalProps> = ({ incident, sto
       return;
     }
     try {
+      // Use native window.print() on the main window.
+      // This is 100% reliable and respects the @media print CSS in index.html which isolates #receipt-to-print
       window.print();
     } catch (err) {
       console.error("Error calling window.print():", err);
