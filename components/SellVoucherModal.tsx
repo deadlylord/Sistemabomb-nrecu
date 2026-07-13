@@ -21,10 +21,13 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
   const [selectedSeller, setSelectedSeller] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   if (!isOpen) return null;
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMsg('');
     const phone = e.target.value.replace(/[^0-9]/g, '');
     if (phone.length <= 10) {
       setCustomerPhone(phone);
@@ -47,21 +50,23 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
   };
 
   const handleConfirm = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
     const amount = parseFloat(value);
     if (isNaN(amount) || amount <= 0) {
-      alert("Ingresa un valor válido para el bono.");
+      setErrorMsg("Ingresa un valor válido para el bono.");
       return;
     }
     if (!selectedSeller) {
-      alert("Selecciona un vendedor.");
+      setErrorMsg("Selecciona un vendedor.");
       return;
     }
     if (!paymentMethod) {
-      alert("Selecciona un método de pago.");
+      setErrorMsg("Selecciona un método de pago.");
       return;
     }
     if (customerPhone.length > 0 && customerPhone.length !== 10) {
-        alert("El celular debe tener 10 dígitos.");
+        setErrorMsg("El celular debe tener 10 dígitos.");
         return;
     }
 
@@ -70,21 +75,6 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
       const code = generateVoucherCode();
       const now = new Date();
       
-      // 1. Create the Gift Voucher record
-      const voucher: Omit<GiftVoucher, 'id'> = {
-        code,
-        initialValue: amount,
-        currentValue: amount,
-        status: 'active',
-        createdAt: now.toISOString(),
-        customerName: toTitleCase(customerName) || 'Cliente Mostrador',
-        customerPhone: customerPhone || 'N/A',
-        storeId: currentStore?.id || '',
-        createdBy: selectedSeller,
-      };
-      
-      await onCreateGiftVoucher(voucher);
-
       // 2. Process as a sale
       const saleData = {
         payments: [{
@@ -108,15 +98,16 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
             description: `Bono de regalo por valor de ${formatCOP(amount)}`
         }]
       };
-
       await onProcessSale(saleData, now);
       
-      alert(`✅ Bono creado con éxito.\nCódigo: ${code}\nValor: ${formatCOP(amount)}`);
+      setSuccessMsg(`Bono creado con éxito. Código: ${code} - Valor: ${formatCOP(amount)}`);
       
-      onClose();
+      setTimeout(() => {
+        onClose();
+      }, 2500);
     } catch (error) {
       console.error(error);
-      alert("Error al crear el bono.");
+      setErrorMsg("Error al crear el bono.");
     } finally {
       setIsProcessing(false);
     }
@@ -131,6 +122,18 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
             <CrossIcon className="w-6 h-6" />
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+            <span className="block sm:inline">{errorMsg}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative" role="alert">
+            <span className="block sm:inline font-bold">✅ {successMsg}</span>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div>

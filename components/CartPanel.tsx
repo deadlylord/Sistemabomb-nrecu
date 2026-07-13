@@ -40,6 +40,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
   const [showChangeCalculator, setShowChangeCalculator] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
   const [layawayDescription, setLayawayDescription] = useState('');
+  const [layawayError, setLayawayError] = useState('');
   
   // Discount State
   const [discountPercent, setDiscountPercent] = useState<number>(0);
@@ -107,9 +108,10 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
   };
   
   const handleLayawayConfirm = () => {
+    setLayawayError('');
     const amount = parseFloat(initialAmount);
     if (customerPhone.trim().length !== 10) {
-      alert("El número de celular debe tener exactamente 10 dígitos.");
+      setLayawayError("El número de celular debe tener exactamente 10 dígitos.");
       return;
     }
     const finalName = toTitleCase(customerName.trim());
@@ -124,7 +126,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
       setPaymentMethod('');
       setLayawayDescription('');
     } else {
-      alert("Por favor, completa todos los campos, incluyendo un abono inicial mayor a cero.");
+      setLayawayError("Por favor, completa todos los campos, incluyendo un abono inicial mayor a cero.");
     }
   };
 
@@ -369,6 +371,11 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                     ? 'El stock NO se descontará hasta que marques el producto como recibido.'
                     : 'Ingresa los datos para asociarlos a este abono.'}
                 </p>
+                {layawayError && (
+                  <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-2.5 rounded-lg text-xs" role="alert">
+                    <span>{layawayError}</span>
+                  </div>
+                )}
                 <div className="space-y-4">
                   {isPreOrder && (
                       <div>

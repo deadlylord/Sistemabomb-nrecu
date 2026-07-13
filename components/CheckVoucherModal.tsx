@@ -13,17 +13,19 @@ interface CheckVoucherModalProps {
 const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, giftVouchers }) => {
   const [code, setCode] = useState('');
   const [foundVoucher, setFoundVoucher] = useState<GiftVoucher | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
 
   const handleSearch = () => {
+    setErrorMsg('');
     const trimmedCode = code.trim().toUpperCase();
     if (!trimmedCode) return;
     const voucher = giftVouchers.find(v => v.code.toUpperCase() === trimmedCode);
     if (voucher) {
       setFoundVoucher(voucher);
     } else {
-      alert(`Bono "${trimmedCode}" no encontrado.`);
+      setErrorMsg(`Bono "${trimmedCode}" no encontrado.`);
       setFoundVoucher(null);
     }
   };
@@ -37,6 +39,12 @@ const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, 
             <CrossIcon className="w-6 h-6" />
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative text-sm" role="alert">
+            <span className="block sm:inline">{errorMsg}</span>
+          </div>
+        )}
 
         <div className="space-y-6">
           <div className="flex gap-2">

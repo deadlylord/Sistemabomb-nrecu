@@ -12,11 +12,13 @@ interface EditCustomerModalProps {
 const EditCustomerModal: React.FC<EditCustomerModalProps> = ({ isOpen, onClose, customer, onSave }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     if (customer) {
       setName(customer.name);
       setPhone(customer.phone);
+      setErrorMsg('');
     }
   }, [customer]);
 
@@ -24,12 +26,13 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({ isOpen, onClose, 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     if (!name.trim() || !phone.trim()) {
-      alert("El nombre y el celular no pueden estar vacíos.");
+      setErrorMsg("El nombre y el celular no pueden estar vacíos.");
       return;
     }
     if (phone.trim().length !== 10) {
-      alert("El celular debe tener 10 dígitos numéricos.");
+      setErrorMsg("El celular debe tener 10 dígitos numéricos.");
       return;
     }
     onSave(customer.id, toTitleCase(name), phone);
@@ -47,6 +50,11 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({ isOpen, onClose, 
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-md">
         <h2 className="text-2xl font-bold text-accent mb-6">Editar Cliente</h2>
+        {errorMsg && (
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative text-sm" role="alert">
+            <span className="block sm:inline">{errorMsg}</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="customerName" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Nombre</label>

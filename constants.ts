@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.84',
+    date: '2026-07-02',
+    description: 'Compatibilidad Total con Microsoft Edge e Impresión de Alta Confiabilidad',
+    isCurrent: true,
+    changes: [
+      'Impresión en Ventana Emergente Aislada (Popup): Se implementó la impresión utilizando una ventana popup independiente (`window.open`). Esto resuelve de raíz el problema de Microsoft Edge y algunos motores Chromium donde las llamadas de impresión en el hilo principal del documento congelan/bloquean la pestaña indefinidamente si se aplican reglas CSS complejas o si la configuración bloquea el diálogo.',
+      'Control y Notificaciones para Bloqueadores de Ventanas: Si el navegador bloquea la apertura de ventanas emergentes (comportamiento por defecto en algunos perfiles estrictos de Edge), la aplicación detecta el bloqueo con gracia, activa una alerta instructiva clara para el usuario con pasos para resolverlo, y ofrece un fallback seguro.',
+      'Detección Activa de Microsoft Edge: Se añadió detección de agente de usuario para Edge con mensajes y banners de ayuda contextuales específicos que mejoran significativamente la usabilidad y evitan la frustración del usuario.'
+    ]
+  },
+  {
     version: '1.1.83',
     date: '2026-07-02',
     description: 'Solución Definitiva de Impresión Nativa sin Bloqueos',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Remoción de Iframe de Impresión: Se eliminó el uso de iframes ocultos dinámicos para la impresión de recibos, ya que las políticas modernas de seguridad y sandbox de los navegadores bloquean estas operaciones, causando que no se imprima nada y que el hilo principal de JavaScript de la pestaña se congele de forma permanente.',
       'Impresión Nativa 100% Confiable: Se restauró la llamada directa a `window.print()` en la ventana principal, la cual utiliza la hoja de estilos de impresión `@media print` ya configurada en `index.html` para aislar y dar formato óptimo al recibo térmico de forma impecable.',
