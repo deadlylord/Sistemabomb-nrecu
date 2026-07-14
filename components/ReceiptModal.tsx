@@ -71,136 +71,22 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
       return;
     }
     
-    let popupWindow: Window | null = null;
     try {
-      // Intentar abrir una ventana emergente para una impresión aislada.
-      // Esto evita el deadlock/congelamiento en Microsoft Edge y Chrome al aislar el hilo del diálogo de impresión.
-      popupWindow = window.open('', '_blank', 'width=320,height=600,menubar=no,status=no,titlebar=no');
+      window.print();
       
-      if (!popupWindow) {
-        throw new Error("Popup blocked");
-      }
-
-      const logoHtml = store.logo ? `<img src="${store.logo}" alt="Logo" class="logo" />` : '';
-      const itemsHtml = sale.items.map(item => `
-        <tr>
-          <td style="text-align: left; vertical-align: top; padding: 4px 0;">
-            ${shortenProductName(item.name)}
-            ${item.id.startsWith('voucher-') ? `<div style="font-size: 10px; font-weight: bold; color: #000;">CÓDIGO: ${item.id.replace('voucher-', '')}</div>` : ''}
-          </td>
-          <td style="text-align: center; vertical-align: top; padding: 4px 0; width: 30px;">${item.quantity}</td>
-          <td style="text-align: right; vertical-align: top; padding: 4px 0; width: 70px;">${formatCOP(item.price * item.quantity)}</td>
-        </tr>
-      `).join('');
-
-      const paymentsHtml = sale.payments ? (
-        sale.payments.map(p => `<p style="margin: 2px 0;"><strong>${p.method}:</strong> ${formatCOP(p.amount)}</p>`).join('')
-      ) : (
-        `<p style="margin: 2px 0;"><strong>Método Pago:</strong> ${sale.paymentMethod}</p>`
-      );
-
-      popupWindow.document.open();
-      popupWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Recibo ${sale.invoiceNumber}</title>
-          <style>
-            @page {
-              size: 58mm auto;
-              margin: 0mm;
-            }
-            body {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 11px;
-              color: #000;
-              margin: 2mm;
-              padding: 0;
-              width: 54mm;
-              background-color: #fff;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .mb-2 { margin-bottom: 8px; }
-            .mb-4 { margin-bottom: 16px; }
-            .mt-4 { margin-top: 16px; }
-            .w-full { width: 100%; }
-            .border-b-2 { border-bottom: 2px dashed #000; }
-            .border-t-2 { border-top: 2px dashed #000; }
-            table { border-collapse: collapse; width: 100%; margin-top: 4px; margin-bottom: 4px; }
-            .logo { max-height: 50px; display: block; margin: 0 auto 6px auto; }
-            .title { font-size: 13px; font-weight: bold; margin-bottom: 3px; }
-            .subtitle { font-size: 9px; white-space: pre-wrap; margin-bottom: 6px; line-height: 1.2; }
-            p { margin: 2px 0; line-height: 1.2; }
-          </style>
-        </head>
-        <body>
-          <div class="text-center mb-2">
-            ${logoHtml}
-            <div class="title">${store.receiptName || store.name}</div>
-            <div class="subtitle">${store.contactInfo}</div>
-          </div>
-          <div class="mb-2" style="font-size: 10px;">
-            <p><strong>Factura #:</strong> ${sale.invoiceNumber}</p>
-            <p><strong>Fecha:</strong> ${new Date(sale.createdAt).toLocaleString()}</p>
-            <p><strong>Cliente:</strong> ${sale.customerName}</p>
-            <p><strong>Vendedor:</strong> ${sale.seller}</p>
-          </div>
-          <table class="w-full mb-2">
-            <thead>
-              <tr class="border-b-2">
-                <th style="text-align: left; font-weight: bold; padding-bottom: 2px;">Artículo</th>
-                <th style="text-align: center; font-weight: bold; padding-bottom: 2px; width: 30px;">Cant</th>
-                <th style="text-align: right; font-weight: bold; padding-bottom: 2px; width: 70px;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          <div class="border-t-2" style="padding-top: 4px; text-align: right; font-size: 11px;">
-            ${paymentsHtml}
-            <p style="margin: 3px 0 0 0; font-size: 12px;"><strong>Total: ${formatCOP(sale.totalAmount)}</strong></p>
-          </div>
-          <div class="text-center mt-4" style="font-size: 9px; border-top: 1px dashed #000; padding-top: 6px; line-height: 1.2;">
-            <p>${store.footerText}</p>
-          </div>
-          <script>
-            window.onload = () => {
-              setTimeout(() => {
-                window.focus();
-                window.print();
-                setTimeout(() => {
-                  window.close();
-                }, 500);
-              }, 250);
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      popupWindow.document.close();
-
       if (autoSendWhatsAppAfter) {
         setTimeout(() => {
           handleWhatsAppSend(false);
         }, 1000);
       }
     } catch (err) {
-      console.warn("Popup printing blocked or failed, falling back to native window.print():", err);
-      setErrorMsg("⚠️ Microsoft Edge bloqueó la ventana de impresión emergente. Asegúrate de 'Permitir ventanas emergentes' para este sitio en la barra de direcciones superior.");
-      
-      // Fallback a impresión nativa directa en la ventana principal
+      console.warn("Printing failed, trying fallback:", err);
       window.print();
       
       if (autoSendWhatsAppAfter) {
         setTimeout(() => {
           handleWhatsAppSend(false);
-        }, 800);
+        }, 1000);
       }
     }
   };
