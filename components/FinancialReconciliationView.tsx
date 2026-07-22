@@ -1724,51 +1724,97 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
             {isSystemLoadsOpen && (
                 <div className="lg:col-span-4 space-y-4 animate-fade-in">
-                <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
-                    <div className="mb-4 flex flex-col gap-2">
-                        <div className="flex justify-between items-center">
-                            <button onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)} className="text-[10px] sm:text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors"><HistoryIcon className="w-4 h-4 text-accent" /> Cierres de Caja <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} /></button>
-                            {isSystemLoadsOpen && hasMismatches && (
-                                <button 
-                                    onClick={syncAllMismatches}
-                                    className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-[8px] font-black uppercase rounded-lg shadow-sm animate-pulse flex items-center gap-1"
-                                    title="Sincronizar todos los cierres con diferencias"
-                                >
-                                    <ArrowPathIcon className="w-3 h-3" /> Sincronizar Todo
-                                </button>
-                            )}
+                    <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
+                        <div className="mb-4 flex flex-col gap-3">
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
+                                <button onClick={() => setIsSystemLoadsOpen(!isSystemLoadsOpen)} className="text-xs sm:text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2 hover:text-accent transition-colors"><HistoryIcon className="w-4 h-4 text-accent" /> Cierres de Caja <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSystemLoadsOpen ? 'rotate-180' : ''}`} /></button>
+                                {isSystemLoadsOpen && hasMismatches && (
+                                    <button 
+                                        onClick={syncAllMismatches}
+                                        className="px-2 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[8px] font-black uppercase rounded-lg shadow-sm animate-pulse flex items-center gap-1 shrink-0"
+                                        title="Sincronizar todos los cierres con diferencias"
+                                    >
+                                        <ArrowPathIcon className="w-3 h-3" /> Sincronizar Todo
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Combined and Responsive Date Picker ("la fecha") */}
+                            <div className="bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1.5">
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block pl-1">Filtrar por Mes/Año</span>
+                               <div className="flex items-center justify-between gap-1 bg-white dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                                  <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 rounded-lg text-accent transition-all" title="Mes Anterior">
+                                     <ChevronLeftIcon className="w-4 h-4"/>
+                                  </button>
+                                  <div className="flex gap-1 text-center flex-grow justify-center min-w-0">
+                                     <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="bg-transparent text-slate-700 dark:text-slate-200 text-xs font-black outline-none border-0 text-center uppercase cursor-pointer max-w-[100px]">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
+                                     <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-transparent text-slate-700 dark:text-slate-200 text-xs font-black outline-none border-0 text-center cursor-pointer">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                                  </div>
+                                  <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-slate-50 dark:hover:bg-slate-750 rounded-lg text-accent transition-all" title="Siguiente Mes">
+                                     <ChevronRightIcon className="w-4 h-4"/>
+                                  </button>
+                               </div>
+                            </div>
+
+                            {/* Toggle Account Visibility */}
+                            <div className="flex items-center justify-between gap-2">
+                                 <button 
+                                    onClick={() => setShowBothClosures(!showBothClosures)}
+                                    className={`flex-grow py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border flex items-center justify-center gap-1.5
+                                      ${showBothClosures 
+                                        ? 'bg-accent/10 border-accent/20 text-accent shadow-sm' 
+                                        : 'bg-slate-50 dark:bg-slate-850 text-slate-400 border-slate-100 dark:border-slate-750 hover:text-accent'}`}
+                                    title="Ver todas las cuentas al tiempo o solo la seleccionada"
+                                  >
+                                    <SwapIcon className="w-3.5 h-3.5" />
+                                    {showBothClosures ? 'Mostrar solo activa' : 'Mostrar todas las cuentas'}
+                                  </button>
+                            </div>
+
+                            {/* Highly Responsive Tab Grid (Efectivo, QR, Addi, Sistecredito) */}
+                            <div className="space-y-1">
+                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block pl-1">Seleccionar Cuenta</span>
+                               <div className="grid grid-cols-2 gap-1.5">
+                                   <button 
+                                     onClick={() => setClosuresActiveTab('cash')} 
+                                     className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
+                                       ${closuresActiveTab === 'cash' 
+                                         ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/15' 
+                                         : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'}`}
+                                   >
+                                     <span className="text-xs">💵</span> Efectivo
+                                   </button>
+                                   <button 
+                                     onClick={() => setClosuresActiveTab('qr')} 
+                                     className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
+                                       ${closuresActiveTab === 'qr' 
+                                         ? 'bg-blue-500 border-blue-500 text-white shadow-md shadow-blue-500/15' 
+                                         : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'}`}
+                                   >
+                                     <span className="text-xs">📱</span> Pago QR
+                                   </button>
+                                   <button 
+                                     onClick={() => setClosuresActiveTab('addi')} 
+                                     className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
+                                       ${closuresActiveTab === 'addi' 
+                                         ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/15' 
+                                         : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'}`}
+                                   >
+                                     <span className="text-xs">💎</span> Addi
+                                   </button>
+                                   <button 
+                                     onClick={() => setClosuresActiveTab('sistecredito')} 
+                                     className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
+                                       ${closuresActiveTab === 'sistecredito' 
+                                         ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/15' 
+                                         : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'}`}
+                                   >
+                                     <span className="text-xs">💳</span> Sistecredito
+                                   </button>
+                               </div>
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-2">
-                           <div className="flex items-center justify-between bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
-                              <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg text-accent transition-all"><ChevronLeftIcon className="w-5 h-5"/></button>
-                              <div className="text-center flex-grow">
-                                <span className="text-xs font-black uppercase tracking-widest text-gray-700 dark:text-gray-200">{monthNames[selectedMonth]} {selectedYear}</span>
-                              </div>
-                              <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg text-accent transition-all"><ChevronRightIcon className="w-5 h-5"/></button>
-                           </div>
-                           <div className="flex gap-2">
-                              <select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="flex-grow bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none border border-gray-200 dark:border-gray-700">{monthNames.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
-                              <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-[10px] sm:text-xs font-bold outline-none border border-gray-200 dark:border-gray-700">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
-                           </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                             <button 
-                                onClick={() => setShowBothClosures(!showBothClosures)}
-                                className={`px-3 py-2 rounded-lg text-[8px] font-black uppercase transition-all flex items-center gap-1.5 ${showBothClosures ? 'bg-accent text-white shadow-md' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent'}`}
-                                title="Ver cierres de Efectivo y QR al tiempo"
-                             >
-                                <SwapIcon className="w-3 h-3" />
-                                {showBothClosures ? 'Ver Solo Activa' : 'Cargar Ambos'}
-                             </button>
-                        </div>
-                        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mt-1 overflow-x-auto scrollbar-hide">
-                            <button onClick={() => setClosuresActiveTab('cash')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'cash' ? 'bg-white dark:bg-secondary text-accent shadow-sm' : 'text-gray-400'}`}>Efectivo</button>
-                            <button onClick={() => setClosuresActiveTab('qr')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'qr' ? 'bg-white dark:bg-secondary text-blue-600 shadow-sm' : 'text-gray-400'}`}>QR</button>
-                            <button onClick={() => setClosuresActiveTab('addi')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'addi' ? 'bg-white dark:bg-secondary text-indigo-600 shadow-sm' : 'text-gray-400'}`}>Addi</button>
-                            <button onClick={() => setClosuresActiveTab('sistecredito')} className={`flex-1 min-w-[60px] py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${closuresActiveTab === 'sistecredito' ? 'bg-white dark:bg-secondary text-orange-600 shadow-sm' : 'text-gray-400'}`}>Siste</button>
-                        </div>
-                    </div>
-                    {isSystemLoadsOpen && closuresActiveTab === 'sistecredito' && (
+                    {closuresActiveTab === 'sistecredito' && (
                         <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800 animate-fade-in">
                             <p className="text-[10px] font-black text-orange-600 uppercase mb-2 flex items-center gap-1"><HistoryIcon className="w-3 h-3"/> Conciliación por Rango (Sistecredito)</p>
                             <div className="grid grid-cols-2 gap-2 mb-3">
@@ -1854,7 +1900,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             })()}
                         </div>
                     )}
-                    {isSystemLoadsOpen && (
                         <div className="space-y-3 overflow-y-auto pr-1 scrollbar-hide animate-fade-in max-h-[300px] lg:max-h-none">
                             {dailySystemTotals.map((item) => {
                                 const cashRecord = records.find(r => r.id === `daily_auto_${activeStoreId}_cash_${item.date}`);
@@ -2107,7 +2152,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             })}
                             {dailySystemTotals.length === 0 && <p className="text-[10px] text-center text-gray-400 italic py-4">Sin datos en este periodo.</p>}
                         </div>
-                    )}
                 </div>
             </div>
             )}

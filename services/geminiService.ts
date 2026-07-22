@@ -192,3 +192,74 @@ export const getAccountingChatResponse = async (
         throw error;
     }
 };
+
+export const getCeoCenterChatResponse = async (
+  ceoData: any, 
+  history: { role: 'user' | 'model', parts: { text: string }[] }[], 
+  userMessage: string
+): Promise<string> => {
+    const ai = getAiClient();
+    
+    try {
+        const systemInstruction = `
+            Eres "Consultor IA", el Asistente Ejecutivo de Estrategia y Operaciones de "Street/Bombón" (tiendas Bombón Divino, Bombón Metro y Street Legends).
+            
+            **DATOS INTEGRALES DEL NEGOCIO (MULTISEDE):**
+            ${JSON.stringify(ceoData, null, 2)}
+            
+            **TU FILOSOFÍA Y FUNCIÓN:**
+            1. Eres el consultor número uno del CEO. No andas con rodeos ni dashboards vacíos. Das sugerencias claras para tomar DECISIONES.
+            2. Analizas la energía del día registrada por las vendedoras, las preguntas frecuentes de clientes, los productos estrella, los lentos, las alertas y las decisiones que ya se han tomado.
+            3. Si el usuario te pregunta algo, responde basándote en los datos reales de ventas, inventarios, cobros y notas.
+            4. Tu tono es profesional, agudo, con mentalidad de crecimiento, directo y altamente estratégico.
+            
+            Usa Markdown (## para títulos, ### para secciones, ** para valores monetarios).
+            Responde siempre en español.
+        `;
+
+        const chat = ai.chats.create({
+            model: 'gemini-3.5-flash',
+            config: {
+                systemInstruction: systemInstruction,
+            },
+            history: history,
+        });
+
+        const response = await chat.sendMessage({ message: userMessage });
+        return response.text || "No se pudo generar una respuesta.";
+    } catch (error) {
+        console.error("Gemini CEO Chat Error:", error);
+        throw error;
+    }
+};
+
+export const generateProactiveCeoInsights = async (ceoData: any): Promise<string> => {
+    const ai = getAiClient();
+    
+    try {
+        const prompt = `
+            Actúa como "Consultor IA", el Asistente Ejecutivo de Estrategia y Operaciones de "Street/Bombón".
+            Analiza los siguientes datos actuales de las tres sedes del negocio:
+            ${JSON.stringify(ceoData, null, 2)}
+            
+            Genera un mensaje proactivo diario de alto impacto (sin que el CEO te lo pida). Debe contener:
+            1. **Un saludo motivador y directo.**
+            2. **Un insight de oro sobre los datos de hoy/esta semana** (ej. "Metro tiene un pico de energía🟢 pero baja conversión", o "Se registraron 3 preguntas sobre blusas negras en Divino").
+            3. **Una recomendación táctica concreta para hoy** (ej. "Lanza una promoción cruzada", "Mueve stock de X de Divino a Metro").
+            
+            La respuesta debe ser concisa, sumamente valiosa, directo y estructurada en Markdown (máximo 120 palabras).
+            Responde en español.
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-3.5-flash',
+            contents: prompt,
+        });
+        
+        return response.text || "No hay insights disponibles para hoy.";
+    } catch (error) {
+        console.error("Gemini proactive insights error:", error);
+        return "No se pudieron calcular insights proactivos en este momento.";
+    }
+};
+

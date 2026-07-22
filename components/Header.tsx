@@ -87,6 +87,7 @@ const Header: React.FC<HeaderProps> = ({
             { view: View.PURCHASES, label: 'Registro de Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
             { view: View.INVENTORY_TRANSFER, label: 'Traslados Internos', shortLabel: 'Traslados', description: 'Entre sedes', icon: SwapIcon },
             { view: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', shortLabel: 'Auditorías', description: 'Control físico', icon: ClipboardListIcon },
+            { view: View.TAG_SCANNING, label: 'Prendas sin Etiqueta', shortLabel: 'Etiquetas', description: 'Escanear y detectar prendas sin etiqueta', icon: TagIcon },
         ]
     },
     {
@@ -95,6 +96,7 @@ const Header: React.FC<HeaderProps> = ({
         icon: DashboardIcon,
         color: 'text-purple-500',
         items: [
+            { view: View.CEO_CENTER, label: 'CEO Center 💎', shortLabel: 'CEO Center', description: 'Control unificado de las 3 tiendas', icon: SparklesIcon },
             { view: View.DASHBOARD, label: 'Resumen de Negocio', shortLabel: 'Dashboard', description: 'Métricas de ventas y rendimiento', icon: DashboardIcon },
             { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja y Conciliación', shortLabel: 'Libro Caja', description: 'Registro de movimientos diarios', icon: DollarIcon },
             { view: View.ACCOUNTING, label: 'Contabilidad e Informes', shortLabel: 'Contabilidad', description: 'Informes PyG y Auditoría IA', icon: ChartPieIcon },
@@ -111,7 +113,8 @@ const Header: React.FC<HeaderProps> = ({
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
-            if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION || item.view === View.GIFT_VOUCHERS) return isAdmin;
+            if (item.view === View.TAG_SCANNING) return true;
+            if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION || item.view === View.GIFT_VOUCHERS || item.view === View.CEO_CENTER) return isAdmin;
             return userPermissions.includes(item.view);
         })
     })).filter(group => group.items.length > 0);

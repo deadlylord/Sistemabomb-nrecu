@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
+import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, CeoDailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
 import ProductPerformanceModal from './ProductPerformanceModal';
 import CartPanel from './CartPanel';
 import DailySalesReportModal from './DailySalesReportModal';
-import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon } from './Icons';
+import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon, SparklesIcon } from './Icons';
 import CreateIncidentModal from './CreateIncidentModal';
 import EditProductImageModal from './EditProductImageModal';
 import SellVoucherModal from './SellVoucherModal';
@@ -54,6 +54,8 @@ interface PosViewProps {
   onCreateGiftVoucher: (voucher: Omit<GiftVoucher, 'id'>) => Promise<void>;
   onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
   onRegenerateAllSkus?: () => Promise<void>;
+  ceoNotes: CeoDailyNote[];
+  onAddCeoNote: (data: Omit<CeoDailyNote, 'id' | 'createdAt'>) => Promise<void>;
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
@@ -72,6 +74,57 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
+  
+  const [isCeoNoteModalOpen, setIsCeoNoteModalOpen] = useState(false);
+  const [energyLevel, setEnergyLevel] = useState<'green' | 'yellow' | 'red' | null>(null);
+  const [energyObservation, setEnergyObservation] = useState('');
+  const [customerQuestion, setCustomerQuestion] = useState('');
+  const [isSubmittingCeoNote, setIsSubmittingCeoNote] = useState(false);
+  const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(true);
+
+  const handleAddCeoDailyNotes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!energyLevel && !customerQuestion.trim()) {
+      alert("Por favor selecciona un nivel de energía o escribe una pregunta de cliente.");
+      return;
+    }
+    if (energyLevel && energyObservation.length > 100) {
+      alert("La observación de energía no puede superar los 100 caracteres.");
+      return;
+    }
+
+    setIsSubmittingCeoNote(true);
+    try {
+      if (energyLevel) {
+        await props.onAddCeoNote({
+          fecha: new Date().toISOString().split('T')[0],
+          tienda: props.currentStore?.id || 'all',
+          energia: energyLevel,
+          observacion: energyObservation.trim(),
+          usuario: props.currentUser.name
+        });
+      }
+      if (customerQuestion.trim()) {
+        await props.onAddCeoNote({
+          fecha: new Date().toISOString().split('T')[0],
+          tienda: props.currentStore?.id || 'all',
+          pregunta_cliente: customerQuestion.trim(),
+          usuario: props.currentUser.name
+        });
+      }
+      setEnergyLevel(null);
+      setEnergyObservation('');
+      setCustomerQuestion('');
+      setIsCeoNoteModalOpen(false);
+      alert("¡Registro diario enviado con éxito al CEO Center!");
+    } catch (err) {
+      console.error("Error saving daily note:", err);
+      alert("Hubo un error al registrar las notas.");
+    } finally {
+      setIsSubmittingCeoNote(false);
+    }
+  };
+
   const barcodeBufferRef = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastKeyTimeRef = useRef<number>(0);
@@ -470,6 +523,25 @@ const PosView: React.FC<PosViewProps> = (props) => {
   
   const CartAndActionsContent = ({ isMobile = false }) => (
     <div className="space-y-3">
+        {/* Quick link to Tag Scanning Audit */}
+        <div className="bg-indigo-100 dark:bg-indigo-900/70 border border-indigo-500/50 text-indigo-700 dark:text-indigo-300 p-2.5 rounded-xl shadow-sm" role="alert">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base flex-shrink-0">🏷️</span>
+                    <div className="text-[11px] leading-tight min-w-0">
+                        <p className="font-black uppercase tracking-tight text-indigo-800 dark:text-indigo-200">Auditoría de Prendas</p>
+                        <p className="opacity-90 truncate text-[9px]">Escanear y descartar prendas para hallar sin etiquetas.</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => props.onNavigate(View.TAG_SCANNING)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-1 px-2.5 text-[9px] uppercase tracking-wider rounded-lg flex-shrink-0 transition-all shadow-sm shadow-indigo-600/10"
+                >
+                    Comenzar
+                </button>
+            </div>
+        </div>
+
         {(pendingApprovals.length > 0 || activeWarranties.length > 0 || pendingPreOrders.length > 0) && (
             <div className="space-y-2">
                 {(pendingApprovals.length > 0 || activeWarranties.length > 0) && (
@@ -529,28 +601,126 @@ const PosView: React.FC<PosViewProps> = (props) => {
               </div>
           </div>
         )}
-        <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 p-2 rounded-xl shadow-lg flex flex-col sm:flex-row justify-between items-center gap-2">
-            <div className="flex items-center gap-2">
-                <label htmlFor="saleDate" className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Fecha:</label>
-                <input
-                    type="date"
-                    id="saleDate"
-                    value={toYYYYMMDD(saleDate)}
-                    onChange={handleDateChange}
-                    className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full py-1 px-3 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none disabled:opacity-70 disabled:cursor-not-allowed"
-                    aria-label="Fecha de Venta"
-                    disabled={!isAdmin}
-                />
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                <a href={props.currentStore?.addiLink} target="_blank" rel="noopener noreferrer" className="bg-green-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-green-600">Addi</a>
-                <a href={props.currentStore?.sistecreditoLink} target="_blank" rel="noopener noreferrer" className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center text-xs transition-colors duration-300 hover:bg-purple-600">Sistecredito</a>
-                <button onClick={() => setIsIncidentModalOpen(true)} className="bg-orange-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-orange-600"><AlertTriangleIcon className="w-4 h-4"/><span className="hidden sm:inline">Novedad</span></button>
-                <button onClick={props.onOpenVerification} className="bg-blue-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-blue-600"><ClipboardListIcon className="w-4 h-4" /><span className="hidden sm:inline">Verificar</span></button>
-                <button onClick={() => setIsSellVoucherModalOpen(true)} className="bg-pink-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-pink-600"><ShoppingCartIcon className="w-4 h-4"/><span className="hidden sm:inline">Vender Bono</span></button>
-                <button onClick={() => setIsCheckVoucherModalOpen(true)} className="bg-purple-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-purple-600"><SearchIcon className="w-4 h-4"/><span className="hidden sm:inline">Consultar Bono</span></button>
-                <button onClick={() => setIsSalesReportModalOpen(true)} className="bg-teal-500 text-white font-bold py-1.5 px-2.5 rounded-lg flex items-center justify-center space-x-1 text-xs transition-colors duration-300 hover:bg-teal-600"><ChartBarIcon className="w-4 h-4" /><span className="hidden sm:inline">Reporte</span></button>
-            </div>
+        <div className="bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl dark:border dark:border-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-800 overflow-hidden">
+            {/* Cabecera colapsable */}
+            <button 
+                onClick={() => setIsControlPanelCollapsed(!isControlPanelCollapsed)}
+                className="w-full flex items-center justify-between p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                type="button"
+            >
+                <div className="flex items-center gap-2">
+                    <span className="text-sm">⚙️</span>
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">Panel de Control POS</span>
+                </div>
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full select-none">
+                    {isControlPanelCollapsed ? 'Ver opciones ▾' : 'Ocultar ▴'}
+                </span>
+            </button>
+
+            {!isControlPanelCollapsed && (
+                <div className="p-3 pt-1 border-t border-slate-100 dark:border-slate-800/50 space-y-3.5 animate-fade-in">
+                    {/* Fecha de venta */}
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Fecha de Venta</span>
+                        <div className="flex items-center gap-1.5">
+                            <input
+                                type="date"
+                                id="saleDate"
+                                value={toYYYYMMDD(saleDate)}
+                                onChange={handleDateChange}
+                                className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full py-0.5 px-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-accent focus:border-accent outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                                aria-label="Fecha de Venta"
+                                disabled={!isAdmin}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Enlaces de financiación */}
+                    <div className="space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Enlaces de Financiación / Créditos</span>
+                        <div className="grid grid-cols-2 gap-2">
+                            <a 
+                                href={props.currentStore?.addiLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider transition-all duration-200 shadow-sm border border-emerald-500/10 text-center"
+                            >
+                                <span>Portal Addi ↗</span>
+                            </a>
+                            <a 
+                                href={props.currentStore?.sistecreditoLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2 px-2.5 rounded-xl flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider transition-all duration-200 shadow-sm border border-indigo-500/10 text-center"
+                            >
+                                <span>Sistecredito ↗</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Operaciones de tienda */}
+                    <div className="space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Operaciones de Tienda</span>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={props.onOpenVerification} 
+                                className="bg-blue-50/70 hover:bg-blue-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-blue-650 text-blue-600 dark:text-blue-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-blue-200/50 dark:border-slate-700 text-center"
+                                type="button"
+                            >
+                                <ClipboardListIcon className="w-4 h-4 shrink-0" />
+                                <span>Verificar Inventario</span>
+                            </button>
+                            <button 
+                                onClick={() => setIsCeoNoteModalOpen(true)} 
+                                className="bg-pink-50/70 hover:bg-pink-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-pink-650 text-pink-600 dark:text-pink-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-pink-200/50 dark:border-slate-700 text-center"
+                                type="button"
+                            >
+                                <SparklesIcon className="w-4 h-4 shrink-0" />
+                                <span>Registro CEO</span>
+                            </button>
+                            <button 
+                                onClick={() => setIsIncidentModalOpen(true)} 
+                                className="bg-orange-50/70 hover:bg-orange-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-orange-650 text-orange-600 dark:text-orange-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-orange-200/50 dark:border-slate-700 text-center"
+                                type="button"
+                            >
+                                <AlertTriangleIcon className="w-4 h-4 shrink-0" />
+                                <span>Novedades</span>
+                            </button>
+                            <button 
+                                onClick={() => setIsSalesReportModalOpen(true)} 
+                                className="bg-teal-50/70 hover:bg-teal-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-teal-650 text-teal-600 dark:text-teal-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-teal-200/50 dark:border-slate-700 text-center"
+                                type="button"
+                            >
+                                <ChartBarIcon className="w-4 h-4 shrink-0" />
+                                <span>Reporte Diario</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Bonos de regalo */}
+                    <div className="space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Bonos de Regalo</span>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => setIsSellVoucherModalOpen(true)} 
+                                className="bg-purple-50/70 hover:bg-purple-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-purple-650 text-purple-600 dark:text-purple-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-purple-200/50 dark:border-slate-700/50 text-center"
+                                type="button"
+                            >
+                                <ShoppingCartIcon className="w-4 h-4 shrink-0" />
+                                <span>Vender Bono</span>
+                            </button>
+                            <button 
+                                onClick={() => setIsCheckVoucherModalOpen(true)} 
+                                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-slate-200/50 dark:border-slate-700/80 text-center"
+                                type="button"
+                            >
+                                <SearchIcon className="w-4 h-4 shrink-0" />
+                                <span>Consultar Bono</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
         <CartPanel
             cartItems={props.activeCart}
@@ -577,7 +747,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   return (
     <div className="p-4 h-full">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-7 xl:col-span-8 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
+        <div className="lg:col-span-8 xl:col-span-9 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
             <div className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-lg flex flex-col h-full">
                 <div className="flex-shrink-0">
                     <div className="space-y-3 mb-3">
@@ -741,7 +911,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             </div>
         </div>
 
-        <div className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
+        <div className="hidden lg:flex flex-col lg:col-span-4 xl:col-span-3 h-[calc(100vh-68px)] sticky top-[60px]" id="cart-and-actions-container">
              <div className="h-full overflow-y-auto pr-2 space-y-3 -mr-2">
                 {CartAndActionsContent({ isMobile: false })}
             </div>
@@ -858,6 +1028,135 @@ const PosView: React.FC<PosViewProps> = (props) => {
             onUpdateProduct={props.onUpdateProduct}
             isAdmin={isAdmin}
         />
+      )}
+      
+      {isCeoNoteModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200] animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-scale-in">
+            <div className="bg-gradient-to-r from-pink-500 to-indigo-500 p-6 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black tracking-tight">Registro Diario para CEO Center 💎</h3>
+                <p className="text-xs text-white/85 font-medium mt-1">Comparte el pulso diario de la tienda con la dirección</p>
+              </div>
+              <button 
+                onClick={() => setIsCeoNoteModalOpen(false)}
+                className="p-1 rounded-full hover:bg-white/10 transition-colors text-white"
+              >
+                <CrossIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCeoDailyNotes} className="p-6 space-y-6">
+              {/* Sección Energía */}
+              <div className="space-y-3">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  ¿Cómo está la energía de la tienda hoy?
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEnergyLevel('green')}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${
+                      energyLevel === 'green'
+                        ? 'bg-green-500/10 border-green-500 text-green-700 dark:text-green-400 scale-105'
+                        : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl mb-1">🟢</span>
+                    <span className="text-xs font-bold">Excelente</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEnergyLevel('yellow')}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${
+                      energyLevel === 'yellow'
+                        ? 'bg-yellow-500/10 border-yellow-500 text-yellow-700 dark:text-yellow-400 scale-105'
+                        : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl mb-1">🟡</span>
+                    <span className="text-xs font-bold">Atención</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEnergyLevel('red')}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${
+                      energyLevel === 'red'
+                        ? 'bg-red-500/10 border-red-500 text-red-700 dark:text-red-400 scale-105'
+                        : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-2xl mb-1">🔴</span>
+                    <span className="text-xs font-bold">Revisar</span>
+                  </button>
+                </div>
+
+                {energyLevel && (
+                  <div className="space-y-1 animate-fade-in">
+                    <label className="block text-[10px] font-bold text-slate-400">
+                      Observación / Justificación de la energía (Máx 100 caracteres)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={100}
+                      value={energyObservation}
+                      onChange={(e) => setEnergyObservation(e.target.value)}
+                      placeholder="Ej. El equipo tiene súper buena actitud, o Falta personal..."
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none"
+                    />
+                    <div className="text-right text-[9px] text-slate-400">
+                      {energyObservation.length}/100
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sección Preguntas de Clientes */}
+              <div className="space-y-2">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Preguntas Frecuentes o Comentarios de Clientes
+                </label>
+                <textarea
+                  value={customerQuestion}
+                  onChange={(e) => setCustomerQuestion(e.target.value)}
+                  placeholder="Ej. ¿Tienen el vestido rojo en talla L? o ¿Cuándo llegan los nuevos bolsos?..."
+                  rows={3}
+                  className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none resize-none"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Esta información ayuda al CEO Center a tomar decisiones sobre compras, reabastecimiento y catálogo.
+                </p>
+              </div>
+
+              {/* Acciones */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCeoNoteModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCeoNote}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-black text-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1 shadow-md shadow-indigo-500/10 disabled:opacity-55"
+                >
+                  {isSubmittingCeoNote ? (
+                    <span>Guardando...</span>
+                  ) : (
+                    <>
+                      <SparklesIcon className="w-4 h-4" />
+                      <span>Enviar al CEO Center</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

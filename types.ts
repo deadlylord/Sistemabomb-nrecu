@@ -235,6 +235,8 @@ export enum View {
   ACCOUNTING = 'accounting',
   FINANCIAL_RECONCILIATION = 'financial_reconciliation',
   GIFT_VOUCHERS = 'gift_vouchers',
+  CEO_CENTER = 'ceo_center',
+  TAG_SCANNING = 'tag_scanning',
 }
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -255,6 +257,8 @@ export const VIEW_LABELS: Record<View, string> = {
     [View.ACCOUNTING]: 'Contabilidad Inteligente',
     [View.FINANCIAL_RECONCILIATION]: 'Libro de Caja / Conciliación',
     [View.GIFT_VOUCHERS]: 'Bonos de Regalo',
+    [View.CEO_CENTER]: 'CEO Center 💎',
+    [View.TAG_SCANNING]: 'Control de Etiquetas',
 };
 
 export enum PaymentMethod {
@@ -328,6 +332,18 @@ export interface DailyNote {
   content: string;
   seller: string;
   storeId: string;
+}
+
+export interface CeoDailyNote {
+  id: string;
+  fecha: string; // YYYY-MM-DD
+  tienda: string; // storeId
+  energia?: 'green' | 'yellow' | 'red';
+  pregunta_cliente?: string;
+  decision?: string;
+  observacion?: string;
+  usuario: string;
+  createdAt: string; // ISO String
 }
 
 export interface Customer {

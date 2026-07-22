@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -44,6 +44,7 @@ import LoginView from './LoginView';
 import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
+import { CeoCenterView } from './CeoCenterView';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
@@ -56,6 +57,7 @@ import VersionHistoryModal from './VersionHistoryModal';
 import FinancialReconciliationView from './FinancialReconciliationView';
 import GiftVouchersView from './GiftVouchersView';
 import { PwaInstallModal } from './PwaInstallModal';
+import { TagScanningView } from './TagScanningView';
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -97,6 +99,7 @@ const App: React.FC = () => {
   const [layaways, setLayaways] = useState<Layaway[]>([]);
   const [stockTakes, setStockTakes] = useState<StockTake[]>([]);
   const [dailyNotes, setDailyNotes] = useState<DailyNote[]>([]);
+  const [ceoNotes, setCeoNotes] = useState<CeoDailyNote[]>([]);
   const [loginHistory, setLoginHistory] = useState<LoginRecord[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [productHistory, setProductHistory] = useState<ProductHistoryLog[]>([]);
@@ -271,6 +274,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
+    const unsubscribe = attachFirestoreListener(query(collection(db, 'daily_notes')), setCeoNotes);
+    return () => unsubscribe();
+  }, [isAppReady, isAuthReady, currentUser]);
+
+  useEffect(() => {
+    if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
       attachFirestoreListener(query(collection(db, 'categories')), setCategories),
@@ -433,6 +442,9 @@ const App: React.FC = () => {
             break;
         case View.GIFT_VOUCHERS:
             attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
+            break;
+        case View.TAG_SCANNING:
+            attach(storeInventoryQuery, setInventory);
             break;
     }
     return () => unsubscribers.forEach(unsub => unsub());
@@ -1507,6 +1519,15 @@ const App: React.FC = () => {
       await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
   };
 
+  const handleSaveCeoNote = async (data: Omit<CeoDailyNote, 'id' | 'createdAt'>) => {
+    const newRef = doc(collection(db, 'daily_notes'));
+    await setDoc(newRef, {
+      ...data,
+      id: newRef.id,
+      createdAt: new Date().toISOString()
+    });
+  };
+
   const handleUpdateVoucherStatus = async (voucherId: string, status: 'active' | 'redeemed' | 'cancelled') => {
     try {
       await updateDoc(doc(db, 'giftVouchers', voucherId), { status });
@@ -2175,7 +2196,7 @@ const App: React.FC = () => {
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
         {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} />}
+        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
@@ -2236,6 +2257,31 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
             onUpdateVoucherStatus={handleUpdateVoucherStatus} 
             onDeleteVoucher={handleDeleteVoucher}
+          />
+        )}
+        {currentView === View.CEO_CENTER && currentUser && (
+          <CeoCenterView
+            sales={isAdmin ? allSales : sales}
+            layaways={isAdmin ? allLayaways : layaways}
+            inventory={isGlobalMode || isAdmin ? globalInventoryForSearch : inventory}
+            purchases={purchases}
+            expenses={expenses}
+            stores={stores}
+            sellers={sellers}
+            ceoNotes={ceoNotes}
+            currentUser={currentUser}
+            onAddCeoNote={handleSaveCeoNote}
+            onNavigate={setCurrentView}
+            categories={categories}
+          />
+        )}
+        {currentView === View.TAG_SCANNING && currentUser && currentStore && (
+          <TagScanningView
+            inventory={inventory}
+            store={currentStore}
+            currentUser={currentUser}
+            categories={categories}
+            isAdmin={isAdmin}
           />
         )}
       </main>
