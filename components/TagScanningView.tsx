@@ -32,6 +32,19 @@ interface RecentScan {
   quantity: number;
 }
 
+export interface LooseTagCheckResult {
+  id: string;
+  scannedCode: string;
+  timestamp: string;
+  status: 'NOT_IN_SYSTEM' | 'NEEDED' | 'SURPLUS';
+  productName?: string;
+  sku?: string;
+  systemStock?: number;
+  scannedQty?: number;
+  missingTags?: number;
+  notes?: string;
+}
+
 export const TagScanningView: React.FC<TagScanningViewProps> = ({
   inventory,
   store,
@@ -56,6 +69,17 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     type: null,
     message: ''
   });
+
+  // Unknown Code Alert state
+  const [unknownCodeAlert, setUnknownCodeAlert] = useState<string | null>(null);
+
+  // Loose Tag Inspector state
+  const [isLooseTagsModalOpen, setIsLooseTagsModalOpen] = useState(false);
+  const [looseTagInput, setLooseTagInput] = useState('');
+  const [looseTagChecks, setLooseTagChecks] = useState<LooseTagCheckResult[]>([]);
+  const [lastLooseTagResult, setLastLooseTagResult] = useState<LooseTagCheckResult | null>(null);
+  const [looseTagFilter, setLooseTagFilter] = useState<'ALL' | 'NEEDED' | 'SURPLUS' | 'NOT_IN_SYSTEM'>('ALL');
+  const looseTagInputRef = useRef<HTMLInputElement>(null);
 
   // Filter by category state
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -231,10 +255,25 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
     if (!product) {
       playBeep(false);
+
+      // Check if code exists in another store
+      const productInOtherStore = inventory.find(p => 
+        (p.sku && p.sku.toLowerCase() === code) || 
+        p.id.toLowerCase() === code ||
+        p.name.toLowerCase() === code
+      );
+
+      let warnMessage = `🚨 ¡CÓDIGO/PRODUCTO NO EXISTE EN EL SISTEMA! No se encontró ninguna prenda en ${store.name} con el código "${cleanCode}".`;
+      if (productInOtherStore) {
+        warnMessage += ` ⚠️ Nota: Esta prenda ("${productInOtherStore.name}") pertenece a OTRA sede (Tienda ID: ${productInOtherStore.storeId}).`;
+      }
+
       setScanStatus({ 
         type: 'error', 
-        message: `No se encontró ningún producto con el código/SKU "${cleanCode}"` 
+        message: warnMessage 
       });
+
+      setUnknownCodeAlert(cleanCode);
       setScanInput('');
       return;
     }
@@ -279,6 +318,95 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     }
 
     setScanInput('');
+  };
+
+  // Handler for checking loose tags
+  const handleCheckLooseTag = (codeToTest: string) => {
+    if (!codeToTest.trim()) return;
+    const cleanCode = codeToTest.trim();
+    const code = cleanCode.toLowerCase();
+    const timestamp = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Find in current store
+    const product = inventory.find(p => 
+      p.storeId === store.id && 
+      ((p.sku && p.sku.toLowerCase() === code) || 
+       p.id.toLowerCase() === code ||
+       p.name.toLowerCase() === code)
+    );
+
+    if (!product) {
+      const productInOtherStore = inventory.find(p => 
+        (p.sku && p.sku.toLowerCase() === code) || 
+        p.id.toLowerCase() === code ||
+        p.name.toLowerCase() === code
+      );
+      playBeep(false);
+
+      const resultItem: LooseTagCheckResult = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        scannedCode: cleanCode,
+        timestamp,
+        status: 'NOT_IN_SYSTEM',
+        productName: productInOtherStore ? `[Otra Sede] ${productInOtherStore.name}` : 'NO REGISTRADO EN EL SISTEMA',
+        sku: cleanCode,
+        notes: productInOtherStore 
+          ? `🚨 La etiqueta pertenece a otra sede (Tienda ID: ${productInOtherStore.storeId}), no a ${store.name}.`
+          : `🚨 ¡Etiqueta Desconocida! El código/SKU no existe en la base de datos de esta tienda.`
+      };
+
+      setLastLooseTagResult(resultItem);
+      setLooseTagChecks(prev => [resultItem, ...prev]);
+      setLooseTagInput('');
+      if (looseTagInputRef.current) looseTagInputRef.current.focus();
+      return;
+    }
+
+    // Product exists in current store
+    const systemStock = product.stock > 0 ? product.stock : 0;
+    const scannedQty = sessionData?.scannedCounts[product.id] || 0;
+    const pendingTagQty = sessionData?.pendingTagCounts?.[product.id] || 0;
+    
+    // Total missing tags = missing from stock + pending relabeling
+    const missingFromStock = Math.max(0, systemStock - scannedQty);
+    const totalMissingTags = missingFromStock + pendingTagQty;
+
+    if (totalMissingTags > 0) {
+      playBeep(true);
+      const resultItem: LooseTagCheckResult = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        scannedCode: cleanCode,
+        timestamp,
+        status: 'NEEDED',
+        productName: product.name,
+        sku: product.sku || cleanCode,
+        systemStock,
+        scannedQty,
+        missingTags: totalMissingTags,
+        notes: `🟢 ¡ETIQUETA ÚTIL Y NECESARIA! Para la prenda "${product.name}" hacen falta ${totalMissingTags} etiqueta(s) en tienda. Puedes pegársela a una prenda física.`
+      };
+      setLastLooseTagResult(resultItem);
+      setLooseTagChecks(prev => [resultItem, ...prev]);
+    } else {
+      playBeep(false);
+      const resultItem: LooseTagCheckResult = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        scannedCode: cleanCode,
+        timestamp,
+        status: 'SURPLUS',
+        productName: product.name,
+        sku: product.sku || cleanCode,
+        systemStock,
+        scannedQty,
+        missingTags: 0,
+        notes: `⚠️ ETIQUETA SOBRANTE / HUÉRFANA. Para "${product.name}" ya todas las ${systemStock} prendas en tienda están etiquetadas o el stock es 0. Esta etiqueta no hace falta.`
+      };
+      setLastLooseTagResult(resultItem);
+      setLooseTagChecks(prev => [resultItem, ...prev]);
+    }
+
+    setLooseTagInput('');
+    if (looseTagInputRef.current) looseTagInputRef.current.focus();
   };
 
   // Remove/undo a scan count for a product
@@ -717,19 +845,32 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                 </span>
               </div>
 
-              {/* Camera Scanner Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setIsCameraActive(!isCameraActive)}
-                className={`w-full py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md ${
-                  isCameraActive 
-                    ? 'bg-rose-500 hover:bg-rose-600 text-white' 
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
-              >
-                <CameraIcon className="w-4 h-4" />
-                <span>{isCameraActive ? 'Cerrar Cámara' : 'Usar Cámara del Celular'}</span>
-              </button>
+              {/* Scanner Control Buttons: Camera & Loose Tag Verifier */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCameraActive(!isCameraActive)}
+                  className={`w-full py-3 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md ${
+                    isCameraActive 
+                      ? 'bg-rose-500 hover:bg-rose-600 text-white' 
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  <CameraIcon className="w-4 h-4" />
+                  <span>{isCameraActive ? 'Cerrar Cámara' : 'Cámara Celular'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLooseTagsModalOpen(true);
+                    setTimeout(() => looseTagInputRef.current?.focus(), 120);
+                  }}
+                  className="w-full py-3 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all border border-amber-500/30 shadow-sm"
+                >
+                  <span>🔎 Inspector Etiquetas Sueltas</span>
+                </button>
+              </div>
 
               {/* Camera Scanner Live Container */}
               {isCameraActive && (
@@ -1253,6 +1394,262 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Unknown Code Warning Modal */}
+      {unknownCodeAlert && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-rose-500 shadow-2xl max-w-md w-full p-6 text-center space-y-4 animate-scale-up">
+            <div className="w-16 h-16 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mx-auto text-3xl animate-pulse">
+              🚨
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                ¡Producto No Registrado!
+              </h3>
+              <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-1">
+                El código de etiqueta escaneado no existe en el sistema.
+              </p>
+            </div>
+
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-2xl">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Código / SKU Escaneado:</p>
+              <p className="text-base font-black text-rose-700 dark:text-rose-300 font-mono mt-0.5">{unknownCodeAlert}</p>
+            </div>
+
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
+              Esta etiqueta no corresponde a ninguna prenda registrada en la sede <strong>{store.name}</strong>. Por favor verifica si el código fue digitado erróneamente o si es mercancía de otra sede/tienda.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setUnknownCodeAlert(null);
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
+              className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-600/30"
+            >
+              Entendido / Continuar Escaneando
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loose Tag Verifier Modal */}
+      {isLooseTagsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-amber-500/10 text-amber-600 rounded-xl">🏷️</span>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                    Inspector de Etiquetas Sueltas
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                  Escanea con la pistola o digita cualquier etiqueta suelta para saber si <strong>hace falta en tienda</strong> (útil) o si <strong>ya no hay prendas pendientes</strong> (sobrante).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLooseTagsModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Stats Summary */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+                <p className="text-[9px] font-black text-slate-400 uppercase">Revisadas</p>
+                <p className="text-lg font-black text-slate-800 dark:text-white">{looseTagChecks.length}</p>
+              </div>
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase">🟢 Útiles</p>
+                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                  {looseTagChecks.filter(c => c.status === 'NEEDED').length}
+                </p>
+              </div>
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800">
+                <p className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase">⚠️ Sobrantes</p>
+                <p className="text-lg font-black text-amber-600 dark:text-amber-400">
+                  {looseTagChecks.filter(c => c.status === 'SURPLUS').length}
+                </p>
+              </div>
+              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/30 rounded-xl border border-rose-200 dark:border-rose-800">
+                <p className="text-[9px] font-black text-rose-600 dark:text-rose-400 uppercase">🚨 No Existe</p>
+                <p className="text-lg font-black text-rose-600 dark:text-rose-400">
+                  {looseTagChecks.filter(c => c.status === 'NOT_IN_SYSTEM').length}
+                </p>
+              </div>
+            </div>
+
+            {/* Continuous Scanner Input */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCheckLooseTag(looseTagInput);
+              }}
+              className="space-y-2"
+            >
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                Escanear Etiqueta Suelta (Pistola o Teclado):
+              </label>
+              <div className="flex gap-2">
+                <input
+                  ref={looseTagInputRef}
+                  type="text"
+                  value={looseTagInput}
+                  onChange={(e) => setLooseTagInput(e.target.value)}
+                  placeholder="Apunta la pistola o escribe SKU/Código..."
+                  className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl focus:border-amber-500 font-black text-sm uppercase outline-none transition-all"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-3 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md transition-all flex items-center gap-1.5"
+                >
+                  <span>Verificar</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Last Inspection Result Card */}
+            {lastLooseTagResult && (
+              <div className={`p-4 rounded-2xl border space-y-2 animate-scale-up ${
+                lastLooseTagResult.status === 'NEEDED'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                  : lastLooseTagResult.status === 'SURPLUS'
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                  : 'bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                    lastLooseTagResult.status === 'NEEDED'
+                      ? 'bg-emerald-500 text-white'
+                      : lastLooseTagResult.status === 'SURPLUS'
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-rose-500 text-white'
+                  }`}>
+                    {lastLooseTagResult.status === 'NEEDED' && '🟢 ETIQUETA ÚTIL Y REQUERIDA'}
+                    {lastLooseTagResult.status === 'SURPLUS' && '⚠️ ETIQUETA SOBRANTE / HUÉRFANA'}
+                    {lastLooseTagResult.status === 'NOT_IN_SYSTEM' && '🚨 PRODUCTO NO EXISTE EN SISTEMA'}
+                  </span>
+                  <span className="text-[10px] font-bold opacity-70">{lastLooseTagResult.timestamp}</span>
+                </div>
+
+                <div className="pt-1">
+                  <h4 className="text-sm font-black">{lastLooseTagResult.productName}</h4>
+                  <p className="text-[11px] font-bold opacity-80">SKU / Código: {lastLooseTagResult.sku}</p>
+                </div>
+
+                <p className="text-xs font-bold leading-relaxed">{lastLooseTagResult.notes}</p>
+
+                {/* Option to count needed tag into current active session */}
+                {lastLooseTagResult.status === 'NEEDED' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      processCode(lastLooseTagResult.scannedCode, 1);
+                      alert(`✔ Se registró 1 unidad de "${lastLooseTagResult.productName}" en el escaneo activo.`);
+                    }}
+                    className="mt-2 w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm"
+                  >
+                    ✔ Sumar este escaneo a la auditoría activa (+1)
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Inspection History Log */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Historial de Etiquetas Verificadas en esta Sesión
+                </h4>
+                {looseTagChecks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLooseTagChecks([]);
+                      setLastLooseTagResult(null);
+                    }}
+                    className="text-[10px] font-bold text-rose-500 hover:underline"
+                  >
+                    Limpiar lista
+                  </button>
+                )}
+              </div>
+
+              {/* Filter pills */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {(['ALL', 'NEEDED', 'SURPLUS', 'NOT_IN_SYSTEM'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setLooseTagFilter(filter)}
+                    className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${
+                      looseTagFilter === filter
+                        ? 'bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {filter === 'ALL' && `Todas (${looseTagChecks.length})`}
+                    {filter === 'NEEDED' && `🟢 Útiles (${looseTagChecks.filter(c => c.status === 'NEEDED').length})`}
+                    {filter === 'SURPLUS' && `⚠️ Sobrantes (${looseTagChecks.filter(c => c.status === 'SURPLUS').length})`}
+                    {filter === 'NOT_IN_SYSTEM' && `🚨 No Registradas (${looseTagChecks.filter(c => c.status === 'NOT_IN_SYSTEM').length})`}
+                  </button>
+                ))}
+              </div>
+
+              <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {looseTagChecks.length === 0 ? (
+                  <p className="text-xs font-bold text-slate-400 text-center py-6">
+                    Aún no has escaneado ninguna etiqueta suelta.
+                  </p>
+                ) : (
+                  looseTagChecks
+                    .filter(c => looseTagFilter === 'ALL' || c.status === looseTagFilter)
+                    .map((item) => (
+                      <div 
+                        key={item.id}
+                        className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs gap-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-slate-800 dark:text-white truncate">{item.productName}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">SKU: {item.sku} • {item.timestamp}</p>
+                        </div>
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase flex-shrink-0 ${
+                          item.status === 'NEEDED' 
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                            : item.status === 'SURPLUS'
+                            ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                            : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                        }`}>
+                          {item.status === 'NEEDED' && `🟢 Faltan ${item.missingTags} un.`}
+                          {item.status === 'SURPLUS' && `⚠️ Sobran 0 un.`}
+                          {item.status === 'NOT_IN_SYSTEM' && `🚨 No existe`}
+                        </span>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsLooseTagsModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700"
+              >
+                Cerrar Inspector
+              </button>
+            </div>
           </div>
         </div>
       )}
