@@ -1196,30 +1196,51 @@ const App: React.FC = () => {
       if (!currentUser) return;
       const batch = writeBatch(db);
 
+      // Si existía un documento duplicado accidental en la colección 'sales' por ediciones anteriores, lo eliminamos
+      const duplicateSaleRef = doc(db, 'sales', updatedLayaway.id);
+      batch.delete(duplicateSaleRef);
+
       if (originalLayaway.status === 'active' || originalLayaway.status === 'completed') {
           originalLayaway.items.forEach(item => {
-              const productRef = doc(db, 'inventory', item.id);
-              batch.update(productRef, { stock: increment(item.quantity) });
+              if (item && item.id) {
+                  const productRef = doc(db, 'inventory', item.id);
+                  batch.update(productRef, { stock: increment(item.quantity) });
+
+                  const logRef = doc(collection(db, 'productHistory'));
+                  const log: ProductHistoryLog = {
+                      id: logRef.id,
+                      productId: item.id,
+                      productName: item.name,
+                      storeId: originalLayaway.storeId,
+                      changedBy: currentUser.name,
+                      timestamp: new Date().toISOString(),
+                      changeType: ProductChangeType.LAYAWAY_DELETED,
+                      details: `Abono #${originalLayaway.invoiceNumber} editado (producto liberado). Stock devuelto: +${item.quantity}`
+                  };
+                  batch.set(logRef, log);
+              }
           });
       }
 
       if (updatedLayaway.status === 'active' || updatedLayaway.status === 'completed') {
           updatedLayaway.items.forEach(item => {
-              const productRef = doc(db, 'inventory', item.id);
-              batch.update(productRef, { stock: increment(-item.quantity) });
+              if (item && item.id) {
+                  const productRef = doc(db, 'inventory', item.id);
+                  batch.update(productRef, { stock: increment(-item.quantity) });
 
-              const logRef = doc(collection(db, 'productHistory'));
-              const log: ProductHistoryLog = {
-                  id: logRef.id,
-                  productId: item.id,
-                  productName: item.name,
-                  storeId: updatedLayaway.storeId,
-                  changedBy: currentUser.name,
-                  timestamp: new Date().toISOString(),
-                  changeType: ProductChangeType.LAYAWAY_RESERVED,
-                  details: `Abono #${updatedLayaway.invoiceNumber} editado. Inventario sincronizado: -${item.quantity}`
-              };
-              batch.set(logRef, log);
+                  const logRef = doc(collection(db, 'productHistory'));
+                  const log: ProductHistoryLog = {
+                      id: logRef.id,
+                      productId: item.id,
+                      productName: item.name,
+                      storeId: updatedLayaway.storeId,
+                      changedBy: currentUser.name,
+                      timestamp: new Date().toISOString(),
+                      changeType: ProductChangeType.LAYAWAY_RESERVED,
+                      details: `Abono #${updatedLayaway.invoiceNumber} editado (producto reservado). Stock restado: -${item.quantity}`
+                  };
+                  batch.set(logRef, log);
+              }
           });
       }
 
@@ -1630,8 +1651,20 @@ const App: React.FC = () => {
           if (existingStoreIds.includes(storeId)) {
               const existingDoc = snapshot.docs.find(d => (d.data() as Product).storeId === storeId);
               if (existingDoc) {
+                  const currentStock = (existingDoc.data() as Product).stock || 0;
                   batch.update(existingDoc.ref, { 
                       stock: increment(newProductData.stock)
+                  });
+                  const logRef = doc(collection(db, 'productHistory'));
+                  batch.set(logRef, {
+                      id: logRef.id,
+                      productId: existingDoc.id,
+                      productName: inputName,
+                      storeId,
+                      changedBy: currentUser?.name || 'Administrador',
+                      timestamp: new Date().toISOString(),
+                      changeType: ProductChangeType.MANUAL_EDIT,
+                      details: `Incremento de stock por adición: +${newProductData.stock} (antes: ${currentStock})`
                   });
               }
           } else {
@@ -1646,6 +1679,18 @@ const App: React.FC = () => {
                   storeId, 
                   isDisabled: false 
               }));
+
+              const logRef = doc(collection(db, 'productHistory'));
+              batch.set(logRef, {
+                  id: logRef.id,
+                  productId: newRef.id,
+                  productName: inputName,
+                  storeId,
+                  changedBy: currentUser?.name || 'Administrador',
+                  timestamp: new Date().toISOString(),
+                  changeType: ProductChangeType.CREATED,
+                  details: `Creación de producto. Stock inicial: ${newProductData.stock || 0}`
+              });
           }
       });
       await batch.commit();
@@ -1792,6 +1837,18 @@ const App: React.FC = () => {
           
           const newRef = doc(collection(db, 'inventory'));
           batch.set(newRef, cleanObject({ ...p, id: newRef.id, sku, storeId, isDisabled: false }));
+
+          const logRef = doc(collection(db, 'productHistory'));
+          batch.set(logRef, {
+              id: logRef.id,
+              productId: newRef.id,
+              productName: p.name || 'Producto',
+              storeId,
+              changedBy: currentUser?.name || 'Administrador',
+              timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.CREATED,
+              details: `Creación masiva de producto. Stock inicial: ${p.stock || 0}`
+          });
       });
       await batch.commit();
   };
@@ -2195,7 +2252,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
-        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
+        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}

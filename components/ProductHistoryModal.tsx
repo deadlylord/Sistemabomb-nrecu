@@ -70,9 +70,20 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
       
       if (oldMatch) {
         currentRunningStock = parseInt(oldMatch[1], 10);
+      } else {
+        const diffMatch = log.details.match(/Ajuste stock:\s*([-+]?\d+)/i);
+        if (diffMatch) {
+          const diff = parseInt(diffMatch[1], 10);
+          currentRunningStock -= diff;
+        }
       }
     } else if (log.changeType === ProductChangeType.CREATED) {
-      currentRunningStock = 0;
+      const initialStockMatch = log.details.match(/Stock inicial: (\d+)/i);
+      if (initialStockMatch) {
+        currentRunningStock = parseInt(initialStockMatch[1], 10);
+      } else {
+        currentRunningStock = 0;
+      }
     }
 
     return { ...log, balanceAfter };
