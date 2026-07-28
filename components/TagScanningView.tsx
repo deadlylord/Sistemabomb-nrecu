@@ -46,6 +46,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     updatedAt: string;
     scannedCounts: Record<string, number>;
     pendingTagCounts?: Record<string, number>;
+    scanHistory?: RecentScan[];
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -115,9 +116,23 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     
     const unsubscribe = onSnapshot(sessionDocRef, (snapshot) => {
       if (snapshot.exists()) {
-        setSessionData(snapshot.data() as any);
+        const data = snapshot.data() as any;
+        setSessionData(data);
+        if (data.scanHistory && Array.isArray(data.scanHistory)) {
+          setRecentScans(data.scanHistory);
+          try {
+            localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(data.scanHistory));
+          } catch (e) {}
+        } else {
+          const saved = localStorage.getItem(`tag_scans_${store.id}`);
+          if (saved) {
+            try { setRecentScans(JSON.parse(saved)); } catch (e) {}
+          }
+        }
       } else {
         setSessionData(null);
+        setRecentScans([]);
+        localStorage.removeItem(`tag_scans_${store.id}`);
       }
       setIsLoading(false);
     }, (error) => {
@@ -143,10 +158,13 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         storeId: store.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        scannedCounts: {}
+        scannedCounts: {},
+        pendingTagCounts: {},
+        scanHistory: []
       };
       await setDoc(sessionDocRef, newSession);
       setRecentScans([]);
+      localStorage.removeItem(`tag_scans_${store.id}`);
       setScanStatus({ type: 'success', message: '¡Sesión de identificación de etiquetas iniciada con éxito!' });
     } catch (error) {
       console.error("Error starting session:", error);
@@ -163,6 +181,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       await deleteDoc(sessionDocRef);
       setSessionData(null);
       setRecentScans([]);
+      localStorage.removeItem(`tag_scans_${store.id}`);
       setIsCameraActive(false);
       setScanStatus({ type: null, message: '' });
     } catch (error) {
@@ -223,10 +242,23 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     const currentCount = sessionData.scannedCounts[product.id] || 0;
     const newCount = currentCount + qtyToAdd;
 
+    const newScanEntry: RecentScan = {
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      productId: product.id,
+      productName: product.name,
+      sku: product.sku || 'N/A',
+      timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      quantity: newCount
+    };
+
+    const currentHistory = sessionData.scanHistory || recentScans || [];
+    const updatedHistory = [newScanEntry, ...currentHistory].slice(0, 100);
+
     try {
       const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
       await updateDoc(sessionDocRef, {
         [`scannedCounts.${product.id}`]: newCount,
+        scanHistory: updatedHistory,
         updatedAt: new Date().toISOString()
       });
 
@@ -236,18 +268,10 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         message: `✔ ${product.name} (SKU: ${product.sku || 'N/A'}): +${qtyToAdd} ${qtyToAdd === 1 ? 'unidad' : 'unidades'} sumada(s). Total escaneado: #${newCount}.`
       });
 
-      // Add to local recent scans
-      setRecentScans(prev => [
-        {
-          id: Date.now().toString(),
-          productId: product.id,
-          productName: product.name,
-          sku: product.sku || 'N/A',
-          timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          quantity: newCount
-        },
-        ...prev.slice(0, 9)
-      ]);
+      setRecentScans(updatedHistory);
+      try {
+        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+      } catch (e) {}
     } catch (error) {
       console.error("Error logging scan:", error);
       playBeep(false);
@@ -265,10 +289,14 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     if (currentCount <= 0) return;
 
     const newCount = Math.max(0, currentCount - qtyToRemove);
+    const currentHistory = sessionData.scanHistory || recentScans || [];
+    const updatedHistory = currentHistory.filter(s => s.productId !== productId);
+
     try {
       const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
       await updateDoc(sessionDocRef, {
         [`scannedCounts.${productId}`]: newCount,
+        scanHistory: updatedHistory,
         updatedAt: new Date().toISOString()
       });
 
@@ -278,7 +306,10 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         message: `✔ Se descontó ${qtyToRemove} escaneo de "${product?.name || 'Prenda'}". Total escaneado ahora: #${newCount}.`
       });
 
-      setRecentScans(prev => prev.filter(s => s.productId !== productId));
+      setRecentScans(updatedHistory);
+      try {
+        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+      } catch (e) {}
     } catch (err) {
       console.error("Error removing scan count:", err);
       alert("No se pudo deshacer el escaneo.");
@@ -342,6 +373,19 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       const currentPending = sessionData.pendingTagCounts?.[correctId] || 0;
       updates[`pendingTagCounts.${correctId}`] = currentPending + qty;
 
+      // 4. Update scanHistory log in Firestore
+      const newScanItem: RecentScan = {
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        productId: correctId,
+        productName: `⚠️ [Corr. Etiqueta] ${selectedCorrectProduct.name}`,
+        sku: selectedCorrectProduct.sku || 'N/A',
+        timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        quantity: qty
+      };
+      const currentHistory = sessionData.scanHistory || recentScans || [];
+      const updatedHistory = [newScanItem, ...currentHistory].slice(0, 100);
+      updates.scanHistory = updatedHistory;
+
       await updateDoc(sessionDocRef, updates);
 
       playBeep(true);
@@ -353,18 +397,10 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         message: `✔ CORRECCIÓN REGISTRADA: ${wrongId ? `Se descontaron ${qty} un. a "${wrongName}" y ` : ''}se sumó "${selectedCorrectProduct.name}" a las prendas físicas identificadas (MARCADA COMO PENDIENTE DE NUEVA ETIQUETA 🏷️).`
       });
 
-      // Add log entry to recent scans
-      setRecentScans(prev => [
-        {
-          id: Date.now().toString(),
-          productId: correctId,
-          productName: `⚠️ [Corr. Etiqueta] ${selectedCorrectProduct.name}`,
-          sku: selectedCorrectProduct.sku || 'N/A',
-          timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          quantity: qty
-        },
-        ...prev.slice(0, 9)
-      ]);
+      setRecentScans(updatedHistory);
+      try {
+        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+      } catch (e) {}
 
       // Reset & close modal
       setIsWrongTagModalOpen(false);
@@ -837,16 +873,25 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
             {/* List of recent scans */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700/60 shadow-sm space-y-4">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                Tus Escaneos Recientes
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <span>Tus Escaneos Recientes</span>
+                  <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full text-[10px]">
+                    {recentScans.length}
+                  </span>
+                </h3>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Guardado permanente
+                </span>
+              </div>
               
               {recentScans.length === 0 ? (
                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500 text-center py-6">
                   Aún no has escaneado ninguna prenda en esta sesión.
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
                   {recentScans.map((scan) => (
                     <div 
                       key={scan.id} 
