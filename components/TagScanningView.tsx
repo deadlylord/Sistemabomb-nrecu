@@ -54,6 +54,9 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     message: ''
   });
 
+  // Filter by category state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+
   // Camera Scanner State
   const [scanQuantity, setScanQuantity] = useState<number>(1);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -344,8 +347,12 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       missingTags: number;
     }[] = [];
 
-    // Filter enabled products for this store
-    const storeProducts = inventory.filter(p => !p.isDisabled && p.storeId === store.id);
+    // Filter enabled products for this store and category filter
+    const storeProducts = inventory.filter(p => {
+      if (p.isDisabled || p.storeId !== store.id) return false;
+      if (selectedCategoryId !== 'all' && p.categoryId !== selectedCategoryId) return false;
+      return true;
+    });
 
     storeProducts.forEach(product => {
       const stock = product.stock > 0 ? product.stock : 0;
@@ -384,7 +391,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       progressPercent,
       missingProducts: missingProductsList
     };
-  }, [inventory, sessionData]);
+  }, [inventory, sessionData, selectedCategoryId, store.id]);
 
   // Open printing wizard for a single product
   const handlePrintSingle = (product: Product, missingQty: number) => {
@@ -473,7 +480,60 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         </div>
       ) : (
         /* Active Scanning Session View */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="space-y-6">
+          {/* Category Filter Bar */}
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-100 dark:border-slate-700/60 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs">🏷️</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Filtrar Auditoría por Categoría:
+                </span>
+              </div>
+              {selectedCategoryId !== 'all' && (
+                <button 
+                  type="button" 
+                  onClick={() => setSelectedCategoryId('all')}
+                  className="text-[10px] font-black text-accent hover:underline flex items-center gap-1"
+                >
+                  <span>Ver Todas las Categorías</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-1 scrollbar-thin">
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryId('all')}
+                className={`px-3.5 py-1.5 rounded-xl font-black text-xs whitespace-nowrap transition-all ${
+                  selectedCategoryId === 'all'
+                    ? 'bg-slate-900 text-white dark:bg-accent dark:text-white shadow-sm ring-2 ring-accent/30'
+                    : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                }`}
+              >
+                Todas las Categorías ({inventory.filter(p => !p.isDisabled && p.storeId === store.id).length})
+              </button>
+              {categories.map((cat) => {
+                const count = inventory.filter(p => !p.isDisabled && p.storeId === store.id && p.categoryId === cat.id).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedCategoryId(cat.id)}
+                    className={`px-3.5 py-1.5 rounded-xl font-black text-xs whitespace-nowrap transition-all ${
+                      selectedCategoryId === cat.id
+                        ? 'bg-accent text-white shadow-sm ring-2 ring-accent/30'
+                        : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {cat.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* LEFT AREA: Scanners / Form (All roles) */}
           <div className={`${isAdmin ? 'lg:col-span-5' : 'lg:col-span-12'} space-y-6`}>
@@ -810,6 +870,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
             </div>
           )}
 
+          </div>
         </div>
       )}
 
