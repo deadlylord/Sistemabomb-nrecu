@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { Product, Store, Category, Seller } from '../types';
 import { 
-  CheckIcon, TagIcon, SparklesIcon, PackageIcon, AlertTriangleIcon, RefreshIcon, PlayIcon, CameraIcon
+  CheckIcon, TagIcon, SparklesIcon, PackageIcon, AlertTriangleIcon, RefreshIcon, PlayIcon, CameraIcon, SearchIcon, CrossIcon, TrashIcon
 } from './Icons';
 import { formatCOP } from '../constants';
 import { LabelPrintModal } from './LabelPrintModal';
@@ -25,6 +25,7 @@ interface TagScanningViewProps {
 
 interface RecentScan {
   id: string;
+  productId?: string;
   productName: string;
   sku: string;
   timestamp: string;
@@ -44,6 +45,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     createdAt: string;
     updatedAt: string;
     scannedCounts: Record<string, number>;
+    pendingTagCounts?: Record<string, number>;
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +58,13 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
   // Filter by category state
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
+
+  // Wrong Tag Modal state
+  const [isWrongTagModalOpen, setIsWrongTagModalOpen] = useState(false);
+  const [wrongTagProductId, setWrongTagProductId] = useState<string>('');
+  const [correctTagSearch, setCorrectTagSearch] = useState<string>('');
+  const [selectedCorrectProduct, setSelectedCorrectProduct] = useState<Product | null>(null);
+  const [wrongTagQty, setWrongTagQty] = useState<number>(1);
 
   // Camera Scanner State
   const [scanQuantity, setScanQuantity] = useState<number>(1);
@@ -231,6 +240,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       setRecentScans(prev => [
         {
           id: Date.now().toString(),
+          productId: product.id,
           productName: product.name,
           sku: product.sku || 'N/A',
           timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -245,6 +255,128 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     }
 
     setScanInput('');
+  };
+
+  // Remove/undo a scan count for a product
+  const handleRemoveScanCount = async (productId: string, qtyToRemove: number = 1) => {
+    if (!sessionData) return;
+    const product = inventory.find(p => p.id === productId);
+    const currentCount = sessionData.scannedCounts[productId] || 0;
+    if (currentCount <= 0) return;
+
+    const newCount = Math.max(0, currentCount - qtyToRemove);
+    try {
+      const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
+      await updateDoc(sessionDocRef, {
+        [`scannedCounts.${productId}`]: newCount,
+        updatedAt: new Date().toISOString()
+      });
+
+      playBeep(false);
+      setScanStatus({
+        type: 'success',
+        message: `✔ Se descontó ${qtyToRemove} escaneo de "${product?.name || 'Prenda'}". Total escaneado ahora: #${newCount}.`
+      });
+
+      setRecentScans(prev => prev.filter(s => s.productId !== productId));
+    } catch (err) {
+      console.error("Error removing scan count:", err);
+      alert("No se pudo deshacer el escaneo.");
+    }
+  };
+
+  // Open Wrong Tag correction modal
+  const handleOpenWrongTagModal = (wrongProdId?: string) => {
+    setWrongTagProductId(wrongProdId || '');
+    setCorrectTagSearch('');
+    setSelectedCorrectProduct(null);
+    setWrongTagQty(1);
+    setIsWrongTagModalOpen(true);
+  };
+
+  // Search results for correct product selection in Wrong Tag Modal
+  const filteredCorrectProducts = useMemo(() => {
+    if (!correctTagSearch.trim()) return [];
+    const q = correctTagSearch.toLowerCase().trim();
+    return inventory
+      .filter(p => !p.isDisabled && p.storeId === store.id)
+      .filter(p => 
+        p.name.toLowerCase().includes(q) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
+        p.id.toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+  }, [inventory, store.id, correctTagSearch]);
+
+  // Submit Wrong Tag report / correction
+  const handleReportWrongTagSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sessionData) return;
+
+    if (!selectedCorrectProduct) {
+      alert("Por favor busca y selecciona la prenda física real que tienes en las manos.");
+      return;
+    }
+
+    const qty = Math.max(1, wrongTagQty);
+    const correctId = selectedCorrectProduct.id;
+    const wrongId = wrongTagProductId;
+
+    try {
+      const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
+      const updates: any = {
+        updatedAt: new Date().toISOString()
+      };
+
+      // 1. Decrement wrong product scan count if a wrong product was selected
+      if (wrongId && sessionData.scannedCounts[wrongId]) {
+        const currentWrong = sessionData.scannedCounts[wrongId] || 0;
+        updates[`scannedCounts.${wrongId}`] = Math.max(0, currentWrong - qty);
+      }
+
+      // 2. Increment correct product scan count (counts as physically present in physical inventory!)
+      const currentCorrectScanned = sessionData.scannedCounts[correctId] || 0;
+      updates[`scannedCounts.${correctId}`] = currentCorrectScanned + qty;
+
+      // 3. Increment correct product pendingTagCounts (flagged as pending a correct tag!)
+      const currentPending = sessionData.pendingTagCounts?.[correctId] || 0;
+      updates[`pendingTagCounts.${correctId}`] = currentPending + qty;
+
+      await updateDoc(sessionDocRef, updates);
+
+      playBeep(true);
+      const wrongProductObj = inventory.find(p => p.id === wrongId);
+      const wrongName = wrongProductObj ? wrongProductObj.name : 'Etiqueta Errónea';
+
+      setScanStatus({
+        type: 'success',
+        message: `✔ CORRECCIÓN REGISTRADA: ${wrongId ? `Se descontaron ${qty} un. a "${wrongName}" y ` : ''}se sumó "${selectedCorrectProduct.name}" a las prendas físicas identificadas (MARCADA COMO PENDIENTE DE NUEVA ETIQUETA 🏷️).`
+      });
+
+      // Add log entry to recent scans
+      setRecentScans(prev => [
+        {
+          id: Date.now().toString(),
+          productId: correctId,
+          productName: `⚠️ [Corr. Etiqueta] ${selectedCorrectProduct.name}`,
+          sku: selectedCorrectProduct.sku || 'N/A',
+          timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          quantity: qty
+        },
+        ...prev.slice(0, 9)
+      ]);
+
+      // Reset & close modal
+      setIsWrongTagModalOpen(false);
+      setWrongTagProductId('');
+      setCorrectTagSearch('');
+      setSelectedCorrectProduct(null);
+      setWrongTagQty(1);
+
+    } catch (err) {
+      console.error("Error submitting wrong tag report:", err);
+      alert("Ocurrió un error al procesar la corrección de etiqueta.");
+    }
   };
 
   const handleScanSubmit = (e: React.FormEvent) => {
@@ -344,6 +476,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       product: Product;
       systemStock: number;
       scannedQty: number;
+      pendingTagQty: number;
       missingTags: number;
     }[] = [];
 
@@ -357,25 +490,23 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     storeProducts.forEach(product => {
       const stock = product.stock > 0 ? product.stock : 0;
       const scanned = sessionData.scannedCounts[product.id] || 0;
+      const pendingTagQty = sessionData.pendingTagCounts?.[product.id] || 0;
+
       totalSystemStock += stock;
       totalScanned += scanned;
 
-      if (scanned < stock) {
-        const missing = stock - scanned;
-        totalMissing += missing;
+      const missingFromStock = Math.max(0, stock - scanned);
+      const missing = missingFromStock + pendingTagQty;
+
+      totalMissing += missingFromStock + pendingTagQty;
+
+      if (missing > 0 || scanned !== stock || pendingTagQty > 0) {
         missingProductsList.push({
           product,
           systemStock: stock,
           scannedQty: scanned,
+          pendingTagQty,
           missingTags: missing
-        });
-      } else if (scanned > stock) {
-        // Excedent
-        missingProductsList.push({
-          product,
-          systemStock: stock,
-          scannedQty: scanned,
-          missingTags: 0 // No labels missing
         });
       }
     });
@@ -677,6 +808,14 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                 >
                   <span>Registrar Escaneo (+{scanQuantity})</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenWrongTagModal()}
+                  className="w-full py-2.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-black text-[11px] uppercase tracking-wider rounded-2xl border border-amber-500/30 flex items-center justify-center gap-2 transition-all"
+                >
+                  <span>⚠️ ¿Etiqueta Equivocada en Prenda? Reportar Aquí</span>
+                </button>
               </form>
 
               {/* Real-time scanning feedback */}
@@ -711,17 +850,36 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                   {recentScans.map((scan) => (
                     <div 
                       key={scan.id} 
-                      className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 animate-slide-in-right"
+                      className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 animate-slide-in-right gap-2"
                     >
-                      <div className="min-w-0 pr-2">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-black text-slate-700 dark:text-slate-300 truncate">{scan.productName}</p>
-                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">SKU: {scan.sku}</p>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">SKU: {scan.sku} • {scan.timestamp}</p>
                       </div>
-                      <div className="text-right flex-shrink-0">
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {scan.productId && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWrongTagModal(scan.productId)}
+                              className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-lg transition-colors flex items-center gap-1"
+                              title="Reportar que esta etiqueta pertenece a otra prenda"
+                            >
+                              <span>⚠️ Mala</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveScanCount(scan.productId!, 1)}
+                              className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg transition-colors"
+                              title="Deshacer / eliminar 1 escaneo"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                         <span className="inline-block bg-accent/10 text-accent font-black text-[10px] px-2 py-0.5 rounded-full">
                           #{scan.quantity}
                         </span>
-                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">{scan.timestamp}</p>
                       </div>
                     </div>
                   ))}
@@ -818,11 +976,16 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800 text-xs">
-                          {stats.missingProducts.map(({ product, systemStock, scannedQty, missingTags }) => (
+                          {stats.missingProducts.map(({ product, systemStock, scannedQty, pendingTagQty, missingTags }) => (
                             <tr key={product.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/10">
                               <td className="p-3">
                                 <p className="font-black text-slate-800 dark:text-white truncate max-w-[150px]">{product.name}</p>
                                 <p className="text-[10px] text-slate-400 font-bold mt-0.5">{product.sku || 'Sin SKU'}</p>
+                                {pendingTagQty > 0 && (
+                                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-black border border-amber-500/20">
+                                    ⚠️ {pendingTagQty} {pendingTagQty === 1 ? 'etiqueta errónea reportada' : 'etiquetas erróneas reportadas'}
+                                  </span>
+                                )}
                               </td>
                               <td className="p-3 text-slate-500 font-bold dark:text-slate-400">
                                 {getCategoryName(product.categoryId)}
@@ -870,6 +1033,181 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
             </div>
           )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Reporting Wrong Tag / Re-labeling */}
+      {isWrongTagModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 space-y-5 my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-black">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-tight">
+                    Corregir Etiqueta Equivocada
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Re-asigna el escaneo a la prenda física real y la marca como pendiente de nueva etiqueta.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWrongTagModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <CrossIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReportWrongTagSubmit} className="space-y-4">
+              {/* Step 1: Wrong tag product (if any) */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  1. Prenda de la Etiqueta Mal Escaneada (Se le restará el escaneo):
+                </label>
+                <select
+                  value={wrongTagProductId}
+                  onChange={(e) => setWrongTagProductId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">-- Ninguna / Solo registrar prenda sin etiqueta válida --</option>
+                  {inventory
+                    .filter(p => p.storeId === store.id && (sessionData?.scannedCounts[p.id] || 0) > 0)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (SKU: {p.sku || 'N/A'}) - Escaneados: #{sessionData?.scannedCounts[p.id]}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[9px] text-slate-400 font-medium">
+                  Si escaneaste la etiqueta pegada en la prenda equivocada, selecciónala arriba para descontarla.
+                </p>
+              </div>
+
+              {/* Step 2: Search for the correct product */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  2. Prenda Física Real que tienes en las manos (Se le sumará la presencia física):
+                </label>
+
+                {selectedCorrectProduct ? (
+                  <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl">
+                    <div>
+                      <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Prenda Seleccionada ✔</span>
+                      <p className="text-xs font-black text-slate-800 dark:text-white">{selectedCorrectProduct.name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">SKU: {selectedCorrectProduct.sku || 'N/A'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCorrectProduct(null)}
+                      className="px-2 py-1 bg-white dark:bg-slate-800 text-slate-500 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 hover:text-rose-500"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={correctTagSearch}
+                        onChange={(e) => setCorrectTagSearch(e.target.value)}
+                        placeholder="Buscar prenda real por nombre, SKU o referencia..."
+                        className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-accent"
+                      />
+                      <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    </div>
+
+                    {/* Search results */}
+                    {correctTagSearch.trim() && (
+                      <div className="max-h-[160px] overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                        {filteredCorrectProducts.length === 0 ? (
+                          <p className="text-[11px] font-bold text-slate-400 text-center py-4">
+                            No se encontró ninguna prenda con "{correctTagSearch}"
+                          </p>
+                        ) : (
+                          filteredCorrectProducts.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setSelectedCorrectProduct(p)}
+                              className="w-full p-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors flex items-center justify-between"
+                            >
+                              <div>
+                                <p className="text-xs font-black text-slate-800 dark:text-white">{p.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">SKU: {p.sku || 'N/A'}</p>
+                              </div>
+                              <span className="text-[10px] font-black text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+                                Seleccionar
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Step 3: Quantity */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  3. Cantidad de prendas afectando:
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWrongTagQty(prev => Math.max(1, prev - 1))}
+                    className="w-8 h-8 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-800 dark:text-white font-black text-sm rounded-lg"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    value={wrongTagQty}
+                    onChange={(e) => setWrongTagQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 py-1.5 text-center font-black text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWrongTagQty(prev => prev + 1)}
+                    className="w-8 h-8 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-800 dark:text-white font-black text-sm rounded-lg"
+                  >
+                    +
+                  </button>
+                  <span className="text-[10px] font-bold text-slate-400 ml-2">unidades</span>
+                </div>
+              </div>
+
+              {/* Submit / Cancel Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setIsWrongTagModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-black text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 uppercase"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedCorrectProduct}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-black text-white uppercase tracking-wider shadow-md transition-all ${
+                    selectedCorrectProduct 
+                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20' 
+                      : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  ✔ Registrar Corrección (Pendiente Etiqueta)
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
