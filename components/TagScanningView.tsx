@@ -9,10 +9,11 @@ import {
 } from 'firebase/firestore';
 import { Product, Store, Category, Seller } from '../types';
 import { 
-  CheckIcon, TagIcon, SparklesIcon, PackageIcon, AlertTriangleIcon, RefreshIcon, PlayIcon
+  CheckIcon, TagIcon, SparklesIcon, PackageIcon, AlertTriangleIcon, RefreshIcon, PlayIcon, CameraIcon
 } from './Icons';
 import { formatCOP } from '../constants';
 import { LabelPrintModal } from './LabelPrintModal';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface TagScanningViewProps {
   inventory: Product[];
@@ -52,6 +53,12 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     type: null,
     message: ''
   });
+
+  // Camera Scanner State
+  const [scanQuantity, setScanQuantity] = useState<number>(1);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const lastScannedCodeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
+  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
 
   // Label print state
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -111,10 +118,10 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
   // Auto focus input field on mount or when status changes
   useEffect(() => {
-    if (sessionData && inputRef.current) {
+    if (sessionData && inputRef.current && !isCameraActive) {
       inputRef.current.focus();
     }
-  }, [sessionData, scanStatus]);
+  }, [sessionData, scanStatus, isCameraActive]);
 
   const handleStartSession = async () => {
     try {
@@ -144,6 +151,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       await deleteDoc(sessionDocRef);
       setSessionData(null);
       setRecentScans([]);
+      setIsCameraActive(false);
       setScanStatus({ type: null, message: '' });
     } catch (error) {
       console.error("Error resetting session:", error);
@@ -151,12 +159,36 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     }
   };
 
-  const handleScanSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scanInput.trim() || !sessionData) return;
+  // Core code processing logic (used both by manual input, barcode gun, and camera scan)
+  const processCode = async (rawCode: string, overrideQty?: number) => {
+    if (!rawCode.trim() || !sessionData) return;
 
-    const rawCode = scanInput.trim();
-    const code = rawCode.toLowerCase();
+    let qtyToAdd = overrideQty ?? scanQuantity;
+    let cleanCode = rawCode.trim();
+
+    // Support multiplier notation directly in text input (e.g. "5*SKU123", "SKU123*5", "5xSKU123")
+    if (cleanCode.includes('*')) {
+      const parts = cleanCode.split('*');
+      if (parts.length === 2) {
+        if (!isNaN(Number(parts[0])) && Number(parts[0]) > 0) {
+          qtyToAdd = Math.floor(Number(parts[0]));
+          cleanCode = parts[1].trim();
+        } else if (!isNaN(Number(parts[1])) && Number(parts[1]) > 0) {
+          qtyToAdd = Math.floor(Number(parts[1]));
+          cleanCode = parts[0].trim();
+        }
+      }
+    } else if (cleanCode.toLowerCase().includes('x') && /^\d+x/i.test(cleanCode)) {
+      const parts = cleanCode.split(/x/i);
+      if (parts.length === 2 && !isNaN(Number(parts[0])) && Number(parts[0]) > 0) {
+        qtyToAdd = Math.floor(Number(parts[0]));
+        cleanCode = parts[1].trim();
+      }
+    }
+
+    if (!qtyToAdd || qtyToAdd < 1) qtyToAdd = 1;
+
+    const code = cleanCode.toLowerCase();
 
     // Look up in inventory for matching SKU or product ID belonging to this store
     const product = inventory.find(p => 
@@ -170,26 +202,26 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       playBeep(false);
       setScanStatus({ 
         type: 'error', 
-        message: `No se encontró ningún producto con el código/SKU "${rawCode}"` 
+        message: `No se encontró ningún producto con el código/SKU "${cleanCode}"` 
       });
       setScanInput('');
       return;
     }
 
     const currentCount = sessionData.scannedCounts[product.id] || 0;
-    const newCount = currentCount + 1;
+    const newCount = currentCount + qtyToAdd;
 
     try {
       const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
       await updateDoc(sessionDocRef, {
-        [`scannedCounts.${product.id}`]: currentCount + 1,
+        [`scannedCounts.${product.id}`]: newCount,
         updatedAt: new Date().toISOString()
       });
 
       playBeep(true);
       setScanStatus({
         type: 'success',
-        message: `✔ ${product.name} (SKU: ${product.sku}) descartado. Escaneado #${newCount}.`
+        message: `✔ ${product.name} (SKU: ${product.sku || 'N/A'}): +${qtyToAdd} ${qtyToAdd === 1 ? 'unidad' : 'unidades'} sumada(s). Total escaneado: #${newCount}.`
       });
 
       // Add to local recent scans
@@ -211,6 +243,86 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
     setScanInput('');
   };
+
+  const handleScanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    processCode(scanInput);
+  };
+
+  // Camera Scanner Lifecycle
+  useEffect(() => {
+    let isMounted = true;
+
+    if (isCameraActive && sessionData) {
+      // Small timeout to allow DOM element #reader-camera-tags to be rendered
+      const timer = setTimeout(() => {
+        if (!isMounted) return;
+        try {
+          const html5Qrcode = new Html5Qrcode("reader-camera-tags");
+          html5QrcodeRef.current = html5Qrcode;
+
+          const config = { 
+            fps: 12, 
+            qrbox: { width: 260, height: 180 },
+            aspectRatio: 1.0 
+          };
+
+          html5Qrcode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              if (!isMounted) return;
+              const now = Date.now();
+              // Prevent rapid multi-scans of the same item within 2 seconds
+              if (
+                lastScannedCodeRef.current.code === decodedText &&
+                now - lastScannedCodeRef.current.time < 2000
+              ) {
+                return;
+              }
+              // Prevent scanning different items faster than 1 second
+              if (now - lastScannedCodeRef.current.time < 1000) {
+                return;
+              }
+
+              lastScannedCodeRef.current = { code: decodedText, time: now };
+              
+              // Automatically register immediately!
+              processCode(decodedText);
+            },
+            () => {
+              // Frame decoding noise ignored
+            }
+          ).catch(err => {
+            console.error("Camera start error:", err);
+            if (isMounted) {
+              setScanStatus({
+                type: 'error',
+                message: 'No se pudo acceder a la cámara. Revisa los permisos en tu navegador.'
+              });
+              setIsCameraActive(false);
+            }
+          });
+        } catch (err) {
+          console.error("Html5Qrcode initialization error:", err);
+        }
+      }, 200);
+
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+        if (html5QrcodeRef.current) {
+          if (html5QrcodeRef.current.isScanning) {
+            html5QrcodeRef.current.stop().then(() => {
+              html5QrcodeRef.current?.clear();
+            }).catch(e => console.error("Camera stop error:", e));
+          } else {
+            try { html5QrcodeRef.current.clear(); } catch(e) {}
+          }
+        }
+      };
+    }
+  }, [isCameraActive, sessionData]);
 
   const getCategoryName = (catId: string) => {
     const cat = categories.find(c => c.id === catId);
@@ -378,17 +490,115 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                 </span>
               </div>
 
-              <form onSubmit={handleScanSubmit} className="space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Código de Barras / SKU / Referencia
-                </label>
+              {/* Camera Scanner Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsCameraActive(!isCameraActive)}
+                className={`w-full py-3 px-4 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md ${
+                  isCameraActive 
+                    ? 'bg-rose-500 hover:bg-rose-600 text-white' 
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+              >
+                <CameraIcon className="w-4 h-4" />
+                <span>{isCameraActive ? 'Cerrar Cámara' : 'Usar Cámara del Celular'}</span>
+              </button>
+
+              {/* Camera Scanner Live Container */}
+              {isCameraActive && (
+                <div className="space-y-2 bg-slate-900 p-3.5 rounded-2xl border border-slate-700 animate-fade-in">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 uppercase tracking-wider px-1">
+                    <span>Cámara Activa</span>
+                    <span className="animate-pulse">Escanear directo ⚡</span>
+                  </div>
+                  <div 
+                    id="reader-camera-tags" 
+                    className="overflow-hidden rounded-xl border border-slate-700 bg-black min-h-[220px]"
+                  />
+                  <p className="text-[10px] text-slate-300 text-center font-bold leading-tight">
+                    Apunta la cámara a la etiqueta. La prenda se agregará <span className="text-emerald-400">directamente</span> sin presionar botones.
+                  </p>
+                </div>
+              )}
+
+              {/* Quantity Selector Control */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Cantidad a sumar por cada escaneo:
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScanQuantity(prev => Math.max(1, prev - 1));
+                        if (inputRef.current) inputRef.current.focus();
+                      }}
+                      className="w-7 h-7 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm flex items-center justify-center transition-colors"
+                      title="Disminuir cantidad"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={scanQuantity}
+                      onChange={(e) => setScanQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-12 py-1 text-center font-black text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScanQuantity(prev => prev + 1);
+                        if (inputRef.current) inputRef.current.focus();
+                      }}
+                      className="w-7 h-7 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm flex items-center justify-center transition-colors"
+                      title="Aumentar cantidad"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick preset buttons */}
+                <div className="grid grid-cols-7 gap-1">
+                  {[1, 2, 3, 5, 10, 15, 20].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => {
+                        setScanQuantity(num);
+                        if (inputRef.current) inputRef.current.focus();
+                      }}
+                      className={`py-1 rounded-lg font-black text-[10px] transition-all text-center ${
+                        scanQuantity === num
+                          ? 'bg-accent text-white shadow-sm ring-2 ring-accent/30'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {num}u
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form onSubmit={handleScanSubmit} className="space-y-3 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Código de Barras / Pistola / SKU
+                  </label>
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
+                    Suma actual: <strong className="text-accent">{scanQuantity} un.</strong>
+                  </span>
+                </div>
+
                 <div className="relative">
                   <input
                     ref={inputRef}
                     type="text"
                     value={scanInput}
                     onChange={(e) => setScanInput(e.target.value)}
-                    placeholder="Escanear o escribir código..."
+                    placeholder="Escanear con pistola o escribir..."
                     autoFocus
                     className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-2xl focus:border-accent dark:focus:border-accent text-slate-900 dark:text-white font-black text-sm uppercase placeholder-slate-400 outline-none transition-all pr-12"
                   />
@@ -396,11 +606,16 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                     <TagIcon className="w-5 h-5" />
                   </div>
                 </div>
+
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                  💡 <strong>Tip con pistola:</strong> Puedes digitar directamente por ejemplo <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-accent">5*CÓDIGO</code> o <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-accent">3xCÓDIGO</code> + Enter para registrar varias unidades a la vez.
+                </p>
+
                 <button
                   type="submit"
-                  className="w-full py-3 bg-slate-900 hover:bg-slate-850 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-sm"
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-850 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2"
                 >
-                  Registrar Escaneo
+                  <span>Registrar Escaneo (+{scanQuantity})</span>
                 </button>
               </form>
 
