@@ -32,6 +32,7 @@ const LayawayCard: React.FC<{
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isFulfilling, setIsFulfilling] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [paymentSeller, setPaymentSeller] = useState<string>('');
@@ -141,8 +142,20 @@ const LayawayCard: React.FC<{
                       </button>
                   )}
                   {layaway.status === 'pre-order' && (
-                      <button onClick={() => onFulfillPreOrder(layaway.id)} className="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors">
-                          Marcar Recibido
+                      <button 
+                        onClick={async () => {
+                          if (isFulfilling) return;
+                          setIsFulfilling(true);
+                          try {
+                            await onFulfillPreOrder(layaway.id);
+                          } finally {
+                            setIsFulfilling(false);
+                          }
+                        }} 
+                        disabled={isFulfilling}
+                        className="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                          {isFulfilling ? 'Procesando...' : 'Marcar Recibido'}
                       </button>
                   )}
                   {(layaway.status === 'active' || layaway.status === 'pre-order') && balance > 0 && (

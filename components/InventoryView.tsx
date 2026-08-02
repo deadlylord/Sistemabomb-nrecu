@@ -48,6 +48,7 @@ interface InventoryViewProps {
   onShowDisabledProductsChange: (show: boolean) => void;
   onReactivateInconsistentProducts: (productIds: string[]) => void;
   onRegenerateAllSkus?: () => Promise<void>;
+  onDeleteProductHistoryLog?: (logId: string) => void;
 }
 
 type SortConfig = {
@@ -56,7 +57,7 @@ type SortConfig = {
 };
 
 
-const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus }) => {
+const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onDeleteProductHistoryLog }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -728,6 +729,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
           onClose={() => setHistoryModalProduct(null)}
           product={historyModalProduct}
           history={productHistory}
+          onDeleteLog={isAdmin ? onDeleteProductHistoryLog : undefined}
         />
       )}
       {isBulkAddModalOpen && (

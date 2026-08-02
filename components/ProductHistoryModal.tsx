@@ -1,16 +1,17 @@
 
 import React from 'react';
 import { Product, ProductHistoryLog, ProductChangeType } from '../types';
-import { CrossIcon } from './Icons';
+import { CrossIcon, TrashIcon } from './Icons';
 
 interface ProductHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product;
   history: ProductHistoryLog[];
+  onDeleteLog?: (logId: string) => void;
 }
 
-const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClose, product, history }) => {
+const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClose, product, history, onDeleteLog }) => {
   if (!isOpen) return null;
 
   const productHistory = [...history]
@@ -126,6 +127,7 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
                   <th className="p-3 text-sm font-semibold tracking-wide">Detalles</th>
                   <th className="p-3 text-sm font-semibold tracking-wide text-center">Stock Final</th>
                   <th className="p-3 text-sm font-semibold tracking-wide">Usuario</th>
+                  {onDeleteLog && <th className="p-3 text-sm font-semibold tracking-wide text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -144,6 +146,21 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
                       </span>
                     </td>
                     <td className="p-3 text-sm font-medium">{log.changedBy}</td>
+                    {onDeleteLog && (
+                      <td className="p-3 text-sm text-center">
+                        <button
+                          onClick={() => {
+                            if (window.confirm('¿Deseas eliminar este registro de historial duplicado?')) {
+                              onDeleteLog(log.id);
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          title="Eliminar este registro duplicado"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

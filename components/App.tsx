@@ -808,6 +808,10 @@ const App: React.FC = () => {
     const layawayRef = doc(db, 'layaways', layawayId);
     const newPaidAmount = layaway.paidAmount + amount;
     const updateData: any = { payments: arrayUnion(newPayment), paidAmount: increment(amount) };
+    
+    // Si el abono se salda por completo y estaba como pre-orden, descontamos inventario y registramos log de encargo recibido
+    const isPreOrderCompleting = layaway.status === 'pre-order' && newPaidAmount >= layaway.totalAmount;
+
     if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && (layaway.status === 'active' || layaway.status === 'pre-order')) {
       updateData.status = 'completed';
       const fullPaymentsList = [...layaway.payments, newPayment];
@@ -826,33 +830,77 @@ const App: React.FC = () => {
       setSaleForReceipt(completedTransactionReceipt);
       setShowReceiptModal(true);
     }
-    await updateDoc(layawayRef, updateData);
+
+    if (isPreOrderCompleting) {
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(layawayRef);
+        if (!docSnap.exists()) return;
+        const currentData = docSnap.data() as Layaway;
+        if (currentData.status === 'pre-order') {
+          currentData.items.forEach(item => {
+            if (item && item.id) {
+              const productRef = doc(db, 'inventory', item.id);
+              transaction.update(productRef, { stock: increment(-item.quantity) });
+
+              const logRef = doc(collection(db, 'productHistory'));
+              const log: ProductHistoryLog = {
+                id: logRef.id,
+                productId: item.id,
+                productName: item.name,
+                storeId: layaway.storeId,
+                changedBy: seller,
+                timestamp: new Date().toISOString(),
+                changeType: ProductChangeType.PRE_ORDER_FULFILLED,
+                details: `Encargo #${layaway.invoiceNumber} entregado/completado por abono final. Cantidad: -${item.quantity}.`
+              };
+              transaction.set(logRef, log);
+            }
+          });
+        }
+        transaction.update(layawayRef, updateData);
+      });
+    } else {
+      await updateDoc(layawayRef, updateData);
+    }
   };
 
   const handleFulfillPreOrder = async (layawayId: string) => {
-      const layaway = layaways.find(l => l.id === layawayId);
-      if (!layaway || layaway.status !== 'pre-order') return;
-      const batch = writeBatch(db);
-      const layawayRef = doc(db, 'layaways', layawayId);
-      layaway.items.forEach(item => {
-          const productRef = doc(db, 'inventory', item.id);
-          batch.update(productRef, { stock: increment(-item.quantity) });
+      try {
+          await runTransaction(db, async (transaction) => {
+              const layawayRef = doc(db, 'layaways', layawayId);
+              const layawayDoc = await transaction.get(layawayRef);
+              if (!layawayDoc.exists()) return;
+              
+              const layawayData = { id: layawayDoc.id, ...layawayDoc.data() } as Layaway;
+              // Validación atómica: si ya no es 'pre-order' (por ejemplo, por doble clic o ejecución paralela), cancelamos la operación
+              if (layawayData.status !== 'pre-order') return;
 
-          const logRef = doc(collection(db, 'productHistory'));
-          const log: ProductHistoryLog = {
-              id: logRef.id,
-              productId: item.id,
-              productName: item.name,
-              storeId: layaway.storeId,
-              changedBy: currentUser?.name || 'Sistema',
-              timestamp: new Date().toISOString(),
-              changeType: ProductChangeType.PRE_ORDER_FULFILLED,
-              details: `Encargo #${layaway.invoiceNumber} recibido. Cantidad: -${item.quantity}.`
-          };
-          batch.set(logRef, log);
-      });
-      batch.update(layawayRef, { status: 'active' });
-      await batch.commit();
+              layawayData.items.forEach(item => {
+                  if (item && item.id) {
+                      const productRef = doc(db, 'inventory', item.id);
+                      transaction.update(productRef, { stock: increment(-item.quantity) });
+
+                      const logRef = doc(collection(db, 'productHistory'));
+                      const log: ProductHistoryLog = {
+                          id: logRef.id,
+                          productId: item.id,
+                          productName: item.name,
+                          storeId: layawayData.storeId,
+                          changedBy: currentUser?.name || 'Sistema',
+                          timestamp: new Date().toISOString(),
+                          changeType: ProductChangeType.PRE_ORDER_FULFILLED,
+                          details: `Encargo #${layawayData.invoiceNumber} recibido. Cantidad: -${item.quantity}.`
+                      };
+                      transaction.set(logRef, log);
+                  }
+              });
+
+              transaction.update(layawayRef, { status: 'active' });
+          });
+      } catch (error) {
+          console.error("Error al marcar encargo como recibido:", error);
+          alert("Error al procesar el encargo. Intente nuevamente.");
+      }
   };
 
   const handleInventoryTransfer = async (data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }, existingBatch?: WriteBatch) => {
@@ -1200,7 +1248,12 @@ const App: React.FC = () => {
       const duplicateSaleRef = doc(db, 'sales', updatedLayaway.id);
       batch.delete(duplicateSaleRef);
 
-      if (originalLayaway.status === 'active' || originalLayaway.status === 'completed') {
+      const isOrigActive = originalLayaway.status === 'active' || originalLayaway.status === 'completed';
+      const isNewActive = updatedLayaway.status === 'active' || updatedLayaway.status === 'completed';
+      const itemsChanged = JSON.stringify(originalLayaway.items) !== JSON.stringify(updatedLayaway.items);
+
+      // Liberar stock original solo si antes estuvo reservado y ahora deja de estarlo o cambiaron las prendas
+      if (isOrigActive && (!isNewActive || itemsChanged)) {
           originalLayaway.items.forEach(item => {
               if (item && item.id) {
                   const productRef = doc(db, 'inventory', item.id);
@@ -1222,7 +1275,8 @@ const App: React.FC = () => {
           });
       }
 
-      if (updatedLayaway.status === 'active' || updatedLayaway.status === 'completed') {
+      // Descontar nuevo stock solo si ahora pasa a estar activo/completado y antes no lo estaba o si cambiaron las prendas
+      if (isNewActive && (!isOrigActive || itemsChanged)) {
           updatedLayaway.items.forEach(item => {
               if (item && item.id) {
                   const productRef = doc(db, 'inventory', item.id);
@@ -2254,7 +2308,7 @@ const App: React.FC = () => {
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
         {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
-        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} />}
+        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
