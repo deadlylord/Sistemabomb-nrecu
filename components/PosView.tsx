@@ -999,6 +999,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             isOpen={isCheckVoucherModalOpen}
             onClose={() => setIsCheckVoucherModalOpen(false)}
             giftVouchers={props.giftVouchers}
+            sales={props.sales}
         />
       )}
       {editingProductImage && (

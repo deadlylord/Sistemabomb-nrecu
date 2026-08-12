@@ -670,6 +670,7 @@ const App: React.FC = () => {
                 if (item.id.startsWith('voucher-')) {
                     const code = item.id.replace('voucher-', '');
                     const voucherRef = doc(collection(db, 'giftVouchers'));
+                    const firstPaymentMethod = saleData.payments && saleData.payments[0] ? saleData.payments[0].method : undefined;
                     transaction.set(voucherRef, {
                         id: voucherRef.id,
                         code,
@@ -682,6 +683,7 @@ const App: React.FC = () => {
                         storeId: currentStoreId,
                         createdBy: saleData.seller,
                         saleId: saleRef.id,
+                        paymentMethod: firstPaymentMethod,
                     });
                 }
             }
@@ -984,29 +986,6 @@ const App: React.FC = () => {
     if (newIncident.type === IncidentType.PRODUCT_EXCHANGE && surplusPaid && surplusPaid > 0 && surplusPaymentMethod) {
         newIncident.adjustmentAmount = surplusPaid;
         newIncident.paymentMethod = surplusPaymentMethod;
-        const adjustmentRef = doc(collection(db, 'incidents'));
-        newIncident.relatedIncidentId = adjustmentRef.id;
-        const adjustmentIncident: Incident = { 
-            id: adjustmentRef.id, 
-            type: IncidentType.CASH_ADJUSTMENT, 
-            status: IncidentStatus.PENDIENTE_APROBACION, 
-            description: `Excedente pagado (${surplusPaymentMethod}) por cambio de factura #${newIncident.originalSaleInvoiceNumber}`, 
-            createdAt: createdAt, 
-            sellerName: currentUser.name, 
-            storeId: currentStoreId, 
-            adjustmentAmount: surplusPaid, 
-            adjustmentType: 'income', 
-            customerName: newIncident.customerName, 
-            customerPhone: newIncident.customerPhone, 
-            paymentMethod: surplusPaymentMethod,
-            history: [{
-                status: IncidentStatus.PENDIENTE_APROBACION,
-                changedBy: currentUser.name,
-                timestamp: new Date().toISOString(),
-                notes: 'Registro automático por excedente en cambio'
-            }]
-        };
-        batch.set(adjustmentRef, cleanObject(adjustmentIncident));
     }
     batch.set(newIncidentRef, cleanObject(newIncident));
     await batch.commit();
@@ -2368,6 +2347,7 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
             onUpdateVoucherStatus={handleUpdateVoucherStatus} 
             onDeleteVoucher={handleDeleteVoucher}
+            sales={sales}
           />
         )}
         {currentView === View.CEO_CENTER && currentUser && (

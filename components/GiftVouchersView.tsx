@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { GiftVoucher, Seller, Store } from '../types';
+import { GiftVoucher, Seller, Store, Sale } from '../types';
 import { formatCOP, toTitleCase, normalizeText } from '../constants';
-import { SearchIcon, HistoryIcon, UsersIcon, CalendarIcon, CheckIcon, CrossIcon, TagIcon, FilterIcon, TrashIcon } from './Icons';
+import { SearchIcon, HistoryIcon, UsersIcon, CalendarIcon, CheckIcon, CrossIcon, TagIcon, FilterIcon, TrashIcon, CreditCardIcon } from './Icons';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface GiftVouchersViewProps {
@@ -13,9 +13,10 @@ interface GiftVouchersViewProps {
   isAdmin: boolean;
   onUpdateVoucherStatus: (voucherId: string, status: 'active' | 'redeemed' | 'cancelled') => Promise<void>;
   onDeleteVoucher: (voucherId: string) => Promise<void>;
+  sales?: Sale[];
 }
 
-const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, stores, currentUser, isAdmin, onUpdateVoucherStatus, onDeleteVoucher }) => {
+const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, stores, currentUser, isAdmin, onUpdateVoucherStatus, onDeleteVoucher, sales }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'redeemed' | 'cancelled'>('all');
   const [voucherToDelete, setVoucherToDelete] = useState<GiftVoucher | null>(null);
@@ -115,6 +116,7 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bono / Código</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Medio de Pago</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Info / Creado por</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Acciones</th>
@@ -124,6 +126,7 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
               {filteredVouchers.map(voucher => {
                 const days = getDaysSinceCreation(voucher.createdAt);
                 const store = stores.find(s => s.id === voucher.storeId);
+                const method = voucher.paymentMethod || sales?.find(s => s.id === voucher.saleId || s.items?.some(i => i && i.id === `voucher-${voucher.code}`))?.payments?.[0]?.method || 'N/A';
                 
                 return (
                   <tr key={voucher.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
@@ -149,6 +152,12 @@ const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, 
                       {voucher.initialValue !== voucher.currentValue && (
                         <p className="text-[10px] text-slate-400 line-through">Inicial: {formatCOP(voucher.initialValue)}</p>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 uppercase">
+                        <CreditCardIcon className="w-3.5 h-3.5" />
+                        {method}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">

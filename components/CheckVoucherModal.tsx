@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { GiftVoucher } from '../types';
+import { GiftVoucher, Sale } from '../types';
 import { formatCOP } from '../constants';
 import { CrossIcon, SearchIcon } from './Icons';
 
@@ -8,9 +8,10 @@ interface CheckVoucherModalProps {
   isOpen: boolean;
   onClose: () => void;
   giftVouchers: GiftVoucher[];
+  sales?: Sale[];
 }
 
-const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, giftVouchers }) => {
+const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, giftVouchers, sales }) => {
   const [code, setCode] = useState('');
   const [foundVoucher, setFoundVoucher] = useState<GiftVoucher | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -28,6 +29,17 @@ const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, 
       setErrorMsg(`Bono "${trimmedCode}" no encontrado.`);
       setFoundVoucher(null);
     }
+  };
+
+  const getPaymentMethod = (voucher: GiftVoucher) => {
+    if (voucher.paymentMethod) return voucher.paymentMethod;
+    if (sales) {
+      const sale = sales.find(s => s.id === voucher.saleId || s.items?.some(i => i && i.id === `voucher-${voucher.code}`));
+      if (sale && sale.payments && sale.payments[0]) {
+        return sale.payments[0].method;
+      }
+    }
+    return 'N/A';
   };
 
   return (
@@ -79,6 +91,10 @@ const CheckVoucherModal: React.FC<CheckVoucherModalProps> = ({ isOpen, onClose, 
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Valor Inicial:</span>
                   <span className="font-bold">{formatCOP(foundVoucher.initialValue)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Medio de Pago:</span>
+                  <span className="font-extrabold text-purple-600 dark:text-purple-400 uppercase">{getPaymentMethod(foundVoucher)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Estado:</span>

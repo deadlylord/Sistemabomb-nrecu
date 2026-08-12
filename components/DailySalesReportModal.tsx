@@ -74,16 +74,25 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
     
     const todaysCashAdjustments = incidents.filter(i => 
         isWithinDay(i.createdAt) &&
-        (i.type === IncidentType.CASH_ADJUSTMENT || i.type === IncidentType.RECAUDO) &&
+        i.type === IncidentType.CASH_ADJUSTMENT &&
+        i.status !== IncidentStatus.PENDIENTE_APROBACION
+    );
+
+    const todaysRecaudos = incidents.filter(i =>
+        isWithinDay(i.createdAt) &&
+        i.type === IncidentType.RECAUDO &&
+        i.status !== IncidentStatus.PENDIENTE_APROBACION
+    );
+
+    const todaysExchangeSurpluses = incidents.filter(i =>
+        isWithinDay(i.createdAt) &&
+        i.type === IncidentType.PRODUCT_EXCHANGE &&
+        (i.adjustmentAmount || 0) > 0 &&
         i.status !== IncidentStatus.PENDIENTE_APROBACION
     );
 
     const incomeAdjustments = todaysCashAdjustments
-        .filter(i => {
-            const isIncomeType = i.adjustmentType === 'income' || i.type === IncidentType.RECAUDO;
-            if (!isIncomeType) return false;
-            return i.paymentMethod ? i.paymentMethod === PaymentMethod.Efectivo : true;
-        })
+        .filter(i => i.adjustmentType === 'income' && (i.paymentMethod ? i.paymentMethod === PaymentMethod.Efectivo : true))
         .reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0);
     
     const expenseAdjustments = todaysCashAdjustments
@@ -175,7 +184,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         expenseAdjustments: expenseAdjustments,
     };
 
-    return { activeSellers, grandTotals, todaysCashAdjustments };
+    return { activeSellers, grandTotals, todaysCashAdjustments, todaysRecaudos, todaysExchangeSurpluses };
   }, [sales, layaways, sellers, incidents, isWithinDay]);
 
   const todaysSoldItems = useMemo(() => {
@@ -333,18 +342,55 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
                 </div>
                  {reportData.todaysCashAdjustments.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <h4 className="font-semibold mb-2">Ajustes y Recaudos de Caja Registrados:</h4>
+                        <h4 className="font-semibold mb-2">Ajustes de Caja Registrados:</h4>
                         <div className="space-y-2 max-h-24 overflow-y-auto">
                             {reportData.todaysCashAdjustments.map(adj => (
                                 <div key={adj.id} className="p-2 bg-white dark:bg-secondary rounded-md text-sm">
                                     <div className="flex justify-between items-center">
-                                        <p className={`font-bold ${adj.adjustmentType === 'income' || adj.type === IncidentType.RECAUDO ? 'text-green-500' : 'text-red-500'}`}>
-                                            {adj.type === IncidentType.RECAUDO ? 'RECAUDO' : (adj.adjustmentType === 'income' ? 'INGRESO' : 'GASTO')}: {formatCOP(adj.adjustmentAmount || 0)}
+                                        <p className={`font-bold ${adj.adjustmentType === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                                            {adj.adjustmentType === 'income' ? 'INGRESO' : 'GASTO'}: {formatCOP(adj.adjustmentAmount || 0)}
                                         </p>
                                         <span className="text-xs text-gray-400">Por: {adj.sellerName}</span>
                                     </div>
                                     <p className="text-gray-600 dark:text-text-dark text-xs">{adj.description}</p>
-                                     {adj.type === IncidentType.RECAUDO && <p className="text-xs text-gray-500">Cliente: {adj.customerName}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {reportData.todaysRecaudos.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <h4 className="font-semibold mb-2 text-purple-600 dark:text-purple-400">Recaudos Sistecredito del Día:</h4>
+                        <div className="space-y-2 max-h-24 overflow-y-auto">
+                            {reportData.todaysRecaudos.map(rec => (
+                                <div key={rec.id} className="p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md text-sm">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-bold text-purple-600 dark:text-purple-300">
+                                            RECAUDO: {formatCOP(rec.adjustmentAmount || 0)}
+                                        </p>
+                                        <span className="text-xs text-gray-400">Por: {rec.sellerName}</span>
+                                    </div>
+                                    <p className="text-gray-600 dark:text-text-dark text-xs">{rec.description}</p>
+                                    {rec.customerName && <p className="text-xs text-gray-500">Cliente: {rec.customerName}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {reportData.todaysExchangeSurpluses.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <h4 className="font-semibold mb-2 text-orange-600 dark:text-orange-400">Excedentes por Cambio de Producto del Día:</h4>
+                        <div className="space-y-2 max-h-24 overflow-y-auto">
+                            {reportData.todaysExchangeSurpluses.map(exc => (
+                                <div key={exc.id} className="p-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md text-sm">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-bold text-orange-600 dark:text-orange-300">
+                                            EXCEDENTE ({exc.paymentMethod || 'Sin método'}): {formatCOP(exc.adjustmentAmount || 0)}
+                                        </p>
+                                        <span className="text-xs text-gray-400">Por: {exc.sellerName}</span>
+                                    </div>
+                                    <p className="text-gray-600 dark:text-text-dark text-xs">Factura original: #{exc.originalSaleInvoiceNumber}</p>
+                                    {exc.customerName && <p className="text-xs text-gray-500">Cliente: {exc.customerName}</p>}
                                 </div>
                             ))}
                         </div>

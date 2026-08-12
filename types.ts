@@ -486,6 +486,7 @@ export interface GiftVoucher {
   storeId: string;
   createdBy: string;
   saleId?: string;
+  paymentMethod?: PaymentMethod | string;
 }
 
 export interface Loan {
