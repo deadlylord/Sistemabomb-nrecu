@@ -153,7 +153,7 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
               productId: product.id, 
               productName: product.name, 
               quantity: 1, 
-              price: product.price, 
+              price: product.discountPrice !== undefined ? product.discountPrice : product.price, 
               cost: product.cost,
               sku: product.sku,
               categoryId: product.categoryId

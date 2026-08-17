@@ -648,6 +648,7 @@ const App: React.FC = () => {
                     const productRef = doc(db, 'inventory', item.id);
                     transaction.update(productRef, { stock: increment(-item.quantity) });
 
+                    const isPromo = (item.discountPrice !== undefined && item.discountPrice === item.price) || (item.basePrice !== undefined && item.basePrice > item.price);
                     const logRef = doc(collection(db, 'productHistory'));
                     const log: ProductHistoryLog = {
                         id: logRef.id,
@@ -657,7 +658,7 @@ const App: React.FC = () => {
                         changedBy: saleData.seller,
                         timestamp: saleDate.toISOString(),
                         changeType: ProductChangeType.SALE,
-                        details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}`
+                        details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}${isPromo ? ' (Precio Promoción)' : ''}`
                     };
                     transaction.set(logRef, log);
                 }

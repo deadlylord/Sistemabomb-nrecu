@@ -342,7 +342,12 @@ const ChristmasCommissionsView: React.FC<ChristmasCommissionsViewProps> = ({
             transaction.items.forEach((item: any) => {
                 const product = inventory.find(p => p.id === item.id);
                 if (product) {
-                    const diffUnit = item.price - product.price;
+                    const officialSystemPrice = (item.discountPrice !== undefined && item.discountPrice > 0)
+                        ? item.discountPrice
+                        : (product.discountPrice !== undefined && product.discountPrice > 0 && item.price <= product.discountPrice
+                           ? product.discountPrice
+                           : product.price);
+                    const diffUnit = item.price - officialSystemPrice;
                     if (diffUnit > 0) { // Only count positive markup/overprice
                         totalDiff += (diffUnit * item.quantity);
                     }
