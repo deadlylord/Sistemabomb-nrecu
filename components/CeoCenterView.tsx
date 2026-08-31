@@ -307,7 +307,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
     // Search filter
     if (productPerfSearch.trim()) {
       const q = productPerfSearch.toLowerCase().trim();
-      list = list.filter(item => item.name.toLowerCase().includes(q) || item.sku.toLowerCase().includes(q));
+      list = list.filter(item => (item.name || '').toLowerCase().includes(q) || (item.sku || '').toLowerCase().includes(q));
     }
 
     // Performance filter
@@ -842,7 +842,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                         <SparklesIcon className="w-5 h-5" />
                       </div>
                       <div className="space-y-1.5 flex-grow">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300">Street IA • Alerta Diaria</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300">IA CEO • Alerta Diaria</span>
                         <p className="text-xs text-indigo-100 font-medium leading-relaxed">{proactiveInsights}</p>
                       </div>
                     </div>
@@ -1442,7 +1442,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                     {/* Insights Banner */}
                     <div className="bg-gradient-to-br from-indigo-900 to-slate-950 p-5 rounded-3xl text-white border border-indigo-500/20 shadow-md">
                       <div className="flex justify-between items-start">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300">Resumen Proactivo de Street IA</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-indigo-300">Resumen Proactivo de IA</span>
                         <span className="text-lg">🤖</span>
                       </div>
                       <p className="text-xs mt-3 leading-relaxed text-indigo-100 font-medium">
@@ -1456,7 +1456,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                       <div className="flex flex-col gap-2">
                         {[
                           '¿Cuáles son mis 3 productos más lentos y cuánto capital tengo atrapado en ellos?',
-                          'Haz una comparación de rentabilidad neta entre Divino, Metro y Legends',
+                          'Haz una comparación de rentabilidad neta entre todas mis sedes activas',
                           'Analiza las preguntas más comunes de los clientes y sugiéreme compras para el próximo mes',
                           '¿Qué recomendación de liquidación me das basada en el stock actual?',
                           'Dame una auditoría express de mi cartera vencida de apartados',
@@ -1482,7 +1482,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                           <SparklesIcon className="w-5 h-5 text-indigo-400" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-black text-white uppercase tracking-wider">Street IA • Consultor de Negocios</h3>
+                          <h3 className="text-sm font-black text-white uppercase tracking-wider">IA CEO • Consultor Estratégico</h3>
                           <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-widest">En línea con todos los datos financieros</p>
                         </div>
                       </div>
@@ -1504,7 +1504,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                             <SparklesIcon className="w-8 h-8 text-indigo-500" />
                           </div>
                           <div className="max-w-sm space-y-2">
-                            <h4 className="text-white font-bold text-sm">Consultoría Ejecutiva Street IA</h4>
+                            <h4 className="text-white font-bold text-sm">Consultoría Ejecutiva con IA</h4>
                             <p className="text-slate-400 text-xs">
                               Escribe tus preguntas o usa uno de los comandos rápidos de la izquierda. Responderé cruzando tus ventas, compras, stock de inventario, layaways e informes diarios.
                             </p>
@@ -1519,7 +1519,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                                   ? 'bg-indigo-600 text-white font-bold rounded-tr-none' 
                                   : 'bg-white/10 text-white rounded-tl-none border border-white/10'
                               }`}>
-                                <p className="font-bold opacity-60 text-[10px] uppercase mb-1">{msg.role === 'user' ? currentUser.name : 'Street IA'}</p>
+                                <p className="font-bold opacity-60 text-[10px] uppercase mb-1">{msg.role === 'user' ? currentUser.name : 'Asistente IA'}</p>
                                 <p className="whitespace-pre-line font-medium">{msg.content}</p>
                               </div>
                             </div>

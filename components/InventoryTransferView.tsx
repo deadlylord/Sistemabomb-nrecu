@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryTransfer, Product, Store, Seller } from '../types';
-import { SwapIcon, SearchIcon, DollarIcon } from './Icons';
+import { SwapIcon, SearchIcon, DollarIcon, TrashIcon } from './Icons';
 import { formatCOP, normalizeText } from '../constants';
 
 interface InventoryTransferViewProps {
@@ -10,10 +10,11 @@ interface InventoryTransferViewProps {
   currentUser: Seller;
   transfers: InventoryTransfer[];
   onTransfer: (data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }) => void;
+  onDeleteTransfer?: (transferId: string) => void;
   onResetBalances: () => void;
 }
 
-export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ inventory, stores, currentUser, transfers, onTransfer, onResetBalances }) => {
+export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ inventory, stores, currentUser, transfers, onTransfer, onDeleteTransfer, onResetBalances }) => {
   const [fromStoreId, setFromStoreId] = useState<string | ''>(currentUser.storeId);
   const [toStoreId, setToStoreId] = useState<string | ''>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -256,6 +257,7 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
                 <th className="p-3">Desde</th>
                 <th className="p-3">Hacia</th>
                 <th className="p-3">Realizado por</th>
+                {onDeleteTransfer && <th className="p-3 text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -269,6 +271,18 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
                   <td className="p-3">{getStoreName(t.fromStoreId)}</td>
                   <td className="p-3">{getStoreName(t.toStoreId)}</td>
                   <td className="p-3">{t.sellerName}</td>
+                  {onDeleteTransfer && (
+                    <td className="p-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => onDeleteTransfer(t.id)}
+                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors inline-flex items-center justify-center"
+                        title="Eliminar y Revertir Traslado"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

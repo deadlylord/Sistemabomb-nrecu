@@ -158,7 +158,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   } = props;
 
   const isAdmin = useMemo(() => {
-    const adminRole = roles.find(r => r.name.toLowerCase() === 'administrator' || r.name.toLowerCase() === 'administrador');
+    const adminRole = roles.find(r => (r.name || '').toLowerCase() === 'administrator' || (r.name || '').toLowerCase() === 'administrador');
     return currentUser.roleId === adminRole?.id || currentUser.roleId === '1';
   }, [currentUser, roles]);
 
@@ -865,7 +865,25 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   const churnAnalysis = useMemo(() => {
     const today = new Date(); const customerMap = new Map<string, { name: string; phone: string; lastPurchaseDate: Date; totalSpent: number; purchaseCount: number; paymentMethods: Record<string, number>; }>();
-    const processTransaction = (customerName: string, customerPhone: string, date: string, amount: number, payments?: Payment[], paymentMethod?: string) => { if (!customerName || customerName === 'Cliente Mostrador' || !customerPhone || customerPhone.length < 10) return; const key = `${customerName.toLowerCase()}-${customerPhone}`; const existing = customerMap.get(key); const transactionDate = new Date(date); const methodsUsed: string[] = []; if (payments) payments.forEach(p => methodsUsed.push(p.method)); else if (paymentMethod) methodsUsed.push(paymentMethod); if (existing) { existing.lastPurchaseDate = transactionDate > existing.lastPurchaseDate ? transactionDate : existing.lastPurchaseDate; existing.totalSpent += amount; existing.purchaseCount += 1; methodsUsed.forEach(m => { existing.paymentMethods[m] = (existing.paymentMethods[m] || 0) + 1; }); } else { const initialMethods: Record<string, number> = {}; methodsUsed.forEach(m => initialMethods[m] = 1); customerMap.set(key, { name: customerName, phone: customerPhone, lastPurchaseDate: transactionDate, totalSpent: amount, purchaseCount: 1, paymentMethods: initialMethods }); } };
+    const processTransaction = (customerName: string, customerPhone: string, date: string, amount: number, payments?: Payment[], paymentMethod?: string) => { 
+      if (!customerName || customerName === 'Cliente Mostrador' || !customerPhone || customerPhone.length < 10) return; 
+      const key = `${(customerName || '').toLowerCase()}-${customerPhone || ''}`; 
+      const existing = customerMap.get(key); 
+      const transactionDate = new Date(date); 
+      const methodsUsed: string[] = []; 
+      if (payments) payments.forEach(p => methodsUsed.push(p.method)); 
+      else if (paymentMethod) methodsUsed.push(paymentMethod); 
+      if (existing) { 
+        existing.lastPurchaseDate = transactionDate > existing.lastPurchaseDate ? transactionDate : existing.lastPurchaseDate; 
+        existing.totalSpent += amount; 
+        existing.purchaseCount += 1; 
+        methodsUsed.forEach(m => { existing.paymentMethods[m] = (existing.paymentMethods[m] || 0) + 1; }); 
+      } else { 
+        const initialMethods: Record<string, number> = {}; 
+        methodsUsed.forEach(m => initialMethods[m] = 1); 
+        customerMap.set(key, { name: customerName, phone: customerPhone, lastPurchaseDate: transactionDate, totalSpent: amount, purchaseCount: 1, paymentMethods: initialMethods }); 
+      } 
+    };
     sales.filter(s => !s.layawayId).forEach(sale => processTransaction(sale.customerName, sale.customerPhone, sale.createdAt, sale.totalAmount, sale.payments, sale.paymentMethod));
     layaways.filter(l => l.status === 'completed').forEach(layaway => processTransaction(layaway.customerName, layaway.customerPhone, layaway.createdAt, layaway.totalAmount, layaway.payments));
     return Array.from(customerMap.values()).filter(c => ((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)) > 45 && c.purchaseCount > 1).map(c => { let preferredMethod = 'Desconocido'; let maxCount = 0; Object.entries(c.paymentMethods).forEach(([method, count]) => { if (count > maxCount) { maxCount = count; preferredMethod = method; } }); return { ...c, daysSince: Math.floor((today.getTime() - c.lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)), preferredMethod }; }).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 20);
@@ -891,7 +909,20 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const layawayIds = new Set(layaways.map(l => l.id));
         const cleanSales = sales.filter(s => !layawayIds.has(s.id));
         const allTransactions: UnifiedSaleTransaction[] = [...cleanSales.map(s => ({ ...s, transactionType: 'sale' as const })), ...layaways.map(l => ({ ...l, transactionType: 'layaway' as const, layawayStatus: l.status }))];
-        return allTransactions.filter(transaction => { const lowerCaseSearchTerm = salesSearchTerm.toLowerCase(); const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; const matchesSearch = transaction.invoiceNumber.toString().includes(salesSearchTerm) || transaction.customerName.toLowerCase().includes(lowerCaseSearchTerm) || transaction.customerPhone.includes(salesSearchTerm) || itemsArray.some((item: CartItem) => item && (item.name.toLowerCase().includes(lowerCaseSearchTerm) || (item.supplier && item.supplier.toLowerCase().includes(lowerCaseSearchTerm)))); const matchesSeller = salesSellerFilter ? transaction.seller === salesSellerFilter : true; const matchesCategory = salesCategoryFilter ? itemsArray.some((item: CartItem) => item && item.categoryId === salesCategoryFilter) : true; return matchesSearch && matchesSeller && isWithinRange(transaction.createdAt) && matchesCategory; }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return allTransactions.filter(transaction => { 
+          const lowerCaseSearchTerm = (salesSearchTerm || '').toLowerCase(); 
+          const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; 
+          const invNum = (transaction.invoiceNumber ?? '').toString();
+          const custName = (transaction.customerName || '').toLowerCase();
+          const custPhone = transaction.customerPhone || '';
+          const matchesSearch = invNum.includes(salesSearchTerm) || 
+            custName.includes(lowerCaseSearchTerm) || 
+            custPhone.includes(salesSearchTerm) || 
+            itemsArray.some((item: CartItem) => item && ((item.name || '').toLowerCase().includes(lowerCaseSearchTerm) || (item.supplier && (item.supplier || '').toLowerCase().includes(lowerCaseSearchTerm)))); 
+          const matchesSeller = salesSellerFilter ? transaction.seller === salesSellerFilter : true; 
+          const matchesCategory = salesCategoryFilter ? itemsArray.some((item: CartItem) => item && item.categoryId === salesCategoryFilter) : true; 
+          return matchesSearch && matchesSeller && isWithinRange(transaction.createdAt) && matchesCategory; 
+        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, isWithinRange]);
 
   const handleShareCurrentStore = async () => {
@@ -933,11 +964,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         `💵 *NETO TOTAL PERIODO:* *${formatCOP(totalPeriodIncome)}*` +
         `${totalRecaudos > 0 ? `\n✳️ *RECAUDOS SISTECREDITO:* ${formatCOP(totalRecaudos)}` : ''}` +
         `\n-----------------------------------\n\n` +
-        `_Informe generado por Street/Bombón POS._`;
+        `_Informe generado por Sistema POS._`;
 
     try { 
         if (navigator.share) {
-            await navigator.share({ title: `Reporte ${currentStore?.name}`, text: summaryText }); 
+            await navigator.share({ title: `Reporte ${currentStore?.name || 'Ventas'}`, text: summaryText }); 
         } else { 
             await navigator.clipboard.writeText(summaryText); 
             alert('Resumen detallado copiado al portapapeles.'); 
@@ -994,7 +1025,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
              <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden relative">
                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
                  <div onClick={() => setIsAIExpanded(!isAIExpanded)} className="p-2 px-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between items-center">
-                     <div className="flex items-center gap-2"><SparklesIcon className="w-4 h-4 text-accent" /><h3 className="font-bold text-gray-800 dark:text-text-light text-sm">Street AI <span className="hidden sm:inline text-gray-400 font-normal">- Asistente Inteligente</span></h3></div>
+                     <div className="flex items-center gap-2"><SparklesIcon className="w-4 h-4 text-accent" /><h3 className="font-bold text-gray-800 dark:text-text-light text-sm">IA POS <span className="hidden sm:inline text-gray-400 font-normal">- Asistente Inteligente</span></h3></div>
                      <div className="flex items-center gap-3">{aiInsights && !isAIExpanded && <span className="text-[10px] text-gray-400 animate-fade-in">{aiInsights.period}</span>}<span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span><button className="text-gray-400 hover:text-accent transition-colors"><ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isAIExpanded ? 'rotate-180' : ''}`} /></button></div>
                  </div>
                  {isAIExpanded && (

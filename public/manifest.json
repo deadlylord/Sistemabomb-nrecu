@@ -1,7 +1,7 @@
 {
-  "name": "Facturacion Bombon",
-  "short_name": "Bombon POS",
-  "description": "Una aplicación de punto de venta (POS) moderna y responsiva con gestión de inventario, diseñada con una estética rosa y negra. Incluye una función de IA para generar descripciones de productos.",
+  "name": "Sistema POS - Punto de Venta & Inventario",
+  "short_name": "Sistema POS",
+  "description": "Sistema de punto de venta (POS), facturación, control de inventario multisede y finanzas en tiempo real.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -9,22 +9,10 @@
     "fullscreen",
     "standalone"
   ],
-  "background_color": "#1a1a1a",
+  "background_color": "#020617",
   "theme_color": "#ff007f",
   "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
     {
       "src": "/assets/icon.svg",
       "sizes": "192x192",

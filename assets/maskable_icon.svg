@@ -1,11 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ff007f;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#00aaff;stop-opacity:1" />
+    <!-- Background Gradient (Deep Luxury Dark) -->
+    <radialGradient id="bgGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="60%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+
+    <!-- Vibrant Brand Gradients -->
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff007f" />
+      <stop offset="50%" stop-color="#d946ef" />
+      <stop offset="100%" stop-color="#00aaff" />
     </linearGradient>
+
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.03" />
+    </linearGradient>
+
+    <!-- Subtle Shadows & Filters -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#ff007f" flood-opacity="0.45" />
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#00aaff" flood-opacity="0.35" />
+    </filter>
+    
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
   </defs>
-  <rect width="100" height="100" fill="#1a1a1a"/>
-  <circle cx="50" cy="50" r="40" fill="url(#bsGradient)"/>
-  <text x="50" y="62" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="bold" fill="white" text-anchor="middle">BS</text>
+
+  <!-- Full bleed background for maskable (Android circles/squircle masking) -->
+  <rect width="512" height="512" fill="url(#bgGrad)" />
+
+  <!-- Background Decorative Glass Ring (Safe zone 80%) -->
+  <circle cx="256" cy="246" r="150" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" />
+  <circle cx="256" cy="246" r="126" fill="none" stroke="url(#brandGrad)" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="8 6" />
+
+  <!-- Main Central POS / Shopping Bag Symbol (Kept within 80% mask zone) -->
+  <g filter="url(#glow)" transform="translate(0, -6)">
+    <!-- Shopping Bag Body -->
+    <path d="M174 196 C174 180, 186 168, 202 168 L310 168 C326 168, 338 180, 338 196 L356 324 C358 338, 346 350, 332 350 L180 350 C166 350, 154 338, 156 324 Z" 
+          fill="url(#brandGrad)" />
+
+    <!-- Bag Handle Arc -->
+    <path d="M214 174 V144 C214 122, 232 104, 256 104 C280 104, 298 122, 298 144 V174" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="12" 
+          stroke-linecap="round" />
+
+    <!-- POS Retail Sparkle / Diamond inside the Bag -->
+    <path d="M256 206 L272 248 L314 256 L272 264 L256 306 L240 264 L198 256 L240 248 Z" 
+          fill="#ffffff" 
+          filter="url(#subtleShadow)" />
+
+    <!-- Mini Star Sparkles -->
+    <circle cx="208" cy="214" r="3.5" fill="#ffffff" opacity="0.9" />
+    <circle cx="304" cy="304" r="4" fill="#ffffff" opacity="0.9" />
+  </g>
+
+  <!-- Bottom Elegant Universal Badge: "POS" -->
+  <g transform="translate(256, 420)">
+    <rect x="-68" y="-18" width="136" height="36" rx="18" fill="#0f172a" stroke="url(#brandGrad)" stroke-width="2" />
+    <text x="0" y="6" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+          font-size="17" 
+          font-weight="900" 
+          letter-spacing="4" 
+          fill="#ffffff" 
+          text-anchor="middle">POS</text>
+  </g>
 </svg>

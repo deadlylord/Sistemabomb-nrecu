@@ -44,7 +44,7 @@ const StoreModal: React.FC<StoreModalProps> = ({ isOpen, onClose, onSave, store,
           accentColorHover: '#e60073',
           nextInvoiceNumber: 1
         }),
-        name,
+        name: name.trim(),
         initialBalances,
         crossStoreInitialBalances
       };

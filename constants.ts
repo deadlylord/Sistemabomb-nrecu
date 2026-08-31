@@ -1164,8 +1164,9 @@ export const INITIAL_CATEGORIES: Category[] = [
 ];
 
 export const INITIAL_ROLES: Role[] = [
-  { id: '1', name: 'Administrator', permissions: Object.values(View) },
-  { id: '2', name: 'Vendedor', permissions: [View.POS, View.LAYAWAY, View.INCIDENTS, View.CUSTOMERS, View.INVENTORY, View.PURCHASES] }
+  { id: '1', name: 'Administrator', permissions: Object.values(View).filter(v => v !== View.DEVELOPER_CENTER) },
+  { id: '2', name: 'Vendedor', permissions: [View.POS, View.LAYAWAY, View.INCIDENTS, View.CUSTOMERS, View.INVENTORY, View.PURCHASES] },
+  { id: '3', name: 'Developer', permissions: Object.values(View) }
 ];
 
 export const INITIAL_SELLERS: Seller[] = [

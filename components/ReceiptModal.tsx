@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { Sale, Store } from '../types';
+import { Sale, Store, Company } from '../types';
 import { formatCOP } from '../constants';
 import { PrintIcon, CrossIcon, WhatsAppIcon } from './Icons';
 
@@ -15,6 +15,7 @@ const isInIframe = () => {
 interface ReceiptModalProps {
   sale: Sale;
   store: Store | null;
+  company?: Company | null;
   onClose: () => void;
 }
 
@@ -26,10 +27,12 @@ const shortenProductName = (name: string): string => {
     return name;
 };
 
-const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => {
+const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, company, onClose }) => {
   const hasAutoInteracted = useRef(false);
 
   if (!store) return null; // Can't render without store info
+
+  const brandDisplayName = store.receiptName || (company ? `${company.name} - ${store.name}` : store.name);
 
   // Re-formatted text for WhatsApp to look more like an invoice
   const itemsText = sale.items.map(item => {
@@ -46,7 +49,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
     ? sale.payments.map(p => `*${p.method}:* ${formatCOP(p.amount)}`).join('\n')
     : `*Método de Pago:* ${sale.paymentMethod}`;
 
-  const receiptText = `*${store.receiptName || store.name}*\n` +
+  const receiptText = `*${brandDisplayName}*\n` +
+      (company?.nit ? `NIT: ${company.nit}\n` : '') +
       `_¡Gracias por tu compra!_\n\n` +
       `📄 *RECIBO DE VENTA*\n` +
       `*Factura #:* ${sale.invoiceNumber}\n` +
@@ -58,8 +62,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
       `-----------------------------------\n\n` +
       `${paymentsText}\n` +
       `*TOTAL PAGADO: ${formatCOP(sale.totalAmount)}*\n\n` +
-      `_${store.whatsappFooterText}_\n\n` +
-      `${store.contactInfo}`;
+      `_${store.whatsappFooterText || ''}_\n\n` +
+      `${store.contactInfo || company?.phone || ''}`;
 
 
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
@@ -179,9 +183,10 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, onClose }) => 
         {/* The actual receipt that will be printed */}
         <div id="receipt-to-print" className="p-6 bg-white dark:bg-primary text-black dark:text-text-light font-mono text-sm overflow-y-auto flex-grow">
            <div className="text-center mb-4">
-                {store.logo && <img src={store.logo} alt="Logo" className="mx-auto max-h-20 mb-2" />}
-                <h1 className="text-2xl font-bold text-accent dark:text-accent">{store.receiptName || store.name}</h1>
-                <p className="whitespace-pre-wrap text-xs text-gray-800 dark:text-text-dark">{store.contactInfo}</p>
+                {(company?.logoUrl || store.logo) && <img src={company?.logoUrl || store.logo || ''} alt="Logo" className="mx-auto max-h-20 mb-2 object-contain" />}
+                <h1 className="text-2xl font-bold text-accent dark:text-accent">{brandDisplayName}</h1>
+                {company?.nit && <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">NIT: {company.nit}</p>}
+                <p className="whitespace-pre-wrap text-xs text-gray-800 dark:text-text-dark mt-1">{store.contactInfo || company?.phone || ''}</p>
             </div>
             <div className="mb-4">
                 <p><strong>Factura #:</strong> {sale.invoiceNumber}</p>

@@ -166,6 +166,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
   const handleExportConsolidatedProducts = () => {
     const uniqueProducts = new Map<string, Product>();
     allInventory.forEach(product => {
+      if (!product || !product.name) return;
       const key = product.name.toLowerCase().trim();
       if (!uniqueProducts.has(key)) {
         uniqueProducts.set(key, product);

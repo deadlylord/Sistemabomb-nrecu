@@ -27,23 +27,18 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onOpenVersio
 
   return (
     <div className="bg-white/10 dark:bg-slate-900/50 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl shadow-black/20 w-full max-w-sm text-center animate-fade-in border border-white/20 dark:border-slate-800">
-      <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-white/5 shadow-2xl ring-1 ring-white/10">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" className="h-20 w-20 drop-shadow-lg">
-          <defs>
-            <linearGradient id="bsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ff007f" stopOpacity="1" />
-              <stop offset="100%" stopColor="#00aaff" stopOpacity="1" />
-            </linearGradient>
-          </defs>
-          <circle cx="50" cy="50" r="50" fill="url(#bsGradient)"/>
-          <text x="50" y="65" fontFamily="Arial, Helvetica, sans-serif" fontSize="50" fontWeight="bold" fill="white" textAnchor="middle">BS</text>
-        </svg>
+      <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-slate-900/60 shadow-2xl ring-1 ring-white/10 p-2 overflow-hidden">
+        <img 
+          src="/assets/icon.svg" 
+          alt="App Icon" 
+          className="w-full h-full object-contain drop-shadow-xl" 
+        />
       </div>
       
-      <h1 className="text-4xl font-serif font-bold text-slate-800 dark:text-text-light mb-2 tracking-wide">
-        Facturación <span className="text-blue-500">Street</span>/<span className="text-accent">Bombón</span>
+      <h1 className="text-3xl font-black text-slate-850 dark:text-text-light mb-1.5 tracking-tight uppercase">
+        Sistema <span className="text-accent">POS</span>
       </h1>
-      <p className="text-slate-500 dark:text-text-dark mb-8 font-light">Ingresa para continuar</p>
+      <p className="text-xs text-slate-500 dark:text-text-dark mb-7 font-semibold uppercase tracking-wider">Punto de Venta & Gestión Multisede</p>
       
       <form onSubmit={handleSubmit} className="space-y-6 text-left">
         <div className="relative">

@@ -92,7 +92,7 @@ const cleanObject = (obj: any) => {
 };
 
 const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
-  const filteredStores = useMemo(() => stores.filter(s => !s.name.toLowerCase().includes('training')), [stores]);
+  const filteredStores = useMemo(() => stores.filter(s => !(s.name || '').toLowerCase().includes('training')), [stores]);
   const [internalActiveStoreId, setInternalActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
   
   const activeStoreId = propsActiveStoreId || internalActiveStoreId;
@@ -2356,7 +2356,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1 mb-0.5 block">¿Pago por otro local?</label>
                                         <select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-1.5 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400">
                                             <option value="">No es préstamo</option>
-                                            {stores.filter(s => s.id !== activeStoreId && !s.name.toLowerCase().includes('training')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            {stores.filter(s => s.id !== activeStoreId && !(s.name || '').toLowerCase().includes('training')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                         {entry.debtStoreId && (
                                             <div className="mt-1.5 space-y-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-2 rounded-xl border border-yellow-100">

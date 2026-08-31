@@ -1,4 +1,20 @@
 
+export const DEFAULT_COMPANY_ID = 'default_company';
+
+export interface Company {
+  id: string;
+  name: string;
+  nit?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  status: 'active' | 'suspended';
+  maxStores: number; // Límite de sedes contratadas
+  createdAt: string;
+  updatedAt?: string;
+  logoUrl?: string | null;
+}
+
 export enum ProductChangeType {
   SALE = 'Venta',
   RETURN = 'Devolución (Venta Editada)',
@@ -8,6 +24,7 @@ export enum ProductChangeType {
   PURCHASE_DELETE = 'Compra Eliminada',
   TRANSFER_OUT = 'Traslado (Salida)',
   TRANSFER_IN = 'Traslado (Entrada)',
+  TRANSFER_DELETED = 'Traslado Eliminado (Reversión)',
   MANUAL_EDIT = 'Ajuste Manual',
   DAMAGED = 'Baja por Daño',
   DAMAGED_RETURNED = 'Devolución de Daño (Arreglo)',
@@ -90,6 +107,7 @@ export interface LabelConfig {
 export interface Store {
   id: string;
   name: string;
+  companyId?: string; // ID de la empresa a la que pertenece
   receiptName?: string;
   logo: string | null;
   contactInfo: string;
@@ -159,9 +177,12 @@ export interface Role {
 export interface Seller {
   id: string;
   name: string;
+  username?: string;
   password: string;
   roleId: string;
   storeId: string;
+  companyId?: string;
+  isDeveloper?: boolean;
   isDisabled?: boolean;
 }
 
@@ -237,6 +258,7 @@ export enum View {
   GIFT_VOUCHERS = 'gift_vouchers',
   CEO_CENTER = 'ceo_center',
   TAG_SCANNING = 'tag_scanning',
+  DEVELOPER_CENTER = 'developer_center',
 }
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -259,6 +281,7 @@ export const VIEW_LABELS: Record<View, string> = {
     [View.GIFT_VOUCHERS]: 'Bonos de Regalo',
     [View.CEO_CENTER]: 'CEO Center 💎',
     [View.TAG_SCANNING]: 'Control de Etiquetas',
+    [View.DEVELOPER_CENTER]: 'Developer Center ⚙️',
 };
 
 export enum PaymentMethod {

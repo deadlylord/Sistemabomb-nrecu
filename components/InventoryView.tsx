@@ -192,7 +192,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       const storeName = stores.find(s => s.id === currentStoreId)?.name || 'tienda';
-      const fileName = `inventario_${storeName.toLowerCase().replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+      const fileName = `inventario_${(storeName || 'tienda').toLowerCase().replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
       link.setAttribute("href", url);
       link.setAttribute("download", fileName);
       link.style.visibility = 'hidden';

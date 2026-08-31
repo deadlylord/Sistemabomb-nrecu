@@ -78,7 +78,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     return inventory.filter(p =>
       !p.isDisabled &&
       p.stock > 0 &&
-      p.name.toLowerCase().includes(lowerCaseSearch) &&
+      (p.name || '').toLowerCase().includes(lowerCaseSearch) &&
       !takenItems.some(item => item.productId === p.id)
     );
   }, [takenItemSearch, inventory, takenItems]);
@@ -88,7 +88,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     const lowerCaseSearch = damagedProductSearch.toLowerCase();
     return inventory.filter(p =>
       !p.isDisabled &&
-      p.name.toLowerCase().includes(lowerCaseSearch)
+      (p.name || '').toLowerCase().includes(lowerCaseSearch)
     );
   }, [damagedProductSearch, inventory]);
 
@@ -98,7 +98,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     return inventory.filter(p =>
       !p.isDisabled &&
       p.storeId === fromStoreId &&
-      p.name.toLowerCase().includes(lowerCaseSearch)
+      (p.name || '').toLowerCase().includes(lowerCaseSearch)
     );
   }, [transferProductSearch, inventory, fromStoreId]);
 

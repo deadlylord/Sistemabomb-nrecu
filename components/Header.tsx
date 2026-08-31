@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Seller, Store, Role, Incident, IncidentStatus } from '../types';
+import { View, Seller, Store, Role, Incident, IncidentStatus, Company } from '../types';
 import { 
   StoreIcon, InventoryIcon, ReceiptIcon, HistoryIcon, TruckIcon, UsersIcon, SunIcon, MoonIcon, 
   ClipboardListIcon, ChartPieIcon, ContactIcon, SettingsIcon, DollarIcon, ShieldCheckIcon, 
@@ -17,6 +17,7 @@ interface HeaderProps {
   toggleTheme: () => void;
   currentUser: Seller;
   currentStore?: Store;
+  currentCompany?: Company | null;
   userPermissions: View[];
   onLogout: () => void;
   stores: Store[];
@@ -27,6 +28,7 @@ interface HeaderProps {
   incidents: Incident[];
   onOpenBriefing: () => void;
   onOpenVersionHistory: () => void;
+  isDeveloper?: boolean;
 }
 
 interface NavItem {
@@ -47,8 +49,8 @@ interface NavGroup {
 
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
-  userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
-  onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory
+  currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
+  onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory, isDeveloper: isDeveloperProp
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
@@ -96,6 +98,7 @@ const Header: React.FC<HeaderProps> = ({
         icon: DashboardIcon,
         color: 'text-purple-500',
         items: [
+            { view: View.DEVELOPER_CENTER, label: 'Developer Center ⚙️', shortLabel: 'Dev Center', description: 'Gestión de empresas y licencias', icon: SettingsIcon },
             { view: View.CEO_CENTER, label: 'CEO Center 💎', shortLabel: 'CEO Center', description: 'Control unificado de las 3 tiendas', icon: SparklesIcon },
             { view: View.DASHBOARD, label: 'Resumen de Negocio', shortLabel: 'Dashboard', description: 'Métricas de ventas y rendimiento', icon: DashboardIcon },
             { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja y Conciliación', shortLabel: 'Libro Caja', description: 'Registro de movimientos diarios', icon: DollarIcon },
@@ -109,16 +112,34 @@ const Header: React.FC<HeaderProps> = ({
     }
   ], []);
 
+  const userRole = roles.find(r => r.id === currentUser.roleId);
+  const roleName = (userRole?.name || '').toLowerCase().trim();
+  const username = (currentUser.username || '').toLowerCase().trim();
+  const name = (currentUser.name || '').toLowerCase().trim();
+
+  const isDeveloper = isDeveloperProp !== undefined
+    ? isDeveloperProp
+    : (
+        !!currentUser.isDeveloper ||
+        roleName === 'developer' ||
+        roleName === 'desarrollador' ||
+        username === 'developer' ||
+        username === 'dev' ||
+        username === 'carlos.cas8852@gmail.com' ||
+        (name === 'developer' && username === 'developer')
+      );
+
   const filteredGroups = useMemo(() => {
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
+            if (item.view === View.DEVELOPER_CENTER) return isDeveloper;
             if (item.view === View.TAG_SCANNING) return true;
             if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION || item.view === View.GIFT_VOUCHERS || item.view === View.CEO_CENTER) return isAdmin;
             return userPermissions.includes(item.view);
         })
     })).filter(group => group.items.length > 0);
-  }, [groups, userPermissions, isAdmin]);
+  }, [groups, userPermissions, isAdmin, isDeveloper]);
 
   const currentGroupIndex = useMemo(() => {
     return filteredGroups.findIndex(group => group.items.some(item => item.view === currentView));
@@ -227,12 +248,24 @@ const Header: React.FC<HeaderProps> = ({
           {/* LEFT: Logo & Brand (Desktop) / Sede Selector (Both) */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <div className="hidden lg:flex items-center gap-2">
-              <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20">
-                <SparklesIcon className="w-6 h-6" />
+              <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20 overflow-hidden">
+                {currentCompany?.logoUrl || currentStore?.logo ? (
+                  <img 
+                    src={currentCompany?.logoUrl || currentStore?.logo || ''} 
+                    alt="Logo" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <SparklesIcon className="w-6 h-6" />
+                )}
               </div>
-              <div className="hidden xl:block">
-                <h1 className="text-sm font-black uppercase tracking-tighter leading-none dark:text-white">Street/Bombón</h1>
-                <p className="text-[8px] font-bold text-accent uppercase tracking-widest mt-1">SISTEMA POS IA</p>
+              <div className="hidden xl:block max-w-[150px]">
+                <h1 className="text-sm font-black uppercase tracking-tighter leading-none dark:text-white truncate">
+                  {currentCompany?.name || 'SISTEMA POS'}
+                </h1>
+                <p className="text-[8px] font-bold text-accent uppercase tracking-widest mt-1 truncate">
+                  {currentCompany?.nit ? `NIT: ${currentCompany.nit}` : 'SISTEMA POS IA'}
+                </p>
               </div>
             </div>
 

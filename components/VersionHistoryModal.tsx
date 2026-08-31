@@ -69,7 +69,7 @@ const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({ isOpen, onClo
         </div>
 
         <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t dark:border-gray-800 text-center flex-shrink-0">
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Desarrollado para Street/Bombón © 2024</p>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Sistema POS Multisede • Cloud Edition</p>
         </div>
       </div>
     </div>

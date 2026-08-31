@@ -249,8 +249,8 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     const product = inventory.find(p => 
       p.storeId === store.id && 
       ((p.sku && p.sku.toLowerCase() === code) || 
-       p.id.toLowerCase() === code ||
-       p.name.toLowerCase() === code)
+       (p.id && p.id.toLowerCase() === code) ||
+       (p.name && p.name.toLowerCase() === code))
     );
 
     if (!product) {
@@ -259,8 +259,8 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       // Check if code exists in another store
       const productInOtherStore = inventory.find(p => 
         (p.sku && p.sku.toLowerCase() === code) || 
-        p.id.toLowerCase() === code ||
-        p.name.toLowerCase() === code
+        (p.id && p.id.toLowerCase() === code) ||
+        (p.name && p.name.toLowerCase() === code)
       );
 
       let warnMessage = `🚨 ¡CÓDIGO/PRODUCTO NO EXISTE EN EL SISTEMA! No se encontró ninguna prenda en ${store.name} con el código "${cleanCode}".`;
@@ -331,15 +331,15 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     const product = inventory.find(p => 
       p.storeId === store.id && 
       ((p.sku && p.sku.toLowerCase() === code) || 
-       p.id.toLowerCase() === code ||
-       p.name.toLowerCase() === code)
+       (p.id && p.id.toLowerCase() === code) ||
+       (p.name && p.name.toLowerCase() === code))
     );
 
     if (!product) {
       const productInOtherStore = inventory.find(p => 
         (p.sku && p.sku.toLowerCase() === code) || 
-        p.id.toLowerCase() === code ||
-        p.name.toLowerCase() === code
+        (p.id && p.id.toLowerCase() === code) ||
+        (p.name && p.name.toLowerCase() === code)
       );
       playBeep(false);
 
@@ -460,9 +460,9 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
     return inventory
       .filter(p => !p.isDisabled && p.storeId === store.id)
       .filter(p => 
-        p.name.toLowerCase().includes(q) ||
+        (p.name && p.name.toLowerCase().includes(q)) ||
         (p.sku && p.sku.toLowerCase().includes(q)) ||
-        p.id.toLowerCase().includes(q)
+        (p.id && p.id.toLowerCase().includes(q))
       )
       .slice(0, 8);
   }, [inventory, store.id, correctTagSearch]);

@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -45,6 +45,7 @@ import RoleManagerView from './RoleManagerView';
 import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
 import { CeoCenterView } from './CeoCenterView';
+import DeveloperCenterView from './DeveloperCenterView';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
@@ -111,6 +112,8 @@ const App: React.FC = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(localStorage.getItem('activeCompanyId') || DEFAULT_COMPANY_ID);
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
@@ -190,11 +193,11 @@ const App: React.FC = () => {
     return store;
   }, [currentStoreId, stores]);
 
-  const userPermissions = useMemo(() => {
-    if (!currentUser) return [];
-    const userRole = roles.find(role => role.id === currentUser.roleId);
-    return userRole ? userRole.permissions : [];
-  }, [currentUser, roles]);
+  const currentCompany = useMemo(() => {
+    if (!currentUser) return null;
+    const targetCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    return companies.find(c => c.id === targetCompanyId) || null;
+  }, [currentUser, currentStore, companies]);
 
   const isAdmin = useMemo(() => {
       if (!currentUser || !roles.length) return false;
@@ -202,10 +205,56 @@ const App: React.FC = () => {
       return currentUser.roleId === adminRole?.id;
   }, [currentUser, roles]);
 
+  const isDeveloper = useMemo(() => {
+      if (!currentUser) return false;
+      const userRole = roles.find(r => r.id === currentUser.roleId);
+      const roleName = (userRole?.name || '').toLowerCase().trim();
+      const username = (currentUser.username || '').toLowerCase().trim();
+      const name = (currentUser.name || '').toLowerCase().trim();
+
+      return !!currentUser.isDeveloper || 
+             roleName === 'developer' || 
+             roleName === 'desarrollador' || 
+             username === 'developer' || 
+             username === 'dev' || 
+             username === 'carlos.cas8852@gmail.com' ||
+             (name === 'developer' && username === 'developer');
+  }, [currentUser, roles]);
+
+  // Restrict visible stores in the Header/views to the current user's company (unless developer)
+  const visibleStores = useMemo(() => {
+    if (!currentUser) return stores;
+    if (isDeveloper) return stores;
+    const userCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    return stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === userCompanyId);
+  }, [currentUser, currentStore, stores, isDeveloper]);
+
+  const visibleStoreIds = useMemo(() => {
+    return new Set(visibleStores.map(s => s.id));
+  }, [visibleStores]);
+
+  const visibleSellers = useMemo(() => {
+    if (!currentUser) return sellers;
+    if (isDeveloper) return sellers;
+    const userCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    return sellers.filter(seller => {
+      if (seller.companyId) {
+        return seller.companyId === userCompanyId;
+      }
+      return visibleStoreIds.has(seller.storeId);
+    });
+  }, [currentUser, currentStore, sellers, isDeveloper, visibleStoreIds]);
+
+  const userPermissions = useMemo(() => {
+    if (!currentUser) return [];
+    const userRole = roles.find(role => role.id === currentUser.roleId);
+    return userRole ? userRole.permissions : [];
+  }, [currentUser, roles]);
+
   const isVendedor = useMemo(() => {
       if (!currentUser || !roles.length) return false;
       const userRole = roles.find(r => r.id === currentUser.roleId);
-      if (!userRole) return false;
+      if (!userRole || !userRole.name) return false;
       const name = userRole.name.toLowerCase();
       return name === 'vendedor' || name === 'vendedores';
   }, [currentUser, roles]);
@@ -237,14 +286,29 @@ const App: React.FC = () => {
     
     const loadInitialData = async () => {
       try {
+        // Ensure default company exists
+        const defaultCompanyDoc = await getDoc(doc(db, 'companies', DEFAULT_COMPANY_ID));
+        if (!defaultCompanyDoc.exists()) {
+          await setDoc(doc(db, 'companies', DEFAULT_COMPANY_ID), {
+            id: DEFAULT_COMPANY_ID,
+            name: 'Sistema POS Multisede',
+            nit: '900.123.456-1',
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            maxStores: 3,
+            phone: '300 000 0000',
+            address: 'Principal'
+          });
+        }
+
         const sellersQuery = query(collection(db, 'sellers'), limit(1));
         const snapshot = await getDocs(sellersQuery);
         if (snapshot.empty) {
           const batch = writeBatch(db);
-          INITIAL_STORES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'stores', id), data); });
+          INITIAL_STORES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'stores', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
           INITIAL_CATEGORIES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'categories', id), data); });
           INITIAL_ROLES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'roles', id), data); });
-          INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), data); });
+          INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
           INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
           await batch.commit();
         }
@@ -262,6 +326,7 @@ const App: React.FC = () => {
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'stores')), setStores),
       attachFirestoreListener(query(collection(db, 'roles')), setRoles),
+      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
     ];
     return () => unsubscribers.forEach(unsub => unsub());
   }, [isAppReady, isAuthReady]);
@@ -528,7 +593,7 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
 
-  const createProductHistoryLog = (product: Product, changedBy: string, changeType: ProductChangeType, details: string): ProductHistoryLog => {
+  const createProductHistoryLog = (product: { id: string; name: string; storeId: string; [key: string]: any }, changedBy: string, changeType: ProductChangeType, details: string): ProductHistoryLog => {
     const newLogRef = doc(collection(db, 'productHistory'));
     return {
       id: newLogRef.id,
@@ -937,6 +1002,105 @@ const App: React.FC = () => {
     } catch (error: any) { console.error("Error durante el traslado de inventario:", error); throw error; }
   };
 
+  const handleDeleteTransfer = async (transferId: string) => {
+    if (!currentUser) return;
+    const transfer = inventoryTransfers.find(t => t.id === transferId);
+    if (!transfer) {
+      alert("No se encontró el registro de traslado.");
+      return;
+    }
+
+    const fromStoreName = getStoreName(transfer.fromStoreId);
+    const toStoreName = getStoreName(transfer.toStoreId);
+
+    const confirmMsg = `¿Estás seguro de que deseas anular y eliminar este traslado por error?\n\n` +
+      `📦 Producto: ${transfer.productName}\n` +
+      `🔢 Cantidad: ${transfer.quantity} unidad(es)\n\n` +
+      `• Se devolverán +${transfer.quantity} unidad(es) a: ${fromStoreName}\n` +
+      `• Se restarán -${transfer.quantity} unidad(es) de: ${toStoreName}\n\n` +
+      `Esta acción restaurará el stock en ambas sedes y eliminará el registro de traslado.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Restaurar stock en Tienda Origen (fromStore)
+      let fromProductRef = doc(db, 'inventory', transfer.productId);
+      let fromProductDoc = await getDoc(fromProductRef);
+      let fromProduct: Product | null = null;
+
+      if (fromProductDoc.exists() && fromProductDoc.data().storeId === transfer.fromStoreId) {
+        fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
+      } else {
+        const qFrom = query(
+          collection(db, 'inventory'),
+          where('name', '==', transfer.productName),
+          where('storeId', '==', transfer.fromStoreId),
+          limit(1)
+        );
+        const snapFrom = await getDocs(qFrom);
+        if (!snapFrom.empty) {
+          fromProductDoc = snapFrom.docs[0];
+          fromProductRef = fromProductDoc.ref;
+          fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
+        }
+      }
+
+      if (fromProductRef && fromProductDoc.exists()) {
+        batch.update(fromProductRef, { stock: increment(transfer.quantity) });
+        const outLog = createProductHistoryLog(
+          fromProduct || { id: fromProductRef.id, name: transfer.productName, storeId: transfer.fromStoreId, cost: transfer.productCost, price: 0, categoryId: '', stock: 0 },
+          currentUser.name,
+          ProductChangeType.TRANSFER_DELETED,
+          `+${transfer.quantity} devueltas por anulación/reversión de traslado a ${toStoreName}`
+        );
+        batch.set(doc(db, 'productHistory', outLog.id), outLog);
+      }
+
+      // 2. Descontar stock en Tienda Destino (toStore)
+      const qTo = query(
+        collection(db, 'inventory'),
+        where('name', '==', transfer.productName),
+        where('storeId', '==', transfer.toStoreId),
+        limit(1)
+      );
+      const snapTo = await getDocs(qTo);
+      if (!snapTo.empty) {
+        const toProductDoc = snapTo.docs[0];
+        const toProduct = { id: toProductDoc.id, ...toProductDoc.data() } as Product;
+        batch.update(toProductDoc.ref, { stock: increment(-transfer.quantity) });
+        const inLog = createProductHistoryLog(
+          toProduct,
+          currentUser.name,
+          ProductChangeType.TRANSFER_DELETED,
+          `-${transfer.quantity} descontadas por anulación/reversión de traslado desde ${fromStoreName}`
+        );
+        batch.set(doc(db, 'productHistory', inLog.id), inLog);
+      }
+
+      // 3. Eliminar el documento de traslado
+      batch.delete(doc(db, 'inventoryTransfers', transferId));
+
+      // 4. Si existe una novedad asociada (IncidentType.INVENTORY_TRANSFER_REQUEST), también eliminarla
+      const linkedIncidents = incidents.filter(i => 
+        i.type === IncidentType.INVENTORY_TRANSFER_REQUEST &&
+        i.fromStoreId === transfer.fromStoreId &&
+        i.toStoreId === transfer.toStoreId &&
+        (i.productName === transfer.productName || i.productId === transfer.productId)
+      );
+      linkedIncidents.forEach(inc => {
+        batch.delete(doc(db, 'incidents', inc.id));
+      });
+
+      await batch.commit();
+      alert('Traslado eliminado y stock revertido correctamente en ambas sedes.');
+    } catch (error: any) {
+      console.error("Error al anular y eliminar traslado:", error);
+      alert(`Error al eliminar traslado: ${error.message}`);
+    }
+  };
+
   const handleResetBalances = async () => {
     if (!window.confirm("Esto marcará todos los traslados visibles como 'liquidados' y reiniciará los saldos. ¿Continuar?")) return;
     try {
@@ -1215,9 +1379,153 @@ const App: React.FC = () => {
   };
 
   const handleDeleteIncident = async (incidentId: string) => {
-      if (window.confirm('¿Eliminar novedad permanentemente?')) {
-          await deleteDoc(doc(db, 'incidents', incidentId));
+    if (!currentUser) return;
+    const incident = incidents.find(i => i.id === incidentId);
+    if (!incident) return;
+
+    // 1. Si es un traslado completado que movió inventario
+    if (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && 
+        incident.status === IncidentStatus.TRASLADO_COMPLETADO) {
+      
+      const fromStoreName = getStoreName(incident.fromStoreId || '');
+      const toStoreName = getStoreName(incident.toStoreId || '');
+      const qty = incident.quantity || 1;
+
+      const confirmMsg = `Esta novedad corresponde a un traslado de inventario que ya fue procesado.\n\n` +
+        `📦 Producto: ${incident.productName || 'Producto'}\n` +
+        `🔢 Cantidad: ${qty} unidad(es)\n\n` +
+        `¿Deseas ELIMINAR esta novedad y REVERTIR el stock?\n` +
+        `• Se devolverán +${qty} unidad(es) a: ${fromStoreName}\n` +
+        `• Se restarán -${qty} unidad(es) de: ${toStoreName}\n` +
+        `• Se eliminará también el registro del historial de traslados.`;
+
+      if (!window.confirm(confirmMsg)) return;
+
+      try {
+        const batch = writeBatch(db);
+
+        // 1.1 Restaurar stock en Tienda Origen (fromStore)
+        if (incident.fromStoreId) {
+          let fromProductRef = incident.productId ? doc(db, 'inventory', incident.productId) : null;
+          let fromProductDoc = fromProductRef ? await getDoc(fromProductRef) : null;
+          let fromProduct: Product | null = null;
+
+          if (fromProductDoc && fromProductDoc.exists() && fromProductDoc.data().storeId === incident.fromStoreId) {
+            fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
+          } else if (incident.productName) {
+            const qFrom = query(
+              collection(db, 'inventory'),
+              where('name', '==', incident.productName),
+              where('storeId', '==', incident.fromStoreId),
+              limit(1)
+            );
+            const snapFrom = await getDocs(qFrom);
+            if (!snapFrom.empty) {
+              fromProductDoc = snapFrom.docs[0];
+              fromProductRef = fromProductDoc.ref;
+              fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
+            }
+          }
+
+          if (fromProductRef && fromProductDoc && fromProductDoc.exists()) {
+            batch.update(fromProductRef, { stock: increment(qty) });
+            const log = createProductHistoryLog(
+              fromProduct || { id: fromProductRef.id, name: incident.productName || 'Producto', storeId: incident.fromStoreId, cost: 0, price: 0, categoryId: '', stock: 0 },
+              currentUser.name,
+              ProductChangeType.TRANSFER_DELETED,
+              `+${qty} devueltas por anulación de novedad de traslado a ${toStoreName}`
+            );
+            batch.set(doc(db, 'productHistory', log.id), log);
+          }
+        }
+
+        // 1.2 Descontar stock en Tienda Destino (toStore)
+        if (incident.toStoreId && incident.productName) {
+          const qTo = query(
+            collection(db, 'inventory'),
+            where('name', '==', incident.productName),
+            where('storeId', '==', incident.toStoreId),
+            limit(1)
+          );
+          const snapTo = await getDocs(qTo);
+          if (!snapTo.empty) {
+            const toProductDoc = snapTo.docs[0];
+            const toProduct = { id: toProductDoc.id, ...toProductDoc.data() } as Product;
+            batch.update(toProductDoc.ref, { stock: increment(-qty) });
+            const log = createProductHistoryLog(
+              toProduct,
+              currentUser.name,
+              ProductChangeType.TRANSFER_DELETED,
+              `-${qty} descontadas por anulación de novedad de traslado desde ${fromStoreName}`
+            );
+            batch.set(doc(db, 'productHistory', log.id), log);
+          }
+        }
+
+        // 1.3 Buscar y eliminar registros en inventoryTransfers asociados
+        if (incident.fromStoreId && incident.toStoreId) {
+          const qTransfers = query(
+            collection(db, 'inventoryTransfers'),
+            where('fromStoreId', '==', incident.fromStoreId),
+            where('toStoreId', '==', incident.toStoreId)
+          );
+          const snapTransfers = await getDocs(qTransfers);
+          snapTransfers.docs.forEach(tDoc => {
+            const tData = tDoc.data();
+            if (tData.productName === incident.productName || tData.productId === incident.productId) {
+              batch.delete(tDoc.ref);
+            }
+          });
+        }
+
+        // 1.4 Eliminar la novedad
+        batch.delete(doc(db, 'incidents', incidentId));
+
+        await batch.commit();
+        alert('Novedad eliminada, stock revertido y traslado anulado exitosamente.');
+        return;
+      } catch (error: any) {
+        console.error("Error al revertir traslado desde novedad:", error);
+        alert(`Error al eliminar novedad: ${error.message}`);
+        return;
       }
+    }
+
+    // 2. Si es una novedad de prenda dañada que estaba en arreglo
+    if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO && incident.productId) {
+      if (window.confirm('¿Eliminar novedad de prenda dañada? Se restaurará +1 unidad al inventario.')) {
+        try {
+          const batch = writeBatch(db);
+          batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
+          const logRef = doc(collection(db, 'productHistory'));
+          const log: ProductHistoryLog = {
+            id: logRef.id,
+            productId: incident.productId,
+            productName: incident.productName || 'Producto',
+            storeId: incident.storeId,
+            changedBy: currentUser.name,
+            timestamp: new Date().toISOString(),
+            changeType: ProductChangeType.DAMAGED_RETURNED,
+            details: `Novedad de prenda dañada eliminada. Stock restaurado: +1`
+          };
+          batch.set(logRef, log);
+          batch.delete(doc(db, 'incidents', incidentId));
+          await batch.commit();
+          alert('Novedad eliminada y stock restaurado.');
+          return;
+        } catch (error: any) {
+          console.error("Error al eliminar novedad de daño:", error);
+          alert(`Error al eliminar novedad: ${error.message}`);
+          return;
+        }
+      }
+      return;
+    }
+
+    // 3. Novedades estándar
+    if (window.confirm('¿Eliminar novedad permanentemente?')) {
+      await deleteDoc(doc(db, 'incidents', incidentId));
+    }
   };
   
   const handleUpdateLayaway = async (updatedLayaway: Layaway, originalLayaway: Layaway) => {
@@ -1822,7 +2130,8 @@ const App: React.FC = () => {
       const sortedInventory = [...inventory].sort((a, b) => a.name.localeCompare(b.name));
       
       sortedInventory.forEach(product => {
-        const uniqueKey = product.name.trim().toLowerCase();
+        if (!product || !product.name) return;
+        const uniqueKey = (product.name || '').trim().toLowerCase();
         let newSku = skuByName.get(uniqueKey);
         
         if (!newSku) {
@@ -2073,7 +2382,14 @@ const App: React.FC = () => {
   const handleUpdateExpenseCategory = async (id: string, name: string) => await updateDoc(doc(db, 'expenseCategories', id), { name });
   const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
 
-  const handleAddStore = async (store: Store) => await setDoc(doc(db, 'stores', store.id), cleanObject(store) as any);
+  const handleAddStore = async (store: Store) => {
+    const userCompanyId = currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const storeToSave: Store = {
+      ...store,
+      companyId: store.companyId || userCompanyId
+    };
+    await setDoc(doc(db, 'stores', storeToSave.id), cleanObject(storeToSave) as any);
+  };
   const handleUpdateStore = async (updatedStore: Store) => {
     try {
       await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
@@ -2095,11 +2411,143 @@ const App: React.FC = () => {
     }
   };
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
-  const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string) => { const newRef = doc(collection(db, 'sellers')); await setDoc(newRef, { id: newRef.id, name, password, roleId, storeId, isDisabled: false }); };
-  const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string) => {
-      const data: any = { name, roleId, storeId };
-      if (password) data.password = password;
-      await updateDoc(doc(db, 'sellers', id), data);
+
+  // Handlers for Developer Center & Multi-Tenant Management
+  const handleCreateCompany = async (
+    companyData: Partial<Company>, 
+    initialStoreName: string, 
+    adminUserData?: { name: string; username: string; password: string }
+  ) => {
+    const companyRef = doc(collection(db, 'companies'));
+    const companyId = companyRef.id;
+
+    const newCompany: Company = {
+      id: companyId,
+      name: companyData.name || 'Nueva Empresa',
+      nit: companyData.nit || '',
+      phone: companyData.phone || '',
+      email: companyData.email || '',
+      address: companyData.address || '',
+      maxStores: companyData.maxStores || 2,
+      status: 'active',
+      createdAt: new Date().toISOString()
+    };
+
+    const batch = writeBatch(db);
+    batch.set(companyRef, cleanObject(newCompany));
+
+    // Create initial Store for this company
+    const storeRef = doc(collection(db, 'stores'));
+    const initialStore: Store = {
+      id: storeRef.id,
+      name: initialStoreName || 'Sede Principal',
+      companyId: companyId,
+      logo: null,
+      contactInfo: companyData.phone || '',
+      footerText: '¡Gracias por su compra!',
+      whatsappFooterText: 'Gracias por preferirnos.',
+      addiLink: '',
+      sistecreditoLink: '',
+      accentColor: '#4f46e5',
+      accentColorHover: '#4338ca',
+      nextInvoiceNumber: 1,
+      initialBalances: { cash: 0, qr: 0 }
+    };
+    batch.set(storeRef, cleanObject(initialStore));
+
+    // Create initial Admin user if provided
+    if (adminUserData) {
+      const adminRole = roles.find(r => r.name === 'Administrator');
+      const sellerRef = doc(collection(db, 'sellers'));
+      const newAdmin: Seller = {
+        id: sellerRef.id,
+        name: adminUserData.name || 'Administrador',
+        username: adminUserData.username,
+        password: adminUserData.password,
+        roleId: adminRole?.id || '',
+        storeId: storeRef.id,
+        companyId: companyId,
+        isDisabled: false
+      };
+      batch.set(sellerRef, cleanObject(newAdmin));
+    }
+
+    await batch.commit();
+  };
+
+  const handleUpdateCompany = async (company: Company) => {
+    await updateDoc(doc(db, 'companies', company.id), cleanObject(company) as any);
+  };
+
+  const handleDeleteCompany = async (companyId: string) => {
+    if (companyId === DEFAULT_COMPANY_ID) {
+      alert('No se puede eliminar la empresa principal.');
+      return;
+    }
+    await deleteDoc(doc(db, 'companies', companyId));
+  };
+
+  const handleCreateStoreForCompany = async (companyId: string, storeData: Partial<Store>) => {
+    const storeRef = doc(collection(db, 'stores'));
+    const newStore: Store = {
+      id: storeRef.id,
+      name: storeData.name || 'Nueva Sede',
+      companyId: companyId,
+      logo: storeData.logo || null,
+      contactInfo: storeData.contactInfo || '',
+      footerText: storeData.footerText || '¡Gracias por su compra!',
+      whatsappFooterText: storeData.whatsappFooterText || 'Gracias por preferirnos.',
+      addiLink: storeData.addiLink || '',
+      sistecreditoLink: storeData.sistecreditoLink || '',
+      accentColor: storeData.accentColor || '#ff007f',
+      accentColorHover: storeData.accentColorHover || '#d9006c',
+      nextInvoiceNumber: storeData.nextInvoiceNumber || 1,
+      initialBalances: storeData.initialBalances || { cash: 0, qr: 0 }
+    };
+    await setDoc(storeRef, cleanObject(newStore));
+  };
+
+  const handleCreateAdminUser = async (
+    companyId: string,
+    storeId: string,
+    adminData: { name: string; username: string; password: string }
+  ) => {
+    const adminRole = roles.find(r => r.name === 'Administrator');
+    const sellerRef = doc(collection(db, 'sellers'));
+    const newAdmin: Seller = {
+      id: sellerRef.id,
+      name: adminData.name,
+      username: adminData.username,
+      password: adminData.password,
+      roleId: adminRole?.id || '',
+      storeId: storeId,
+      companyId: companyId,
+      isDisabled: false
+    };
+    await setDoc(sellerRef, cleanObject(newAdmin));
+  };
+  const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    const userCompanyId = currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const newRef = doc(collection(db, 'sellers'));
+    const newSellerData: any = {
+      id: newRef.id,
+      name,
+      password,
+      roleId,
+      storeId,
+      companyId: userCompanyId,
+      isDisabled: false
+    };
+    if (username) newSellerData.username = username;
+    await setDoc(newRef, cleanObject(newSellerData));
+  };
+  const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    const targetSeller = sellers.find(s => s.id === id);
+    const userCompanyId = targetSeller?.companyId || currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const data: any = { name, roleId, storeId, companyId: userCompanyId };
+    if (password) data.password = password;
+    if (username !== undefined) data.username = username;
+    await updateDoc(doc(db, 'sellers', id), cleanObject(data));
   };
   const handleDeleteSeller = async (id: string) => { if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
   const handleToggleSellerStatus = async (id: string) => { const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
@@ -2266,12 +2714,24 @@ const App: React.FC = () => {
     await deleteDoc(doc(db, 'loans', id));
   };
 
-  const handleLogin = (sellerName: string, passwordAttempt: string) => {
-    const seller = sellers.find(s => s.name.trim().toLowerCase() === sellerName.trim().toLowerCase());
-    if (seller && seller.password.trim() === passwordAttempt.trim()) {
-      setCurrentUser(seller); handleSwitchStore(seller.storeId);
+  const handleLogin = (identifier: string, passwordAttempt: string) => {
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const cleanPass = (passwordAttempt || '').trim();
+    const seller = sellers.find(s => 
+      s && (
+        (s.username && s.username.trim().toLowerCase() === cleanId) || 
+        (s.name && s.name.trim().toLowerCase() === cleanId)
+      )
+    );
+    if (seller && (seller.password || '').trim() === cleanPass) {
+      if (seller.isDisabled) {
+        alert('Este usuario se encuentra desactivado. Contacta al administrador.');
+        return;
+      }
+      setCurrentUser(seller); 
+      handleSwitchStore(seller.storeId);
       const sellerRole = roles.find(role => role.id === seller.roleId);
-      if (sellerRole && sellerRole.name.toLowerCase() === 'vendedor') setCurrentView(View.POS);
+      if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
       const newLoginRecord: Omit<LoginRecord, 'id'> = { sellerId: seller.id, sellerName: seller.name, date: new Date().toISOString(), storeId: seller.storeId };
       addDoc(collection(db, 'loginHistory'), newLoginRecord);
@@ -2284,22 +2744,22 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} userPermissions={userPermissions} onLogout={handleLogout} stores={stores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} isDeveloper={isDeveloper} />
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
-        {currentView === View.DASHBOARD && <DashboardView stores={stores} allLayaways={allLayaways} allIncidents={allIncidents} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={sellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales} allInventory={globalInventoryForSearch} allStockTakes={stockTakes} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} sellers={sellers} stores={stores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
-        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
-        {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={stores} currentUser={currentUser} transfers={inventoryTransfers} onTransfer={(data) => handleInventoryTransfer(data)} onResetBalances={handleResetBalances} />}
-        {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={sellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch : undefined} categories={categories} stores={stores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
-        {currentView === View.SELLERS && <SellersView sellers={sellers} roles={roles} stores={stores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} />}
-        {currentView === View.STORES && <StoresView stores={stores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} />}
+        {currentView === View.DASHBOARD && <DashboardView stores={visibleStores} allLayaways={isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={isDeveloper ? allIncidents : allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
+        {currentView === View.POS && <PosView inventory={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
+        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
+        {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={isDeveloper ? inventoryTransfers : inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) || visibleStoreIds.has(t.toStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
+        {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
+        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : undefined} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
+        {currentView === View.SELLERS && <SellersView sellers={visibleSellers} roles={roles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={isDeveloper} />}
+        {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
-        {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={sellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PAYROLL && <PayrollView sellers={sellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
-        {currentView === View.SETTINGS && <SettingsView stores={stores} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
+        {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
+        {currentView === View.PAYROLL && <PayrollView sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
+        {currentView === View.SETTINGS && <SettingsView stores={visibleStores} allInventory={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} />}
-        {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={stores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
+        {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && (
           <SmartAccountantView 
             sales={sales} 
@@ -2326,13 +2786,13 @@ const App: React.FC = () => {
         )}
         {currentView === View.FINANCIAL_RECONCILIATION && (
             <FinancialReconciliationView 
-                stores={stores} 
+                stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={isAdmin ? allSales : sales} 
-                layaways={isAdmin ? allLayaways : layaways} 
+                sales={isAdmin ? (isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))) : sales} 
+                layaways={isAdmin ? (isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))) : layaways} 
                 expenses={expenses}
-                incidents={isAdmin ? allIncidents : incidents}
+                incidents={isAdmin ? (isDeveloper ? allIncidents : allIncidents.filter(i => visibleStoreIds.has(i.storeId))) : incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
@@ -2342,8 +2802,8 @@ const App: React.FC = () => {
         {currentView === View.GIFT_VOUCHERS && currentUser && (
           <GiftVouchersView 
             vouchers={giftVouchers} 
-            sellers={sellers} 
-            stores={stores} 
+            sellers={visibleSellers} 
+            stores={visibleStores} 
             currentUser={currentUser} 
             isAdmin={isAdmin}
             onUpdateVoucherStatus={handleUpdateVoucherStatus} 
@@ -2353,13 +2813,13 @@ const App: React.FC = () => {
         )}
         {currentView === View.CEO_CENTER && currentUser && (
           <CeoCenterView
-            sales={isAdmin ? allSales : sales}
-            layaways={isAdmin ? allLayaways : layaways}
-            inventory={isGlobalMode || isAdmin ? globalInventoryForSearch : inventory}
+            sales={isAdmin ? (isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))) : sales}
+            layaways={isAdmin ? (isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))) : layaways}
+            inventory={isGlobalMode || isAdmin ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory}
             purchases={purchases}
             expenses={expenses}
-            stores={stores}
-            sellers={sellers}
+            stores={visibleStores}
+            sellers={visibleSellers}
             ceoNotes={ceoNotes}
             currentUser={currentUser}
             onAddCeoNote={handleSaveCeoNote}
@@ -2376,9 +2836,37 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
           />
         )}
+        {currentView === View.DEVELOPER_CENTER && isDeveloper && (
+          <DeveloperCenterView
+            companies={companies}
+            stores={stores}
+            sellers={sellers}
+            roles={roles}
+            activeCompanyId={activeCompanyId}
+            onSetActiveCompanyId={(id) => {
+              setActiveCompanyId(id);
+              localStorage.setItem('activeCompanyId', id);
+              // If current store is not in this company, switch store to first store of company
+              const compStores = stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === id);
+              if (compStores.length > 0 && !compStores.some(s => s.id === currentStoreId)) {
+                handleSwitchStore(compStores[0].id);
+              }
+            }}
+            onCreateCompany={handleCreateCompany}
+            onUpdateCompany={handleUpdateCompany}
+            onDeleteCompany={handleDeleteCompany}
+            onCreateStoreForCompany={handleCreateStoreForCompany}
+            onUpdateStore={handleUpdateStore}
+            onDeleteStore={handleDeleteStore}
+            onCreateAdminUser={handleCreateAdminUser}
+            onUpdateUser={handleUpdateSeller}
+            onDeleteUser={handleDeleteSeller}
+            onToggleUserStatus={handleToggleSellerStatus}
+          />
+        )}
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
-      {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} onClose={() => setShowReceiptModal(false)} />}
+      {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {showRecaudoReceipt && lastRecaudo && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (
           <InventoryVerificationModal

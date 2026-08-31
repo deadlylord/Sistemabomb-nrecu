@@ -82,7 +82,7 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
     const lowerCaseSearch = takenItemSearch.toLowerCase();
     return inventory.filter(p =>
       !p.isDisabled &&
-      p.name.toLowerCase().includes(lowerCaseSearch) &&
+      (p.name || '').toLowerCase().includes(lowerCaseSearch) &&
       !takenItems.some(item => item.productId === p.id)
     );
   }, [takenItemSearch, inventory, takenItems]);

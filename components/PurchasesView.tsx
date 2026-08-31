@@ -134,7 +134,8 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   };
 
   const handleProductSelect = (product: Product, targetStoreId: string | 'ALL') => {
-    const existingInBatch = batchItems.find(item => item.productName.toLowerCase() === product.name.toLowerCase());
+    const prodName = (product.name || '').toLowerCase();
+    const existingInBatch = batchItems.find(item => (item.productName || '').toLowerCase() === prodName);
     
     if (existingInBatch) {
         setBatchItems(prev => prev.map(item => {
@@ -144,7 +145,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 
                 storesToAdd.forEach(sid => {
                     if (!newEntries[sid]) {
-                        const instanceInStore = searchSource.find(p => p.name.toLowerCase() === product.name.toLowerCase() && p.storeId === sid);
+                        const instanceInStore = searchSource.find(p => (p.name || '').toLowerCase() === prodName && p.storeId === sid);
                         newEntries[sid] = {
                             quantity: '1',
                             cost: (instanceInStore?.cost || product.cost).toString(),
@@ -163,7 +164,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
         const storesToAdd = targetStoreId === 'ALL' ? activeStoreIds : [targetStoreId];
         
         storesToAdd.forEach(sid => {
-            const instanceInStore = searchSource.find(p => p.name.toLowerCase() === product.name.toLowerCase() && p.storeId === sid);
+            const instanceInStore = searchSource.find(p => (p.name || '').toLowerCase() === prodName && p.storeId === sid);
             defaultEntries[sid] = {
                 quantity: '1',
                 cost: (instanceInStore?.cost || product.cost).toString(),

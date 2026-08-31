@@ -103,8 +103,9 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
     setShowSuggestions(false);
     
     // Al seleccionar uno existente, marcar las tiendas donde NO existe
+    const targetName = (product.name || '').toLowerCase();
     const existingStoreIds = allInventory
-        .filter(p => p.name.toLowerCase() === product.name.toLowerCase())
+        .filter(p => (p.name || '').toLowerCase() === targetName)
         .map(p => p.storeId);
     
     // Si no existe en la tienda actual, dejarla seleccionada. Si existe, buscar otras.
@@ -151,7 +152,8 @@ const AddProductForm: React.FC<AddProductFormProps> = ({ onAddProduct, categorie
 
     // Smart-fill data if creating a new instance of an existing product by name
     if (!selectedProduct && productName) {
-        const existingProduct = allInventory.find(p => p.name.toLowerCase() === productName.toLowerCase());
+        const prodNameLower = productName.toLowerCase();
+        const existingProduct = allInventory.find(p => (p.name || '').toLowerCase() === prodNameLower);
         if (existingProduct) {
             productDataForSubmission.description = existingProduct.description;
             productDataForSubmission.categoryId = existingProduct.categoryId;

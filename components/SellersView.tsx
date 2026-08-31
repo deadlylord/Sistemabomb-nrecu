@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Seller, Role, Store } from '../types';
-import { EditIcon, PlusCircleIcon, TrashIcon, SearchIcon, CrossIcon, PowerIcon } from './Icons';
+import { EditIcon, PlusCircleIcon, TrashIcon, SearchIcon, CrossIcon, PowerIcon, EyeIcon, EyeOffIcon } from './Icons';
 import SellerModal from './SellerModal';
 import { normalizeText } from '../constants';
 
@@ -21,6 +21,14 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
   const [roleFilter, setRoleFilter] = useState('');
   const [storeFilter, setStoreFilter] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+
+  const togglePasswordVisibility = (id: string) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   const getRoleName = (roleId: string) => {
     return roles.find(r => r.id === roleId)?.name || 'Sin Rol';
@@ -125,6 +133,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
                   <th className="p-3 text-sm font-semibold tracking-wide">Nombre</th>
                   <th className="p-3 text-sm font-semibold tracking-wide">Rol</th>
                   <th className="p-3 text-sm font-semibold tracking-wide">Tienda Asignada</th>
+                  <th className="p-3 text-sm font-semibold tracking-wide">Contraseña</th>
                   <th className="p-3 text-sm font-semibold tracking-wide text-center">Acciones</th>
                 </tr>
               </thead>
@@ -137,7 +146,28 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
                         {getRoleName(seller.roleId)}
                       </span>
                     </td>
-                     <td className="p-3 font-semibold text-gray-600 dark:text-text-dark">{getStoreName(seller.storeId)}</td>
+                    <td className="p-3 font-semibold text-gray-600 dark:text-text-dark">{getStoreName(seller.storeId)}</td>
+                    <td className="p-3">
+                      <div className="flex items-center space-x-2">
+                        {visiblePasswords[seller.id] ? (
+                          <span className="font-mono font-bold text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-slate-800 dark:text-slate-100 select-all border border-gray-300 dark:border-gray-700">
+                            {seller.password || '—'}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-gray-400 text-xs tracking-widest">
+                            ••••••
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(seller.id)}
+                          className="text-gray-400 hover:text-accent p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                          title={visiblePasswords[seller.id] ? "Ocultar contraseña" : "Ver contraseña"}
+                        >
+                          {visiblePasswords[seller.id] ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="p-3 text-center">
                         <div className="flex justify-center items-center space-x-2">
                             <button onClick={() => onToggleSellerStatus(seller.id)} className={`p-2 rounded-full transition-colors ${!seller.isDisabled ? 'text-red-500 hover:text-red-400 hover:bg-red-500/10' : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'}`} title={seller.isDisabled ? 'Habilitar Vendedor' : 'Deshabilitar Vendedor'}>
