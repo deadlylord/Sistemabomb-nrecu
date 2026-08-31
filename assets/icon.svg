@@ -14,6 +14,11 @@
       <stop offset="100%" stop-color="#00aaff" />
     </linearGradient>
 
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#ff007f" />
+    </linearGradient>
+
     <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15" />
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0.03" />
@@ -52,6 +57,7 @@
           stroke-linecap="round" />
 
     <!-- POS Retail Lightning / Smart Sparkle / Diamond inside the Bag -->
+    <!-- Stylized Geometric Modern Cash / Card / Sparkle Glyph -->
     <path d="M256 198 L274 246 L322 256 L274 266 L256 314 L238 266 L190 256 L238 246 Z" 
           fill="#ffffff" 
           filter="url(#subtleShadow)" />
@@ -67,7 +73,9 @@
 
   <!-- Bottom Elegant Universal Badge: "POS" -->
   <g transform="translate(256, 436)">
+    <!-- Pill Background -->
     <rect x="-76" y="-22" width="152" height="44" rx="22" fill="#0f172a" stroke="url(#brandGrad)" stroke-width="2" />
+    <!-- Lettering "POS" -->
     <text x="0" y="7" 
           font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
           font-size="20" 

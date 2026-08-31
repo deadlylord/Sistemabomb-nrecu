@@ -1,10 +1,12 @@
-const CACHE_NAME = 'bombon-pos-cache-v1.1.67-network-first';
+const CACHE_NAME = 'bombon-pos-cache-v1.1.85-network-first';
 const urlsToCache = [
     '/',
     '/index.html',
     '/manifest.json',
     '/assets/icon.svg',
     '/assets/maskable_icon.svg',
+    '/icon-192.png',
+    '/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
