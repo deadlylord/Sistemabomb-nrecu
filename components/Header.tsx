@@ -123,23 +123,38 @@ const Header: React.FC<HeaderProps> = ({
         !!currentUser.isDeveloper ||
         roleName === 'developer' ||
         roleName === 'desarrollador' ||
+        userRole?.permissions?.includes(View.DEVELOPER_CENTER) ||
         username === 'developer' ||
         username === 'dev' ||
+        username.includes('carlos') ||
         username === 'carlos.cas8852@gmail.com' ||
+        name.includes('carlos') ||
+        name === 'developer' ||
+        name === 'desarrollador' ||
         (name === 'developer' && username === 'developer')
       );
 
   const filteredGroups = useMemo(() => {
+    const companyAllowed = currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0
+      ? new Set(currentCompany.allowedViews)
+      : null;
+
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
             if (item.view === View.DEVELOPER_CENTER) return isDeveloper;
+            
+            // Si el usuario no es desarrollador, verificar si la empresa tiene habilitado este módulo
+            if (!isDeveloper && companyAllowed && !companyAllowed.has(item.view)) {
+                return false;
+            }
+
             if (item.view === View.TAG_SCANNING) return true;
             if (item.view === View.ACCOUNTING || item.view === View.FINANCIAL_RECONCILIATION || item.view === View.GIFT_VOUCHERS || item.view === View.CEO_CENTER) return isAdmin;
             return userPermissions.includes(item.view);
         })
     })).filter(group => group.items.length > 0);
-  }, [groups, userPermissions, isAdmin, isDeveloper]);
+  }, [groups, userPermissions, isAdmin, isDeveloper, currentCompany]);
 
   const currentGroupIndex = useMemo(() => {
     return filteredGroups.findIndex(group => group.items.some(item => item.view === currentView));
@@ -408,6 +423,15 @@ const Header: React.FC<HeaderProps> = ({
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
                     <div className="p-2 space-y-1">
+                      {isDeveloper && (
+                        <button 
+                          onClick={() => { setCurrentView(View.DEVELOPER_CENTER); setIsUserDropdownOpen(false); }} 
+                          className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-xs font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all border border-indigo-200 dark:border-indigo-800"
+                        >
+                          <SettingsIcon className="w-4 h-4 text-indigo-600" />
+                          <span>🛠️ Panel Developer Center</span>
+                        </button>
+                      )}
                       <button onClick={() => { onOpenVersionHistory(); setIsUserDropdownOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
                         <SparklesIcon className="w-5 h-5 text-accent" />
                         Versión v{currentVersion}

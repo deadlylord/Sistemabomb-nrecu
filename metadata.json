@@ -3,5 +3,8 @@
   "description": "Sistema de punto de venta (POS) y facturación comercial con gestión de inventario multisede, control de caja y consultor estratégico con IA.",
   "requestFramePermissions": [
     "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

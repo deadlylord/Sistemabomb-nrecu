@@ -25,7 +25,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID } from '../types';
+import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID, DEFAULT_CLIENT_ALLOWED_VIEWS } from '../types';
 import Header from './Header';
 import PosView from './PosView';
 import InventoryView from './InventoryView';
@@ -184,14 +184,19 @@ const App: React.FC = () => {
   
   const currentStore = useMemo(() => {
     const store = stores.find(s => s.id === currentStoreId);
-    if (store) {
-      const rgb = hexToRgb(store.accentColor);
-      if (rgb) document.documentElement.style.setProperty('--color-accent', `${rgb.r} ${rgb.g} ${rgb.b}`);
-      const hoverRgb = hexToRgb(store.accentColorHover);
-      if (hoverRgb) document.documentElement.style.setProperty('--color-accent-hover', `${hoverRgb.r} ${hoverRgb.g} ${hoverRgb.b}`);
-    }
+    const targetCompanyId = currentUser?.companyId || store?.companyId || DEFAULT_COMPANY_ID;
+    const company = companies.find(c => c.id === targetCompanyId);
+
+    const primaryColor = company?.primaryColor || store?.accentColor || '#ff007f';
+    const primaryHover = company?.primaryColorHover || store?.accentColorHover || '#d9006c';
+
+    const rgb = hexToRgb(primaryColor);
+    if (rgb) document.documentElement.style.setProperty('--color-accent', `${rgb.r} ${rgb.g} ${rgb.b}`);
+    const hoverRgb = hexToRgb(primaryHover);
+    if (hoverRgb) document.documentElement.style.setProperty('--color-accent-hover', `${hoverRgb.r} ${hoverRgb.g} ${hoverRgb.b}`);
+
     return store;
-  }, [currentStoreId, stores]);
+  }, [currentStoreId, stores, companies, currentUser]);
 
   const currentCompany = useMemo(() => {
     if (!currentUser) return null;
@@ -215,9 +220,14 @@ const App: React.FC = () => {
       return !!currentUser.isDeveloper || 
              roleName === 'developer' || 
              roleName === 'desarrollador' || 
+             (userRole?.permissions && userRole.permissions.includes(View.DEVELOPER_CENTER)) ||
              username === 'developer' || 
              username === 'dev' || 
+             username.includes('carlos') ||
              username === 'carlos.cas8852@gmail.com' ||
+             name.includes('carlos') ||
+             name === 'developer' ||
+             name === 'desarrollador' ||
              (name === 'developer' && username === 'developer');
   }, [currentUser, roles]);
 
@@ -248,8 +258,30 @@ const App: React.FC = () => {
   const userPermissions = useMemo(() => {
     if (!currentUser) return [];
     const userRole = roles.find(role => role.id === currentUser.roleId);
-    return userRole ? userRole.permissions : [];
-  }, [currentUser, roles]);
+    let perms = userRole ? userRole.permissions : [];
+    
+    // Si no es desarrollador y la empresa tiene módulos restringidos, filtrar permisos
+    if (!isDeveloper && currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0) {
+      const allowedSet = new Set(currentCompany.allowedViews);
+      perms = perms.filter(p => allowedSet.has(p));
+    }
+    return perms;
+  }, [currentUser, roles, isDeveloper, currentCompany]);
+
+  useEffect(() => {
+    if (!currentUser || isDeveloper) return;
+    if (currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0) {
+      if (!currentCompany.allowedViews.includes(currentView)) {
+        if (currentCompany.allowedViews.includes(View.POS)) {
+          setCurrentView(View.POS);
+        } else if (currentCompany.allowedViews.includes(View.DASHBOARD)) {
+          setCurrentView(View.DASHBOARD);
+        } else if (currentCompany.allowedViews[0]) {
+          setCurrentView(currentCompany.allowedViews[0] as View);
+        }
+      }
+    }
+  }, [currentView, currentCompany, isDeveloper, currentUser]);
 
   const isVendedor = useMemo(() => {
       if (!currentUser || !roles.length) return false;
@@ -2430,7 +2462,10 @@ const App: React.FC = () => {
       address: companyData.address || '',
       maxStores: companyData.maxStores || 2,
       status: 'active',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      allowedViews: companyData.allowedViews && companyData.allowedViews.length > 0 
+        ? companyData.allowedViews 
+        : DEFAULT_CLIENT_ALLOWED_VIEWS
     };
 
     const batch = writeBatch(db);

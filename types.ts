@@ -1,6 +1,120 @@
 
 export const DEFAULT_COMPANY_ID = 'default_company';
 
+export interface ColorPalettePreset {
+  id: string;
+  name: string;
+  primary: string;
+  primaryHover: string;
+  secondary: string;
+  description: string;
+  badgeBg: string;
+  previewGradient: string;
+}
+
+export const COMPANY_COLOR_PRESETS: ColorPalettePreset[] = [
+  {
+    id: 'fuchsia-glam',
+    name: 'Rosa Fucsia Glamour',
+    primary: '#ff007f',
+    primaryHover: '#d9006c',
+    secondary: '#8b5cf6',
+    description: 'Vibrante, moderno y llamativo para moda y boutiques',
+    badgeBg: '#fdf2f8',
+    previewGradient: 'from-pink-500 via-fuchsia-500 to-rose-600'
+  },
+  {
+    id: 'indigo-tech',
+    name: 'Azul Índigo Corporativo',
+    primary: '#4f46e5',
+    primaryHover: '#4338ca',
+    secondary: '#06b6d4',
+    description: 'Elegante, tecnológico, seguro y profesional',
+    badgeBg: '#eef2ff',
+    previewGradient: 'from-indigo-600 via-blue-600 to-indigo-800'
+  },
+  {
+    id: 'emerald-pro',
+    name: 'Verde Esmeralda Fresh',
+    primary: '#059669',
+    primaryHover: '#047857',
+    secondary: '#10b981',
+    description: 'Fresco, natural, financiero y de alto contraste',
+    badgeBg: '#ecfdf5',
+    previewGradient: 'from-emerald-500 via-teal-600 to-green-700'
+  },
+  {
+    id: 'coral-energy',
+    name: 'Naranja Coral & Ámbar',
+    primary: '#ea580c',
+    primaryHover: '#c2410c',
+    secondary: '#f59e0b',
+    description: 'Cálido, comercial, dinámico y energético',
+    badgeBg: '#fff7ed',
+    previewGradient: 'from-orange-500 via-amber-500 to-red-600'
+  },
+  {
+    id: 'purple-royal',
+    name: 'Púrpura Imperial & Violeta',
+    primary: '#7c3aed',
+    primaryHover: '#6d28d9',
+    secondary: '#ec4899',
+    description: 'Sofisticado, premium, creativo y exclusivo',
+    badgeBg: '#f5f3ff',
+    previewGradient: 'from-purple-600 via-violet-600 to-pink-600'
+  },
+  {
+    id: 'blue-cobalt',
+    name: 'Azul Cobalto & Zafiro',
+    primary: '#2563eb',
+    primaryHover: '#1d4ed8',
+    secondary: '#38bdf8',
+    description: 'Clásico, confiable y de máxima legibilidad',
+    badgeBg: '#eff6ff',
+    previewGradient: 'from-blue-600 via-sky-600 to-indigo-700'
+  },
+  {
+    id: 'rose-gold',
+    name: 'Rose Gold & Rubí',
+    primary: '#e11d48',
+    primaryHover: '#be123c',
+    secondary: '#fb7185',
+    description: 'Lujo sutil, joyería, cosmética y estilo premium',
+    badgeBg: '#fff1f2',
+    previewGradient: 'from-rose-500 via-pink-600 to-red-600'
+  },
+  {
+    id: 'cyan-aqua',
+    name: 'Turquesa Aqua & Océano',
+    primary: '#0891b2',
+    primaryHover: '#0e7490',
+    secondary: '#14b8a6',
+    description: 'Innovador, limpio, relajante y nítido',
+    badgeBg: '#ecfeff',
+    previewGradient: 'from-cyan-500 via-teal-500 to-blue-600'
+  },
+  {
+    id: 'amber-gold',
+    name: 'Dorado Ámbar & Oro',
+    primary: '#d97706',
+    primaryHover: '#b45309',
+    secondary: '#f59e0b',
+    description: 'Prestigio, calidez y riqueza visual',
+    badgeBg: '#fffbeb',
+    previewGradient: 'from-amber-500 via-yellow-500 to-orange-600'
+  },
+  {
+    id: 'slate-minimal',
+    name: 'Grafito Minimalista',
+    primary: '#334155',
+    primaryHover: '#1e293b',
+    secondary: '#64748b',
+    description: 'Sobrio, minimalista, atemporal y ultra limpio',
+    badgeBg: '#f8fafc',
+    previewGradient: 'from-slate-700 via-gray-800 to-zinc-900'
+  }
+];
+
 export interface Company {
   id: string;
   name: string;
@@ -13,6 +127,15 @@ export interface Company {
   createdAt: string;
   updatedAt?: string;
   logoUrl?: string | null;
+  allowedViews?: string[]; // Módulos / vistas autorizados para la empresa
+  // Brand & Color Customization
+  primaryColor?: string;
+  primaryColorHover?: string;
+  secondaryColor?: string;
+  palettePresetId?: string;
+  brandingTagline?: string;
+  receiptHeaderColor?: string;
+  accentColorsUpdated?: boolean;
 }
 
 export enum ProductChangeType {
@@ -283,6 +406,44 @@ export const VIEW_LABELS: Record<View, string> = {
     [View.TAG_SCANNING]: 'Control de Etiquetas',
     [View.DEVELOPER_CENTER]: 'Developer Center ⚙️',
 };
+
+export interface CompanyModuleInfo {
+  id: View;
+  label: string;
+  category: 'Ventas y Operación' | 'Inventario y Logística' | 'Finanzas y Contabilidad' | 'Administración y Control';
+  description: string;
+}
+
+export const ALL_CLIENT_MODULES: CompanyModuleInfo[] = [
+  // Ventas y Operación
+  { id: View.POS, label: 'Punto de Venta (POS)', category: 'Ventas y Operación', description: 'Facturación rápida, cobros mixtos, tickets e impresión' },
+  { id: View.LAYAWAY, label: 'Apartados y Abonos', category: 'Ventas y Operación', description: 'Planes separe, abonos y reservas de clientes' },
+  { id: View.INCIDENTS, label: 'Novedades y Garantías', category: 'Ventas y Operación', description: 'Cambios de prendas, arreglos, garantías y devoluciones' },
+  { id: View.GIFT_VOUCHERS, label: 'Bonos de Regalo', category: 'Ventas y Operación', description: 'Emisión, redención y saldo de tarjetas de regalo' },
+  { id: View.CUSTOMERS, label: 'Gestión de Clientes', category: 'Ventas y Operación', description: 'Directorio de clientes e historial de compras' },
+
+  // Inventario y Logística
+  { id: View.INVENTORY, label: 'Stock de Productos', category: 'Inventario y Logística', description: 'Catálogo de referencias, precios, código de barras y kardex' },
+  { id: View.PURCHASES, label: 'Registro de Compras', category: 'Inventario y Logística', description: 'Ingreso de mercancía por proveedores y costos' },
+  { id: View.INVENTORY_TRANSFER, label: 'Traslados Internos', category: 'Inventario y Logística', description: 'Movimientos y despachos de stock entre sedes' },
+  { id: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', category: 'Inventario y Logística', description: 'Conteos físicos, auditorías y cruces de inventario' },
+  { id: View.TAG_SCANNING, label: 'Control de Etiquetas', category: 'Inventario y Logística', description: 'Escanear y detectar prendas sin etiqueta' },
+
+  // Finanzas y Contabilidad
+  { id: View.ACCOUNTING, label: 'Contabilidad e Informes', category: 'Finanzas y Contabilidad', description: 'Estado de resultados PyG, ventas globales y auditoría contable' },
+  { id: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja / Conciliación', category: 'Finanzas y Contabilidad', description: 'Movimientos de caja diarios, gastos, ingresos y arqueos' },
+  { id: View.PAYROLL, label: 'Nómina y Comisiones', category: 'Finanzas y Contabilidad', description: 'Cálculo de liquidación de sueldos y comisiones de ventas' },
+
+  // Administración y Control
+  { id: View.DASHBOARD, label: 'Panel Directivo (Dashboard)', category: 'Administración y Control', description: 'Métricas clave, gráficos y resumen ejecutivo' },
+  { id: View.SELLERS, label: 'Gestión de Equipo', category: 'Administración y Control', description: 'Vendedores, cajeros y personal de la empresa' },
+  { id: View.STORES, label: 'Sedes y Almacenes', category: 'Administración y Control', description: 'Configuración visual y saldo base de sedes' },
+  { id: View.ROLE_MANAGER, label: 'Control de Permisos', category: 'Administración y Control', description: 'Jerarquía de roles y accesos para empleados' },
+  { id: View.SETTINGS, label: 'Configuración General', category: 'Administración y Control', description: 'Logos, datos de ticket, consecutivos y opciones' },
+  { id: View.CEO_CENTER, label: 'CEO Center 💎', category: 'Administración y Control', description: 'Control analítico unificado de compras y stock' },
+];
+
+export const DEFAULT_CLIENT_ALLOWED_VIEWS: View[] = ALL_CLIENT_MODULES.map(m => m.id);
 
 export enum PaymentMethod {
     Efectivo = 'Efectivo',

@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
-import { Company, Store, Seller, Role } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Company, Store, Seller, Role, View, ALL_CLIENT_MODULES, DEFAULT_CLIENT_ALLOWED_VIEWS, CompanyModuleInfo, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
 import { formatCOP } from '../constants';
+import { compressImage } from '../services/storageService';
 import { 
   BuildingStorefrontIcon, UsersIcon, ShieldCheckIcon, 
   SettingsIcon, CheckIcon, CrossIcon, EditIcon, TrashIcon,
-  SparklesIcon, DashboardIcon, EyeIcon, EyeOffIcon
+  SparklesIcon, DashboardIcon, EyeIcon, EyeOffIcon, StoreIcon,
+  InventoryIcon, ReceiptIcon, TruckIcon, SwapIcon, ClipboardListIcon,
+  TagIcon, ChartPieIcon, DollarIcon, ContactIcon, AlertTriangleIcon
 } from './Icons';
 
 interface DeveloperCenterViewProps {
@@ -54,6 +57,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [editingUser, setEditingUser] = useState<Seller | null>(null);
+  const [moduleSaveToast, setModuleSaveToast] = useState<string | null>(null);
 
   // Visibility state for passwords
   const [visibleUserPasswords, setVisibleUserPasswords] = useState<Record<string, boolean>>({});
@@ -68,6 +72,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const [newCompanyAddress, setNewCompanyAddress] = useState('');
   const [newCompanyMaxStores, setNewCompanyMaxStores] = useState<number>(2);
   const [newCompanyInitialStoreName, setNewCompanyInitialStoreName] = useState('Sede Principal');
+  const [newCompanyAllowedViews, setNewCompanyAllowedViews] = useState<View[]>(DEFAULT_CLIENT_ALLOWED_VIEWS);
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
@@ -94,6 +99,14 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const [editUserRoleId, setEditUserRoleId] = useState('');
   const [editUserStoreId, setEditUserStoreId] = useState('');
 
+  // Branding Customization States
+  const [brandingLogo, setBrandingLogo] = useState<string | null>(null);
+  const [brandingPrimary, setBrandingPrimary] = useState<string>('#ff007f');
+  const [brandingPrimaryHover, setBrandingPrimaryHover] = useState<string>('#d9006c');
+  const [brandingSecondary, setBrandingSecondary] = useState<string>('#8b5cf6');
+  const [brandingPresetId, setBrandingPresetId] = useState<string>('fuchsia-glam');
+  const [brandingSaveToast, setBrandingSaveToast] = useState<string | null>(null);
+
   const toggleUserPasswordVisibility = (id: string) => {
     setVisibleUserPasswords(prev => ({
       ...prev,
@@ -108,6 +121,75 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
     return companies.find(c => c.id === selectedCompanyId) || companies[0];
   }, [companies, selectedCompanyId]);
 
+  useEffect(() => {
+    if (activeCompany) {
+      setBrandingLogo(activeCompany.logoUrl || null);
+      setBrandingPrimary(activeCompany.primaryColor || '#ff007f');
+      setBrandingPrimaryHover(activeCompany.primaryColorHover || '#d9006c');
+      setBrandingSecondary(activeCompany.secondaryColor || '#8b5cf6');
+      setBrandingPresetId(activeCompany.palettePresetId || 'fuchsia-glam');
+    }
+  }, [activeCompany?.id, activeCompany?.logoUrl, activeCompany?.primaryColor, activeCompany?.primaryColorHover, activeCompany?.secondaryColor, activeCompany?.palettePresetId]);
+
+  const handleApplyPalettePreset = (preset: ColorPalettePreset) => {
+    setBrandingPresetId(preset.id);
+    setBrandingPrimary(preset.primary);
+    setBrandingPrimaryHover(preset.primaryHover);
+    setBrandingSecondary(preset.secondary);
+  };
+
+  const handleBrandingLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type.startsWith('image/')) {
+        try {
+          const compressed = await compressImage(file, 'logo');
+          setBrandingLogo(compressed);
+        } catch (err) {
+          console.error("Error compressing logo:", err);
+          alert("Error al procesar el archivo de imagen.");
+        }
+      } else {
+        alert("Por favor selecciona una imagen válida (PNG, JPG, SVG).");
+      }
+    }
+  };
+
+  const handleRemoveBrandingLogo = () => {
+    setBrandingLogo(null);
+    const input = document.getElementById('company-branding-logo-upload') as HTMLInputElement;
+    if (input) input.value = '';
+  };
+
+  const handleSaveBranding = async () => {
+    if (!activeCompany) return;
+    try {
+      setIsProcessing(true);
+      await onUpdateCompany({
+        ...activeCompany,
+        logoUrl: brandingLogo,
+        primaryColor: brandingPrimary,
+        primaryColorHover: brandingPrimaryHover,
+        secondaryColor: brandingSecondary,
+        palettePresetId: brandingPresetId
+      });
+      setBrandingSaveToast('¡Identidad y paleta de colores guardadas exitosamente!');
+      setTimeout(() => setBrandingSaveToast(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      alert("Error al guardar la personalización de la empresa: " + (err?.message || err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const activeCompanyAllowedViews = useMemo(() => {
+    if (!activeCompany?.allowedViews || activeCompany.allowedViews.length === 0) {
+      return DEFAULT_CLIENT_ALLOWED_VIEWS;
+    }
+    return activeCompany.allowedViews as View[];
+  }, [activeCompany]);
+
   const companyStores = useMemo(() => {
     if (!activeCompany) return [];
     return stores.filter(s => (s.companyId || 'default_company') === activeCompany.id);
@@ -118,6 +200,66 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
     const storeIds = new Set(companyStores.map(s => s.id));
     return sellers.filter(s => (s.companyId || 'default_company') === activeCompany.id || storeIds.has(s.storeId));
   }, [sellers, activeCompany, companyStores]);
+
+  const handleToggleModule = async (moduleId: View) => {
+    if (!activeCompany) return;
+    const currentAllowed = activeCompany.allowedViews && activeCompany.allowedViews.length > 0 
+      ? (activeCompany.allowedViews as View[])
+      : DEFAULT_CLIENT_ALLOWED_VIEWS;
+    
+    let updated: View[];
+    if (currentAllowed.includes(moduleId)) {
+      if (currentAllowed.length === 1 && currentAllowed.includes(moduleId)) {
+        alert('La empresa debe tener al menos un módulo habilitado.');
+        return;
+      }
+      updated = currentAllowed.filter(v => v !== moduleId);
+    } else {
+      updated = [...currentAllowed, moduleId];
+    }
+
+    try {
+      setIsProcessing(true);
+      await onUpdateCompany({ ...activeCompany, allowedViews: updated });
+      const modLabel = ALL_CLIENT_MODULES.find(m => m.id === moduleId)?.label || moduleId;
+      const isNowActive = updated.includes(moduleId);
+      setModuleSaveToast(`Módulo "${modLabel}" ${isNowActive ? 'habilitado' : 'deshabilitado'} correctamente.`);
+      setTimeout(() => setModuleSaveToast(null), 3500);
+    } catch (err: any) {
+      alert('Error al actualizar módulos: ' + (err?.message || err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleApplyModulePreset = async (preset: 'all' | 'no_accounting_payroll' | 'standard' | 'pos_only') => {
+    if (!activeCompany) return;
+    let targetViews: View[] = [];
+    if (preset === 'all') {
+      targetViews = DEFAULT_CLIENT_ALLOWED_VIEWS;
+    } else if (preset === 'no_accounting_payroll') {
+      targetViews = DEFAULT_CLIENT_ALLOWED_VIEWS.filter(v => v !== View.ACCOUNTING && v !== View.PAYROLL);
+    } else if (preset === 'standard') {
+      targetViews = [
+        View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, 
+        View.LAYAWAY, View.CUSTOMERS, View.INCIDENTS, View.FINANCIAL_RECONCILIATION, 
+        View.STORES, View.SELLERS, View.SETTINGS
+      ];
+    } else if (preset === 'pos_only') {
+      targetViews = [View.POS, View.INVENTORY, View.CUSTOMERS, View.SETTINGS];
+    }
+
+    try {
+      setIsProcessing(true);
+      await onUpdateCompany({ ...activeCompany, allowedViews: targetViews });
+      setModuleSaveToast('Preset de módulos aplicado correctamente a ' + activeCompany.name);
+      setTimeout(() => setModuleSaveToast(null), 3500);
+    } catch (err: any) {
+      alert('Error al aplicar preset de módulos: ' + (err?.message || err));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleCreateCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +279,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
           address: newCompanyAddress.trim(),
           maxStores: Number(newCompanyMaxStores) || 1,
           status: 'active',
+          allowedViews: newCompanyAllowedViews
         },
         newCompanyInitialStoreName.trim() || 'Sede Principal',
         newAdminUsername.trim() ? {
@@ -154,6 +297,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       setNewCompanyAddress('');
       setNewCompanyMaxStores(2);
       setNewCompanyInitialStoreName('Sede Principal');
+      setNewCompanyAllowedViews(DEFAULT_CLIENT_ALLOWED_VIEWS);
       setNewAdminName('');
       setNewAdminUsername('');
       setNewAdminPassword('');
@@ -395,6 +539,27 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                     }`}>
                       {comp.status === 'active' ? 'Activa' : 'Suspendida'}
                     </span>
+                  </div>
+
+                  {/* Modules summary badge */}
+                  <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                    <span className={`px-2 py-0.5 rounded font-mono font-bold ${
+                      (comp.allowedViews?.length || DEFAULT_CLIENT_ALLOWED_VIEWS.length) === ALL_CLIENT_MODULES.length
+                        ? 'bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300'
+                        : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {(comp.allowedViews?.length || DEFAULT_CLIENT_ALLOWED_VIEWS.length)}/{ALL_CLIENT_MODULES.length} módulos
+                    </span>
+                    {comp.allowedViews && !comp.allowedViews.includes(View.ACCOUNTING) && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 font-medium">
+                        Sin Contab.
+                      </span>
+                    )}
+                    {comp.allowedViews && !comp.allowedViews.includes(View.PAYROLL) && (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 font-medium">
+                        Sin Nómina
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-700/60">
@@ -645,6 +810,434 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                     </table>
                   </div>
                 </div>
+
+                {/* SECTION: Module & Function Visibility Control */}
+                <div className="mt-8 space-y-4 pt-6 border-t border-slate-100 dark:border-slate-700">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                          Control de Módulos y Funciones Habilitadas
+                        </h3>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono ${
+                          activeCompanyAllowedViews.length === ALL_CLIENT_MODULES.length
+                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300'
+                        }`}>
+                          {activeCompanyAllowedViews.length} / {ALL_CLIENT_MODULES.length} activos
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Define qué funciones y secciones podrá ver esta empresa. Desactiva Contabilidad, Nómina, u otros módulos con un solo clic.
+                      </p>
+                    </div>
+
+                    {/* Presets */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Presets:</span>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleApplyModulePreset('all')}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 transition-all"
+                        title="Habilitar todos los módulos del sistema"
+                      >
+                        ✓ Todos ({ALL_CLIENT_MODULES.length})
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleApplyModulePreset('no_accounting_payroll')}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 transition-all"
+                        title="Desactiva Contabilidad y Nómina para esta empresa"
+                      >
+                        🚫 Sin Contab./Nómina
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleApplyModulePreset('standard')}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all"
+                        title="Módulos estándar de comercio"
+                      >
+                        🏬 Estándar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleApplyModulePreset('pos_only')}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-300 transition-all"
+                        title="Solo Punto de Venta e Inventario"
+                      >
+                        ⚡ POS Básico
+                      </button>
+                    </div>
+                  </div>
+
+                  {moduleSaveToast && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-2 animate-fade-in shadow-xs">
+                      <CheckIcon className="w-4 h-4" />
+                      <span>{moduleSaveToast}</span>
+                    </div>
+                  )}
+
+                  {/* Categorized Module Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(['Ventas y Operación', 'Inventario y Logística', 'Finanzas y Contabilidad', 'Administración y Control'] as const).map(cat => {
+                      const catModules = ALL_CLIENT_MODULES.filter(m => m.category === cat);
+                      const catActiveCount = catModules.filter(m => activeCompanyAllowedViews.includes(m.id)).length;
+                      return (
+                        <div key={cat} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700">
+                            <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                              <span>{cat}</span>
+                            </h4>
+                            <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500">
+                              {catActiveCount} / {catModules.length}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {catModules.map(mod => {
+                              const isAllowed = activeCompanyAllowedViews.includes(mod.id);
+                              return (
+                                <div
+                                  key={mod.id}
+                                  onClick={() => !isProcessing && handleToggleModule(mod.id)}
+                                  className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                                    isAllowed
+                                      ? 'bg-white dark:bg-slate-900 border-indigo-200 dark:border-indigo-800/60 shadow-xs hover:border-indigo-400'
+                                      : 'bg-slate-100/60 dark:bg-slate-900/40 border-dashed border-slate-300 dark:border-slate-700/60 opacity-60 hover:opacity-100 hover:border-slate-400'
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <div className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-colors ${
+                                      isAllowed ? 'bg-indigo-600 text-white' : 'border border-slate-400 dark:border-slate-600 bg-transparent'
+                                    }`}>
+                                      {isAllowed && <CheckIcon className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                    <div>
+                                      <p className={`text-xs font-bold ${isAllowed ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                                        {mod.label}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 line-clamp-1">
+                                        {mod.description}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded flex-shrink-0 ${
+                                    isAllowed 
+                                      ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300' 
+                                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                                  }`}>
+                                    {isAllowed ? 'Activo' : 'Oculto'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Branding, Logo & Color Palettes Section */}
+                <div className="mt-8 space-y-6 pt-6 border-t border-slate-100 dark:border-slate-700">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                          Personalización de Marca, Paleta de Colores & Logotipo
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-fuchsia-100 dark:bg-fuchsia-950/80 text-fuchsia-700 dark:text-fuchsia-300">
+                          🎨 Identidad Visual
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Define la paleta de colores corporativa y el logo exclusivo para <strong className="text-slate-700 dark:text-slate-200">{activeCompany.name}</strong>. Se aplica en toda la interfaz, botones, cabecera y recibos.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={handleSaveBranding}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/20 active:scale-95 transition-all self-start sm:self-auto"
+                    >
+                      <CheckIcon className="w-4 h-4" />
+                      <span>{isProcessing ? 'Guardando...' : 'Guardar y Aplicar Colores'}</span>
+                    </button>
+                  </div>
+
+                  {brandingSaveToast && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-2 animate-fade-in shadow-xs">
+                      <CheckIcon className="w-4 h-4" />
+                      <span>{brandingSaveToast}</span>
+                    </div>
+                  )}
+
+                  {/* Logo Management Card */}
+                  <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 flex items-center justify-center overflow-hidden shadow-inner flex-shrink-0">
+                          {brandingLogo ? (
+                            <img src={brandingLogo} alt="Logo Empresa" className="w-full h-full object-contain p-1" />
+                          ) : (
+                            <div className="text-center p-2 text-slate-400">
+                              <SparklesIcon className="w-6 h-6 mx-auto mb-1 opacity-60" />
+                              <span className="text-[9px] font-bold block leading-tight">Sin logo</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 dark:text-slate-100">Logotipo Oficial de la Empresa</h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Formato PNG, JPG o SVG. Se muestra en la cabecera superior y en los tiquetes de venta.
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <label 
+                              htmlFor="company-branding-logo-upload" 
+                              className="cursor-pointer px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-xs"
+                            >
+                              <span>📁 Subir / Cambiar Logo</span>
+                            </label>
+                            <input 
+                              id="company-branding-logo-upload" 
+                              type="file" 
+                              accept="image/png, image/jpeg, image/svg+xml" 
+                              onChange={handleBrandingLogoUpload} 
+                              className="hidden" 
+                            />
+                            {brandingLogo && (
+                              <button 
+                                type="button" 
+                                onClick={handleRemoveBrandingLogo}
+                                className="px-3 py-1.5 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-xl text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/60 transition-all"
+                              >
+                                Quitar Logo
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right hidden md:block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Impacto de Marca</span>
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                          <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">Cabecera</span>
+                          <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">POS</span>
+                          <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">Tiquetes</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 10 Curated Color Palettes */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Paletas de Colores Curadas ({COMPANY_COLOR_PRESETS.length} Diseños Profesionales)</span>
+                      </h4>
+                      <span className="text-[10px] text-slate-400">Haz clic en una paleta para seleccionarla</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                      {COMPANY_COLOR_PRESETS.map((preset) => {
+                        const isSelected = brandingPresetId === preset.id || (brandingPrimary.toLowerCase() === preset.primary.toLowerCase());
+                        return (
+                          <div
+                            key={preset.id}
+                            onClick={() => handleApplyPalettePreset(preset)}
+                            className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all relative select-none flex flex-col justify-between ${
+                              isSelected
+                                ? 'bg-white dark:bg-slate-900 border-indigo-500 shadow-md ring-2 ring-indigo-500/20'
+                                : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                            }`}
+                          >
+                            <div>
+                              {/* Gradient visual bar */}
+                              <div className={`h-2.5 w-full rounded-full bg-gradient-to-r ${preset.previewGradient} shadow-xs mb-2.5`}></div>
+                              
+                              <div className="flex items-start justify-between gap-1.5">
+                                <p className="text-xs font-black text-slate-900 dark:text-white leading-tight">
+                                  {preset.name}
+                                </p>
+                                {isSelected && (
+                                  <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 text-[10px] shadow-xs">
+                                    ✓
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                                {preset.description}
+                              </p>
+                            </div>
+
+                            {/* Color swatches */}
+                            <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                              <div className="w-5 h-5 rounded-full border border-white dark:border-slate-800 shadow-sm" style={{ backgroundColor: preset.primary }} title={`Principal: ${preset.primary}`}></div>
+                              <div className="w-4 h-4 rounded-full border border-white dark:border-slate-800 shadow-sm" style={{ backgroundColor: preset.primaryHover }} title={`Hover: ${preset.primaryHover}`}></div>
+                              <div className="w-3.5 h-3.5 rounded-full border border-white dark:border-slate-800 shadow-sm" style={{ backgroundColor: preset.secondary }} title={`Secundario: ${preset.secondary}`}></div>
+                              <span className="text-[9px] font-mono font-bold text-slate-500 ml-auto">{preset.primary}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Hex Color Pickers and Live Preview */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-2">
+                    {/* Color inputs (7 cols) */}
+                    <div className="lg:col-span-7 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-4">
+                      <h4 className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                        Ajuste Manual de Tonos Hexadecimales
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Primary Color */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Color Principal
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={brandingPrimary}
+                              onChange={(e) => {
+                                setBrandingPrimary(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-10 h-10 rounded-xl cursor-pointer border border-slate-300 dark:border-slate-600 p-0.5 bg-white dark:bg-slate-900"
+                            />
+                            <input
+                              type="text"
+                              value={brandingPrimary}
+                              onChange={(e) => {
+                                setBrandingPrimary(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-mono font-bold uppercase text-slate-800 dark:text-slate-100"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Hover Color */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Color Hover (Pasar ratón)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={brandingPrimaryHover}
+                              onChange={(e) => {
+                                setBrandingPrimaryHover(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-10 h-10 rounded-xl cursor-pointer border border-slate-300 dark:border-slate-600 p-0.5 bg-white dark:bg-slate-900"
+                            />
+                            <input
+                              type="text"
+                              value={brandingPrimaryHover}
+                              onChange={(e) => {
+                                setBrandingPrimaryHover(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-mono font-bold uppercase text-slate-800 dark:text-slate-100"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Secondary Color */}
+                        <div className="space-y-1.5">
+                          <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Color Secundario / Acento 2
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={brandingSecondary}
+                              onChange={(e) => {
+                                setBrandingSecondary(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-10 h-10 rounded-xl cursor-pointer border border-slate-300 dark:border-slate-600 p-0.5 bg-white dark:bg-slate-900"
+                            />
+                            <input
+                              type="text"
+                              value={brandingSecondary}
+                              onChange={(e) => {
+                                setBrandingSecondary(e.target.value);
+                                setBrandingPresetId('custom');
+                              }}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-mono font-bold uppercase text-slate-800 dark:text-slate-100"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Preview (5 cols) */}
+                    <div className="lg:col-span-5 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <SparklesIcon className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>Vista Previa Interactiva en Vivo</span>
+                        </h4>
+                        <span className="text-[10px] font-bold text-slate-400 font-mono">{brandingPrimary}</span>
+                      </div>
+
+                      <div className="space-y-3 pt-1">
+                        {/* Sample active button */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            style={{ backgroundColor: brandingPrimary }}
+                            className="px-4 py-2 text-white font-black text-xs rounded-xl shadow-md transition-all active:scale-95"
+                          >
+                            + Botón Acción Principal
+                          </button>
+                          <span 
+                            style={{ color: brandingPrimary, borderColor: brandingPrimary }}
+                            className="px-3 py-1.5 border rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-800"
+                          >
+                            Badge Activo
+                          </span>
+                        </div>
+
+                        {/* Sample Mini Header Bar */}
+                        <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              style={{ backgroundColor: brandingPrimary }} 
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black overflow-hidden shadow-xs"
+                            >
+                              {brandingLogo ? (
+                                <img src={brandingLogo} alt="Logo" className="w-full h-full object-cover" />
+                              ) : (
+                                activeCompany.name.charAt(0)
+                              )}
+                            </div>
+                            <span className="text-xs font-black text-slate-800 dark:text-white uppercase truncate max-w-[130px]">
+                              {activeCompany.name}
+                            </span>
+                          </div>
+                          <div 
+                            style={{ backgroundColor: brandingPrimary }} 
+                            className="px-2 py-0.5 rounded-md text-[9px] font-black text-white"
+                          >
+                            SISTEMA POS
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
@@ -758,6 +1351,56 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-mono"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Modules selection */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase">
+                    Módulos Habilitados ({newCompanyAllowedViews.length}/{ALL_CLIENT_MODULES.length})
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNewCompanyAllowedViews(DEFAULT_CLIENT_ALLOWED_VIEWS)}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-100"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCompanyAllowedViews(DEFAULT_CLIENT_ALLOWED_VIEWS.filter(v => v !== View.ACCOUNTING && v !== View.PAYROLL))}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 hover:bg-amber-100"
+                    >
+                      Sin Contab./Nómina
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                  {ALL_CLIENT_MODULES.map(m => {
+                    const checked = newCompanyAllowedViews.includes(m.id);
+                    return (
+                      <label key={m.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs select-none">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewCompanyAllowedViews(prev => [...prev, m.id]);
+                            } else {
+                              setNewCompanyAllowedViews(prev => prev.filter(id => id !== m.id));
+                            }
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className={`truncate text-[11px] ${checked ? 'font-bold text-slate-800 dark:text-slate-200' : 'text-slate-400'}`}>
+                          {m.label}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1215,6 +1858,60 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                   onChange={(e) => setEditingCompany({ ...editingCompany, phone: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm"
                 />
+              </div>
+
+              {/* Modules selection for existing company */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase">
+                    Módulos ({((editingCompany.allowedViews as View[]) || DEFAULT_CLIENT_ALLOWED_VIEWS).length}/{ALL_CLIENT_MODULES.length})
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCompany({ ...editingCompany, allowedViews: DEFAULT_CLIENT_ALLOWED_VIEWS })}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-100"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCompany({ 
+                        ...editingCompany, 
+                        allowedViews: DEFAULT_CLIENT_ALLOWED_VIEWS.filter(v => v !== View.ACCOUNTING && v !== View.PAYROLL) 
+                      })}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 hover:bg-amber-100"
+                    >
+                      Sin Contab./Nómina
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto p-1.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                  {ALL_CLIENT_MODULES.map(m => {
+                    const currentViews = (editingCompany.allowedViews as View[]) || DEFAULT_CLIENT_ALLOWED_VIEWS;
+                    const checked = currentViews.includes(m.id);
+                    return (
+                      <label key={m.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs select-none">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditingCompany({ ...editingCompany, allowedViews: [...currentViews, m.id] });
+                            } else {
+                              setEditingCompany({ ...editingCompany, allowedViews: currentViews.filter(id => id !== m.id) });
+                            }
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className={`truncate text-[11px] ${checked ? 'font-bold text-slate-800 dark:text-slate-200' : 'text-slate-400'}`}>
+                          {m.label}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
