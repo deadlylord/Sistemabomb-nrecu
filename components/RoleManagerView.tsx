@@ -8,9 +8,10 @@ interface RoleManagerViewProps {
   roles: Role[];
   onAddRole: (name: string) => void;
   onUpdateRole: (updatedRole: Role) => void;
+  isDeveloper?: boolean;
 }
 
-const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onUpdateRole }) => {
+const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onUpdateRole, isDeveloper = false }) => {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id || null);
   const [newRoleName, setNewRoleName] = useState('');
 
@@ -22,19 +23,38 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
     (r.permissions && r.permissions.includes(View.DEVELOPER_CENTER))
   );
 
+  const availableViews = React.useMemo(() => {
+    return Object.values(View).filter(v => {
+      if (v === View.DEVELOPER_CENTER) {
+        return !!isDeveloper;
+      }
+      return true;
+    });
+  }, [isDeveloper]);
+
   const handleAddRole = () => {
-    if (newRoleName.trim()) {
-      onAddRole(newRoleName.trim());
+    const trimmed = newRoleName.trim();
+    if (trimmed) {
+      if (!isDeveloper && (trimmed.toLowerCase() === 'developer' || trimmed.toLowerCase() === 'desarrollador')) {
+        alert("No tienes permisos para crear roles de Desarrollador.");
+        return;
+      }
+      onAddRole(trimmed);
       setNewRoleName('');
     }
   };
 
   const handleCreateDeveloperRole = () => {
+    if (!isDeveloper) return;
     onAddRole('Developer');
   };
 
   const handlePermissionChange = (view: View, isChecked: boolean) => {
     if (!selectedRole) return;
+    if (view === View.DEVELOPER_CENTER && !isDeveloper) {
+      alert("Solo el desarrollador puede asignar permisos de Developer Center.");
+      return;
+    }
     const currentPermissions = selectedRole.permissions || [];
     let newPermissions: View[];
 
@@ -48,7 +68,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
 
   const handleSelectAll = (selectAll: boolean) => {
     if (!selectedRole) return;
-    const newPermissions = selectAll ? Object.values(View) : [];
+    const newPermissions = selectAll ? availableViews : [];
     onUpdateRole({ ...selectedRole, permissions: newPermissions });
   };
 
@@ -65,7 +85,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
           </p>
         </div>
 
-        {!hasDeveloperRole && (
+        {isDeveloper && !hasDeveloperRole && (
           <button
             onClick={handleCreateDeveloperRole}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
@@ -156,7 +176,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                     <span className="text-accent">{selectedRole.name}</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {selectedRole.permissions?.length || 0} de {Object.values(View).length} vistas autorizadas
+                    {selectedRole.permissions?.filter(p => availableViews.includes(p)).length || 0} de {availableViews.length} vistas autorizadas
                   </p>
                 </div>
 
@@ -177,7 +197,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
-                {Object.values(View).map(view => {
+                {availableViews.map(view => {
                   const isChecked = selectedRole.permissions?.includes(view);
                   const isDevCenter = view === View.DEVELOPER_CENTER;
 

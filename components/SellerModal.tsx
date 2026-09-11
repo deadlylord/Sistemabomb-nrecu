@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Seller, Role, Store } from '../types';
+import { Seller, Role, Store, View } from '../types';
 import { EyeIcon, EyeOffIcon, ShieldCheckIcon } from './Icons';
 
 interface SellerModalProps {
@@ -11,9 +11,10 @@ interface SellerModalProps {
   seller: Seller | null;
   roles: Role[];
   stores: Store[];
+  isDeveloperUser?: boolean;
 }
 
-const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, seller, roles, stores }) => {
+const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, seller, roles, stores, isDeveloperUser = false }) => {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +22,16 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
   const [roleId, setRoleId] = useState<string | ''>('');
   const [storeId, setStoreId] = useState<string | ''>('');
   const [isDeveloper, setIsDeveloper] = useState(false);
+
+  // Filter roles available to the current user
+  const availableRoles = React.useMemo(() => {
+    if (isDeveloperUser) return roles;
+    return roles.filter(r => {
+      const rName = (r.name || '').toLowerCase().trim();
+      const isDev = rName === 'developer' || rName === 'desarrollador' || (r.permissions && r.permissions.includes(View.DEVELOPER_CENTER));
+      return !isDev;
+    });
+  }, [roles, isDeveloperUser]);
 
   useEffect(() => {
     if (seller) {
@@ -34,13 +45,14 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
     } else {
       setName('');
       setUsername('');
-      setRoleId(roles.length > 0 ? roles[1]?.id || roles[0]?.id : '');
+      const defaultRole = availableRoles.length > 1 ? availableRoles[1]?.id : availableRoles[0]?.id || '';
+      setRoleId(defaultRole);
       setStoreId(stores.length > 0 ? stores[0].id : '');
       setPassword('');
       setIsDeveloper(false);
       setShowPassword(false);
     }
-  }, [seller, roles, stores, isOpen]);
+  }, [seller, availableRoles, stores, isOpen]);
 
   if (!isOpen) return null;
 
@@ -51,7 +63,9 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
         alert("La contraseña es obligatoria.");
         return;
       }
-      onSave(name.trim(), password.trim(), roleId, storeId, username.trim() || undefined, isDeveloper);
+      // If the current user is not a developer, they cannot grant or toggle developer access
+      const finalIsDev = isDeveloperUser ? isDeveloper : (seller ? !!seller.isDeveloper : false);
+      onSave(name.trim(), password.trim(), roleId, storeId, username.trim() || undefined, finalIsDev);
     } else {
       alert("Por favor, completa todos los campos.");
     }
@@ -133,7 +147,7 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
                 onChange={e => {
                   setRoleId(e.target.value);
                   const r = roles.find(item => item.id === e.target.value);
-                  if ((r?.name || '').toLowerCase() === 'developer') {
+                  if (isDeveloperUser && (r?.name || '').toLowerCase() === 'developer') {
                     setIsDeveloper(true);
                   }
                 }}
@@ -141,7 +155,7 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
                 required
               >
                 <option value="" disabled>Selecciona rol</option>
-                {roles.map(role => (
+                {availableRoles.map(role => (
                   <option key={role.id} value={role.id}>{role.name}</option>
                 ))}
               </select>
@@ -164,24 +178,26 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
             </div>
           </div>
 
-          {/* Developer Access Toggle */}
-          <div className="p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
-            <div className="pr-2">
-              <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 block">
-                🛠️ Privilegios de Desarrollador
-              </span>
-              <span className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 block leading-tight">
-                Permite acceso al Developer Center y gestión global multi-empresa.
-              </span>
+          {/* Developer Access Toggle (Only visible and configurable by developers) */}
+          {isDeveloperUser && (
+            <div className="p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
+              <div className="pr-2">
+                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 block">
+                  🛠️ Privilegios de Desarrollador
+                </span>
+                <span className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 block leading-tight">
+                  Permite acceso al Developer Center y gestión global multi-empresa.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={isDeveloper || isDevRole}
+                disabled={isDevRole}
+                onChange={e => setIsDeveloper(e.target.checked)}
+                className="h-5 w-5 rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
+              />
             </div>
-            <input
-              type="checkbox"
-              checked={isDeveloper || isDevRole}
-              disabled={isDevRole}
-              onChange={e => setIsDeveloper(e.target.checked)}
-              className="h-5 w-5 rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
-            />
-          </div>
+          )}
 
           <div className="mt-6 flex justify-end space-x-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-bold text-xs">Cancelar</button>

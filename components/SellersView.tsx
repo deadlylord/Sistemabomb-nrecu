@@ -224,6 +224,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
           seller={editingSeller}
           roles={roles}
           stores={stores}
+          isDeveloperUser={isDeveloper}
         />
       )}
     </>

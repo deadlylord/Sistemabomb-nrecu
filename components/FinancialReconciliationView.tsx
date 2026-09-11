@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
-import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon } from './Icons';
+import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 
@@ -121,6 +121,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
   const [showBothClosures, setShowBothClosures] = useState(false);
   const [showGlobalSummary, setShowGlobalSummary] = useState(false);
+  const [showInterStoreModal, setShowInterStoreModal] = useState(false);
+  const [interStoreFilterStoreId, setInterStoreFilterStoreId] = useState<string>('all');
+  const [interStoreSearchQuery, setInterStoreSearchQuery] = useState<string>('');
+  const [showSettledBalances, setShowSettledBalances] = useState<boolean>(false);
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
@@ -268,7 +272,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       };
   }, [records, selectedMonth, selectedYear]);
 
-  const interStoreBalances = useMemo(() => {
+  const allInterStoreBalances = useMemo(() => {
       const balances: Record<string, { total: number, cash: number, qr: number, storeId: string, history: FinancialRecord[] }> = {};
       records.forEach(r => {
           const otherStoreId = r.debtStoreId;
@@ -301,8 +305,200 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               ...stats,
               history: historyWithBalance.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime() || b.id.localeCompare(a.id))
           };
-      }).filter(s => Math.abs(s.total) > 0.1);
+      });
   }, [records, filteredStores]);
+
+  const interStoreBalances = useMemo(() => {
+      return allInterStoreBalances.filter(s => Math.abs(s.total) > 0.1);
+  }, [allInterStoreBalances]);
+
+  const escapeCsvValue = (val: any): string => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const handleExportSingleStoreExcel = (targetStoreBalance: {
+    otherStoreName: string;
+    storeId: string;
+    total: number;
+    cash: number;
+    qr: number;
+    history: FinancialRecord[];
+  }) => {
+    const activeStoreName = activeStore?.name || 'Local Actual';
+    const otherStoreName = targetStoreBalance.otherStoreName;
+    const history = targetStoreBalance.history || [];
+
+    if (history.length === 0) {
+      alert(`No hay registros de intercambio con la sede ${otherStoreName}.`);
+      return;
+    }
+
+    const dateFormatted = new Date().toISOString().split('T')[0];
+    const cleanFileName = `intercambios_${activeStoreName.replace(/[^a-zA-Z0-9]/g, '_')}_con_${otherStoreName.replace(/[^a-zA-Z0-9]/g, '_')}_${dateFormatted}.csv`;
+
+    const csvRows: string[] = [
+      `"REPORTE DE INTERCAMBIO ENTRE SEDES"`,
+      `"Sede Principal:",${escapeCsvValue(activeStoreName)}`,
+      `"Sede Involucrada:",${escapeCsvValue(otherStoreName)}`,
+      `"Fecha de Exportación:",${escapeCsvValue(new Date().toLocaleString())}`,
+      `"Saldo Actual:",${targetStoreBalance.total}`,
+      `"Estado:",${escapeCsvValue(targetStoreBalance.total > 0 ? 'POR COBRAR' : targetStoreBalance.total < 0 ? 'POR PAGAR' : 'AL DÍA')}`,
+      `"Total Efectivo:",${targetStoreBalance.cash}`,
+      `"Total QR / Digital:",${targetStoreBalance.qr}`,
+      `""`,
+      [
+        'Fecha',
+        'Hora',
+        'Sede Principal',
+        'Sede Involucrada',
+        'Tipo de Movimiento',
+        'Cuenta / Método',
+        'Descripción / Concepto',
+        'Subcategoría',
+        'Impacto Neto ($)',
+        'Impacto Formateado',
+        'Saldo Acumulado ($)',
+        'Saldo Acumulado Formateado',
+        'Registrado Por',
+        'ID Transacción'
+      ].map(escapeCsvValue).join(',')
+    ];
+
+    const chronologicalHistory = [...history].sort((a: any, b: any) => 
+      new Date(a.date || '').getTime() - new Date(b.date || '').getTime() || a.id.localeCompare(b.id)
+    );
+
+    chronologicalHistory.forEach(r => {
+      const impact = (r as any).netImpact || 0;
+      const running = (r as any).runningBalance || 0;
+      const timeStr = r.date.includes('T') ? r.date.split('T')[1]?.slice(0, 5) : '--:--';
+      const dateStr = getLocalDateString(r.date);
+      const methodLabel = r.accountType === 'cash' ? 'Efectivo' : (r.accountType === 'qr' ? 'QR' : (r.accountType === 'addi' ? 'Addi' : 'Banco'));
+      const tipoMovimiento = impact > 0 ? 'A favor / Cobro (+)' : (impact < 0 ? 'En contra / Deuda (-)' : 'Neutral');
+
+      const row = [
+        escapeCsvValue(dateStr),
+        escapeCsvValue(timeStr),
+        escapeCsvValue(activeStoreName),
+        escapeCsvValue(otherStoreName),
+        escapeCsvValue(tipoMovimiento),
+        escapeCsvValue(methodLabel),
+        escapeCsvValue(r.description || ''),
+        escapeCsvValue(r.subCategory || 'Cruce Sedes'),
+        impact,
+        escapeCsvValue(formatCOP(impact)),
+        running,
+        escapeCsvValue(formatCOP(running)),
+        escapeCsvValue(r.registeredBy || 'Sistema'),
+        escapeCsvValue(r.id)
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', cleanFileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleExportAllInterStoreExcel = () => {
+    const activeStoreName = activeStore?.name || 'Local Actual';
+    const balances = allInterStoreBalances.length > 0 ? allInterStoreBalances : interStoreBalances;
+    const totalRecords = balances.reduce((acc, b) => acc + (b.history?.length || 0), 0);
+
+    if (totalRecords === 0) {
+      alert("No hay movimientos de intercambio de sedes para exportar.");
+      return;
+    }
+
+    const dateFormatted = new Date().toISOString().split('T')[0];
+    const cleanFileName = `intercambios_sedes_${activeStoreName.replace(/[^a-zA-Z0-9]/g, '_')}_consolidado_${dateFormatted}.csv`;
+
+    const csvRows: string[] = [
+      `"REPORTE CONSOLIDADO DE INTERCAMBIO DE SEDES"`,
+      `"Sede Principal:",${escapeCsvValue(activeStoreName)}`,
+      `"Fecha de Exportación:",${escapeCsvValue(new Date().toLocaleString())}`,
+      `"Total Por Cobrar Global:",${globalDebtsSummary.toCollect}`,
+      `"Total Por Pagar Global:",${globalDebtsSummary.toPay}`,
+      `"Balance Neto Red:",${globalDebtsSummary.toCollect - globalDebtsSummary.toPay}`,
+      `""`,
+      [
+        'Fecha',
+        'Hora',
+        'Sede Principal',
+        'Sede Involucrada',
+        'Tipo de Movimiento',
+        'Cuenta / Método',
+        'Descripción / Concepto',
+        'Subcategoría',
+        'Impacto Neto ($)',
+        'Impacto Formateado',
+        'Saldo Acumulado en Sede ($)',
+        'Saldo Acumulado Formateado',
+        'Registrado Por',
+        'ID Transacción'
+      ].map(escapeCsvValue).join(',')
+    ];
+
+    balances.forEach(b => {
+      const otherStoreName = b.otherStoreName;
+      const chronological = [...b.history].sort((x: any, y: any) => 
+        new Date(x.date || '').getTime() - new Date(y.date || '').getTime() || x.id.localeCompare(y.id)
+      );
+
+      chronological.forEach(r => {
+        const impact = (r as any).netImpact || 0;
+        const running = (r as any).runningBalance || 0;
+        const timeStr = r.date.includes('T') ? r.date.split('T')[1]?.slice(0, 5) : '--:--';
+        const dateStr = getLocalDateString(r.date);
+        const methodLabel = r.accountType === 'cash' ? 'Efectivo' : (r.accountType === 'qr' ? 'QR' : (r.accountType === 'addi' ? 'Addi' : 'Banco'));
+        const tipoMovimiento = impact > 0 ? 'A favor / Cobro (+)' : (impact < 0 ? 'En contra / Deuda (-)' : 'Neutral');
+
+        const row = [
+          escapeCsvValue(dateStr),
+          escapeCsvValue(timeStr),
+          escapeCsvValue(activeStoreName),
+          escapeCsvValue(otherStoreName),
+          escapeCsvValue(tipoMovimiento),
+          escapeCsvValue(methodLabel),
+          escapeCsvValue(r.description || ''),
+          escapeCsvValue(r.subCategory || 'Cruce Sedes'),
+          impact,
+          escapeCsvValue(formatCOP(impact)),
+          running,
+          escapeCsvValue(formatCOP(running)),
+          escapeCsvValue(r.registeredBy || 'Sistema'),
+          escapeCsvValue(r.id)
+        ];
+        csvRows.push(row.join(','));
+      });
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', cleanFileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
 
   const globalDebtsSummary = useMemo(() => {
       let toCollect = 0; let toPay = 0;
@@ -1294,6 +1490,294 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             </div>
         )}
 
+        {/* Modal de Intercambio de Sedes y Descarga Excel */}
+        {showInterStoreModal && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white dark:bg-secondary w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden border border-accent/20 flex flex-col max-h-[90vh]">
+                    {/* Header del Modal */}
+                    <div className="p-4 sm:p-6 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 shrink-0">
+                        <div className="min-w-0 pr-2">
+                            <h3 className="text-base sm:text-xl font-black text-accent uppercase tracking-widest flex items-center gap-2 truncate">
+                                <SwapIcon className="w-5 h-5 sm:w-6 sm:h-6 text-accent shrink-0" />
+                                <span>Intercambio de Sedes y Conciliación</span>
+                            </h3>
+                            <p className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-tighter mt-1 truncate">
+                                Sede Activa: <span className="text-accent font-black">{activeStore?.name || 'Local'}</span> • Historial de cruces, préstamos y exportación a Excel
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button 
+                                onClick={handleExportAllInterStoreExcel}
+                                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md font-black text-[9px] sm:text-xs uppercase flex items-center gap-1.5 transition-all hover:scale-[1.02]"
+                                title="Descargar reporte consolidado de todos los intercambios en Excel"
+                            >
+                                <DownloadIcon className="w-4 h-4" />
+                                <span className="hidden sm:inline">Descargar Todo (Excel)</span>
+                                <span className="sm:hidden">Excel</span>
+                            </button>
+                            <button 
+                                onClick={() => setShowInterStoreModal(false)} 
+                                className="p-2 text-gray-400 hover:text-red-500 transition-colors bg-white dark:bg-gray-800 rounded-full shadow-sm"
+                            >
+                                <CrossIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Resumen Global Rápido de Intercambios */}
+                    <div className="p-3 sm:p-4 bg-gray-100/70 dark:bg-gray-800/40 border-b dark:border-gray-800 shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+                        <div className="bg-white dark:bg-gray-800/80 p-2.5 sm:p-3 rounded-xl border border-green-200 dark:border-green-900/40 shadow-sm">
+                            <span className="text-[8px] sm:text-[9px] font-black text-green-600 dark:text-green-400 uppercase tracking-wider block">Total Por Cobrar</span>
+                            <span className="text-sm sm:text-lg font-black text-green-600 dark:text-green-400">+{formatCOP(globalDebtsSummary.toCollect)}</span>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800/80 p-2.5 sm:p-3 rounded-xl border border-red-200 dark:border-red-900/40 shadow-sm">
+                            <span className="text-[8px] sm:text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-wider block">Total Por Pagar</span>
+                            <span className="text-sm sm:text-lg font-black text-red-600 dark:text-red-400">-{formatCOP(globalDebtsSummary.toPay)}</span>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800/80 p-2.5 sm:p-3 rounded-xl border border-accent/20 shadow-sm">
+                            <span className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-wider block">Balance Neto</span>
+                            <span className={`text-sm sm:text-lg font-black ${(globalDebtsSummary.toCollect - globalDebtsSummary.toPay) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatCOP(globalDebtsSummary.toCollect - globalDebtsSummary.toPay)}
+                            </span>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800/80 p-2.5 sm:p-3 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
+                            <div>
+                                <span className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-wider block">Sedes Involucradas</span>
+                                <span className="text-sm sm:text-lg font-black text-accent">{allInterStoreBalances.length}</span>
+                            </div>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                                {interStoreBalances.length} pendientes
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Barra de Filtros y Búsqueda */}
+                    <div className="p-3 sm:p-4 border-b dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row gap-2.5 items-center justify-between shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto flex-1">
+                            {/* Filtro por Sede */}
+                            <select
+                                value={interStoreFilterStoreId}
+                                onChange={(e) => setInterStoreFilterStoreId(e.target.value)}
+                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:border-accent"
+                            >
+                                <option value="all">Todas las Sedes</option>
+                                {allInterStoreBalances.map(b => (
+                                    <option key={b.storeId} value={b.storeId}>{b.otherStoreName}</option>
+                                ))}
+                            </select>
+
+                            {/* Búsqueda */}
+                            <div className="relative flex-1 min-w-[180px]">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar en descripción, categoría o usuario..."
+                                    value={interStoreSearchQuery}
+                                    onChange={(e) => setInterStoreSearchQuery(e.target.value)}
+                                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-1.5 pl-8 pr-3 text-xs font-bold outline-none focus:border-accent"
+                                />
+                                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5" />
+                            </div>
+                        </div>
+
+                        {/* Toggle saldos liquidados */}
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-[9px] sm:text-xs font-bold text-gray-500 dark:text-gray-400">
+                            <input
+                                type="checkbox"
+                                checked={showSettledBalances}
+                                onChange={(e) => setShowSettledBalances(e.target.checked)}
+                                className="w-3.5 h-3.5 rounded text-accent focus:ring-accent"
+                            />
+                            <span>Ver saldos en $0 (liquidados)</span>
+                        </label>
+                    </div>
+
+                    {/* Lista de Sedes y Movimientos */}
+                    <div className="p-3 sm:p-6 overflow-y-auto flex-1 space-y-4">
+                        {(() => {
+                            const sourceList = showSettledBalances ? allInterStoreBalances : interStoreBalances;
+                            const filteredList = sourceList
+                                .filter(b => interStoreFilterStoreId === 'all' || b.storeId === interStoreFilterStoreId)
+                                .map(b => {
+                                    if (!interStoreSearchQuery.trim()) return b;
+                                    const q = interStoreSearchQuery.toLowerCase();
+                                    const matchesHistory = b.history.filter(r => 
+                                        (r.description || '').toLowerCase().includes(q) ||
+                                        (r.subCategory || '').toLowerCase().includes(q) ||
+                                        (r.registeredBy || '').toLowerCase().includes(q) ||
+                                        (r.date || '').toLowerCase().includes(q)
+                                    );
+                                    return { ...b, history: matchesHistory };
+                                })
+                                .filter(b => b.history.length > 0 || (showSettledBalances && interStoreSearchQuery === ''));
+
+                            if (filteredList.length === 0) {
+                                return (
+                                    <div className="text-center py-12">
+                                        <SwapIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3 opacity-50" />
+                                        <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No hay movimientos de intercambio encontrados</p>
+                                        <p className="text-xs text-gray-500 mt-1">Prueba cambiando los filtros o activando la opción de saldos liquidados.</p>
+                                    </div>
+                                );
+                            }
+
+                            return filteredList.map((item) => (
+                                <div 
+                                    key={item.storeId} 
+                                    className="bg-white dark:bg-gray-800/60 rounded-2xl border-2 border-gray-100 dark:border-gray-700/60 shadow-sm overflow-hidden"
+                                >
+                                    {/* Header de la Sede */}
+                                    <div className="p-3 sm:p-4 bg-gray-50/70 dark:bg-gray-800/90 border-b dark:border-gray-700/60 flex flex-wrap justify-between items-center gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-accent"></div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="text-xs sm:text-base font-black uppercase text-gray-800 dark:text-gray-100">{item.otherStoreName}</h4>
+                                                    <span className={`text-[8px] sm:text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                        item.total > 0 
+                                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' 
+                                                            : item.total < 0 
+                                                                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' 
+                                                                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                                                    }`}>
+                                                        {item.total > 0 ? 'POR COBRAR' : item.total < 0 ? 'POR PAGAR' : 'AL DÍA ($0)'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[8px] sm:text-[9px] font-bold text-gray-400 uppercase mt-0.5">
+                                                    Efectivo: {formatCOP(item.cash)} • QR: {formatCOP(item.qr)} • {item.history.length} movimientos
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-right mr-1 sm:mr-3">
+                                                <span className="text-[7px] sm:text-[8px] font-black uppercase text-gray-400 block">Saldo Actual</span>
+                                                <span className={`text-sm sm:text-lg font-black ${
+                                                    item.total > 0 ? 'text-green-600' : item.total < 0 ? 'text-red-600' : 'text-gray-500'
+                                                }`}>
+                                                    {formatCOP(Math.abs(item.total))}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* Botón Descargar Excel para este local */}
+                                            <button
+                                                onClick={() => handleExportSingleStoreExcel(item)}
+                                                className="px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-600 text-emerald-700 dark:text-emerald-300 hover:text-white border border-emerald-300 dark:border-emerald-800 rounded-xl font-black text-[9px] sm:text-[10px] uppercase flex items-center gap-1.5 transition-all shadow-sm"
+                                                title={`Descargar historial de intercambios con ${item.otherStoreName} en formato Excel`}
+                                            >
+                                                <DownloadIcon className="w-3.5 h-3.5" />
+                                                <span>Descargar Excel</span>
+                                            </button>
+
+                                            {item.total < 0 && (
+                                                <div className="flex gap-1">
+                                                    <button 
+                                                        onClick={() => {
+                                                            setShowInterStoreModal(false);
+                                                            initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'cash', item.history);
+                                                        }} 
+                                                        className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[8px] sm:text-[9px] font-black uppercase"
+                                                    >
+                                                        Pagar Efec
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setShowInterStoreModal(false);
+                                                            initiateSettlement(item.storeId, item.otherStoreName, Math.abs(item.total), 'qr', item.history);
+                                                        }} 
+                                                        className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[8px] sm:text-[9px] font-black uppercase"
+                                                    >
+                                                        Pagar QR
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Tabla detallada de movimientos */}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse text-[9px] sm:text-xs">
+                                            <thead>
+                                                <tr className="border-b dark:border-gray-700/60 bg-gray-50/40 dark:bg-gray-900/30 text-gray-400 uppercase font-black tracking-wider text-[8px]">
+                                                    <th className="p-2 sm:p-3">Fecha y Hora</th>
+                                                    <th className="p-2 sm:p-3">Cuenta</th>
+                                                    <th className="p-2 sm:p-3">Descripción / Concepto</th>
+                                                    <th className="p-2 sm:p-3">Subcategoría</th>
+                                                    <th className="p-2 sm:p-3 text-right">Impacto</th>
+                                                    <th className="p-2 sm:p-3 text-right">Saldo Acumulado</th>
+                                                    <th className="p-2 sm:p-3 text-center">Registrado Por</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                                {item.history.map((record) => {
+                                                    const impact = (record as any).netImpact || 0;
+                                                    const running = (record as any).runningBalance || 0;
+                                                    const methodLabel = record.accountType === 'cash' ? 'EFEC' : (record.accountType === 'qr' ? 'QR' : (record.accountType === 'addi' ? 'ADDI' : 'BANCO'));
+                                                    const methodBadge = record.accountType === 'cash' 
+                                                        ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800' 
+                                                        : (record.accountType === 'qr' 
+                                                            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800' 
+                                                            : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800');
+
+                                                    return (
+                                                        <tr key={record.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition-colors">
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap font-medium text-gray-600 dark:text-gray-300">
+                                                                <span className="font-bold">{getLocalDateString(record.date)}</span>
+                                                                <span className="text-[8px] text-accent ml-1.5 font-bold">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap">
+                                                                <span className={`text-[7px] sm:text-[8px] font-black uppercase px-1.5 py-0.5 border rounded-md ${methodBadge}`}>
+                                                                    {methodLabel}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 font-semibold text-gray-800 dark:text-gray-200 max-w-[200px] sm:max-w-xs truncate" title={record.description}>
+                                                                {record.description}
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap">
+                                                                <span className="text-[8px] sm:text-[9px] font-black text-accent uppercase bg-accent/5 px-2 py-0.5 rounded">
+                                                                    {record.subCategory || 'Cruce Sedes'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap text-right font-black">
+                                                                <span className={impact > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                                                                    {impact > 0 ? '+' : ''}{formatCOP(impact)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap text-right font-bold text-gray-600 dark:text-gray-300">
+                                                                {formatCOP(Math.abs(running))}
+                                                                <span className="text-[7px] uppercase text-gray-400 ml-1">
+                                                                    {running > 0 ? '(Favor)' : running < 0 ? '(Deuda)' : ''}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-2 sm:p-3 whitespace-nowrap text-center text-gray-400 text-[8px] font-bold">
+                                                                {record.registeredBy || 'Sistema'}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ));
+                        })()}
+                    </div>
+
+                    {/* Footer del Modal */}
+                    <div className="p-3 sm:p-4 border-t dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 flex flex-wrap justify-between items-center gap-2 shrink-0">
+                        <p className="text-[9px] sm:text-xs text-gray-400">
+                            * Los reportes descargados en Excel son compatibles con Microsoft Excel, Google Sheets y LibreOffice.
+                        </p>
+                        <button
+                            onClick={() => setShowInterStoreModal(false)}
+                            className="px-4 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-black uppercase transition-all"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Modal de Historial de Auditoría y Restauración */}
         {showHistoryModal && (
             <div className="fixed inset-0 z-[400] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -1530,6 +2014,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <span className="text-[9px] font-black uppercase hidden sm:inline">Historial/Auditoría</span>
                             </button>
                             <button 
+                                onClick={() => setShowInterStoreModal(true)}
+                                className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl transition-all flex items-center gap-1.5 shadow-sm border border-emerald-500/20"
+                                title="Modal de Intercambio de Sedes y Descarga Excel"
+                            >
+                                <SwapIcon className="w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase hidden sm:inline">Intercambios</span>
+                            </button>
+                            <button 
                                 onClick={handleOpenEditNames}
                                 className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-400 hover:text-accent rounded-xl transition-colors"
                                 title="Editar nombres de cuentas"
@@ -1546,8 +2038,26 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-accent/20">
                 <div onClick={() => setIsDebtsSectionOpen(!isDebtsSectionOpen)} className="flex justify-between items-center cursor-pointer mb-3 group">
                     <h3 className="text-[10px] sm:text-sm font-black text-accent uppercase tracking-widest flex items-center gap-2"><SwapIcon className="w-4 h-4 sm:w-5 h-5" /> Intercambios Sedes</h3>
-                    <div className="flex items-center gap-1.5 sm:gap-3">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
                         {globalDebtsSummary.toCollect > 0 && <span className="text-[8px] sm:text-[10px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded truncate max-w-[100px]">COBRAR: {formatCOP(globalDebtsSummary.toCollect)}</span>}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleExportAllInterStoreExcel(); }}
+                            className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-300 dark:border-emerald-800 rounded-lg text-[8px] sm:text-[9px] font-black flex items-center gap-1 transition-all shadow-sm"
+                            title="Descargar historial de intercambios en Excel"
+                        >
+                            <DownloadIcon className="w-3 h-3" />
+                            <span className="hidden sm:inline">Excel</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setShowInterStoreModal(true); }}
+                            className="px-2 py-1 bg-accent/10 text-accent hover:bg-accent hover:text-white border border-accent/30 rounded-lg text-[8px] sm:text-[9px] font-black flex items-center gap-1 transition-all shadow-sm"
+                            title="Abrir modal detallado de intercambios"
+                        >
+                            <SwapIcon className="w-3 h-3" />
+                            <span className="hidden sm:inline">Modal</span>
+                        </button>
                         <ChevronDownIcon className={`w-4 h-4 sm:w-5 h-5 text-gray-400 transition-transform ${isDebtsSectionOpen ? 'rotate-180' : ''} group-hover:text-accent`} />
                     </div>
                 </div>
@@ -1566,9 +2076,34 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     </div>
                                 </div>
                                 <div className="mt-2">
-                                    <button onClick={() => setExpandedDebtStoreId(expandedDebtStoreId === item.storeId ? null : item.storeId)} className="text-[8px] sm:text-[9px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 w-full justify-center pt-1 border-t border-gray-100 dark:border-gray-700">{expandedDebtStoreId === item.storeId ? 'Ocultar' : 'Historial'}<ChevronDownIcon className={`w-3 h-3 transition-transform ${expandedDebtStoreId === item.storeId ? 'rotate-180' : ''}`} /></button>
+                                    <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-700">
+                                        <button onClick={() => setExpandedDebtStoreId(expandedDebtStoreId === item.storeId ? null : item.storeId)} className="text-[8px] sm:text-[9px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1">
+                                            {expandedDebtStoreId === item.storeId ? 'Ocultar' : 'Historial'}
+                                            <ChevronDownIcon className={`w-3 h-3 transition-transform ${expandedDebtStoreId === item.storeId ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleExportSingleStoreExcel(item); }}
+                                            className="flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md transition-all shadow-xs"
+                                            title={`Descargar historial de intercambios con ${item.otherStoreName} en Excel`}
+                                        >
+                                            <DownloadIcon className="w-3 h-3" />
+                                            <span>Descargar Excel</span>
+                                        </button>
+                                    </div>
                                     {expandedDebtStoreId === item.storeId && (
                                         <div className="mt-2 space-y-1 bg-white/50 dark:bg-black/20 p-2 rounded-lg animate-fade-in">
+                                            <div className="flex justify-between items-center pb-1 border-b border-gray-200 dark:border-gray-700 text-[8px] font-bold text-gray-400">
+                                                <span>Detalle de intercambios</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleExportSingleStoreExcel(item)}
+                                                    className="text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                                                >
+                                                    <DownloadIcon className="w-2.5 h-2.5" />
+                                                    <span>Excel</span>
+                                                </button>
+                                            </div>
                                             {item.history.map(record => {
                                                 const impact = (record as any).netImpact || 0;
                                                 const running = (record as any).runningBalance || 0;
