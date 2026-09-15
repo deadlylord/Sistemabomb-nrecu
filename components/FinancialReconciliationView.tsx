@@ -140,6 +140,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [historyActionFilter, setHistoryActionFilter] = useState<'all' | 'create' | 'update' | 'delete' | 'restore'>('all');
 
+  // Selección múltiple de movimientos estilo Excel y cálculo en tiempo real
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+  const [copiedSum, setCopiedSum] = useState(false);
+
   const getLocalDateString = (dateInput: string | Date) => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string' && dateInput.length === 10 && dateInput.includes('-') && !dateInput.includes('T')) {
@@ -196,6 +200,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         return timeB - timeA || b.id.localeCompare(a.id);
     }));
   }, [activeStoreId, allRecords]);
+
+  // Limpiar selección de movimientos al cambiar de cuenta o de sede
+  useEffect(() => {
+    setSelectedRecordIds(new Set());
+  }, [activeTab, activeStoreId]);
 
   const learnedKnowledge = useMemo(() => {
     const directMap: Record<string, string> = {};
@@ -907,6 +916,179 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     return filteredRecords.map(r => ({ ...r, saldo: balanceMap.get(r.id) || 0 })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
   }, [filteredRecords, records, activeTab, initialBalanceValue]);
+
+  // Estadísticas estilo Excel para movimientos seleccionados
+  const selectedStats = useMemo(() => {
+    if (selectedRecordIds.size === 0) return null;
+    const selectedList = recordsWithBalance.filter(r => selectedRecordIds.has(r.id));
+    if (selectedList.length === 0) return null;
+
+    let sum = 0;
+    let positiveSum = 0;
+    let negativeSum = 0;
+    const count = selectedList.length;
+
+    selectedList.forEach(r => {
+      sum += r.amount;
+      if (r.amount > 0) positiveSum += r.amount;
+      else negativeSum += Math.abs(r.amount);
+    });
+
+    const average = count > 0 ? sum / count : 0;
+
+    return {
+      count,
+      sum,
+      positiveSum,
+      negativeSum,
+      average,
+      records: selectedList
+    };
+  }, [selectedRecordIds, recordsWithBalance]);
+
+  const isAllVisibleSelected = recordsWithBalance.length > 0 && recordsWithBalance.every(r => selectedRecordIds.has(r.id));
+  const isSomeVisibleSelected = recordsWithBalance.some(r => selectedRecordIds.has(r.id)) && !isAllVisibleSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      setSelectedRecordIds(prev => {
+        const next = new Set(prev);
+        recordsWithBalance.forEach(r => next.delete(r.id));
+        return next;
+      });
+    } else {
+      setSelectedRecordIds(prev => {
+        const next = new Set(prev);
+        recordsWithBalance.forEach(r => next.add(r.id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSelectRecord = (recordId: string) => {
+    setSelectedRecordIds(prev => {
+      const next = new Set(prev);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  };
+
+  const handleCopySum = () => {
+    if (!selectedStats) return;
+    try {
+      navigator.clipboard?.writeText(String(selectedStats.sum));
+      setCopiedSum(true);
+      setTimeout(() => setCopiedSum(false), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleExportAccountExcel = (customRecords?: any[], customFilenamePrefix?: string) => {
+    const listToExport = customRecords || recordsWithBalance;
+    if (listToExport.length === 0) {
+      alert("No hay movimientos para exportar en esta cuenta.");
+      return;
+    }
+
+    const activeStoreName = activeStore?.name || 'Local Actual';
+    const accountLabel = getAccountName(activeTab);
+    const dateFormatted = new Date().toISOString().split('T')[0];
+    const isFiltered = !!(ledgerStartDate || ledgerEndDate || searchTerm || financeTypeFilter !== 'all');
+    const filterTag = isFiltered && !customFilenamePrefix ? '_filtrado' : '';
+    const prefix = customFilenamePrefix || `movimientos_${accountLabel.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}_${activeStoreName.replace(/[^a-zA-Z0-9]/g, '_')}${filterTag}`;
+    const cleanFileName = `${prefix}_${dateFormatted}.csv`;
+
+    let sumTotal = 0;
+    let sumIncome = 0;
+    let sumExpense = 0;
+    listToExport.forEach(r => {
+      sumTotal += r.amount;
+      if (r.amount > 0) sumIncome += r.amount;
+      else sumExpense += Math.abs(r.amount);
+    });
+
+    const csvRows: string[] = [
+      `"LIBRO MAYOR DE CUENTA - REPORTE DE MOVIMIENTOS"`,
+      `"Sede:",${escapeCsvValue(activeStoreName)}`,
+      `"Cuenta:",${escapeCsvValue(accountLabel)}`,
+      `"Fecha de Exportación:",${escapeCsvValue(new Date().toLocaleString())}`,
+      `"Saldo Inicial Apertura:",${initialBalanceValue}`,
+      `"Saldo Actual de la Cuenta:",${currentBalance}`,
+      `"Total Ingresos:",${sumIncome}`,
+      `"Total Gastos:",${sumExpense}`,
+      `"Neto Movimientos Exportados:",${sumTotal}`,
+      `"Filtro Fechas:",${escapeCsvValue((ledgerStartDate || 'Inicio') + ' a ' + (ledgerEndDate || 'Hoy'))}`,
+      `"Filtro Búsqueda:",${escapeCsvValue(searchTerm || 'Ninguno')}`,
+      `"Filtro Tipo:",${escapeCsvValue(financeTypeFilter === 'all' ? 'Todos' : (financeTypeFilter === 'income' ? 'Solo Ingresos' : 'Solo Gastos'))}`,
+      `"Cantidad de Registros:",${listToExport.length}`,
+      `""`,
+      [
+        'Fecha',
+        'Hora',
+        'Sede',
+        'Cuenta',
+        'Tipo de Movimiento',
+        'Concepto / Descripción',
+        'Subcategoría',
+        'Monto ($)',
+        'Monto Formateado',
+        'Saldo Acumulado ($)',
+        'Saldo Formateado',
+        'Cruce con Otra Sede',
+        'Afecta Saldo de Caja',
+        'Registrado Por',
+        'ID Movimiento'
+      ].map(escapeCsvValue).join(',')
+    ];
+
+    const chronological = [...listToExport].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id)
+    );
+
+    chronological.forEach(r => {
+      const timeStr = r.date.includes('T') ? r.date.split('T')[1]?.slice(0, 5) : '--:--';
+      const dateStr = getLocalDateString(r.date);
+      const isPositive = r.amount >= 0;
+      const typeLabel = r.type === 'initial_balance' ? 'Apertura' : (isPositive ? 'Ingreso (+)' : 'Gasto (-)');
+      const debtStore = r.debtStoreId ? (filteredStores.find(s => s.id === r.debtStoreId)?.name || 'Otra Sede') : 'N/A';
+      const affectsBalance = r.affectsCashBalance !== false ? 'Sí' : 'No';
+
+      const row = [
+        escapeCsvValue(dateStr),
+        escapeCsvValue(timeStr),
+        escapeCsvValue(activeStoreName),
+        escapeCsvValue(accountLabel),
+        escapeCsvValue(typeLabel),
+        escapeCsvValue(r.description || ''),
+        escapeCsvValue(r.subCategory || 'Varios'),
+        r.amount,
+        escapeCsvValue(formatCOP(r.amount)),
+        r.saldo !== undefined ? r.saldo : '',
+        escapeCsvValue(r.saldo !== undefined ? formatCOP(r.saldo) : ''),
+        escapeCsvValue(debtStore),
+        escapeCsvValue(affectsBalance),
+        escapeCsvValue(r.registeredBy || 'Sistema'),
+        escapeCsvValue(r.id)
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', cleanFileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
 
   const handleAddRow = () => {
     const lastEntry = manualEntries[manualEntries.length - 1];
@@ -2718,13 +2900,22 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 h-5" />
                             </div>
 
-                            <div className="flex items-center gap-2 w-full md:w-auto">
+                            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                                 <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 p-1.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-inner flex-grow">
                                     <input type="date" value={ledgerStartDate} onChange={e => setLedgerStartDate(e.target.value)} className="bg-transparent text-[10px] sm:text-xs font-bold outline-none uppercase w-full" />
                                     <span className="text-gray-300">|</span>
                                     <input type="date" value={ledgerEndDate} onChange={e => setLedgerEndDate(e.target.value)} className="bg-transparent text-[10px] sm:text-xs font-bold outline-none uppercase w-full" />
                                 </div>
                                 <button onClick={() => { setLedgerStartDate(''); setLedgerEndDate(''); setSearchTerm(''); setFinanceTypeFilter('all'); }} className="p-2 text-gray-400 hover:text-red-500" title="Limpiar filtros"><CrossIcon className="w-5 h-5" /></button>
+                                <button 
+                                    onClick={() => handleExportAccountExcel()} 
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md font-black text-[9px] sm:text-xs uppercase flex items-center gap-1.5 transition-all hover:scale-105 shrink-0" 
+                                    title="Descargar todos los movimientos de la cuenta en Excel (.csv)"
+                                >
+                                    <DownloadIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Descargar Excel</span>
+                                    <span className="sm:hidden">Excel</span>
+                                </button>
                             </div>
                         </div>
 
@@ -2757,10 +2948,29 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     
                     <div className="flex-grow overflow-x-auto">
                         <table className="w-full text-left border-collapse text-[10px] sm:text-xs">
-                            <thead><tr className="bg-gray-100 dark:bg-gray-800 text-[8px] sm:text-[10px] font-black uppercase text-gray-500 border-b dark:border-gray-700"><th className="p-3 sm:p-4">Fecha</th><th className="p-3 sm:p-4">Concepto</th><th className="p-3 sm:p-4">Cat.</th><th className="p-3 sm:p-4 text-right">Monto</th><th className="p-3 sm:p-4 text-right">Saldo</th><th className="p-3 sm:p-4 w-8"></th></tr></thead>
+                            <thead>
+                                <tr className="bg-gray-100 dark:bg-gray-800 text-[8px] sm:text-[10px] font-black uppercase text-gray-500 border-b dark:border-gray-700">
+                                    <th className="p-3 sm:p-4 w-10 text-center" title="Seleccionar o deseleccionar todos los movimientos visibles">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={isAllVisibleSelected} 
+                                            ref={input => { if (input) input.indeterminate = isSomeVisibleSelected; }}
+                                            onChange={handleToggleSelectAll} 
+                                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600" 
+                                        />
+                                    </th>
+                                    <th className="p-3 sm:p-4">Fecha</th>
+                                    <th className="p-3 sm:p-4">Concepto</th>
+                                    <th className="p-3 sm:p-4">Cat.</th>
+                                    <th className="p-3 sm:p-4 text-right">Monto</th>
+                                    <th className="p-3 sm:p-4 text-right">Saldo</th>
+                                    <th className="p-3 sm:p-4 w-12 text-center">Acción</th>
+                                </tr>
+                            </thead>
                             <tbody className="divide-y dark:divide-gray-800">
                                 {(!ledgerStartDate || new Date(ledgerStartDate) <= new Date(records[records.length-1]?.date || Date.now())) && searchTerm === '' && financeTypeFilter === 'all' && (
                                     <tr className="bg-accent/5 font-black italic">
+                                        <td className="p-3 sm:p-4 text-center text-gray-300">--</td>
                                         <td className="p-3 sm:p-4 text-gray-400">---</td>
                                         <td className="p-3 sm:p-4 text-accent uppercase tracking-widest">Saldo Inicial Apertura</td>
                                         <td className="p-3 sm:p-4 text-gray-400">APERTURA</td>
@@ -2769,45 +2979,106 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <td className="p-3 sm:p-4"></td>
                                     </tr>
                                 )}
-                                {recordsWithBalance.map(record => (
-                                    <tr key={record.id} className={`hover:bg-accent/5 transition-colors group ${record.affectsCashBalance === false ? 'opacity-50 italic' : ''}`}>
-                                        <td className="p-3 sm:p-4 font-mono text-gray-500 whitespace-nowrap">
-                                            <div className="flex flex-col">
-                                                <span>{getLocalDateString(record.date)}</span>
-                                                <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
-                                            </div>
-                                        </td>
-                                        <td className="p-3 sm:p-4 min-w-[120px] sm:min-w-[200px]">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <p className="font-bold text-gray-800 dark:text-gray-200 uppercase text-[9px] sm:text-[11px] leading-snug break-words flex-grow">{record.description}</p>
-                                                    {record.debtStoreId && (
-                                                        <span className="px-1.5 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0 whitespace-nowrap">
-                                                            CRUCE {filteredStores.find(s => s.id === record.debtStoreId)?.name || 'SEDE'}
-                                                        </span>
-                                                    )}
+                                {recordsWithBalance.map(record => {
+                                    const isSelected = selectedRecordIds.has(record.id);
+                                    return (
+                                        <tr 
+                                            key={record.id} 
+                                            onClick={() => handleToggleSelectRecord(record.id)}
+                                            className={`transition-colors group cursor-pointer select-none ${
+                                                isSelected 
+                                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-l-emerald-500 font-medium' 
+                                                    : 'hover:bg-accent/5'
+                                            } ${record.affectsCashBalance === false ? 'opacity-50 italic' : ''}`}
+                                        >
+                                            <td className="p-3 sm:p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={isSelected} 
+                                                    onChange={() => handleToggleSelectRecord(record.id)}
+                                                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600" 
+                                                />
+                                            </td>
+                                            <td className="p-3 sm:p-4 font-mono text-gray-500 whitespace-nowrap">
+                                                <div className="flex flex-col">
+                                                    <span>{getLocalDateString(record.date)}</span>
+                                                    <span className="text-[8px] sm:text-[10px] font-black text-accent">{record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '--:--'}</span>
                                                 </div>
-                                                <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
+                                            </td>
+                                            <td className="p-3 sm:p-4 min-w-[120px] sm:min-w-[200px]">
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <p className="font-bold text-gray-800 dark:text-gray-200 uppercase text-[9px] sm:text-[11px] leading-snug break-words flex-grow">{record.description}</p>
+                                                        {record.debtStoreId && (
+                                                            <span className="px-1.5 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0 whitespace-nowrap">
+                                                                CRUCE {filteredStores.find(s => s.id === record.debtStoreId)?.name || 'SEDE'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
+                                                </div>
+                                            </td>
+                                            <td className="p-3 sm:p-4 uppercase font-black text-[8px] sm:text-[9px] text-gray-500 truncate max-w-[60px]">{record.subCategory || 'Varios'}</td>
+                                            <td className={`p-3 sm:p-4 text-right font-black ${record.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {record.amount >= 0 ? '+' : ''}{formatCOP(record.amount)}
+                                            </td>
+                                            <td className="p-3 sm:p-4 text-right font-black bg-accent/5">
+                                                {record.affectsCashBalance !== false ? formatCOP(record.saldo) : '--'}
+                                            </td>
+                                            <td className="p-3 sm:p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <button onClick={() => handleOpenEdit(record)} className="p-1.5 text-gray-400 hover:text-accent" title="Editar"><EditIcon className="w-4 h-4" /></button>
+                                                    <button onClick={() => handleDeleteRecord(record)} className="p-1.5 text-gray-400 hover:text-red-500" title="Eliminar"><TrashIcon className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                            <tfoot className="bg-gray-50 dark:bg-gray-900 border-t-2 border-gray-200 dark:border-gray-700">
+                                {selectedStats && (
+                                    <tr className="bg-emerald-500/15 dark:bg-emerald-950/60 border-b-2 border-emerald-500/40 text-[9px] sm:text-[11px] font-black text-emerald-950 dark:text-emerald-100">
+                                        <td className="p-2 sm:p-3 text-center">
+                                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        </td>
+                                        <td className="p-2 sm:p-3 uppercase text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                                            SELECCIÓN ({selectedStats.count})
+                                        </td>
+                                        <td className="p-2 sm:p-3">
+                                            <div className="flex flex-wrap items-center gap-2 text-[8px] sm:text-[10px] uppercase font-bold text-gray-600 dark:text-gray-300">
+                                                <span>Prom: {formatCOP(selectedStats.average)}</span>
+                                                {selectedStats.positiveSum > 0 && <span className="text-green-600 dark:text-green-400">+In: {formatCOP(selectedStats.positiveSum)}</span>}
+                                                {selectedStats.negativeSum > 0 && <span className="text-red-600 dark:text-red-400">-Out: {formatCOP(selectedStats.negativeSum)}</span>}
                                             </div>
                                         </td>
-                                        <td className="p-3 sm:p-4 uppercase font-black text-[8px] sm:text-[9px] text-gray-500 truncate max-w-[60px]">{record.subCategory || 'Varios'}</td>
-                                        <td className={`p-3 sm:p-4 text-right font-black ${record.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                            {record.amount >= 0 ? '+' : ''}{formatCOP(record.amount)}
+                                        <td className="p-2 sm:p-3 uppercase text-[8px] sm:text-[9px] text-right text-emerald-700 dark:text-emerald-300">
+                                            SUMA EXCEL:
                                         </td>
-                                        <td className="p-3 sm:p-4 text-right font-black bg-accent/5">
-                                            {record.affectsCashBalance !== false ? formatCOP(record.saldo) : '--'}
+                                        <td className={`p-2 sm:p-3 text-right text-xs sm:text-sm font-black ${selectedStats.sum >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                            {selectedStats.sum >= 0 ? '+' : ''}{formatCOP(selectedStats.sum)}
                                         </td>
-                                        <td className="p-3 sm:p-4 text-center">
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                <button onClick={() => handleOpenEdit(record)} className="p-1.5 text-gray-400 hover:text-accent"><EditIcon className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDeleteRecord(record)} className="p-1.5 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button>
+                                        <td className="p-2 sm:p-3 text-right" colSpan={2}>
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                <button
+                                                    onClick={() => handleExportAccountExcel(selectedStats.records, `seleccion_${getAccountName(activeTab).toLowerCase()}`)}
+                                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[8px] sm:text-[9px] font-black uppercase flex items-center gap-1 shadow-xs transition-all"
+                                                    title="Descargar selección en Excel"
+                                                >
+                                                    <DownloadIcon className="w-3 h-3" />
+                                                    <span>Excel</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => setSelectedRecordIds(new Set())}
+                                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-[8px] sm:text-[9px] font-black uppercase transition-all"
+                                                >
+                                                    Limpiar
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                            <tfoot className="bg-gray-50 dark:bg-gray-900 border-t-2 border-gray-200 dark:border-gray-700">
+                                )}
                                 <tr className="font-black">
+                                    <td className="p-3 sm:p-4 text-center text-gray-400 text-[8px]">{recordsWithBalance.length}</td>
                                     <td className="p-3 sm:p-4 text-gray-400 uppercase text-[8px]">TOTALES VISIBLES</td>
                                     <td className="p-3 sm:p-4">
                                         <div className="flex gap-4 text-[9px] uppercase">
@@ -2815,17 +3086,95 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             <span className="text-red-500">OUT: {formatCOP(visibleTotals.expense)}</span>
                                         </div>
                                     </td>
+                                    <td className="p-3 sm:p-4 uppercase text-[8px] text-gray-400"></td>
                                     <td className="p-3 sm:p-4 text-right text-gray-400 uppercase text-[8px]">NETO:</td>
                                     <td className={`p-3 sm:p-4 text-right ${visibleTotals.net >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                         {formatCOP(visibleTotals.net)}
                                     </td>
-                                    <td className="p-3 sm:p-4"></td>
                                     <td className="p-3 sm:p-4"></td>
                                 </tr>
                             </tfoot>
                         </table>
                     </div>
                 </div>
+
+                {/* Barra Flotante de Selección y Suma estilo Excel */}
+                {selectedStats && (
+                    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[500] w-[95%] max-w-4xl bg-gray-900/95 dark:bg-slate-900/95 text-white backdrop-blur-md px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/50 flex flex-wrap items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500 text-gray-950 font-black text-xs">
+                                {selectedStats.count}
+                            </span>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    Movimientos Seleccionados
+                                </span>
+                                <span className="text-xs font-semibold text-emerald-400">
+                                    Cálculo rápido tipo hoja de cálculo
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 sm:gap-6 bg-gray-800/80 dark:bg-black/50 px-3 sm:px-4 py-2 rounded-xl border border-gray-700/60">
+                            <div className="flex flex-col">
+                                <span className="text-[8px] sm:text-[9px] uppercase font-bold text-gray-400">Suma Total</span>
+                                <span className={`text-sm sm:text-base font-black ${selectedStats.sum >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {selectedStats.sum >= 0 ? '+' : ''}{formatCOP(selectedStats.sum)}
+                                </span>
+                            </div>
+                            <div className="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                            <div className="flex flex-col hidden sm:flex">
+                                <span className="text-[8px] sm:text-[9px] uppercase font-bold text-gray-400">Promedio</span>
+                                <span className="text-xs font-black text-gray-200">{formatCOP(selectedStats.average)}</span>
+                            </div>
+                            {selectedStats.positiveSum > 0 && (
+                                <>
+                                    <div className="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                                    <div className="flex flex-col hidden sm:flex">
+                                        <span className="text-[8px] sm:text-[9px] uppercase font-bold text-gray-400">Ingresos</span>
+                                        <span className="text-xs font-black text-green-400">+{formatCOP(selectedStats.positiveSum)}</span>
+                                    </div>
+                                </>
+                            )}
+                            {selectedStats.negativeSum > 0 && (
+                                <>
+                                    <div className="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                                    <div className="flex flex-col hidden sm:flex">
+                                        <span className="text-[8px] sm:text-[9px] uppercase font-bold text-gray-400">Gastos</span>
+                                        <span className="text-xs font-black text-red-400">-{formatCOP(selectedStats.negativeSum)}</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleCopySum}
+                                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95"
+                                title="Copiar suma al portapapeles"
+                            >
+                                <CopyIcon className="w-3.5 h-3.5 text-accent" />
+                                <span>{copiedSum ? 'Copiado!' : 'Copiar'}</span>
+                            </button>
+                            <button
+                                onClick={() => handleExportAccountExcel(selectedStats.records, `seleccion_${getAccountName(activeTab).toLowerCase()}`)}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                                title="Exportar movimientos seleccionados a Excel"
+                            >
+                                <DownloadIcon className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Exportar Selección</span>
+                                <span className="sm:hidden">Excel</span>
+                            </button>
+                            <button
+                                onClick={() => setSelectedRecordIds(new Set())}
+                                className="p-1.5 text-gray-400 hover:text-white rounded-xl transition-all"
+                                title="Limpiar selección"
+                            >
+                                <CrossIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
 
