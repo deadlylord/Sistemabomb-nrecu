@@ -229,12 +229,24 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
       const store = stores.find(s => s.id === p.storeId);
       if (!store || store.name.toLowerCase().includes('training')) return;
 
-      const key = p.sku || p.name;
-      if (!map[key]) {
+      const cleanSku = (p.sku || '').trim();
+      const cleanName = (p.name || '').trim();
+      if (!cleanSku && !cleanName) return;
+
+      // Find if we already have a map key matching this product by SKU or Name across any store
+      let key = Object.keys(map).find(k => {
+        const item = map[k];
+        const sameSku = cleanSku !== '' && item.sku && item.sku !== 'N/A' && item.sku.trim().toLowerCase() === cleanSku.toLowerCase();
+        const sameName = cleanName !== '' && item.name.trim().toLowerCase() === cleanName.toLowerCase();
+        return sameSku || sameName;
+      });
+
+      if (!key) {
+        key = cleanSku || cleanName;
         const cat = categories.find(c => c.id === p.categoryId);
         map[key] = {
-          sku: p.sku || 'N/A',
-          name: p.name,
+          sku: cleanSku || 'N/A',
+          name: cleanName,
           categoryName: cat ? cat.name : 'Sin categoría',
           totalStock: 0,
           price: p.price,
@@ -243,12 +255,19 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
           revenue: 0,
           storesBreakdown: {}
         };
+      } else {
+        // If existing item didn't have a valid SKU but this one does, update SKU
+        if ((!map[key].sku || map[key].sku === 'N/A') && cleanSku) {
+          map[key].sku = cleanSku;
+        }
       }
+
       map[key].totalStock += p.stock;
-      map[key].storesBreakdown[p.storeId] = {
-        stock: p.stock,
-        qtySold: 0
-      };
+
+      if (!map[key].storesBreakdown[p.storeId]) {
+        map[key].storesBreakdown[p.storeId] = { stock: 0, qtySold: 0 };
+      }
+      map[key].storesBreakdown[p.storeId].stock += p.stock;
     });
 
     filteredSales.forEach(sale => {
@@ -257,25 +276,30 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
 
       sale.items.forEach(item => {
         const origProd = inventory.find(p => p.id === item.id);
-        const key = origProd ? (origProd.sku || origProd.name) : item.id;
-        
-        if (map[key]) {
+        const itemSku = (origProd?.sku || item.sku || '').trim();
+        const itemName = (origProd?.name || item.name || '').trim();
+
+        let key = Object.keys(map).find(k => {
+          const entry = map[k];
+          const sameSku = itemSku !== '' && entry.sku && entry.sku !== 'N/A' && entry.sku.trim().toLowerCase() === itemSku.toLowerCase();
+          const sameName = itemName !== '' && entry.name.trim().toLowerCase() === itemName.toLowerCase();
+          return sameSku || sameName;
+        });
+
+        if (key && map[key]) {
           map[key].qtySold += item.quantity;
           map[key].revenue += item.price * item.quantity;
-          if (map[key].storesBreakdown[sale.storeId]) {
-            map[key].storesBreakdown[sale.storeId].qtySold += item.quantity;
-          } else {
-            map[key].storesBreakdown[sale.storeId] = {
-              stock: 0,
-              qtySold: item.quantity
-            };
+          if (!map[key].storesBreakdown[sale.storeId]) {
+            map[key].storesBreakdown[sale.storeId] = { stock: 0, qtySold: 0 };
           }
-        } else {
-          const matchedProd = inventory.find(p => p.sku === (origProd?.sku || item.sku));
+          map[key].storesBreakdown[sale.storeId].qtySold += item.quantity;
+        } else if (itemSku || itemName) {
+          key = itemSku || itemName;
+          const matchedProd = inventory.find(p => (itemSku && p.sku === itemSku) || (itemName && p.name.toLowerCase() === itemName.toLowerCase()));
           const cat = matchedProd ? categories.find(c => c.id === matchedProd.categoryId) : null;
           map[key] = {
-            sku: origProd?.sku || item.sku || 'N/A',
-            name: item.name || 'Producto Desconocido',
+            sku: itemSku || 'N/A',
+            name: itemName || 'Producto Desconocido',
             categoryName: cat ? cat.name : 'Otros',
             totalStock: 0,
             price: item.price,
@@ -1119,31 +1143,31 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr className="bg-slate-50 dark:bg-slate-800 text-slate-400 uppercase tracking-widest font-black text-[9px]">
-                              <th className="p-4">SKU</th>
-                              <th className="p-4">Prenda / Categoría</th>
-                              <th className="p-4 text-right">Existencias Totales</th>
+                            <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-400 uppercase tracking-wider font-extrabold text-[9px] border-b dark:border-slate-800">
+                              <th className="py-3 px-3">SKU</th>
+                              <th className="py-3 px-3">Prenda / Categoría</th>
+                              <th className="py-3 px-3 text-right">Stock Total</th>
                               {selectedStoreId === 'all' && (
-                                <th className="p-4 text-center">Desglose por Sede (Stock | Ventas)</th>
+                                <th className="py-3 px-3 text-center">Desglose por Sede (Stock | Ventas)</th>
                               )}
-                              <th className="p-4 text-right">Precio venta</th>
-                              <th className="p-4 text-right text-indigo-500">U. Vendidas</th>
-                              <th className="p-4 text-right">Ingresos</th>
-                              <th className="p-4 text-center">Acciones</th>
+                              <th className="py-3 px-3 text-right">Precio</th>
+                              <th className="py-3 px-3 text-right text-indigo-500 dark:text-indigo-400">Vendidos</th>
+                              <th className="py-3 px-3 text-right">Ingresos</th>
+                              <th className="py-3 px-3 text-center">Acciones</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                             {filteredGroupedPerformance.map(item => (
-                              <tr key={item.sku} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300">
-                                <td className="p-4 font-mono font-bold text-slate-400">{item.sku}</td>
-                                <td className="p-4">
-                                  <p className="font-bold">{item.name}</p>
+                              <tr key={item.sku} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 text-slate-700 dark:text-slate-300 transition-colors">
+                                <td className="py-2.5 px-3 font-mono font-bold text-[11px] text-slate-400">{item.sku}</td>
+                                <td className="py-2.5 px-3">
+                                  <p className="font-bold text-xs text-slate-800 dark:text-slate-100">{item.name}</p>
                                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                    <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">{item.categoryName}</p>
+                                    <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold">{item.categoryName}</span>
                                     {(() => {
                                       const storeStatuses = nonTrainingStores.map(store => {
                                         const b = item.storesBreakdown[store.id] || { stock: 0, qtySold: 0 };
-                                        const hasProductInStore = inventory.some(p => p.storeId === store.id && (p.sku === item.sku || p.name === item.name));
+                                        const hasProductInStore = item.storesBreakdown[store.id] !== undefined || inventory.some(p => p.storeId === store.id && ((item.sku && item.sku !== 'N/A' && p.sku && p.sku.trim().toLowerCase() === item.sku.trim().toLowerCase()) || (item.name && p.name && p.name.trim().toLowerCase() === item.name.trim().toLowerCase())));
                                         if (!hasProductInStore) return 'none';
                                         if (b.qtySold > 0) return 'performing';
                                         if (b.stock > 3) return 'stagnant';
@@ -1151,32 +1175,35 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                                       });
                                       const hasDisparity = storeStatuses.includes('performing') && storeStatuses.includes('stagnant');
                                       return hasDisparity ? (
-                                        <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-500 dark:text-rose-400 text-[8px] font-black uppercase rounded tracking-wider animate-pulse">
+                                        <span className="px-1.5 py-0.2 bg-rose-500/10 text-rose-500 dark:text-rose-400 text-[8px] font-black uppercase rounded tracking-wider">
                                           ⚠️ Desbalance
                                         </span>
                                       ) : null;
                                     })()}
                                   </div>
                                 </td>
-                                <td className="p-4 text-right font-bold">
-                                  <span className={`px-2 py-0.5 rounded-full ${item.totalStock < 0 ? 'bg-red-500/10 text-red-500 font-black' : item.totalStock <= 3 ? 'bg-amber-500/10 text-amber-500 font-black' : 'text-slate-700 dark:text-slate-300'}`}>
+                                <td className="py-2.5 px-3 text-right font-bold">
+                                  <span className={`inline-block px-2 py-0.5 rounded-md text-xs ${item.totalStock < 0 ? 'bg-red-500/10 text-red-500 font-black' : item.totalStock <= 3 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-black' : 'text-slate-800 dark:text-slate-200 font-black'}`}>
                                     {item.totalStock}
                                   </span>
                                 </td>
                                 {selectedStoreId === 'all' && (
-                                  <td className="p-4 text-center">
-                                    <div className="flex justify-center gap-2 flex-wrap">
+                                  <td className="py-2.5 px-3 text-center">
+                                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                       {nonTrainingStores.map(store => {
                                         const b = item.storesBreakdown[store.id] || { stock: 0, qtySold: 0 };
-                                        const hasProductInStore = inventory.some(p => p.storeId === store.id && (p.sku === item.sku || p.name === item.name));
+                                        const hasProductInStore = item.storesBreakdown[store.id] !== undefined || inventory.some(p => p.storeId === store.id && ((item.sku && item.sku !== 'N/A' && p.sku && p.sku.trim().toLowerCase() === item.sku.trim().toLowerCase()) || (item.name && p.name && p.name.trim().toLowerCase() === item.name.trim().toLowerCase())));
                                         
                                         if (!hasProductInStore) {
                                           return (
-                                            <div key={store.id} className="bg-slate-100/50 dark:bg-slate-800/20 p-2 rounded-xl border border-slate-200/40 dark:border-slate-800/40 flex flex-col items-center min-w-[110px] opacity-40">
-                                              <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">
-                                                {store.name}
-                                              </span>
-                                              <span className="text-[9px] font-black text-slate-400 mt-1">❌ Sin Inventario</span>
+                                            <div 
+                                              key={store.id} 
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100/60 dark:bg-slate-800/30 text-slate-400 text-[9px] font-bold border border-slate-200/40 dark:border-slate-800/40 opacity-50"
+                                              title={`${store.name}: No registrado`}
+                                            >
+                                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"></span>
+                                              <span className="uppercase text-[8px] tracking-tight">{store.name}:</span>
+                                              <span className="font-normal italic">Sin stock</span>
                                             </div>
                                           );
                                         }
@@ -1185,81 +1212,48 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                                         const isStagnant = b.stock > 3 && b.qtySold === 0;
                                         const isOutOfStock = b.stock <= 0 && b.qtySold === 0;
 
-                                        let statusBg = "bg-slate-50 dark:bg-slate-800/50";
-                                        let statusBorder = "border-slate-200 dark:border-slate-700/60";
-                                        let statusBadge = (
-                                          <span className="text-slate-500 font-black bg-slate-500/10 px-1 py-0.5 rounded text-[8px] uppercase tracking-wider">
-                                            💤 Inactivo
-                                          </span>
-                                        );
-
+                                        let pillStyle = "bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700/60";
                                         if (isTrending) {
-                                          statusBg = "bg-emerald-50/70 dark:bg-emerald-950/20";
-                                          statusBorder = "border-emerald-200 dark:border-emerald-800/40";
-                                          statusBadge = (
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-black bg-emerald-500/10 px-1 py-0.5 rounded text-[8px] uppercase tracking-wider">
-                                              🔥 Activo
-                                            </span>
-                                          );
+                                          pillStyle = "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50";
                                         } else if (isStagnant) {
-                                          statusBg = "bg-amber-50/70 dark:bg-amber-950/20";
-                                          statusBorder = "border-amber-200 dark:border-amber-800/40";
-                                          statusBadge = (
-                                            <span className="text-amber-600 dark:text-amber-400 font-black bg-amber-500/10 px-1 py-0.5 rounded text-[8px] uppercase tracking-wider">
-                                              ⚠️ Estancado
-                                            </span>
-                                          );
+                                          pillStyle = "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50";
                                         } else if (isOutOfStock) {
-                                          statusBg = "bg-rose-50/50 dark:bg-rose-950/10";
-                                          statusBorder = "border-rose-100 dark:border-rose-900/30";
-                                          statusBadge = (
-                                            <span className="text-rose-500 font-black bg-rose-500/10 px-1 py-0.5 rounded text-[8px] uppercase tracking-wider">
-                                              ❌ Agotado
-                                            </span>
-                                          );
+                                          pillStyle = "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/40";
                                         }
 
                                         return (
                                           <div 
                                             key={store.id} 
-                                            className={`${statusBg} ${statusBorder} p-2 rounded-xl border flex flex-col items-stretch min-w-[110px] transition-all hover:scale-[1.02] shadow-sm`}
+                                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-bold shadow-2xs ${pillStyle}`}
+                                            title={`${store.name} - Stock: ${b.stock}, Vendidos: ${b.qtySold}`}
                                           >
-                                            <div className="flex justify-between items-center gap-1.5 mb-1">
-                                              <span className="text-[8px] font-black uppercase tracking-wider" style={{ color: store.accentColor }}>
-                                                {store.name}
+                                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: store.accentColor || '#6366f1' }}></span>
+                                            <span className="font-extrabold uppercase text-[8px] tracking-tight opacity-75">{store.name}:</span>
+                                            <span className="font-black text-[10px]">{b.stock} <span className="font-medium text-[8px] text-slate-400">st</span></span>
+                                            {b.qtySold > 0 && (
+                                              <span className="font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-400/10 px-1 py-0.2 rounded text-[8px]">
+                                                {b.qtySold}v
                                               </span>
-                                              {statusBadge}
-                                            </div>
-                                            <div className="flex justify-between items-center text-[9px] mt-0.5">
-                                              <span className="text-slate-500 font-medium">Stock:</span>
-                                              <span className="text-slate-800 dark:text-slate-200 font-black">{b.stock}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-[9px]">
-                                              <span className="text-slate-500 font-medium">Vendido:</span>
-                                              <span className={`${isTrending ? "text-emerald-500 font-black" : "text-slate-400 font-medium"}`}>
-                                                {b.qtySold}
-                                              </span>
-                                            </div>
+                                            )}
                                           </div>
                                         );
                                       })}
                                     </div>
                                   </td>
                                 )}
-                                <td className="p-4 text-right font-bold">{formatCOP(item.price)}</td>
-                                <td className="p-4 text-right font-black text-indigo-600 dark:text-indigo-400 text-sm">{item.qtySold}</td>
-                                <td className="p-4 text-right font-bold text-slate-800 dark:text-white">{formatCOP(item.revenue)}</td>
-                                <td className="p-4 text-center">
+                                <td className="py-2.5 px-3 text-right font-medium text-xs">{formatCOP(item.price)}</td>
+                                <td className="py-2.5 px-3 text-right font-black text-indigo-600 dark:text-indigo-400 text-xs">{item.qtySold}</td>
+                                <td className="py-2.5 px-3 text-right font-bold text-xs text-slate-800 dark:text-white">{formatCOP(item.revenue)}</td>
+                                <td className="py-2.5 px-3 text-center">
                                   <button
                                     onClick={() => {
                                       setCompareSku(item.sku);
                                       setCompareProductName(item.name);
-                                      // Scroll smoothly to comparison card
                                       window.scrollTo({ top: 150, behavior: 'smooth' });
                                     }}
-                                    className="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl transition-all"
+                                    className="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-md transition-all border border-indigo-200/50 dark:border-indigo-800/50"
                                   >
-                                    Comparar Sedes
+                                    <span>📊</span> Comparar
                                   </button>
                                 </td>
                               </tr>

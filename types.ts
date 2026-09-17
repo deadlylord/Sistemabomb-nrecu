@@ -242,6 +242,7 @@ export interface Store {
   autoSendWhatsApp?: boolean;
   accentColor: string;
   accentColorHover: string;
+  secondaryColor?: string;
   nextInvoiceNumber: number;
   loginBackgroundUrl?: string | null;
   imageCompressionQuality?: 'high' | 'medium' | 'low';

@@ -187,13 +187,16 @@ const App: React.FC = () => {
     const targetCompanyId = currentUser?.companyId || store?.companyId || DEFAULT_COMPANY_ID;
     const company = companies.find(c => c.id === targetCompanyId);
 
-    const primaryColor = company?.primaryColor || store?.accentColor || '#ff007f';
-    const primaryHover = company?.primaryColorHover || store?.accentColorHover || '#d9006c';
+    const primaryColor = store?.accentColor || company?.primaryColor || '#ff007f';
+    const primaryHover = store?.accentColorHover || company?.primaryColorHover || '#d9006c';
+    const secondaryColor = store?.secondaryColor || store?.accentColorHover || company?.secondaryColor || '#8b5cf6';
 
     const rgb = hexToRgb(primaryColor);
     if (rgb) document.documentElement.style.setProperty('--color-accent', `${rgb.r} ${rgb.g} ${rgb.b}`);
     const hoverRgb = hexToRgb(primaryHover);
     if (hoverRgb) document.documentElement.style.setProperty('--color-accent-hover', `${hoverRgb.r} ${hoverRgb.g} ${hoverRgb.b}`);
+    const secRgb = hexToRgb(secondaryColor);
+    if (secRgb) document.documentElement.style.setProperty('--color-accent-secondary', `${secRgb.r} ${secRgb.g} ${secRgb.b}`);
 
     return store;
   }, [currentStoreId, stores, companies, currentUser]);

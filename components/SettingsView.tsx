@@ -469,7 +469,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                       setLocalSettings(prev => prev ? ({
                         ...prev,
                         accentColor: preset.primary,
-                        accentColorHover: preset.primaryHover
+                        accentColorHover: preset.primaryHover,
+                        secondaryColor: preset.secondary || preset.primaryHover
                       }) : null);
                     }}
                     className={`p-2.5 rounded-xl border-2 text-left transition-all relative ${
@@ -482,6 +483,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">{preset.name}</p>
                     <div className="flex items-center gap-1 mt-1.5">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: preset.primary }}></div>
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: preset.secondary || preset.primaryHover }}></div>
                       <span className="text-[10px] font-mono text-gray-500">{preset.primary}</span>
                     </div>
                   </button>
@@ -492,17 +494,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="accentColor" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Color de Acento Personalizado</label>
+                <label htmlFor="accentColor" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Color Principal (Acento / Botones)</label>
                 <div className="flex items-center gap-2">
-                  <input type="color" id="accentColor" name="accentColor" value={localSettings.accentColor || '#ff007f'} onChange={handleSettingsChange} className="w-12 h-10 p-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer"/>
-                  <input type="text" name="accentColor" value={localSettings.accentColor || '#ff007f'} onChange={handleSettingsChange} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 text-xs font-mono font-bold uppercase"/>
+                  <input 
+                    type="color" 
+                    id="accentColor" 
+                    name="accentColor" 
+                    value={localSettings.accentColor || '#ff007f'} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLocalSettings(prev => prev ? ({ ...prev, accentColor: val }) : null);
+                    }} 
+                    className="w-12 h-10 p-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer"
+                  />
+                  <input 
+                    type="text" 
+                    name="accentColor" 
+                    value={localSettings.accentColor || '#ff007f'} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLocalSettings(prev => prev ? ({ ...prev, accentColor: val }) : null);
+                    }} 
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 text-xs font-mono font-bold uppercase"
+                  />
                 </div>
               </div>
               <div>
-                <label htmlFor="accentColorHover" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Color de Acento (Hover)</label>
+                <label htmlFor="secondaryColor" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Color Secundario (Énfasis / Complementario)</label>
                 <div className="flex items-center gap-2">
-                  <input type="color" id="accentColorHover" name="accentColorHover" value={localSettings.accentColorHover || '#e60073'} onChange={handleSettingsChange} className="w-12 h-10 p-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer"/>
-                  <input type="text" name="accentColorHover" value={localSettings.accentColorHover || '#e60073'} onChange={handleSettingsChange} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 text-xs font-mono font-bold uppercase"/>
+                  <input 
+                    type="color" 
+                    id="secondaryColor" 
+                    name="secondaryColor" 
+                    value={localSettings.secondaryColor || localSettings.accentColorHover || '#8b5cf6'} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLocalSettings(prev => prev ? ({ 
+                        ...prev, 
+                        secondaryColor: val, 
+                        accentColorHover: val 
+                      }) : null);
+                    }} 
+                    className="w-12 h-10 p-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md cursor-pointer"
+                  />
+                  <input 
+                    type="text" 
+                    name="secondaryColor" 
+                    value={localSettings.secondaryColor || localSettings.accentColorHover || '#8b5cf6'} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLocalSettings(prev => prev ? ({ 
+                        ...prev, 
+                        secondaryColor: val, 
+                        accentColorHover: val 
+                      }) : null);
+                    }} 
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 text-xs font-mono font-bold uppercase"
+                  />
                 </div>
               </div>
           </div>

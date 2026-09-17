@@ -274,13 +274,10 @@ const Header: React.FC<HeaderProps> = ({
                   <SparklesIcon className="w-6 h-6" />
                 )}
               </div>
-              <div className="hidden xl:block max-w-[150px]">
-                <h1 className="text-sm font-black uppercase tracking-tighter leading-none dark:text-white truncate">
-                  {currentCompany?.name || 'SISTEMA POS'}
+              <div className="hidden xl:block">
+                <h1 className="text-sm font-black uppercase tracking-tight leading-none dark:text-white">
+                  SISTEMA POS
                 </h1>
-                <p className="text-[8px] font-bold text-accent uppercase tracking-widest mt-1 truncate">
-                  {currentCompany?.nit ? `NIT: ${currentCompany.nit}` : 'SISTEMA POS IA'}
-                </p>
               </div>
             </div>
 
