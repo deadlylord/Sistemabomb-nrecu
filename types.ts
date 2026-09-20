@@ -173,6 +173,7 @@ export interface VersionLog {
 
 export interface FinancialRecord {
   id: string;
+  companyId?: string;
   date: string; // ISO String
   storeId: string;
   accountType: 'cash' | 'qr' | 'addi' | 'sistecredito';
@@ -201,6 +202,7 @@ export interface PendingDetailedVerification {
 
 export interface ProductHistoryLog {
   id: string;
+  companyId?: string;
   productId: string;
   productName: string;
   storeId: string;
@@ -269,6 +271,7 @@ export interface Store {
 
 export interface InventoryTransfer {
   id: string;
+  companyId?: string;
   fromStoreId: string;
   toStoreId: string;
   productId: string;
@@ -312,6 +315,7 @@ export interface Seller {
 
 export interface Product {
   id: string;
+  companyId?: string;
   sku: string;
   name: string;
   description: string;
@@ -333,6 +337,7 @@ export interface CartItem extends Product {
 
 export interface HeldCart {
     id: string;
+  companyId?: string;
     items: CartItem[];
     storeId: string;
     customerName?: string | null;
@@ -484,6 +489,7 @@ export interface Layaway {
 
 export interface Sale {
   id: string;
+  companyId?: string;
   invoiceNumber: number;
   customerName: string;
   customerPhone: string;
@@ -501,6 +507,7 @@ export interface Sale {
 
 export interface Purchase {
   id: string;
+  companyId?: string;
   productId: string;
   productName: string;
   quantity: number;
@@ -513,6 +520,7 @@ export interface Purchase {
 
 export interface DailyNote {
   id: string;
+  companyId?: string;
   createdAt: string; // ISO string
   content: string;
   seller: string;
@@ -521,6 +529,7 @@ export interface DailyNote {
 
 export interface CeoDailyNote {
   id: string;
+  companyId?: string;
   fecha: string; // YYYY-MM-DD
   tienda: string; // storeId
   energia?: 'green' | 'yellow' | 'red';
@@ -533,6 +542,7 @@ export interface CeoDailyNote {
 
 export interface Customer {
     id: string;
+  companyId?: string;
     name: string;
     phone: string;
     storeId: string;
@@ -541,6 +551,7 @@ export interface Customer {
 
 export interface LoginRecord {
   id: string;
+  companyId?: string;
   sellerId: string;
   sellerName: string;
   date: string; // ISO string
@@ -549,6 +560,7 @@ export interface LoginRecord {
 
 export interface PayrollRecord {
   id: string;
+  companyId?: string;
   sellerName: string;
   period: string;
   paymentType?: 'nomina' | 'admin' | 'utilidad';
@@ -613,6 +625,7 @@ export interface ExchangedItem {
 
 export interface Incident {
   id: string;
+  companyId?: string;
   type: IncidentType;
   status: IncidentStatus;
   description: string;
@@ -660,6 +673,7 @@ export interface Expense {
 
 export interface GiftVoucher {
   id: string;
+  companyId?: string;
   code: string;
   initialValue: number;
   currentValue: number;
@@ -676,6 +690,7 @@ export interface GiftVoucher {
 
 export interface Loan {
   id: string;
+  companyId?: string;
   lenderName: string; // Nombre del prestamista/banco
   loanType: 'bank' | 'personal'; // 'bank' | 'personal'
   totalAmount: number; // Monto desembolsado
