@@ -2770,7 +2770,7 @@ const App: React.FC = () => {
   const handleUpdateAccountingChat = async (messages: any[]) => {
     if (!currentStoreId) return;
     const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
-    await setDoc(chatRef, { messages, lastUpdated: new Date().toISOString() });
+    await setDoc(chatRef, { messages, lastUpdated: new Date().toISOString(), storeId: currentStoreId, companyId: operationalCompanyId });
   };
 
   const handleAddLoan = async (loanData: Omit<Loan, 'id' | 'storeId' | 'createdAt'>) => {
@@ -2780,6 +2780,7 @@ const App: React.FC = () => {
       ...loanData,
       id: ref.id,
       storeId: currentStoreId,
+      companyId: operationalCompanyId,
       createdAt: new Date().toISOString()
     };
     await setDoc(ref, cleanObject(finalLoan));
@@ -2794,28 +2795,57 @@ const App: React.FC = () => {
     await deleteDoc(doc(db, 'loans', id));
   };
 
-  const handleLogin = (identifier: string, passwordAttempt: string) => {
+  const handleLogin = async (identifier: string, passwordAttempt: string) => {
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanPass = (passwordAttempt || '').trim();
-    const seller = sellers.find(s => 
+    const matches = sellers.filter(s =>
       s && (
-        (s.username && s.username.trim().toLowerCase() === cleanId) || 
+        (s.username && s.username.trim().toLowerCase() === cleanId) ||
         (s.name && s.name.trim().toLowerCase() === cleanId)
       )
     );
-    if (seller && (seller.password || '').trim() === cleanPass) {
+    const seller = matches.find(s => (s.password || '').trim() === cleanPass);
+
+    if (seller) {
       if (seller.isDisabled) {
         alert('Este usuario se encuentra desactivado. Contacta al administrador.');
         return;
       }
-      setCurrentUser(seller); 
+
+      const sellerStore = stores.find(s => s.id === seller.storeId);
+      const resolvedCompanyId = seller.companyId || sellerStore?.companyId || DEFAULT_COMPANY_ID;
+
+      // Compatibility bridge: legacy users continue to work, but every successful
+      // login now repairs/persists the tenant identity needed for the secure-auth migration.
+      if (!seller.companyId || seller.companyId !== resolvedCompanyId) {
+        try {
+          await updateDoc(doc(db, 'sellers', seller.id), { companyId: resolvedCompanyId });
+        } catch (error) {
+          console.error('Could not persist seller companyId:', error);
+        }
+      }
+
+      const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
+      setCurrentUser(sessionUser);
+      setActiveCompanyId(resolvedCompanyId);
+      localStorage.setItem('activeCompanyId', resolvedCompanyId);
       handleSwitchStore(seller.storeId);
+
       const sellerRole = roles.find(role => role.id === seller.roleId);
       if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
-      const newLoginRecord: Omit<LoginRecord, 'id'> = { sellerId: seller.id, sellerName: seller.name, date: new Date().toISOString(), storeId: seller.storeId };
-      addDoc(collection(db, 'loginHistory'), newLoginRecord);
-    } else alert('Usuario o contraseña incorrecta.');
+
+      const newLoginRecord: Omit<LoginRecord, 'id'> = {
+        sellerId: seller.id,
+        sellerName: seller.name,
+        date: new Date().toISOString(),
+        storeId: seller.storeId,
+        companyId: resolvedCompanyId
+      };
+      await addDoc(collection(db, 'loginHistory'), newLoginRecord);
+    } else {
+      alert('Usuario o contraseña incorrecta.');
+    }
   };
   
   const handleLogout = () => { setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); setHasShownBriefing(false); };
