@@ -226,6 +226,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [salesSellerFilter, setSalesSellerFilter] = useState('');
   const [salesCategoryFilter, setSalesCategoryFilter] = useState('');
   const [salesMonthFilter, setSalesMonthFilter] = useState('');
+  const [salesHistoryStartDate, setSalesHistoryStartDate] = useState('');
+  const [salesHistoryEndDate, setSalesHistoryEndDate] = useState('');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editingLayaway, setEditingLayaway] = useState<Layaway | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
@@ -967,11 +969,17 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           matchesMonth = false;
         }
       }
-      const matchesDateRange = salesMonthFilter ? true : isWithinRange(transaction.createdAt);
+      let matchesDateRange = salesMonthFilter ? true : isWithinRange(transaction.createdAt);
+      if (!salesMonthFilter && (salesHistoryStartDate || salesHistoryEndDate)) {
+        const d = new Date(transaction.createdAt);
+        const customStart = salesHistoryStartDate ? new Date(salesHistoryStartDate + 'T00:00:00') : null;
+        const customEnd = salesHistoryEndDate ? new Date(salesHistoryEndDate + 'T23:59:59.999') : null;
+        matchesDateRange = (!customStart || d >= customStart) && (!customEnd || d <= customEnd);
+      }
 
       return matchesSearch && matchesSeller && matchesCategory && matchesMonth && matchesDateRange; 
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, salesMonthFilter, isWithinRange]);
+  }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, salesMonthFilter, salesHistoryStartDate, salesHistoryEndDate, isWithinRange]);
 
   const handleExportSalesHistoryExcel = () => {
     if (managedSales.length === 0) {
@@ -1115,7 +1123,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     const csvContent = csvRows.join('\n');
     const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-    const monthSuffix = salesMonthFilter ? `_${salesMonthFilter}` : `_${new Date().toISOString().split('T')[0]}`;
+    const monthSuffix = salesMonthFilter ? `_${salesMonthFilter}` : (salesHistoryStartDate || salesHistoryEndDate) ? `_${salesHistoryStartDate || 'inicio'}_a_${salesHistoryEndDate || 'hoy'}` : `_${startDate}_a_${endDate}`;
     const fileName = `historial_ventas_${storeName.toLowerCase().replace(/[^a-z0-9]/g, '_')}${monthSuffix}.csv`;
 
     const link = document.createElement('a');
@@ -1552,11 +1560,20 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                   onChange={e => setSalesMonthFilter(e.target.value)} 
                   className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm font-medium text-gray-700 dark:text-gray-200"
                 >
-                  <option value="">📅 Todos los Meses (Rango Actual)</option>
+                  <option value="">📅 Rango de fechas</option>
                   {availableMonths.map(m => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
+
+                {!salesMonthFilter && (
+                  <div className="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-2 items-center bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div><label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Desde</label><input type="date" value={salesHistoryStartDate} onChange={e => setSalesHistoryStartDate(e.target.value)} className="w-full bg-white dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm" /></div>
+                    <span className="hidden sm:block text-gray-400 mt-5">a</span>
+                    <div><label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Hasta</label><input type="date" value={salesHistoryEndDate} onChange={e => setSalesHistoryEndDate(e.target.value)} className="w-full bg-white dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm" /></div>
+                    <button type="button" onClick={() => { setSalesHistoryStartDate(''); setSalesHistoryEndDate(''); }} className="mt-0 sm:mt-5 px-3 py-2 text-xs font-bold rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Usar rango general</button>
+                  </div>
+                )}
 
                 <select 
                   value={salesSellerFilter} 
