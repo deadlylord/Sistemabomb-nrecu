@@ -396,9 +396,10 @@ const App: React.FC = () => {
       attachFirestoreListener(query(collection(db, 'inventoryTransfers')), setInventoryTransfers)
     ];
     if (isAdmin) {
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'layaways')), setAllLayaways));
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'incidents')), setAllIncidents));
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'sales')), setAllSales));
+      // Global sales/layaways/incidents are intentionally NOT permanent listeners.
+      // They are loaded on demand for multisede analytical screens and then reused
+      // in memory during the session. This avoids re-reading the entire history on
+      // every live update while POS/store-specific views remain real-time.
       
       // Ensure Administrator role has gift_vouchers permission
       const adminRole = roles.find(r => r.name === 'Administrator');
@@ -412,33 +413,27 @@ const App: React.FC = () => {
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
   
   useEffect(() => {
-    if ((isReportsModalOpen || currentView === View.DASHBOARD) && isAdmin) {
-      if (allSales.length === 0) {
-        const salesQuery = query(collection(db, 'sales'));
-        getDocs(salesQuery).then(snapshot => {
-          const list: Sale[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Sale));
-          setAllSales(list);
-        }).catch(error => console.error("Error fetching all sales for report:", error));
-      }
-      if (globalInventoryForSearch.length === 0) {
-          const inventoryQuery = query(collection(db, 'inventory'));
-          getDocs(inventoryQuery).then(snapshot => {
-              const list: Product[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as Product));
-              setGlobalInventoryForSearch(list);
-          }).catch(error => console.error("Error fetching all inventory for report:", error));
-      }
+    if (!isAdmin || !currentUser) return;
+    const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.CEO_CENTER || currentView === View.FINANCIAL_RECONCILIATION;
+    const needsMultistoreCatalog = needsMultistoreAnalytics || currentView === View.PURCHASES || isGlobalMode;
+    if (needsMultistoreAnalytics) {
+      if (allSales.length === 0) fetchOnceFromFirestore(query(collection(db, 'sales')), setAllSales);
+      if (allLayaways.length === 0) fetchOnceFromFirestore(query(collection(db, 'layaways')), setAllLayaways);
+      if (allIncidents.length === 0) fetchOnceFromFirestore(query(collection(db, 'incidents')), setAllIncidents);
     }
-  }, [isReportsModalOpen, currentView, isAdmin, allSales.length, globalInventoryForSearch.length]);
+    if (needsMultistoreCatalog && globalInventoryForSearch.length === 0) {
+      fetchOnceFromFirestore(query(collection(db, 'inventory')), setGlobalInventoryForSearch);
+    }
+  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
   
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
         if (globalInventoryForSearch.length > 0 && !isAdmin) setGlobalInventoryForSearch([]);
         return;
     }
-    const inventoryQuery = query(collection(db, 'inventory'));
-    const unsubscribe = attachFirestoreListener(inventoryQuery, setGlobalInventoryForSearch);
-    return () => unsubscribe();
-  }, [isGlobalMode, isAppReady, currentUser, isAdmin]);
+    // Multisede inventory is cached by the on-demand loader above. Store inventory
+    // continues real-time in the active operational view, avoiding a second global listener.
+  }, [isGlobalMode, isAppReady, currentUser, isAdmin, globalInventoryForSearch.length]);
   
   useEffect(() => {
     if (!currentUser || !currentStoreId) return;
@@ -2861,7 +2856,7 @@ const App: React.FC = () => {
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : undefined} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
+        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={visibleSellers} roles={roles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={isDeveloper} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
@@ -2975,7 +2970,7 @@ const App: React.FC = () => {
           />
         )}
       </main>
-      <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
+      <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {showRecaudoReceipt && lastRecaudo && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (
