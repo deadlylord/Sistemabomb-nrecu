@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.88',
+    date: '2026-09-20',
+    description: 'Navegación Responsive y Menú Adaptable',
+    isCurrent: true,
+    changes: [
+      'Menú lateral de escritorio ahora puede contraerse y recuerda la preferencia del usuario.',
+      'Navegación móvil más compacta para evitar choques entre selector de sede, menú y acciones del encabezado.',
+      'Submenús móviles aprovechan mejor el ancho disponible y se adaptan a pantallas pequeñas.',
+      'Área principal usa espaciado progresivo para celular, tablet y escritorio y evita desbordamientos horizontales innecesarios.'
+    ]
+  },
+  {
     version: '1.1.87',
     date: '2026-09-20',
     description: 'CEO Center: Inventario Inteligente y Corrección de Recaudos en Efectivo',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Nuevo motor de inventario inteligente con recomendaciones de traslado, reabastecimiento y promoción basadas en rotación y stock de los últimos 30 días.',
       'Las recomendaciones son informativas: el sistema no realiza traslados ni compras automáticamente.',
