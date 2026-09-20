@@ -225,6 +225,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [salesSearchTerm, setSalesSearchTerm] = useState('');
   const [salesSellerFilter, setSalesSellerFilter] = useState('');
   const [salesCategoryFilter, setSalesCategoryFilter] = useState('');
+  const [salesMonthFilter, setSalesMonthFilter] = useState('');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editingLayaway, setEditingLayaway] = useState<Layaway | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
@@ -905,25 +906,229 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sales, layaways, chartViewMode]);
 
-    const managedSales = useMemo(() => {
-        const layawayIds = new Set(layaways.map(l => l.id));
-        const cleanSales = sales.filter(s => !layawayIds.has(s.id));
-        const allTransactions: UnifiedSaleTransaction[] = [...cleanSales.map(s => ({ ...s, transactionType: 'sale' as const })), ...layaways.map(l => ({ ...l, transactionType: 'layaway' as const, layawayStatus: l.status }))];
-        return allTransactions.filter(transaction => { 
-          const lowerCaseSearchTerm = (salesSearchTerm || '').toLowerCase(); 
-          const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; 
-          const invNum = (transaction.invoiceNumber ?? '').toString();
-          const custName = (transaction.customerName || '').toLowerCase();
-          const custPhone = transaction.customerPhone || '';
-          const matchesSearch = invNum.includes(salesSearchTerm) || 
-            custName.includes(lowerCaseSearchTerm) || 
-            custPhone.includes(salesSearchTerm) || 
-            itemsArray.some((item: CartItem) => item && ((item.name || '').toLowerCase().includes(lowerCaseSearchTerm) || (item.supplier && (item.supplier || '').toLowerCase().includes(lowerCaseSearchTerm)))); 
-          const matchesSeller = salesSellerFilter ? transaction.seller === salesSellerFilter : true; 
-          const matchesCategory = salesCategoryFilter ? itemsArray.some((item: CartItem) => item && item.categoryId === salesCategoryFilter) : true; 
-          return matchesSearch && matchesSeller && isWithinRange(transaction.createdAt) && matchesCategory; 
-        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, isWithinRange]);
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    const addDate = (dStr: string) => {
+      if (!dStr) return;
+      const d = new Date(dStr);
+      if (!isNaN(d.getTime())) {
+        const ym = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        monthsSet.add(ym);
+      }
+    };
+    sales.forEach(s => addDate(s.createdAt));
+    layaways.forEach(l => addDate(l.createdAt));
+
+    const MONTH_NAMES = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    return Array.from(monthsSet)
+      .sort((a, b) => b.localeCompare(a))
+      .map(ym => {
+        const [year, month] = ym.split('-');
+        const monthIndex = parseInt(month, 10) - 1;
+        const monthName = MONTH_NAMES[monthIndex] || month;
+        return {
+          value: ym,
+          label: `${monthName} ${year}`
+        };
+      });
+  }, [sales, layaways]);
+
+  const managedSales = useMemo(() => {
+    const layawayIds = new Set(layaways.map(l => l.id));
+    const cleanSales = sales.filter(s => !layawayIds.has(s.id));
+    const allTransactions: UnifiedSaleTransaction[] = [
+      ...cleanSales.map(s => ({ ...s, transactionType: 'sale' as const })),
+      ...layaways.map(l => ({ ...l, transactionType: 'layaway' as const, layawayStatus: l.status }))
+    ];
+    return allTransactions.filter(transaction => { 
+      const lowerCaseSearchTerm = (salesSearchTerm || '').toLowerCase(); 
+      const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; 
+      const invNum = (transaction.invoiceNumber ?? '').toString();
+      const custName = (transaction.customerName || '').toLowerCase();
+      const custPhone = transaction.customerPhone || '';
+      const matchesSearch = invNum.includes(salesSearchTerm) || 
+        custName.includes(lowerCaseSearchTerm) || 
+        custPhone.includes(salesSearchTerm) || 
+        itemsArray.some((item: CartItem) => item && ((item.name || '').toLowerCase().includes(lowerCaseSearchTerm) || (item.supplier && (item.supplier || '').toLowerCase().includes(lowerCaseSearchTerm)))); 
+      const matchesSeller = salesSellerFilter ? transaction.seller === salesSellerFilter : true; 
+      const matchesCategory = salesCategoryFilter ? itemsArray.some((item: CartItem) => item && item.categoryId === salesCategoryFilter) : true; 
+      
+      let matchesMonth = true;
+      if (salesMonthFilter) {
+        const d = new Date(transaction.createdAt);
+        if (!isNaN(d.getTime())) {
+          const ym = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+          matchesMonth = (ym === salesMonthFilter);
+        } else {
+          matchesMonth = false;
+        }
+      }
+      const matchesDateRange = salesMonthFilter ? true : isWithinRange(transaction.createdAt);
+
+      return matchesSearch && matchesSeller && matchesCategory && matchesMonth && matchesDateRange; 
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [sales, layaways, salesSearchTerm, salesSellerFilter, salesCategoryFilter, salesMonthFilter, isWithinRange]);
+
+  const handleExportSalesHistoryExcel = () => {
+    if (managedSales.length === 0) {
+      alert('No hay ventas registradas que coincidan con los filtros actuales para exportar.');
+      return;
+    }
+
+    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    const storeName = currentStore?.name || 'Sede';
+
+    const headers = [
+      'Nro Factura',
+      'Tipo Transaccion',
+      'Fecha',
+      'Hora',
+      'Ano',
+      'Mes',
+      'Cliente Nombre',
+      'Cliente Telefono',
+      'Vendedor',
+      'Sede / Local',
+      'SKU / Ref',
+      'Producto / Item',
+      'Categoria',
+      'Proveedor',
+      'Cantidad Vendida',
+      'Precio Unitario ($)',
+      'Costo Unitario ($)',
+      'Precio Base ($)',
+      'Subtotal Venta ($)',
+      'Costo Total ($)',
+      'Ganancia Neta ($)',
+      'Medio(s) de Pago',
+      'Total Factura ($)',
+      'Estado'
+    ];
+
+    const escapeCsv = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows: string[] = [headers.map(escapeCsv).join(',')];
+
+    const MONTH_NAMES = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    managedSales.forEach((transaction) => {
+      const d = new Date(transaction.createdAt);
+      const dateStr = !isNaN(d.getTime()) ? d.toLocaleDateString('es-CO') : '';
+      const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      const yearStr = !isNaN(d.getTime()) ? d.getFullYear().toString() : '';
+      const monthStr = !isNaN(d.getTime()) ? MONTH_NAMES[d.getMonth()] : '';
+
+      const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[];
+
+      let paymentMethodsText = '';
+      if (Array.isArray(transaction.payments) && transaction.payments.length > 0) {
+        paymentMethodsText = transaction.payments.map(p => `${p.method}: $${p.amount}`).join(' | ');
+      } else if ('paymentMethod' in transaction && transaction.paymentMethod) {
+        paymentMethodsText = String(transaction.paymentMethod);
+      } else {
+        paymentMethodsText = 'N/A';
+      }
+
+      const transactionType = transaction.transactionType === 'layaway' ? 'Plan Separe / Abono' : 'Venta Directa';
+      const statusText = (transaction as any).layawayStatus || 'Completada';
+
+      if (itemsArray.length > 0) {
+        itemsArray.forEach((item) => {
+          const catName = categoryMap.get(item.categoryId) || 'Sin Categoria';
+          const qty = item.quantity || 1;
+          const price = item.price || 0;
+          const cost = item.cost || 0;
+          const basePrice = item.basePrice || price;
+          const subtotal = price * qty;
+          const totalCost = cost * qty;
+          const profit = (price - cost) * qty;
+
+          const row = [
+            `#${transaction.invoiceNumber}`,
+            transactionType,
+            dateStr,
+            timeStr,
+            yearStr,
+            monthStr,
+            transaction.customerName || 'Cliente Mostrador',
+            transaction.customerPhone || 'N/A',
+            transaction.seller || 'N/A',
+            storeName,
+            item.sku || 'N/A',
+            item.name || 'Producto Desconocido',
+            catName,
+            item.supplier || 'N/A',
+            qty,
+            price,
+            cost,
+            basePrice,
+            subtotal,
+            totalCost,
+            profit,
+            paymentMethodsText,
+            transaction.totalAmount,
+            statusText
+          ];
+          csvRows.push(row.map(escapeCsv).join(','));
+        });
+      } else {
+        const row = [
+          `#${transaction.invoiceNumber}`,
+          transactionType,
+          dateStr,
+          timeStr,
+          yearStr,
+          monthStr,
+          transaction.customerName || 'Cliente Mostrador',
+          transaction.customerPhone || 'N/A',
+          transaction.seller || 'N/A',
+          storeName,
+          'N/A',
+          'Venta Sin Items',
+          'N/A',
+          'N/A',
+          1,
+          transaction.totalAmount,
+          0,
+          transaction.totalAmount,
+          transaction.totalAmount,
+          0,
+          transaction.totalAmount,
+          paymentMethodsText,
+          transaction.totalAmount,
+          statusText
+        ];
+        csvRows.push(row.map(escapeCsv).join(','));
+      }
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+    const monthSuffix = salesMonthFilter ? `_${salesMonthFilter}` : `_${new Date().toISOString().split('T')[0]}`;
+    const fileName = `historial_ventas_${storeName.toLowerCase().replace(/[^a-z0-9]/g, '_')}${monthSuffix}.csv`;
+
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   const handleShareCurrentStore = async () => {
     const { totalUnitsSold, totalProfit, averageTicketSize, totalDirectSalesValue } = metricsForCurrentStore;
@@ -1320,7 +1525,74 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         )}
       </div>
 
-      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} /></div>{isSalesHistoryVisible && (<div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"><div className="relative"><input type="text" placeholder="Factura, cliente, producto..." value={salesSearchTerm} onChange={e => setSalesSearchTerm(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none" /><div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400"><SearchIcon /></div></div><select value={salesSellerFilter} onChange={e => setSalesSellerFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todos los vendedores</option>{sellers.map(seller => (<option key={seller.id} value={seller.name}>{seller.name}</option>))}</select><select value={salesCategoryFilter} onChange={e => setSalesCategoryFilter(e.target.value)} className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2"><option value="">Todas las categorías</option>{categories.map(category => (<option key={category.id} value={category.id}>{category.name}</option>))}</select></div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); if (transaction.transactionType === 'layaway') { setEditingLayaway(transaction as unknown as Layaway); } else { setEditingSale(transaction as Sale); } }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>{isAdmin && transaction.transactionType === 'sale' && (<button onClick={(e) => { e.stopPropagation(); setSaleToDelete(transaction as Sale); }} className="text-gray-500 hover:text-red-500 p-1.5 rounded-full hover:bg-red-100 transition-colors" title="Eliminar Venta"><TrashIcon className="w-4 h-4" /></button>)}</div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => { const isPromo = (item.discountPrice !== undefined && item.discountPrice === item.price) || (item.basePrice !== undefined && item.basePrice > item.price); return (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}{isPromo && (<span className="ml-2 px-1.5 py-0.5 text-[9px] font-black rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">🏷️ Promoción</span>)}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u{item.basePrice && item.basePrice > item.price && (<span className="line-through text-gray-400 ml-1">{formatCOP(item.basePrice)}</span>)}</p></div></div>); })}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
+      <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+        <div onClick={() => setIsSalesHistoryVisible(!isSalesHistoryVisible)} className="cursor-pointer flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-accent">Historial de Ventas</h2>
+          <ChevronDownIcon className={`w-6 h-6 transition-transform ${isSalesHistoryVisible ? 'rotate-180' : ''}`} />
+        </div>
+        {isSalesHistoryVisible && (
+          <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 flex-1">
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    placeholder="Factura, cliente, producto..." 
+                    value={salesSearchTerm} 
+                    onChange={e => setSalesSearchTerm(e.target.value)} 
+                    className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 pl-10 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none text-sm" 
+                  />
+                  <div className="absolute top-0 left-0 inline-flex items-center justify-center h-full w-10 text-gray-400">
+                    <SearchIcon />
+                  </div>
+                </div>
+
+                <select 
+                  value={salesMonthFilter} 
+                  onChange={e => setSalesMonthFilter(e.target.value)} 
+                  className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm font-medium text-gray-700 dark:text-gray-200"
+                >
+                  <option value="">📅 Todos los Meses (Rango Actual)</option>
+                  {availableMonths.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+
+                <select 
+                  value={salesSellerFilter} 
+                  onChange={e => setSalesSellerFilter(e.target.value)} 
+                  className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <option value="">Todos los vendedores</option>
+                  {sellers.map(seller => (
+                    <option key={seller.id} value={seller.name}>{seller.name}</option>
+                  ))}
+                </select>
+
+                <select 
+                  value={salesCategoryFilter} 
+                  onChange={e => setSalesCategoryFilter(e.target.value)} 
+                  className="w-full bg-gray-100 dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExportSalesHistoryExcel}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-lg shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all shrink-0 active:scale-95"
+                title="Descargar historial de ventas con todos sus campos en Excel (.csv)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Descargar Excel</span>
+              </button>
+            </div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); if (transaction.transactionType === 'layaway') { setEditingLayaway(transaction as unknown as Layaway); } else { setEditingSale(transaction as Sale); } }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>{isAdmin && transaction.transactionType === 'sale' && (<button onClick={(e) => { e.stopPropagation(); setSaleToDelete(transaction as Sale); }} className="text-gray-500 hover:text-red-500 p-1.5 rounded-full hover:bg-red-100 transition-colors" title="Eliminar Venta"><TrashIcon className="w-4 h-4" /></button>)}</div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => { const isPromo = (item.discountPrice !== undefined && item.discountPrice === item.price) || (item.basePrice !== undefined && item.basePrice > item.price); return (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}{isPromo && (<span className="ml-2 px-1.5 py-0.5 text-[9px] font-black rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">🏷️ Promoción</span>)}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u{item.basePrice && item.basePrice > item.price && (<span className="line-through text-gray-400 ml-1">{formatCOP(item.basePrice)}</span>)}</p></div></div>); })}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3><div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
         <div id="sales-chart" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg mt-8"><div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-bold text-accent">Análisis de Ventas</h2><div className="flex gap-2"><button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button><button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button></div></div><SalesHistoryChart data={salesChartData} viewMode={chartViewMode} /></div>
