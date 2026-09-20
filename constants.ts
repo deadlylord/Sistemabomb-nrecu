@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.90',
+    date: '2026-09-20',
+    description: 'CEO Center Ligero por Sede',
+    isCurrent: true,
+    changes: [
+      'CEO Center abre usando únicamente los datos de la sede activa del usuario o seleccionada en el menú principal.',
+      'La información de todas las sedes deja de cargarse automáticamente al abrir CEO Center.',
+      'La opción Todas las Sedes solicita explícitamente la carga multisede solo cuando el usuario la necesita.',
+      'Al cambiar de sede en el menú principal, CEO Center sigue automáticamente esa sede mientras esté en modo local.',
+      'Los cálculos pesados de comparación, vendedores e inventario trabajan sobre un conjunto de datos mucho menor en la apertura normal.'
+    ]
+  },
+  {
     version: '1.1.89',
     date: '2026-09-20',
     description: 'Optimización de Carga y Lecturas Firebase',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Ventas, apartados y novedades multisede dejan de mantenerse con listeners globales permanentes para administradores.',
       'Dashboard, CEO Center, Conciliación y Reportes cargan la información multisede bajo demanda y la reutilizan durante la sesión.',
