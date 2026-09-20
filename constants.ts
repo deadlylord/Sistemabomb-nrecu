@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.89',
+    date: '2026-09-20',
+    description: 'Optimización de Carga y Lecturas Firebase',
+    isCurrent: true,
+    changes: [
+      'Ventas, apartados y novedades multisede dejan de mantenerse con listeners globales permanentes para administradores.',
+      'Dashboard, CEO Center, Conciliación y Reportes cargan la información multisede bajo demanda y la reutilizan durante la sesión.',
+      'Compras carga y reutiliza el catálogo multisede para reconocer referencias, nombres y fotos de otras sedes sin mantener un listener global adicional.',
+      'POS y módulos operativos conservan listeners por sede para mantener ventas y stock activos en tiempo real.',
+      'Se eliminó el segundo listener global de inventario que se activaba en modo multisede.'
+    ]
+  },
+  {
     version: '1.1.88',
     date: '2026-09-20',
     description: 'Navegación Responsive y Menú Adaptable',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Menú lateral de escritorio ahora puede contraerse y recuerda la preferencia del usuario.',
       'Navegación móvil más compacta para evitar choques entre selector de sede, menú y acciones del encabezado.',
