@@ -281,6 +281,48 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
     }).filter(x => x.salesAmount > 0 || x.previousAmount > 0).sort((a,b) => b.salesAmount - a.salesAmount);
   }, [sales, sellers, stores, selectedStoreId, nonTrainingStoreIds, timeRange]);
 
+  // Smart inventory engine: deterministic recommendations, never automatic movements.
+  const smartInventoryRecommendations = useMemo(() => {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    const scopedStoreIds = selectedStoreId === 'all' ? nonTrainingStoreIds : [selectedStoreId];
+    const scopedInventory = inventory.filter(p => scopedStoreIds.includes(p.storeId) && !p.isDisabled);
+    const soldByProduct: Record<string, number> = {};
+    sales.forEach(s => {
+      if (!scopedStoreIds.includes(s.storeId) || new Date(s.createdAt) < cutoff) return;
+      s.items.forEach(i => { soldByProduct[i.id] = (soldByProduct[i.id] || 0) + (i.quantity || 0); });
+    });
+    const groups: Record<string, { name: string; sku: string; rows: { product: Product; sold: number }[] }> = {};
+    scopedInventory.forEach(p => {
+      const key = (p.sku || p.name || '').trim().toLowerCase(); if (!key) return;
+      if (!groups[key]) groups[key] = { name: p.name, sku: p.sku || '', rows: [] };
+      groups[key].rows.push({ product: p, sold: soldByProduct[p.id] || 0 });
+    });
+    const recs: { id: string; type: 'buy'|'transfer'|'promote'; title: string; detail: string; impact: string }[] = [];
+    Object.entries(groups).forEach(([key,g]) => {
+      const totalStock = g.rows.reduce((n,r) => n + Math.max(0,r.product.stock),0);
+      const totalSold = g.rows.reduce((n,r) => n + r.sold,0);
+      if (g.rows.length > 1 && selectedStoreId === 'all') {
+        const need = [...g.rows].sort((a,b) => (b.sold-b.product.stock)-(a.sold-a.product.stock))[0];
+        const donor = [...g.rows].sort((a,b) => (b.product.stock-b.sold)-(a.product.stock-a.sold))[0];
+        if (need.product.storeId !== donor.product.storeId && need.sold >= 3 && need.product.stock <= 2 && donor.product.stock >= 4) {
+          const qty = Math.max(1, Math.min(donor.product.stock - 2, Math.max(1, Math.ceil(need.sold - need.product.stock))));
+          const from = stores.find(s=>s.id===donor.product.storeId)?.name || 'Sede origen'; const to = stores.find(s=>s.id===need.product.storeId)?.name || 'Sede destino';
+          recs.push({ id:`transfer-${key}`, type:'transfer', title:`Trasladar ${g.name}`, detail:`${qty} und. sugeridas: ${from} → ${to}. En 30 días: ${to} vendió ${need.sold} y tiene ${need.product.stock}; ${from} tiene ${donor.product.stock}.`, impact:'Evita comprar antes de aprovechar inventario existente.' });
+          return;
+        }
+      }
+      if (totalSold >= 4 && totalStock <= Math.max(2, Math.ceil(totalSold * 0.35))) {
+        const qty = Math.max(3, Math.ceil(totalSold * 1.5 - totalStock));
+        recs.push({ id:`buy-${key}`, type:'buy', title:`Reabastecer ${g.name}`, detail:`Vendió ${totalSold} und. en 30 días y quedan ${totalStock}. Compra sugerida: aprox. ${qty} und.`, impact:'Riesgo de perder ventas por agotamiento.' });
+      } else if (totalStock >= 4 && totalSold === 0) {
+        const capital = g.rows.reduce((n,r)=>n + Math.max(0,r.product.stock)*(r.product.cost||0),0);
+        recs.push({ id:`promote-${key}`, type:'promote', title:`Mover ${g.name}`, detail:`${totalStock} und. sin ventas en 30 días. Capital estimado: ${formatCOP(capital)}.`, impact:'Revisar exhibición, contenido, precio o promoción antes de volver a comprar.' });
+      }
+    });
+    const order = { transfer:0, buy:1, promote:2 };
+    return recs.sort((a,b)=>order[a.type]-order[b.type]).slice(0,12);
+  }, [inventory, sales, stores, selectedStoreId, nonTrainingStoreIds]);
+
   // Store-wise performance
   const storePerformance = useMemo(() => {
     return nonTrainingStores.map(store => {
@@ -1041,6 +1083,12 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                         <p className="text-[9px] text-slate-400 mt-1">{formatCOP(executiveComparison.grossProfit)}</p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Smart inventory recommendations */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 mb-4"><div><h4 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Inventario Inteligente</h4><p className="text-[10px] text-slate-400 mt-1">Recomendaciones calculadas con ventas y existencias de los últimos 30 días. No ejecutan movimientos automáticamente.</p></div><span className="text-[10px] font-black px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400">{smartInventoryRecommendations.length} recomendación(es)</span></div>
+                    {smartInventoryRecommendations.length === 0 ? <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 p-4 text-sm font-bold text-emerald-700 dark:text-emerald-400">✓ No se detectaron acciones urgentes de inventario con las reglas actuales.</div> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">{smartInventoryRecommendations.map(r => <div key={r.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4"><div className="flex gap-3"><span className="text-xl">{r.type==='transfer'?'🔄':r.type==='buy'?'📦':'🏷️'}</span><div><p className="text-sm font-black text-slate-900 dark:text-white">{r.title}</p><p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{r.detail}</p><p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-2">{r.impact}</p></div></div></div>)}</div>}
                   </div>
 
                   {/* Seller commercial performance */}
