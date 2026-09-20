@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.87',
+    date: '2026-09-20',
+    description: 'CEO Center: Inventario Inteligente y Corrección de Recaudos en Efectivo',
+    isCurrent: true,
+    changes: [
+      'Nuevo motor de inventario inteligente con recomendaciones de traslado, reabastecimiento y promoción basadas en rotación y stock de los últimos 30 días.',
+      'Las recomendaciones son informativas: el sistema no realiza traslados ni compras automáticamente.',
+      'Se corrigió el resumen del negocio para que los recaudos Sistecredito también sumen al Efectivo Neto, manteniendo su casilla separada para control.',
+      'El desglose de Efectivo ahora muestra explícitamente cuánto corresponde a recaudos Sistecredito, alineándolo con la lógica de Conciliación.'
+    ]
+  },
+  {
     version: '1.1.86',
     date: '2026-09-20',
     description: 'CEO Center: Desempeño Comercial por Vendedora',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Nuevo panel de desempeño de vendedoras dentro del consolidado del CEO Center.',
       'Muestra ventas, prendas vendidas, número de facturas y ticket promedio por vendedora.',
