@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.86',
+    date: '2026-09-20',
+    description: 'CEO Center: Desempeño Comercial por Vendedora',
+    isCurrent: true,
+    changes: [
+      'Nuevo panel de desempeño de vendedoras dentro del consolidado del CEO Center.',
+      'Muestra ventas, prendas vendidas, número de facturas y ticket promedio por vendedora.',
+      'Compara automáticamente cada vendedora contra el periodo anterior equivalente y muestra su variación porcentual.',
+      'Respeta el filtro de sede y el periodo seleccionado, manteniendo aislada la información de la empresa activa.'
+    ]
+  },
+  {
     version: '1.1.85',
     date: '2026-09-20',
     description: 'Aislamiento Multiempresa y Preparación de Autenticación Segura',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Aislamiento operativo por empresa activa para evitar mezclar información entre Bombón/Street Legends y empresas cliente como Mayla.',
       'Validaciones de seguridad en productos, compras multitienda, traslados y usuarios para impedir operaciones entre empresas distintas.',
