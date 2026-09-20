@@ -1021,6 +1021,9 @@ const App: React.FC = () => {
     const batch = existingBatch || writeBatch(db);
     try {
       const { fromStoreId, toStoreId, productId, quantity, sellerName } = data;
+      if (!visibleStoreIds.has(fromStoreId) || !visibleStoreIds.has(toStoreId)) {
+        throw new Error('Traslado bloqueado: origen y destino deben pertenecer a la empresa activa.');
+      }
       const fromProductRef = doc(db, 'inventory', productId);
       const fromProductDoc = await getDoc(fromProductRef);
       if (!fromProductDoc.exists()) throw new Error("Producto no encontrado en la tienda de origen.");
@@ -1150,7 +1153,7 @@ const App: React.FC = () => {
     if (!window.confirm("Esto marcará todos los traslados visibles como 'liquidados' y reiniciará los saldos. ¿Continuar?")) return;
     try {
         const batch = writeBatch(db);
-        const unsettledTransfers = inventoryTransfers.filter(t => !t.settled);
+        const unsettledTransfers = inventoryTransfers.filter(t => !t.settled && visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId));
         if (unsettledTransfers.length === 0) return;
         unsettledTransfers.forEach(transfer => {
             const transferRef = doc(db, 'inventoryTransfers', transfer.id);
@@ -1999,9 +2002,15 @@ const App: React.FC = () => {
 
   const handleAddProduct = async (newProductData: any, selectedStoreIds: string[], imageFile?: File) => {
       const inputName = newProductData.name;
+      const allowedStoreIds = new Set(visibleStores.map(s => s.id));
+      const invalidStoreIds = selectedStoreIds.filter(id => !allowedStoreIds.has(id));
+      if (invalidStoreIds.length > 0) throw new Error('Intento bloqueado: no se pueden crear productos en tiendas de otra empresa.');
       
       const q = query(collection(db, 'inventory'), where('name', '==', inputName));
-      const snapshot = await getDocs(q);
+      const rawSnapshot = await getDocs(q);
+      // Product identity propagation must never cross company boundaries.
+      const companyDocs = rawSnapshot.docs.filter(d => allowedStoreIds.has((d.data() as Product).storeId));
+      const snapshot = { ...rawSnapshot, docs: companyDocs, empty: companyDocs.length === 0 } as typeof rawSnapshot;
       
       let imageUrl = '';
       let existingDescription = newProductData.description;
@@ -2099,8 +2108,11 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       
       const q = query(collection(db, 'inventory'), where('name', '==', nameInDb));
-      const snapshot = await getDocs(q);
+      const rawSnapshot = await getDocs(q);
+      const companyDocs = rawSnapshot.docs.filter(d => visibleStoreIds.has((d.data() as Product).storeId));
+      const snapshot = { ...rawSnapshot, docs: companyDocs, empty: companyDocs.length === 0 } as typeof rawSnapshot;
       
+      if (!visibleStoreIds.has(updatedProduct.storeId)) throw new Error('Intento bloqueado: el producto pertenece a otra empresa.');
       if (snapshot.empty) {
           batch.update(productRef, {
               name: updatedProduct.name,
@@ -2249,9 +2261,16 @@ const App: React.FC = () => {
     
     const { productInfo, storeEntries } = data;
     const inputName = productInfo.name;
+    const requestedStoreIds = Object.keys(storeEntries);
+    if (requestedStoreIds.some(id => !visibleStoreIds.has(id))) {
+      throw new Error('Intento bloqueado: una compra incluye una tienda de otra empresa.');
+    }
     
-    const globalQ = query(collection(db, 'inventory'), where('name', '==', inputName), limit(1));
-    const globalSnap = await getDocs(globalQ);
+    // Reuse product metadata only inside the active company.
+    const globalQ = query(collection(db, 'inventory'), where('name', '==', inputName));
+    const rawGlobalSnap = await getDocs(globalQ);
+    const companyGlobalDocs = rawGlobalSnap.docs.filter(d => visibleStoreIds.has((d.data() as Product).storeId));
+    const globalSnap = { ...rawGlobalSnap, docs: companyGlobalDocs, empty: companyGlobalDocs.length === 0 } as typeof rawGlobalSnap;
     
     let globalImage = '';
     let globalDesc = 'Sin descripción...';
@@ -2428,10 +2447,10 @@ const App: React.FC = () => {
   const handleDeleteExpenseCategory = async (id: string) => await deleteDoc(doc(db, 'expenseCategories', id));
 
   const handleAddStore = async (store: Store) => {
-    const userCompanyId = currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const userCompanyId = operationalCompanyId;
     const storeToSave: Store = {
       ...store,
-      companyId: store.companyId || userCompanyId
+      companyId: isDeveloper ? (store.companyId || userCompanyId) : userCompanyId
     };
     await setDoc(doc(db, 'stores', storeToSave.id), cleanObject(storeToSave) as any);
   };
@@ -2575,7 +2594,8 @@ const App: React.FC = () => {
     await setDoc(sellerRef, cleanObject(newAdmin));
   };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
-    const userCompanyId = currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const userCompanyId = operationalCompanyId;
+    if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
     const newRef = doc(collection(db, 'sellers'));
     const newSellerData: any = {
       id: newRef.id,
