@@ -248,6 +248,39 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
     return alerts.slice(0, 6);
   }, [inventory, sales, stores, selectedStoreId, nonTrainingStoreIds, executiveComparison.salesChangePct]);
 
+  // Seller performance: compare each seller against the equivalent previous period.
+  const sellerPerformance = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let currentStart: Date;
+    let previousStart: Date;
+    let previousEnd: Date;
+    if (timeRange === 'today') {
+      currentStart = todayStart; previousStart = new Date(todayStart.getTime() - 86400000); previousEnd = todayStart;
+    } else if (timeRange === 'week') {
+      currentStart = new Date(todayStart.getTime() - 7 * 86400000); previousStart = new Date(currentStart.getTime() - 7 * 86400000); previousEnd = currentStart;
+    } else if (timeRange === 'month') {
+      currentStart = new Date(now.getFullYear(), now.getMonth(), 1); previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1); previousEnd = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate() + 1);
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1); if (previousEnd > currentMonthStart) previousEnd = currentMonthStart;
+    } else {
+      currentStart = new Date(now.getFullYear(), 0, 1); previousStart = new Date(now.getFullYear() - 1, 0, 1); previousEnd = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1);
+    }
+    const targetStoreIds = selectedStoreId === 'all' ? nonTrainingStoreIds : [selectedStoreId];
+    const scopedSellers = sellers.filter(s => targetStoreIds.includes(s.storeId) && !s.isDisabled);
+    return scopedSellers.map(seller => {
+      const current = sales.filter(s => targetStoreIds.includes(s.storeId) && s.seller === seller.name && new Date(s.createdAt) >= currentStart && new Date(s.createdAt) <= now);
+      const previous = sales.filter(s => targetStoreIds.includes(s.storeId) && s.seller === seller.name && new Date(s.createdAt) >= previousStart && new Date(s.createdAt) < previousEnd);
+      const salesAmount = current.reduce((sum, s) => sum + s.totalAmount, 0);
+      const previousAmount = previous.reduce((sum, s) => sum + s.totalAmount, 0);
+      const units = current.reduce((sum, s) => sum + s.items.reduce((n, i) => n + (i.quantity || 0), 0), 0);
+      const previousUnits = previous.reduce((sum, s) => sum + s.items.reduce((n, i) => n + (i.quantity || 0), 0), 0);
+      const tickets = current.length;
+      const averageTicket = tickets ? salesAmount / tickets : 0;
+      const changePct = previousAmount > 0 ? ((salesAmount - previousAmount) / previousAmount) * 100 : null;
+      return { id: seller.id, name: seller.name, storeId: seller.storeId, storeName: stores.find(st => st.id === seller.storeId)?.name || 'Sede', salesAmount, previousAmount, units, previousUnits, tickets, averageTicket, changePct };
+    }).filter(x => x.salesAmount > 0 || x.previousAmount > 0).sort((a,b) => b.salesAmount - a.salesAmount);
+  }, [sales, sellers, stores, selectedStoreId, nonTrainingStoreIds, timeRange]);
+
   // Store-wise performance
   const storePerformance = useMemo(() => {
     return nonTrainingStores.map(store => {
@@ -1008,6 +1041,22 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                         <p className="text-[9px] text-slate-400 mt-1">{formatCOP(executiveComparison.grossProfit)}</p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Seller commercial performance */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="mb-4">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Desempeño de Vendedoras</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">Ventas, prendas, facturas y ticket promedio del periodo seleccionado frente al periodo anterior equivalente.</p>
+                    </div>
+                    {sellerPerformance.length === 0 ? <p className="text-xs text-slate-400">No hay ventas de vendedoras para este periodo.</p> : <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {sellerPerformance.map(seller => <div key={seller.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-800/40">
+                        <div className="flex items-start justify-between gap-2"><div><p className="text-sm font-black text-slate-900 dark:text-white">{seller.name}</p><p className="text-[9px] uppercase font-bold text-slate-400 mt-0.5">{seller.storeName}</p></div>{seller.changePct !== null && <span className={`text-[10px] font-black px-2 py-1 rounded-full ${seller.changePct >= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'}`}>{seller.changePct >= 0 ? '▲' : '▼'} {Math.abs(seller.changePct).toFixed(1)}%</span>}</div>
+                        <p className="text-xl font-black text-slate-900 dark:text-white mt-3">{formatCOP(seller.salesAmount)}</p>
+                        <div className="grid grid-cols-3 gap-2 mt-3 text-center"><div><p className="text-sm font-black text-indigo-600 dark:text-indigo-400">{seller.units}</p><p className="text-[8px] uppercase text-slate-400">Prendas</p></div><div><p className="text-sm font-black text-slate-700 dark:text-slate-200">{seller.tickets}</p><p className="text-[8px] uppercase text-slate-400">Facturas</p></div><div><p className="text-xs font-black text-slate-700 dark:text-slate-200">{formatCOP(seller.averageTicket)}</p><p className="text-[8px] uppercase text-slate-400">Ticket prom.</p></div></div>
+                        <p className="text-[9px] text-slate-400 mt-3">Anterior: {formatCOP(seller.previousAmount)} · {seller.previousUnits} prendas</p>
+                      </div>)}
+                    </div>}
                   </div>
 
                   {/* Pro-active AI Advisor Banner */}
