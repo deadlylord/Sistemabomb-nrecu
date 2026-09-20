@@ -148,6 +148,57 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
 
   const netProfit = totalSalesAmount - totalCOGS - totalExpensesAmount;
 
+  // Executive comparison: current period vs equivalent previous period
+  const executiveComparison = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let currentStart: Date;
+    let previousStart: Date;
+    let previousEnd: Date;
+
+    if (timeRange === 'today') {
+      currentStart = todayStart;
+      previousStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+      previousEnd = todayStart;
+    } else if (timeRange === 'week') {
+      currentStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+      previousStart = new Date(currentStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+      previousEnd = currentStart;
+    } else if (timeRange === 'month') {
+      currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      // Compare against the same elapsed portion of the previous month.
+      previousEnd = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate() + 1);
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      if (previousEnd > nextMonthStart) previousEnd = nextMonthStart;
+    } else {
+      currentStart = new Date(now.getFullYear(), 0, 1);
+      previousStart = new Date(now.getFullYear() - 1, 0, 1);
+      previousEnd = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1);
+    }
+
+    const targetStoreIds = selectedStoreId === 'all' ? nonTrainingStoreIds : [selectedStoreId];
+    const previousSales = sales.filter(s => {
+      const d = new Date(s.createdAt);
+      return targetStoreIds.includes(s.storeId) && d >= previousStart && d < previousEnd;
+    });
+
+    const previousSalesAmount = previousSales.reduce((sum, s) => sum + s.totalAmount, 0);
+    const previousUnits = previousSales.reduce((sum, s) => sum + s.items.reduce((n, item) => n + (item.quantity || 0), 0), 0);
+    const currentUnits = filteredSales.reduce((sum, s) => sum + s.items.reduce((n, item) => n + (item.quantity || 0), 0), 0);
+    const currentTickets = filteredSales.length;
+    const previousTickets = previousSales.length;
+    const currentAverageTicket = currentTickets > 0 ? totalSalesAmount / currentTickets : 0;
+    const previousAverageTicket = previousTickets > 0 ? previousSalesAmount / previousTickets : 0;
+    const unitsPerTicket = currentTickets > 0 ? currentUnits / currentTickets : 0;
+    const salesChangePct = previousSalesAmount > 0 ? ((totalSalesAmount - previousSalesAmount) / previousSalesAmount) * 100 : null;
+    const ticketChangePct = previousAverageTicket > 0 ? ((currentAverageTicket - previousAverageTicket) / previousAverageTicket) * 100 : null;
+    const grossProfit = totalSalesAmount - totalCOGS;
+    const grossMarginPct = totalSalesAmount > 0 ? (grossProfit / totalSalesAmount) * 100 : 0;
+
+    return { previousSalesAmount, previousUnits, currentUnits, currentTickets, previousTickets, currentAverageTicket, previousAverageTicket, unitsPerTicket, salesChangePct, ticketChangePct, grossProfit, grossMarginPct };
+  }, [timeRange, selectedStoreId, nonTrainingStoreIds, sales, filteredSales, totalSalesAmount, totalCOGS]);
+
   // Store-wise performance
   const storePerformance = useMemo(() => {
     return nonTrainingStores.map(store => {
@@ -851,11 +902,53 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                         ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500/20' 
                         : 'bg-red-50 dark:bg-red-950/20 border-red-500/20'
                     }`}>
-                      <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Utilidad Neta</span>
+                      <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Resultado Operativo Est.</span>
                       <h3 className={`text-2xl font-black mt-3 ${netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatCOP(netProfit)}
                       </h3>
-                      <p className="text-[10px] text-slate-400 mt-2">Margen operativo real</p>
+                      <p className="text-[10px] text-slate-400 mt-2">Ventas − COGS − gastos registrados</p>
+                    </div>
+                  </div>
+
+                  {/* Executive commercial pulse */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Pulso Ejecutivo</h4>
+                        <p className="text-[10px] text-slate-400 mt-1">Compara el periodo actual con el periodo anterior equivalente.</p>
+                      </div>
+                      {executiveComparison.salesChangePct !== null && (
+                        <span className={`text-xs font-black px-3 py-1.5 rounded-full ${executiveComparison.salesChangePct >= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'}`}>
+                          {executiveComparison.salesChangePct >= 0 ? '▲' : '▼'} {Math.abs(executiveComparison.salesChangePct).toFixed(1)}% ventas
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Prendas vendidas</p>
+                        <p className="text-xl font-black text-slate-900 dark:text-white mt-2">{executiveComparison.currentUnits}</p>
+                        <p className="text-[9px] text-slate-400 mt-1">Anterior: {executiveComparison.previousUnits}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Facturas</p>
+                        <p className="text-xl font-black text-slate-900 dark:text-white mt-2">{executiveComparison.currentTickets}</p>
+                        <p className="text-[9px] text-slate-400 mt-1">Anterior: {executiveComparison.previousTickets}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ticket promedio</p>
+                        <p className="text-lg font-black text-slate-900 dark:text-white mt-2">{formatCOP(executiveComparison.currentAverageTicket)}</p>
+                        <p className="text-[9px] text-slate-400 mt-1">{executiveComparison.ticketChangePct === null ? 'Sin base anterior' : `${executiveComparison.ticketChangePct >= 0 ? '+' : ''}${executiveComparison.ticketChangePct.toFixed(1)}% vs anterior`}</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Prendas / factura</p>
+                        <p className="text-xl font-black text-slate-900 dark:text-white mt-2">{executiveComparison.unitsPerTicket.toFixed(2)}</p>
+                        <p className="text-[9px] text-slate-400 mt-1">Unidades promedio</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl col-span-2 lg:col-span-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Margen bruto</p>
+                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-2">{executiveComparison.grossMarginPct.toFixed(1)}%</p>
+                        <p className="text-[9px] text-slate-400 mt-1">{formatCOP(executiveComparison.grossProfit)}</p>
+                      </div>
                     </div>
                   </div>
 
