@@ -199,6 +199,55 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
     return { previousSalesAmount, previousUnits, currentUnits, currentTickets, previousTickets, currentAverageTicket, previousAverageTicket, unitsPerTicket, salesChangePct, ticketChangePct, grossProfit, grossMarginPct };
   }, [timeRange, selectedStoreId, nonTrainingStoreIds, sales, filteredSales, totalSalesAmount, totalCOGS]);
 
+  // Executive attention center: only issues that need a decision today
+  const attentionItems = useMemo(() => {
+    const alerts: { id: string; severity: 'critical' | 'warning' | 'opportunity'; title: string; detail: string; action: string }[] = [];
+    const scopedInventory = inventory.filter(p => !p.isDisabled && (selectedStoreId === 'all' ? nonTrainingStoreIds.includes(p.storeId) : p.storeId === selectedStoreId));
+    const negative = scopedInventory.filter(p => p.stock < 0);
+    if (negative.length > 0) alerts.push({ id: 'negative-stock', severity: 'critical', title: `${negative.length} referencia(s) con stock negativo`, detail: 'Hay ventas o movimientos que dejaron existencias por debajo de cero.', action: 'Revisar inventario y kardex' });
+
+    if (executiveComparison.salesChangePct !== null && executiveComparison.salesChangePct <= -15) {
+      alerts.push({ id: 'sales-drop', severity: 'critical', title: `Ventas caen ${Math.abs(executiveComparison.salesChangePct).toFixed(1)}%`, detail: 'El periodo actual está por debajo del periodo anterior equivalente.', action: 'Revisar sedes y vendedores' });
+    } else if (executiveComparison.salesChangePct !== null && executiveComparison.salesChangePct <= -5) {
+      alerts.push({ id: 'sales-soft-drop', severity: 'warning', title: `Ventas bajan ${Math.abs(executiveComparison.salesChangePct).toFixed(1)}%`, detail: 'Hay una desaceleración comercial que conviene vigilar antes de que se profundice.', action: 'Revisar tendencia' });
+    }
+
+    const recentCutoff = new Date(); recentCutoff.setDate(recentCutoff.getDate() - 30);
+    const recentQtyByProduct: Record<string, number> = {};
+    sales.forEach(s => {
+      if (new Date(s.createdAt) < recentCutoff) return;
+      if (selectedStoreId !== 'all' && s.storeId !== selectedStoreId) return;
+      if (selectedStoreId === 'all' && !nonTrainingStoreIds.includes(s.storeId)) return;
+      s.items.forEach(item => { recentQtyByProduct[item.id] = (recentQtyByProduct[item.id] || 0) + (item.quantity || 0); });
+    });
+    const urgentStars = scopedInventory.filter(p => p.stock >= 0 && p.stock <= 3 && (recentQtyByProduct[p.id] || 0) >= 4).sort((a,b) => (recentQtyByProduct[b.id] || 0) - (recentQtyByProduct[a.id] || 0));
+    if (urgentStars.length > 0) alerts.push({ id: 'star-low-stock', severity: 'warning', title: `${urgentStars.length} producto(s) de buena rotación cerca de agotarse`, detail: `${urgentStars.slice(0,3).map(p => p.name).join(', ')}${urgentStars.length > 3 ? '…' : ''}`, action: 'Reponer o trasladar stock' });
+
+    const dead = scopedInventory.filter(p => p.stock > 0 && !sales.some(s => s.storeId === p.storeId && new Date(s.createdAt) >= recentCutoff && s.items.some(i => i.id === p.id)));
+    const trappedCapital = dead.reduce((sum,p) => sum + (p.stock * (p.cost || 0)), 0);
+    if (dead.length > 0) alerts.push({ id: 'dead-stock', severity: 'warning', title: `${dead.length} referencia(s) sin venta en 30 días`, detail: `Capital estimado inmovilizado: ${formatCOP(trappedCapital)}.`, action: 'Evaluar traslado, exhibición o promoción' });
+
+    // Detect simple cross-store transfer opportunities using SKU/name identity.
+    if (selectedStoreId === 'all') {
+      const groups: Record<string, { name: string; rows: { storeId: string; stock: number; sold: number }[] }> = {};
+      scopedInventory.forEach(p => {
+        const key = (p.sku || p.name || '').trim().toLowerCase(); if (!key) return;
+        if (!groups[key]) groups[key] = { name: p.name, rows: [] };
+        groups[key].rows.push({ storeId: p.storeId, stock: p.stock, sold: recentQtyByProduct[p.id] || 0 });
+      });
+      const opportunities = Object.values(groups).map(g => {
+        const need = [...g.rows].sort((a,b) => (b.sold - b.stock) - (a.sold - a.stock))[0];
+        const donor = [...g.rows].sort((a,b) => (b.stock - b.sold) - (a.stock - a.sold))[0];
+        return { ...g, need, donor };
+      }).filter(g => g.rows.length > 1 && g.need.storeId !== g.donor.storeId && g.need.sold >= 3 && g.need.stock <= 2 && g.donor.stock >= 4 && g.donor.sold < g.need.sold);
+      if (opportunities.length > 0) {
+        const op = opportunities[0]; const from = stores.find(s => s.id === op.donor.storeId)?.name || 'otra sede'; const to = stores.find(s => s.id === op.need.storeId)?.name || 'sede con demanda';
+        alerts.push({ id: 'transfer-opportunity', severity: 'opportunity', title: `Oportunidad de traslado: ${op.name}`, detail: `${from} tiene ${op.donor.stock} und.; ${to} tiene ${op.need.stock} und. y vendió ${op.need.sold} en 30 días.`, action: `Evaluar traslado ${from} → ${to}` });
+      }
+    }
+    return alerts.slice(0, 6);
+  }, [inventory, sales, stores, selectedStoreId, nonTrainingStoreIds, executiveComparison.salesChangePct]);
+
   // Store-wise performance
   const storePerformance = useMemo(() => {
     return nonTrainingStores.map(store => {
@@ -908,6 +957,15 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
                       </h3>
                       <p className="text-[10px] text-slate-400 mt-2">Ventas − COGS − gastos registrados</p>
                     </div>
+                  </div>
+
+                  {/* Requires attention today */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div><h4 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-white">Requiere tu atención hoy</h4><p className="text-[10px] text-slate-400 mt-1">Alertas priorizadas que necesitan revisión o una decisión.</p></div>
+                      <span className={`text-xs font-black px-3 py-1.5 rounded-full ${attentionItems.length ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'}`}>{attentionItems.length ? `${attentionItems.length} pendiente(s)` : 'Todo en orden'}</span>
+                    </div>
+                    {attentionItems.length === 0 ? <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 p-4 text-sm font-bold text-emerald-700 dark:text-emerald-400">✓ No se detectaron alertas prioritarias con las reglas actuales.</div> : <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">{attentionItems.map(item => <div key={item.id} className={`rounded-2xl border p-4 ${item.severity === 'critical' ? 'border-red-200 bg-red-50/70 dark:border-red-900 dark:bg-red-950/20' : item.severity === 'warning' ? 'border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20' : 'border-indigo-200 bg-indigo-50/70 dark:border-indigo-900 dark:bg-indigo-950/20'}`}><div className="flex items-start gap-3"><span className="text-lg">{item.severity === 'critical' ? '🔴' : item.severity === 'warning' ? '🟠' : '💡'}</span><div><p className="text-sm font-black text-slate-800 dark:text-white">{item.title}</p><p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{item.detail}</p><p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mt-3">→ {item.action}</p></div></div></div>)}</div>}
                   </div>
 
                   {/* Executive commercial pulse */}
