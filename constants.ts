@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.85',
+    date: '2026-09-20',
+    description: 'Aislamiento Multiempresa y Preparación de Autenticación Segura',
+    isCurrent: true,
+    changes: [
+      'Aislamiento operativo por empresa activa para evitar mezclar información entre Bombón/Street Legends y empresas cliente como Mayla.',
+      'Validaciones de seguridad en productos, compras multitienda, traslados y usuarios para impedir operaciones entre empresas distintas.',
+      'Los nuevos registros operativos comienzan a guardar companyId además de storeId, manteniendo compatibilidad con los datos históricos.',
+      'El inicio de sesión ahora resuelve y conserva la empresa del usuario como preparación para la futura autenticación segura multiempresa.'
+    ]
+  },
+  {
     version: '1.1.84',
     date: '2026-07-02',
     description: 'Compatibilidad Total con Microsoft Edge e Impresión de Alta Confiabilidad',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Impresión en Ventana Emergente Aislada (Popup): Se implementó la impresión utilizando una ventana popup independiente (`window.open`). Esto resuelve de raíz el problema de Microsoft Edge y algunos motores Chromium donde las llamadas de impresión en el hilo principal del documento congelan/bloquean la pestaña indefinidamente si se aplican reglas CSS complejas o si la configuración bloquea el diálogo.',
       'Control y Notificaciones para Bloqueadores de Ventanas: Si el navegador bloquea la apertura de ventanas emergentes (comportamiento por defecto en algunos perfiles estrictos de Edge), la aplicación detecta el bloqueo con gracia, activa una alerta instructiva clara para el usuario con pasos para resolverlo, y ofrece un fallback seguro.',
