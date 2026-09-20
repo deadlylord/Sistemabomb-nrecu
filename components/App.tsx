@@ -234,29 +234,39 @@ const App: React.FC = () => {
              (name === 'developer' && username === 'developer');
   }, [currentUser, roles]);
 
-  // Restrict visible stores in the Header/views to the current user's company (unless developer)
+  // Multi-company isolation: every operational view is scoped to exactly one company.
+  // Developers can switch the operational context from Developer Center, but only
+  // Developer Center itself receives the global companies/stores/users collections.
+  const operationalCompanyId = useMemo(() => {
+    if (!currentUser) return DEFAULT_COMPANY_ID;
+    if (isDeveloper) return activeCompanyId || DEFAULT_COMPANY_ID;
+    return currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+  }, [currentUser, currentStore, isDeveloper, activeCompanyId]);
+
   const visibleStores = useMemo(() => {
-    if (!currentUser) return stores;
-    if (isDeveloper) return stores;
-    const userCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
-    return stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === userCompanyId);
-  }, [currentUser, currentStore, stores, isDeveloper]);
+    return stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId);
+  }, [stores, operationalCompanyId]);
 
   const visibleStoreIds = useMemo(() => {
     return new Set(visibleStores.map(s => s.id));
   }, [visibleStores]);
 
   const visibleSellers = useMemo(() => {
-    if (!currentUser) return sellers;
-    if (isDeveloper) return sellers;
-    const userCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
     return sellers.filter(seller => {
-      if (seller.companyId) {
-        return seller.companyId === userCompanyId;
-      }
+      if (seller.companyId) return seller.companyId === operationalCompanyId;
+      // Backwards compatibility for legacy sellers without companyId.
       return visibleStoreIds.has(seller.storeId);
     });
-  }, [currentUser, currentStore, sellers, isDeveloper, visibleStoreIds]);
+  }, [sellers, operationalCompanyId, visibleStoreIds]);
+
+  // If a developer changes company context, never leave an operational store from
+  // another company selected. This prevents store-specific listeners from reading
+  // data belonging to the previous company.
+  useEffect(() => {
+    if (!currentUser || !isDeveloper || currentView === View.DEVELOPER_CENTER) return;
+    if (currentStoreId && visibleStoreIds.has(currentStoreId)) return;
+    if (visibleStores.length > 0) handleSwitchStore(visibleStores[0].id);
+  }, [currentUser, isDeveloper, currentView, currentStoreId, visibleStores, visibleStoreIds]);
 
   const userPermissions = useMemo(() => {
     if (!currentUser) return [];
@@ -2786,7 +2796,7 @@ const App: React.FC = () => {
       <main className="w-full max-w-[1920px] mx-auto p-4 pb-20 lg:pb-8 lg:pl-72">
         {currentView === View.DASHBOARD && <DashboardView stores={visibleStores} allLayaways={isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={isDeveloper ? allIncidents : allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
-        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
+        {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={isDeveloper ? inventoryTransfers : inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) || visibleStoreIds.has(t.toStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={roles} />}
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={isGlobalMode ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : undefined} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
@@ -2827,10 +2837,10 @@ const App: React.FC = () => {
                 stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={isAdmin ? (isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))) : sales} 
-                layaways={isAdmin ? (isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))) : layaways} 
+                sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales} 
+                layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways} 
                 expenses={expenses}
-                incidents={isAdmin ? (isDeveloper ? allIncidents : allIncidents.filter(i => visibleStoreIds.has(i.storeId))) : incidents}
+                incidents={isAdmin ? allIncidents.filter(i => visibleStoreIds.has(i.storeId)) : incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
@@ -2853,7 +2863,7 @@ const App: React.FC = () => {
           <CeoCenterView
             sales={isAdmin ? (isDeveloper ? allSales : allSales.filter(s => visibleStoreIds.has(s.storeId))) : sales}
             layaways={isAdmin ? (isDeveloper ? allLayaways : allLayaways.filter(l => visibleStoreIds.has(l.storeId))) : layaways}
-            inventory={isGlobalMode || isAdmin ? (isDeveloper ? globalInventoryForSearch : globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))) : inventory}
+            inventory={isGlobalMode || isAdmin ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory}
             purchases={purchases}
             expenses={expenses}
             stores={visibleStores}
@@ -2903,7 +2913,7 @@ const App: React.FC = () => {
           />
         )}
       </main>
-      <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales} allInventory={isGlobalMode ? globalInventoryForSearch : inventory} stores={stores} categories={categories} />
+      <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {showRecaudoReceipt && lastRecaudo && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (
