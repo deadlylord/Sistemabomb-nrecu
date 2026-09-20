@@ -55,6 +55,7 @@ const Header: React.FC<HeaderProps> = ({
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('sidebarCollapsed') === 'true');
   const [previewGroupIndex, setPreviewGroupIndex] = useState<number>(-1);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -181,6 +182,14 @@ const Header: React.FC<HeaderProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const toggleDesktopSidebar = () => {
+    setIsDesktopSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  };
 
   const handleMobileGroupClick = (index: number) => {
     if (previewGroupIndex === index && isMobileMenuOpen) {
@@ -321,7 +330,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* CENTER: Navigation (Desktop & Mobile) */}
           <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
              {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-2 w-full max-w-[280px]">
+             <div className="lg:hidden flex items-center justify-center gap-1.5 w-full max-w-[230px] sm:max-w-[280px]">
                 {filteredGroups.map((group, idx) => {
                   const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
                   const isCurrentActive = currentGroupIndex === idx;
@@ -348,7 +357,7 @@ const Header: React.FC<HeaderProps> = ({
 
                 {/* Dropdown for Mobile Submenus */}
                 {isMobileMenuOpen && displayedGroup && (
-                  <div className="absolute top-[72px] left-1/2 -translate-x-1/2 w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
+                  <div className="absolute top-[68px] left-2 right-2 w-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
                     <div className="flex items-center justify-between px-4 py-3 bg-accent/5 rounded-2xl mb-2">
                         <div className="flex items-center gap-2">
                             <displayedGroup.icon className="w-5 h-5 text-accent" />
@@ -447,8 +456,11 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Beautiful Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col lg:w-64 fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-4 px-3 space-y-5 scrollbar-thin">
+      {/* Responsive Desktop Sidebar */}
+      <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-64 px-3'}`}>
+        <button onClick={toggleDesktopSidebar} className="sticky top-0 z-10 self-end mb-1 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-accent transition-all" title={isDesktopSidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}>
+          {isDesktopSidebarCollapsed ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronLeftIcon className="w-4 h-4" />}
+        </button>
         {filteredGroups.map((group) => {
           const GroupIcon = group.icon;
           return (
@@ -456,7 +468,7 @@ const Header: React.FC<HeaderProps> = ({
               {/* Group Title */}
               <div className="flex items-center gap-2 px-3 py-1 text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1 mb-2">
                 <GroupIcon className="w-3.5 h-3.5 text-accent opacity-80" />
-                <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>
+                {!isDesktopSidebarCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>}
               </div>
               
               {/* Group Items */}
@@ -468,7 +480,7 @@ const Header: React.FC<HeaderProps> = ({
                      <button
                        key={item.view}
                        onClick={() => setCurrentView(item.view)}
-                       className={`flex items-center gap-3 w-full px-3 py-2 rounded-xl transition-all duration-200 group text-left relative
+                       className={`flex items-center ${isDesktopSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} w-full py-2 rounded-xl transition-all duration-200 group text-left relative
                          ${isActive 
                            ? 'bg-accent text-white shadow-md shadow-accent/15 font-bold scale-[1.01]' 
                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
@@ -477,12 +489,12 @@ const Header: React.FC<HeaderProps> = ({
                        <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}`}>
                          <Icon className="w-4 h-4" />
                        </div>
-                       <div className="flex-grow min-w-0">
+                       {!isDesktopSidebarCollapsed && <div className="flex-grow min-w-0">
                          <p className="text-xs font-black leading-none">{item.label}</p>
                          <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
                            {item.description}
                          </p>
-                       </div>
+                       </div>}
                        {item.view === View.INCIDENTS && pendingCount > 0 && (
                            <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-white text-accent animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
                                {pendingCount}
