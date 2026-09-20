@@ -734,6 +734,7 @@ const App: React.FC = () => {
                 seller: saleData.seller,
                 createdAt: saleDate.toISOString(),
                 storeId: currentStoreId,
+                companyId: operationalCompanyId,
                 discountPercent,
                 discountAmount,
             };
@@ -821,6 +822,7 @@ const App: React.FC = () => {
         id: cartRef.id,
         items: activeCart,
         storeId: currentStoreId,
+        companyId: operationalCompanyId,
         customerName: data?.customer?.name ?? null,
         customerPhone: data?.customer?.phone ?? null,
         sellerName: data?.sellerName ?? null,
@@ -877,6 +879,7 @@ const App: React.FC = () => {
                 createdAt: saleDate.toISOString(),
                 seller,
                 storeId: currentStoreId,
+                companyId: operationalCompanyId,
                 description,
             };
 
@@ -1189,6 +1192,7 @@ const App: React.FC = () => {
         createdAt: createdAt, 
         sellerName: currentUser.name, 
         storeId: currentStoreId,
+        companyId: operationalCompanyId,
         history: [{
             status: initialStatus,
             changedBy: currentUser.name,
@@ -1927,7 +1931,7 @@ const App: React.FC = () => {
   const handleAddDailyNote = async (content: string, seller: string) => {
       if (!currentStoreId) return;
       const newRef = doc(collection(db, 'dailyNotes'));
-      await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId });
+      await setDoc(newRef, { id: newRef.id, content, seller, createdAt: new Date().toISOString(), storeId: currentStoreId, companyId: operationalCompanyId });
   };
 
   const handleSaveCeoNote = async (data: Omit<CeoDailyNote, 'id' | 'createdAt'>) => {
@@ -1935,7 +1939,8 @@ const App: React.FC = () => {
     await setDoc(newRef, {
       ...data,
       id: newRef.id,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      companyId: operationalCompanyId
     });
   };
 
@@ -2057,6 +2062,7 @@ const App: React.FC = () => {
                       productId: existingDoc.id,
                       productName: inputName,
                       storeId,
+                      companyId: operationalCompanyId,
                       changedBy: currentUser?.name || 'Administrador',
                       timestamp: new Date().toISOString(),
                       changeType: ProductChangeType.MANUAL_EDIT,
@@ -2072,7 +2078,8 @@ const App: React.FC = () => {
                   id: newRef.id, 
                   sku, 
                   imageUrl, 
-                  storeId, 
+                  storeId,
+                  companyId: operationalCompanyId,
                   isDisabled: false 
               }));
 
@@ -2335,6 +2342,7 @@ const App: React.FC = () => {
                     stock: entry.quantity,
                     supplier: entry.supplier,
                     storeId,
+                    companyId: operationalCompanyId,
                     imageUrl: globalImage,
                     description: globalDesc,
                     isDisabled: false
@@ -2351,7 +2359,8 @@ const App: React.FC = () => {
                 totalCost: entry.quantity * entry.cost,
                 supplier: entry.supplier,
                 createdAt: new Date().toISOString(),
-                storeId: storeId
+                storeId: storeId,
+                companyId: operationalCompanyId
             }));
 
             const logRef = doc(collection(db, 'productHistory'));
@@ -2360,6 +2369,7 @@ const App: React.FC = () => {
                 productId,
                 productName: inputName,
                 storeId,
+                companyId: operationalCompanyId,
                 changedBy: currentUser.name,
                 timestamp: new Date().toISOString(),
                 changeType: ProductChangeType.PURCHASE,
@@ -2626,7 +2636,7 @@ const App: React.FC = () => {
       if (!currentStoreId || !currentUser) return;
       const newRef = doc(collection(db, 'payrollHistory'));
       const paidAt = payrollData.paidAt || new Date().toISOString();
-      await setDoc(newRef, cleanObject({ ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId }));
+      await setDoc(newRef, cleanObject({ ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId, companyId: operationalCompanyId }));
   };
 
   const handleDeletePayroll = async (payrollId: string) => {
@@ -2638,7 +2648,7 @@ const App: React.FC = () => {
       const batch = writeBatch(db);
       newCustomers.forEach(c => {
           const newRef = doc(collection(db, 'customers'));
-          batch.set(newRef, cleanObject({ ...c, id: newRef.id, storeId: currentStoreId, createdAt: new Date().toISOString() }));
+          batch.set(newRef, cleanObject({ ...c, id: newRef.id, storeId: currentStoreId, companyId: operationalCompanyId, createdAt: new Date().toISOString() }));
       });
       await batch.commit();
   };
@@ -2652,6 +2662,7 @@ const App: React.FC = () => {
         id: newRef.id,
         date: expenseData.date === 'TEMPLATE' ? new Date().toISOString() : expenseData.date,
         storeId: currentStoreId,
+        companyId: operationalCompanyId,
         accountType: 'cash', // Por defecto a caja si se crea desde contabilidad, o podrías pedirlo
         amount: -Math.abs(expenseData.amount),
         type: 'expense',
@@ -2665,7 +2676,7 @@ const App: React.FC = () => {
       // Si es una plantilla, seguimos guardándola en 'expenses' para persistencia de plantillas
       if (expenseData.isRecurring) {
         const templateRef = doc(collection(db, 'expenses'));
-        await setDoc(templateRef, { ...expenseData, id: templateRef.id, storeId: currentStoreId });
+        await setDoc(templateRef, { ...expenseData, id: templateRef.id, storeId: currentStoreId, companyId: operationalCompanyId });
       } else {
         await setDoc(newRef, cleanObject(financialRecord));
 
@@ -2679,6 +2690,7 @@ const App: React.FC = () => {
             changedBy: currentUser?.name || 'Sistema',
             newState: financialRecord,
             storeId: currentStoreId,
+            companyId: operationalCompanyId,
             accountType: 'cash'
         });
       }
