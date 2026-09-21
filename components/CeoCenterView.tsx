@@ -27,9 +27,6 @@ interface CeoCenterViewProps {
   onAddCeoNote: (data: Omit<CeoDailyNote, 'id' | 'createdAt'>) => Promise<void>;
   onNavigate: (view: View) => void;
   categories?: Category[];
-  currentStoreId: string;
-  isMultistoreLoaded: boolean;
-  onRequestMultistore: () => void;
 }
 
 type SubTab = 'consolidated' | 'product_performance' | 'slow' | 'store_info' | 'ai';
@@ -46,24 +43,12 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
   currentUser,
   onAddCeoNote,
   onNavigate,
-  categories = [],
-  currentStoreId,
-  isMultistoreLoaded,
-  onRequestMultistore
+  categories = []
 }) => {
   const [activeTab, setActiveTab] = useState<SubTab>('consolidated');
-  const [selectedStoreId, setSelectedStoreId] = useState<string>(currentStoreId);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('month');
   
-  useEffect(() => {
-    if (!isMultistoreLoaded) setSelectedStoreId(currentStoreId);
-  }, [currentStoreId, isMultistoreLoaded]);
-
-  const handleStoreScopeChange = (value: string) => {
-    if (value === 'all' && !isMultistoreLoaded) onRequestMultistore();
-    setSelectedStoreId(value);
-  };
-
   // Product Performance state
   const [productPerfFilter, setProductPerfFilter] = useState<'all' | 'trends' | 'restock' | 'stagnant' | 'negative'>('all');
   const [productPerfSearch, setProductPerfSearch] = useState('');
@@ -919,7 +904,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
           <div>
             <h2 className="text-2xl font-black uppercase tracking-tight">CEO Center</h2>
             <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest mt-1">
-              Vista rápida de la sede activa · Multisede solo cuando la solicites
+              Consolidación Estratégica de las Tres Sedes del Negocio
             </p>
           </div>
         </div>
@@ -928,10 +913,10 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
         <div className="flex flex-wrap gap-2.5">
           <select 
             value={selectedStoreId} 
-            onChange={(e) => handleStoreScopeChange(e.target.value)}
+            onChange={(e) => setSelectedStoreId(e.target.value)}
             className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl py-2 px-3.5 text-xs font-black uppercase tracking-wider outline-none cursor-pointer focus:ring-2 focus:ring-indigo-400"
           >
-            <option value="all" className="bg-slate-900 text-white font-bold">Todas las Sedes{!isMultistoreLoaded ? ' · cargar' : ''}</option>
+            <option value="all" className="bg-slate-900 text-white font-bold">Todas las Sedes</option>
             {nonTrainingStores.map(store => (
               <option key={store.id} value={store.id} className="bg-slate-900 text-white font-bold">{store.name}</option>
             ))}
