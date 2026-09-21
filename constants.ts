@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.91',
+    date: '2026-09-20',
+    description: 'Restauración de Datos CEO Center',
+    isCurrent: true,
+    changes: [
+      'Se restaura la carga de información multisede del CEO Center para evitar indicadores en cero.',
+      'CEO Center vuelve al comportamiento estable anterior mientras se optimiza su procesamiento interno.',
+      'Se conserva la optimización general de listeners Firebase realizada en la versión 1.1.89.'
+    ]
+  },
+  {
     version: '1.1.90',
     date: '2026-09-20',
     description: 'CEO Center Ligero por Sede',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'CEO Center abre usando únicamente los datos de la sede activa del usuario o seleccionada en el menú principal.',
       'La información de todas las sedes deja de cargarse automáticamente al abrir CEO Center.',
