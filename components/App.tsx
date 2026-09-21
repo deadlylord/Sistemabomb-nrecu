@@ -138,7 +138,6 @@ const App: React.FC = () => {
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [ceoMultistoreRequested, setCeoMultistoreRequested] = useState(false);
   
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
@@ -415,7 +414,7 @@ const App: React.FC = () => {
   
   useEffect(() => {
     if (!isAdmin || !currentUser) return;
-    const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION || (currentView === View.CEO_CENTER && ceoMultistoreRequested);
+    const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.CEO_CENTER || currentView === View.FINANCIAL_RECONCILIATION;
     const needsMultistoreCatalog = needsMultistoreAnalytics || currentView === View.PURCHASES || isGlobalMode;
     if (needsMultistoreAnalytics) {
       if (allSales.length === 0) fetchOnceFromFirestore(query(collection(db, 'sales')), setAllSales);
@@ -425,7 +424,7 @@ const App: React.FC = () => {
     if (needsMultistoreCatalog && globalInventoryForSearch.length === 0) {
       fetchOnceFromFirestore(query(collection(db, 'inventory')), setGlobalInventoryForSearch);
     }
-  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, ceoMultistoreRequested, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
+  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
   
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
@@ -2919,9 +2918,9 @@ const App: React.FC = () => {
         )}
         {currentView === View.CEO_CENTER && currentUser && (
           <CeoCenterView
-            sales={ceoMultistoreRequested && isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales}
-            layaways={ceoMultistoreRequested && isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways}
-            inventory={ceoMultistoreRequested && isAdmin ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory}
+            sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales}
+            layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways}
+            inventory={isAdmin ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory}
             purchases={purchases}
             expenses={expenses}
             stores={visibleStores}
@@ -2931,9 +2930,6 @@ const App: React.FC = () => {
             onAddCeoNote={handleSaveCeoNote}
             onNavigate={setCurrentView}
             categories={categories}
-            currentStoreId={currentStoreId || currentUser.storeId}
-            isMultistoreLoaded={ceoMultistoreRequested}
-            onRequestMultistore={() => setCeoMultistoreRequested(true)}
           />
         )}
         {currentView === View.TAG_SCANNING && currentUser && currentStore && (
