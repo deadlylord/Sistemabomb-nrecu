@@ -92,7 +92,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
   const [wrongTagQty, setWrongTagQty] = useState<number>(1);
 
   // Camera Scanner State
-  const [scanQuantity, setScanQuantity] = useState<number>(1);
+  const [scanQuantity, setScanQuantity] = useState<number>(1); // Legacy UI state; normal scans are always 1 unit.
   const [isCameraActive, setIsCameraActive] = useState(false);
   const lastScannedCodeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
@@ -218,29 +218,13 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
   const processCode = async (rawCode: string, overrideQty?: number) => {
     if (!rawCode.trim() || !sessionData) return;
 
-    let qtyToAdd = overrideQty ?? scanQuantity;
+    // Safety rule: a physical scan always counts exactly one garment. Quantities >1
+    // are accepted only from an explicit internal action that passes overrideQty.
+    let qtyToAdd = overrideQty ?? 1;
     let cleanCode = rawCode.trim();
 
-    // Support multiplier notation directly in text input (e.g. "5*SKU123", "SKU123*5", "5xSKU123")
-    if (cleanCode.includes('*')) {
-      const parts = cleanCode.split('*');
-      if (parts.length === 2) {
-        if (!isNaN(Number(parts[0])) && Number(parts[0]) > 0) {
-          qtyToAdd = Math.floor(Number(parts[0]));
-          cleanCode = parts[1].trim();
-        } else if (!isNaN(Number(parts[1])) && Number(parts[1]) > 0) {
-          qtyToAdd = Math.floor(Number(parts[1]));
-          cleanCode = parts[0].trim();
-        }
-      }
-    } else if (cleanCode.toLowerCase().includes('x') && /^\d+x/i.test(cleanCode)) {
-      const parts = cleanCode.split(/x/i);
-      if (parts.length === 2 && !isNaN(Number(parts[0])) && Number(parts[0]) > 0) {
-        qtyToAdd = Math.floor(Number(parts[0]));
-        cleanCode = parts[1].trim();
-      }
-    }
-
+    // Multipliers typed/scanned as part of a barcode are intentionally ignored in
+    // audit mode: one physical label read must never create multiple garments.
     if (!qtyToAdd || qtyToAdd < 1) qtyToAdd = 1;
 
     const code = cleanCode.toLowerCase();
@@ -545,7 +529,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
   const handleScanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    processCode(scanInput);
+    processCode(scanInput, 1);
   };
 
   // Camera Scanner Lifecycle
@@ -575,7 +559,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
               // Prevent rapid multi-scans of the same item within 2 seconds
               if (
                 lastScannedCodeRef.current.code === decodedText &&
-                now - lastScannedCodeRef.current.time < 2000
+                now - lastScannedCodeRef.current.time < 5000
               ) {
                 return;
               }
@@ -587,7 +571,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
               lastScannedCodeRef.current = { code: decodedText, time: now };
               
               // Automatically register immediately!
-              processCode(decodedText);
+              processCode(decodedText, 1);
             },
             () => {
               // Frame decoding noise ignored
@@ -928,27 +912,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                   </div>
                 </div>
 
-                {/* Quick preset buttons */}
-                <div className="grid grid-cols-7 gap-1">
-                  {[1, 2, 3, 5, 10, 15, 20].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => {
-                        setScanQuantity(num);
-                        if (inputRef.current) inputRef.current.focus();
-                      }}
-                      className={`py-1 rounded-lg font-black text-[10px] transition-all text-center ${
-                        scanQuantity === num
-                          ? 'bg-accent text-white shadow-sm ring-2 ring-accent/30'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      {num}u
-                    </button>
-                  ))}
-                </div>
-              </div>
+                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Modo auditoría seguro: cada etiqueta escaneada cuenta exactamente 1 prenda.</p>
 
               <form onSubmit={handleScanSubmit} className="space-y-3 pt-1">
                 <div className="flex items-center justify-between">
@@ -956,7 +920,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                     Código de Barras / Pistola / SKU
                   </label>
                   <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
-                    Suma actual: <strong className="text-accent">{scanQuantity} un.</strong>
+                    Cada lectura suma: <strong className="text-accent">1 un.</strong>
                   </span>
                 </div>
 
@@ -983,7 +947,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                   type="submit"
                   className="w-full py-3 bg-slate-900 hover:bg-slate-850 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2"
                 >
-                  <span>Registrar Escaneo (+{scanQuantity})</span>
+                  <span>Registrar Escaneo (+1)</span>
                 </button>
 
                 <button
