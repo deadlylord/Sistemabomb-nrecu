@@ -92,7 +92,6 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
   const [wrongTagQty, setWrongTagQty] = useState<number>(1);
 
   // Camera Scanner State
-  const [scanQuantity, setScanQuantity] = useState<number>(1); // Legacy UI state; normal scans are always 1 unit.
   const [isCameraActive, setIsCameraActive] = useState(false);
   const lastScannedCodeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
@@ -896,46 +895,9 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                 </div>
               )}
 
-              {/* Quantity Selector Control */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Cantidad a sumar por cada escaneo:
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScanQuantity(prev => Math.max(1, prev - 1));
-                        if (inputRef.current) inputRef.current.focus();
-                      }}
-                      className="w-7 h-7 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm flex items-center justify-center transition-colors"
-                      title="Disminuir cantidad"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      value={scanQuantity}
-                      onChange={(e) => setScanQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-12 py-1 text-center font-black text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScanQuantity(prev => prev + 1);
-                        if (inputRef.current) inputRef.current.focus();
-                      }}
-                      className="w-7 h-7 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm flex items-center justify-center transition-colors"
-                      title="Aumentar cantidad"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Modo auditoría seguro: cada etiqueta escaneada cuenta exactamente 1 prenda.</p>
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200 dark:border-emerald-900/50">
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">✓ Modo auditoría seguro: cada etiqueta escaneada cuenta exactamente 1 prenda.</p>
+              </div>
 
               <form onSubmit={handleScanSubmit} className="space-y-3 pt-1">
                 <div className="flex items-center justify-between">
@@ -961,10 +923,6 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                     <TagIcon className="w-5 h-5" />
                   </div>
                 </div>
-
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                  💡 <strong>Tip con pistola:</strong> Puedes digitar directamente por ejemplo <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-accent">5*CÓDIGO</code> o <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-accent">3xCÓDIGO</code> + Enter para registrar varias unidades a la vez.
-                </p>
 
                 <button
                   type="submit"
