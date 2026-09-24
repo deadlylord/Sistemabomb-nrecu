@@ -138,6 +138,7 @@ const App: React.FC = () => {
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCeoCenterActivated, setIsCeoCenterActivated] = useState(false);
   
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
@@ -414,7 +415,7 @@ const App: React.FC = () => {
   
   useEffect(() => {
     if (!isAdmin || !currentUser) return;
-    const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.CEO_CENTER || currentView === View.FINANCIAL_RECONCILIATION;
+    const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION || (currentView === View.CEO_CENTER && isCeoCenterActivated);
     const needsMultistoreCatalog = needsMultistoreAnalytics || currentView === View.PURCHASES || isGlobalMode;
     if (needsMultistoreAnalytics) {
       if (allSales.length === 0) fetchOnceFromFirestore(query(collection(db, 'sales')), setAllSales);
@@ -424,7 +425,7 @@ const App: React.FC = () => {
     if (needsMultistoreCatalog && globalInventoryForSearch.length === 0) {
       fetchOnceFromFirestore(query(collection(db, 'inventory')), setGlobalInventoryForSearch);
     }
-  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
+  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, isCeoCenterActivated, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
   
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
@@ -2916,7 +2917,15 @@ const App: React.FC = () => {
             sales={sales}
           />
         )}
-        {currentView === View.CEO_CENTER && currentUser && (
+        {currentView === View.CEO_CENTER && currentUser && !isCeoCenterActivated && (
+          <div className="max-w-2xl mx-auto mt-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 text-center shadow-sm">
+            <div className="text-4xl mb-4">💎</div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white">CEO Center</h2>
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">El análisis está en pausa para mantener el sistema ligero. Los datos y cálculos del CEO Center solo se cargarán cuando tú los solicites.</p>
+            <button onClick={() => setIsCeoCenterActivated(true)} className="mt-6 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black shadow-lg">Cargar y analizar CEO Center</button>
+          </div>
+        )}
+        {currentView === View.CEO_CENTER && currentUser && isCeoCenterActivated && (
           <CeoCenterView
             sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales}
             layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways}
