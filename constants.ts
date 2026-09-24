@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.92',
+    date: '2026-09-24',
+    description: 'CEO Center Bajo Demanda',
+    isCurrent: true,
+    changes: [
+      'CEO Center ya no dispara automáticamente la carga multisede ni sus cálculos al abrir el sistema.',
+      'Al entrar al módulo se muestra una pantalla ligera con un botón para cargar y analizar la información manualmente.',
+      'Las consultas y cálculos completos del CEO Center solo se activan cuando el usuario pulsa Cargar y analizar CEO Center.',
+      'Se conservan intactos los datos y análisis completos una vez activados durante la sesión.'
+    ]
+  },
+  {
     version: '1.1.91',
     date: '2026-09-20',
     description: 'Restauración de Datos CEO Center',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se restaura la carga de información multisede del CEO Center para evitar indicadores en cero.',
       'CEO Center vuelve al comportamiento estable anterior mientras se optimiza su procesamiento interno.',
