@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.95',
+    date: '2026-09-24',
+    description: 'Corrección de Compilación del Escáner',
+    isCurrent: true,
+    changes: [
+      'Se corrigió la estructura visual del módulo de auditoría que impedía compilar el despliegue.',
+      'Se eliminó por completo el selector antiguo de cantidades para evitar contradicciones con el conteo seguro +1.',
+      'Se mantiene el historial agrupado y el conteo de una prenda por cada lectura.'
+    ]
+  },
+  {
     version: '1.1.94',
     date: '2026-09-24',
     description: 'Historial Claro de Auditoría de Etiquetas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'El historial de auditoría ahora agrupa cada referencia en una sola fila.',
       'Se muestra claramente el total real escaneado, el stock del sistema y las etiquetas faltantes.',
