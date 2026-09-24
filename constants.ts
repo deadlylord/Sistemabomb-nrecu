@@ -58,10 +58,23 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.93',
+    date: '2026-09-24',
+    description: 'Conteo Seguro de Etiquetas',
+    isCurrent: true,
+    changes: [
+      'Cada lectura normal de etiqueta registra exactamente una prenda.',
+      'Se desactivó el uso de multiplicadores en códigos durante la auditoría para evitar conteos accidentales.',
+      'El registro manual y la cámara fuerzan +1 por cada lectura.',
+      'La cámara amplía la protección contra lectura repetida del mismo código.',
+      'La interfaz informa claramente que el modo auditoría cuenta una unidad por etiqueta.'
+    ]
+  },
+  {
     version: '1.1.92',
     date: '2026-09-24',
     description: 'CEO Center Bajo Demanda',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'CEO Center ya no dispara automáticamente la carga multisede ni sus cálculos al abrir el sistema.',
       'Al entrar al módulo se muestra una pantalla ligera con un botón para cargar y analizar la información manualmente.',
