@@ -104,6 +104,29 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Clear, grouped view of the active audit: one row per product/reference.
+  // The authoritative total comes from scannedCounts, not from adding history badges.
+  const groupedRecentScans = useMemo(() => {
+    if (!sessionData) return [];
+    const byProduct = new Map<string, { productId: string; productName: string; sku: string; timestamp: string; scannedQty: number; systemStock: number; missingTags: number }>();
+    recentScans.forEach(scan => {
+      if (!scan.productId || byProduct.has(scan.productId)) return;
+      const product = inventory.find(p => p.id === scan.productId);
+      const scannedQty = sessionData.scannedCounts[scan.productId] || 0;
+      const systemStock = product && product.stock > 0 ? product.stock : 0;
+      byProduct.set(scan.productId, {
+        productId: scan.productId,
+        productName: product?.name || scan.productName,
+        sku: product?.sku || scan.sku,
+        timestamp: scan.timestamp,
+        scannedQty,
+        systemStock,
+        missingTags: Math.max(0, systemStock - scannedQty)
+      });
+    });
+    return Array.from(byProduct.values()).filter(item => item.scannedQty > 0);
+  }, [recentScans, sessionData, inventory]);
+
   // Audio syntesizer for beeps (Web Audio API)
   const playBeep = (isSuccess: boolean) => {
     try {
@@ -976,67 +999,41 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
               )}
             </div>
 
-            {/* List of recent scans */}
+            {/* Grouped scan summary */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700/60 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <span>Tus Escaneos Recientes</span>
-                  <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full text-[10px]">
-                    {recentScans.length}
-                  </span>
-                </h3>
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Guardado permanente
-                </span>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Resumen de prendas escaneadas</h3>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">Una fila por referencia. El número “Escaneadas” es el total real contado.</p>
+                </div>
+                <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">Guardado permanente</span>
               </div>
-              
-              {recentScans.length === 0 ? (
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 text-center py-6">
-                  Aún no has escaneado ninguna prenda en esta sesión.
-                </p>
+              {groupedRecentScans.length === 0 ? (
+                <p className="text-xs font-bold text-slate-400 text-center py-6">Aún no has escaneado ninguna prenda en esta sesión.</p>
               ) : (
                 <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
-                  {recentScans.map((scan) => (
-                    <div 
-                      key={scan.id} 
-                      className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 animate-slide-in-right gap-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-black text-slate-700 dark:text-slate-300 truncate">{scan.productName}</p>
-                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">SKU: {scan.sku} • {scan.timestamp}</p>
+                  {groupedRecentScans.map((item) => (
+                    <div key={item.productId} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-700 dark:text-slate-300 truncate">{item.productName}</p>
+                          <p className="text-[10px] text-slate-400 font-bold mt-0.5">SKU: {item.sku} • Último escaneo: {item.timestamp}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button type="button" onClick={() => handleOpenWrongTagModal(item.productId)} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-lg">⚠️ Mala</button>
+                          <button type="button" onClick={() => handleRemoveScanCount(item.productId, 1)} className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg" title="Restar 1 prenda escaneada"><TrashIcon className="w-3.5 h-3.5" /></button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {scan.productId && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenWrongTagModal(scan.productId)}
-                              className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black rounded-lg transition-colors flex items-center gap-1"
-                              title="Reportar que esta etiqueta pertenece a otra prenda"
-                            >
-                              <span>⚠️ Mala</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveScanCount(scan.productId!, 1)}
-                              className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg transition-colors"
-                              title="Deshacer / eliminar 1 escaneo"
-                            >
-                              <TrashIcon className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
-                        <span className="inline-block bg-accent/10 text-accent font-black text-[10px] px-2 py-0.5 rounded-full">
-                          #{scan.quantity}
-                        </span>
+                      <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                        <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/30 p-2"><p className="text-[9px] font-black text-indigo-500 uppercase">Escaneadas</p><p className="text-sm font-black text-indigo-700 dark:text-indigo-300">{item.scannedQty}</p></div>
+                        <div className="rounded-lg bg-slate-100 dark:bg-slate-800 p-2"><p className="text-[9px] font-black text-slate-400 uppercase">Stock sistema</p><p className="text-sm font-black text-slate-700 dark:text-slate-300">{item.systemStock}</p></div>
+                        <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 p-2"><p className="text-[9px] font-black text-rose-500 uppercase">Faltan etiquetas</p><p className="text-sm font-black text-rose-600 dark:text-rose-300">{item.missingTags}</p></div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
           </div>
 
           {/* RIGHT AREA: Admin Stats & Table (Only shown for administrators) */}
