@@ -811,10 +811,12 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
                     : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
-                Todas las Categorías ({inventory.filter(p => !p.isDisabled && p.storeId === store.id).length})
+                Todas las Categorías ({inventory.filter(p => !p.isDisabled && p.storeId === store.id && p.stock > 0).reduce((sum, p) => sum + p.stock, 0)})
               </button>
               {categories.map((cat) => {
-                const count = inventory.filter(p => !p.isDisabled && p.storeId === store.id && p.categoryId === cat.id).length;
+                const count = inventory
+                  .filter(p => !p.isDisabled && p.storeId === store.id && p.categoryId === cat.id && p.stock > 0)
+                  .reduce((sum, p) => sum + p.stock, 0);
                 if (count === 0) return null;
                 return (
                   <button
