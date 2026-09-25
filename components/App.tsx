@@ -472,12 +472,16 @@ const App: React.FC = () => {
             attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             break;
         case View.POS:
+            // Checkout only needs inventory and operationally live carts/layaways.
+            // Historical sales, purchases and the customer catalog do not need permanent
+            // realtime listeners just to open the cash register. Loading them once cuts
+            // Firestore reads substantially while keeping the POS responsive.
             attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('purchases'), setPurchases);
+            fetchOnce(storeSpecificQuery('sales'), setSales);
+            fetchOnce(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('layaways'), setLayaways);
-            attach(storeSpecificQuery('customers'), setCustomers);
-            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
+            fetchOnce(storeSpecificQuery('customers'), setCustomers);
+            fetchOnce(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             break;
         case View.INVENTORY:
