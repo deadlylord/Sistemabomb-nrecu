@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.96',
+    date: '2026-09-24',
+    description: 'Actualización de Novedades en Conciliación',
+    isCurrent: true,
+    changes: [
+      'Las correcciones realizadas a una novedad existente se reflejan inmediatamente en la conciliación.',
+      'Los excedentes agregados posteriormente, incluido QR, actualizan el caché multisede usado por conciliación.',
+      'Se evita tener que recargar el sistema o registrar manualmente el excedente corregido.'
+    ]
+  },
+  {
     version: '1.1.95',
     date: '2026-09-24',
     description: 'Corrección de Compilación del Escáner',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Se corrigió la estructura visual del módulo de auditoría que impedía compilar el despliegue.',
       'Se eliminó por completo el selector antiguo de cantidades para evitar contradicciones con el conteo seguro +1.',
