@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { db, auth } from '../firebase';
 import { 
   collection, 
@@ -27,38 +27,41 @@ import {
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID, DEFAULT_CLIENT_ALLOWED_VIEWS } from '../types';
 import Header from './Header';
-import PosView from './PosView';
-import InventoryView from './InventoryView';
-import { InventoryTransferView } from './InventoryTransferView';
-import { LayawayView } from './LayawayView';
-import SalesView from './SalesView';
-import PurchasesView from './PurchasesView';
-import SellersView from './SellersView';
-import StoresView from './StoresView';
-import StockTakeHistoryView from './StockTakeHistoryView';
+import { createSessionLoader } from '../services/sessionLoader';
+import { useStoreCollection } from '../services/useStoreCollection';
 import StockTakeModal from './StockTakeModal';
-import CustomersView from './CustomersView';
-import { SettingsView } from './SettingsView';
-import PayrollView from './PayrollView';
 import LoginView from './LoginView';
-import RoleManagerView from './RoleManagerView';
-import IncidentsView from './IncidentsView';
 import ReportsModal from './ReportsView';
-import { CeoCenterView } from './CeoCenterView';
-import DeveloperCenterView from './DeveloperCenterView';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
-import DashboardView from './DashboardView';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
 import { InventoryVerificationModal } from './InventoryVerificationModal';
 import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
-import SmartAccountantView from './SmartAccountantView';
 import VersionHistoryModal from './VersionHistoryModal';
-import FinancialReconciliationView from './FinancialReconciliationView';
-import GiftVouchersView from './GiftVouchersView';
 import { PwaInstallModal } from './PwaInstallModal';
-import { TagScanningView } from './TagScanningView';
+
+const PosView = lazy(() => import('./PosView'));
+const InventoryView = lazy(() => import('./InventoryView'));
+const InventoryTransferView = lazy(() => import('./InventoryTransferView').then(module => ({ default: module.InventoryTransferView })));
+const LayawayView = lazy(() => import('./LayawayView').then(module => ({ default: module.LayawayView })));
+const SalesView = lazy(() => import('./SalesView'));
+const PurchasesView = lazy(() => import('./PurchasesView'));
+const SellersView = lazy(() => import('./SellersView'));
+const StoresView = lazy(() => import('./StoresView'));
+const StockTakeHistoryView = lazy(() => import('./StockTakeHistoryView'));
+const CustomersView = lazy(() => import('./CustomersView'));
+const SettingsView = lazy(() => import('./SettingsView').then(module => ({ default: module.SettingsView })));
+const PayrollView = lazy(() => import('./PayrollView'));
+const RoleManagerView = lazy(() => import('./RoleManagerView'));
+const IncidentsView = lazy(() => import('./IncidentsView'));
+const CeoCenterView = lazy(() => import('./CeoCenterView').then(module => ({ default: module.CeoCenterView })));
+const DeveloperCenterView = lazy(() => import('./DeveloperCenterView'));
+const DashboardView = lazy(() => import('./DashboardView'));
+const SmartAccountantView = lazy(() => import('./SmartAccountantView'));
+const FinancialReconciliationView = lazy(() => import('./FinancialReconciliationView'));
+const GiftVouchersView = lazy(() => import('./GiftVouchersView'));
+const TagScanningView = lazy(() => import('./TagScanningView').then(module => ({ default: module.TagScanningView })));
 
 const hexToRgb = (hex: string) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -305,15 +308,6 @@ const App: React.FC = () => {
       return name === 'vendedor' || name === 'vendedores';
   }, [currentUser, roles]);
   
-  const fetchOnceFromFirestore = useCallback(<T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
-    getDocs(query).then(snapshot => {
-      const list: T[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as T));
-      setter(list);
-    }).catch(error => {
-      console.error(`Error fetching once:`, error);
-    });
-  }, []);
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
       if (user) setIsAuthReady(true);
@@ -413,20 +407,36 @@ const App: React.FC = () => {
     return () => unsubscribers.forEach(unsub => unsub());
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
   
+  const multisiteLoader = useRef(createSessionLoader());
+  const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
+  const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
+  useEffect(() => {
+    multisiteLoader.current.reset();
+    setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
+    return () => multisiteLoader.current.reset();
+  }, [dataScope, companyStoreKey]);
+
   useEffect(() => {
     if (!isAdmin || !currentUser) return;
     const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION || (currentView === View.CEO_CENTER && isCeoCenterActivated);
     const needsMultistoreCatalog = needsMultistoreAnalytics || currentView === View.PURCHASES || isGlobalMode;
+    const storeIds: string[] = JSON.parse(companyStoreKey);
+    const load = <T extends { id: string }>(name: string, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
+      // Query stores instead of companyId to also include legacy records. Never
+      // download another company's operational history for client-side filtering.
+      void multisiteLoader.current.load(name, async () => {
+        const snapshots = await Promise.all(storeIds.map(storeId =>
+          getDocs(query(collection(db, name), where('storeId', '==', storeId)))
+        ));
+        return snapshots.flatMap(snapshot => snapshot.docs.map(document => ({ ...document.data(), id: document.id } as T)));
+      }, setter).catch(error => console.error(`Error loading ${name}:`, error));
+    };
     if (needsMultistoreAnalytics) {
-      if (allSales.length === 0) fetchOnceFromFirestore(query(collection(db, 'sales')), setAllSales);
-      if (allLayaways.length === 0) fetchOnceFromFirestore(query(collection(db, 'layaways')), setAllLayaways);
-      if (allIncidents.length === 0) fetchOnceFromFirestore(query(collection(db, 'incidents')), setAllIncidents);
+      load('sales', setAllSales); load('layaways', setAllLayaways); load('incidents', setAllIncidents);
     }
-    if (needsMultistoreCatalog && globalInventoryForSearch.length === 0) {
-      fetchOnceFromFirestore(query(collection(db, 'inventory')), setGlobalInventoryForSearch);
-    }
-  }, [isReportsModalOpen, currentView, isAdmin, currentUser, isGlobalMode, isCeoCenterActivated, allSales.length, allLayaways.length, allIncidents.length, globalInventoryForSearch.length, fetchOnceFromFirestore]);
-  
+    if (needsMultistoreCatalog) load('inventory', setGlobalInventoryForSearch);
+  }, [isReportsModalOpen, currentView, isAdmin, dataScope, companyStoreKey, isGlobalMode, isCeoCenterActivated]);
+
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
         if (globalInventoryForSearch.length > 0 && !isAdmin) setGlobalInventoryForSearch([]);
@@ -443,69 +453,52 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [currentUser, currentStoreId]);
 
+  const hasDataAccess = !!currentUser && userPermissions.length > 0;
+  const canLoadStore = isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
   useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentStoreId || !currentUser || userPermissions.length === 0) return;
+    setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
+    setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
+    setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setExpenses([]);
+    setIncidents([]); setGiftVouchers([]); setFinancialRecords([]); setLoans([]); setExpenseCategories([]); setAccountingChatHistory([]);
+  }, [currentStoreId, dataScope]);
 
+  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView), setInventory);
+  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
+  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
+  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
+  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
+
+  useEffect(() => {
+    if (!canLoadStore || !currentStoreId) return;
+
+    let active = true;
     const unsubscribers: (() => void)[] = [];
     const attach = <T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
         unsubscribers.push(attachFirestoreListener(query, setter));
     };
     const fetchOnce = <T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
-        fetchOnceFromFirestore(query, setter);
+        getDocs(query).then(snapshot => {
+          if (active) setter(snapshot.docs.map(document => ({ ...document.data(), id: document.id } as T)));
+        }).catch(error => console.error('Error loading view data:', error));
     };
 
-    setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
-    setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
-    setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setExpenses([]);
-
     const storeSpecificQuery = (collectionName: string) => query(collection(db, collectionName), where('storeId', '==', currentStoreId));
-    const storeInventoryQuery = storeSpecificQuery('inventory');
 
     switch (currentView) {
         case View.DASHBOARD:
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('layaways'), setLayaways);
-            attach(storeInventoryQuery, setInventory);
             attach(storeSpecificQuery('dailyNotes'), setDailyNotes);
-            attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('stockTakes'), setStockTakes);
-            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             break;
         case View.POS:
-            // Checkout only needs inventory and operationally live carts/layaways.
-            // Historical sales, purchases and the customer catalog do not need permanent
-            // realtime listeners just to open the cash register. Loading them once cuts
-            // Firestore reads substantially while keeping the POS responsive.
-            attach(storeInventoryQuery, setInventory);
-            fetchOnce(storeSpecificQuery('sales'), setSales);
-            fetchOnce(storeSpecificQuery('purchases'), setPurchases);
-            attach(storeSpecificQuery('layaways'), setLayaways);
+            // Shared live data stays connected while navigating operational screens.
             fetchOnce(storeSpecificQuery('customers'), setCustomers);
-            fetchOnce(storeSpecificQuery('giftVouchers'), setGiftVouchers);
             attach(query(collection(db, 'heldCarts'), where('storeId', '==', currentStoreId)), setHeldCarts);
             break;
         case View.INVENTORY:
-            attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('purchases'), setPurchases);
-            attach(storeSpecificQuery('layaways'), setLayaways);
             fetchOnce(query(collection(db, 'productHistory'), where('storeId', '==', currentStoreId)), setProductHistory);
-            break;
-        case View.INVENTORY_TRANSFER:
-            attach(storeInventoryQuery, setInventory);
-            break;
-        case View.LAYAWAY:
-            attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('layaways'), setLayaways);
-            break;
-        case View.PURCHASES:
-            attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('purchases'), setPurchases);
             break;
         case View.CUSTOMERS:
             attach(storeSpecificQuery('customers'), setCustomers);
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('layaways'), setLayaways);
             break;
         case View.STOCK_TAKE_HISTORY:
             fetchOnce(storeSpecificQuery('stockTakes'), setStockTakes);
@@ -513,28 +506,16 @@ const App: React.FC = () => {
         case View.PAYROLL:
             fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
             attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('layaways'), setLayaways);
-            break;
-        case View.SETTINGS:
-            attach(storeInventoryQuery, setInventory);
             break;
         case View.INCIDENTS:
-            attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('sales'), setSales);
             attach(storeSpecificQuery('customers'), setCustomers);
             break;
         case View.ACCOUNTING:
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('expenses'), setExpenses);
             attach(storeSpecificQuery('expenseCategories'), setExpenseCategories);
             attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
-            attach(storeInventoryQuery, setInventory);
-            attach(storeSpecificQuery('purchases'), setPurchases);
             attach(storeSpecificQuery('financialRecords'), setFinancialRecords);
             attach(storeSpecificQuery('loans'), setLoans);
-            
             const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
             unsubscribers.push(onSnapshot(chatRef, (doc) => {
               if (doc.exists()) {
@@ -545,21 +526,11 @@ const App: React.FC = () => {
             }));
             break;
         case View.FINANCIAL_RECONCILIATION:
-            attach(storeSpecificQuery('sales'), setSales);
-            attach(storeSpecificQuery('layaways'), setLayaways);
             attach(storeSpecificQuery('expenses'), setExpenses);
-            attach(storeSpecificQuery('incidents'), setIncidents);
-            break;
-        case View.GIFT_VOUCHERS:
-            attach(storeSpecificQuery('giftVouchers'), setGiftVouchers);
-            break;
-        case View.TAG_SCANNING:
-            attach(storeInventoryQuery, setInventory);
             break;
     }
-    return () => unsubscribers.forEach(unsub => unsub());
-}, [isAppReady, isAuthReady, currentStoreId, currentView, currentUser, roles, userPermissions, fetchOnceFromFirestore]);
-
+    return () => { active = false; unsubscribers.forEach(unsub => unsub()); };
+  }, [canLoadStore, currentStoreId, currentView, dataScope]);
   useEffect(() => {
     if (currentUser && !hasShownBriefing) {
       const pendingIncidentsCount = incidents.filter(i => 
@@ -2869,6 +2840,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={roles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} isDeveloper={isDeveloper} />
       <main className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
+        <Suspense fallback={<div className="p-6 text-center" role="status">Cargando módulo…</div>}>
         {currentView === View.DASHBOARD && <DashboardView stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={roles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={roles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={roles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
@@ -2995,6 +2967,7 @@ const App: React.FC = () => {
             onToggleUserStatus={handleToggleSellerStatus}
           />
         )}
+        </Suspense>
       </main>
       <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}

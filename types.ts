@@ -473,6 +473,7 @@ export interface Payment {
 
 export interface Layaway {
   id: string;
+  companyId?: string;
   invoiceNumber: string;
   customerName: string;
   customerPhone: string;
