@@ -58,10 +58,20 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.100',
+    date: '2026-09-25',
+    description: 'Orden inicial alfabético en el punto de venta',
+    isCurrent: true,
+    changes: [
+      'El punto de venta abre en orden alfabético, con productos disponibles primero y agotados al final.',
+      'El administrador puede elegir manualmente los modos Inteligente, Tendencias o Recompra cuando los necesite.'
+    ]
+  },
+  {
     version: '1.1.99',
     date: '2026-09-25',
     description: 'Carga por módulos y navegación más ligera',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Los módulos se descargan al abrirlos, reduciendo la carga inicial.',
       'El inventario y los datos operativos compartidos conservan su conexión al cambiar de pantalla.',

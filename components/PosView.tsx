@@ -60,7 +60,7 @@ interface PosViewProps {
 
 const PosView: React.FC<PosViewProps> = (props) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('inteligente');
+  const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
   const [searchTerm, setSearchTerm] = useState('');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
