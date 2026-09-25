@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.97',
+    date: '2026-09-25',
+    description: 'Conteo Correcto por Categoría en Auditoría',
+    isCurrent: true,
+    changes: [
+      'Los números de las categorías muestran unidades reales de stock y no cantidad histórica de referencias.',
+      'Solo se cuentan productos activos, con stock positivo y pertenecientes a la tienda seleccionada.',
+      'El total de categorías queda alineado con las prendas teóricas que realmente deben auditarse.'
+    ]
+  },
+  {
     version: '1.1.96',
     date: '2026-09-24',
     description: 'Actualización de Novedades en Conciliación',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Las correcciones realizadas a una novedad existente se reflejan inmediatamente en la conciliación.',
       'Los excedentes agregados posteriormente, incluido QR, actualizan el caché multisede usado por conciliación.',
