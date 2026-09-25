@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.98',
+    date: '2026-09-25',
+    description: 'POS Más Ligero y Menos Lecturas Firestore',
+    isCurrent: true,
+    changes: [
+      'Se redujeron listeners permanentes al abrir el punto de venta.',
+      'Ventas, compras, clientes y bonos se cargan una sola vez en lugar de mantenerse escuchando en tiempo real.',
+      'Inventario, separados y carritos pendientes conservan actualización en tiempo real por ser operativos.',
+      'Se reduce el consumo de lecturas de Firestore y la carga inicial del POS.'
+    ]
+  },
+  {
     version: '1.1.97',
     date: '2026-09-25',
     description: 'Conteo Correcto por Categoría en Auditoría',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Los números de las categorías muestran unidades reales de stock y no cantidad histórica de referencias.',
       'Solo se cuentan productos activos, con stock positivo y pertenecientes a la tienda seleccionada.',
