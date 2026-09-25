@@ -1,13 +1,14 @@
 {
   "name": "original-cambios-ok-conectarda-a-firestore-facturacion-bombon",
   "private": true,
-  "version": "1.1.98",
+  "version": "1.1.99",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:performance": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "react-test-renderer": "19.2.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

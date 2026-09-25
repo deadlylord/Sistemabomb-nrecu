@@ -365,9 +365,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
     return `${year}-${month}-${day}`;
   };
 
-    const { filteredInventory, performanceTrends, recentSalesMap, trendingProductIds } = useMemo(() => {
-      const NOVEDADES_CATEGORY_ID = 'novedades';
-      const DESCUENTOS_CATEGORY_ID = 'descuentos';
+    const { performanceTrends, recentSalesMap, trendingProductIds } = useMemo(() => {
       
       // Calculate performance trends
       const now = new Date();
@@ -414,6 +412,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
           }
       });
   
+      return { performanceTrends: trends, recentSalesMap, trendingProductIds };
+  }, [props.sales, props.inventory]);
+
+  const filteredInventory = useMemo(() => {
+      const NOVEDADES_CATEGORY_ID = 'novedades';
+      const DESCUENTOS_CATEGORY_ID = 'descuentos';
       let result: Product[] = [];
 
       const normalizedSearch = normalizeText(searchTerm);
@@ -509,13 +513,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
           return a.name.localeCompare(b.name);
       });
 
-      return { 
-          filteredInventory: sortedResult, 
-          performanceTrends: trends, 
-          recentSalesMap, 
-          trendingProductIds 
-      };
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, props.sales, businessSortMode]);
+      return sortedResult;
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, recentSalesMap, businessSortMode]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
