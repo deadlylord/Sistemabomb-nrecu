@@ -1422,8 +1422,21 @@ const App: React.FC = () => {
             }
         }
     }
-    batch.set(doc(db, 'incidents', incident.id), incident, { merge: true }); 
+    batch.set(doc(db, 'incidents', incident.id), cleanObject(incident), { merge: true }); 
     await batch.commit();
+
+    // The multisite analytics arrays are loaded on demand and are not realtime.
+    // Keep the edited incident in that cache immediately so Financial Reconciliation
+    // reflects corrections (e.g. adding a QR surplus to an existing exchange) without
+    // requiring a reload or a fresh global fetch.
+    setAllIncidents(prev => {
+        if (prev.length === 0) return prev;
+        const index = prev.findIndex(i => i.id === incident.id);
+        if (index === -1) return [...prev, incident];
+        const next = [...prev];
+        next[index] = { ...next[index], ...incident };
+        return next;
+    });
   };
 
   const handleDeleteIncident = async (incidentId: string) => {
