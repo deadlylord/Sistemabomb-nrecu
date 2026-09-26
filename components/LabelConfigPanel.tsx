@@ -16,6 +16,8 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     height: 48,
     columns: 1,
     columnGap: 0,
+    rows: 1,
+    rowGap: 0,
     orientation: 'portrait',
     fontSize: 8,
     showPrice: true,
@@ -25,10 +27,11 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     barcodeWidth: 1.5,
     barcodeHeight: 25,
     horizontalOffset: 0,
+    verticalOffset: 0,
     centerOffset: 0,
   };
 
-  const [config, setConfig] = useState<LabelConfig>(store.labelConfig || DEFAULT_CONFIG);
+  const [config, setConfig] = useState<LabelConfig>({ ...DEFAULT_CONFIG, ...store.labelConfig });
   const [localValues, setLocalValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -84,7 +87,10 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
   };
 
   const handleTestPrint = () => {
+    const rows = Math.max(1, Math.floor(config.rows || 1));
+    const rowGap = config.rowGap || 0;
     const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
+    const totalHeight = (config.height * rows) + (rowGap * (rows - 1));
     const centerOffset = config.centerOffset || 0;
 
     // Create a hidden iframe for printing to avoid "about:blank" title issues
@@ -107,7 +113,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     // Patch to remove headers/footers by setting empty title
     frameDoc.title = "\u200E";
 
-    const labelsHtml = Array.from({ length: config.columns * 2 }).map((_, i) => {
+    const labelsHtml = Array.from({ length: config.columns * rows }).map((_, i) => {
       const colIndex = i % config.columns;
       const isFirstCol = colIndex === 0;
       const isLastCol = colIndex === config.columns - 1;
@@ -133,11 +139,6 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
       `;
     }).join('');
 
-    const finalHtml = `
-      <div class="container">${labelsHtml.slice(0, Math.ceil(labelsHtml.length / 2))}</div>
-      <div class="container">${labelsHtml.slice(Math.ceil(labelsHtml.length / 2))}</div>
-    `;
-
     frameDoc.open();
     frameDoc.write(`
       <html>
@@ -147,7 +148,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           <style>
             * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             @page { 
-              size: ${totalWidth}mm ${config.height}mm; 
+              size: ${totalWidth}mm ${totalHeight}mm;
               margin: 0 !important; 
             }
             @media print {
@@ -167,11 +168,14 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
             .container {
               display: grid;
               grid-template-columns: repeat(${config.columns}, ${config.width}mm);
+              grid-template-rows: repeat(${rows}, ${config.height}mm);
               column-gap: ${config.columnGap}mm;
+              row-gap: ${rowGap}mm;
               width: ${totalWidth}mm;
-              height: ${config.height}mm;
-              max-height: ${config.height}mm;
+              height: ${totalHeight}mm;
+              max-height: ${totalHeight}mm;
               margin-left: ${config.horizontalOffset || 0}mm;
+              margin-top: ${config.verticalOffset || 0}mm;
               page-break-after: always;
               break-after: page;
               page-break-inside: avoid;
@@ -229,7 +233,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
         </head>
         <body>
           <div class="container">
-            ${Array.from({ length: config.columns }).map((_, i) => `
+            ${Array.from({ length: config.columns * rows }).map((_, i) => `
               <div class="label">
                 <div class="label-inner" style="${i === 0 ? `padding-left: ${2 + centerOffset}mm;` : ''} ${i === config.columns - 1 ? `padding-right: ${2 + centerOffset}mm;` : ''}">
                   <div class="store-name">${store.receiptName || store.name}</div>
@@ -309,12 +313,35 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Espacio Columnas (mm)</label>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Filas por hoja</label>
+              <input
+                type="number"
+                name="rows"
+                value={localValues.rows ?? (config.rows || 1)}
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+                min="1"
+                max="20"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Espacio horizontal (mm)</label>
               <input 
                 type="number" 
                 name="columnGap" 
                 step="0.1"
                 value={localValues.columnGap ?? config.columnGap} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Espacio vertical (mm)</label>
+              <input
+                type="number"
+                name="rowGap"
+                step="0.1"
+                value={localValues.rowGap ?? (config.rowGap || 0)}
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -337,6 +364,17 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
                 name="centerOffset" 
                 step="0.1"
                 value={localValues.centerOffset ?? (config.centerOffset || 0)} 
+                onChange={handleChange}
+                className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Margen Superior (mm)</label>
+              <input
+                type="number"
+                name="verticalOffset"
+                step="0.1"
+                value={localValues.verticalOffset ?? (config.verticalOffset || 0)}
                 onChange={handleChange}
                 className="w-full bg-white dark:bg-gray-700 p-2 rounded-lg border outline-none font-bold text-sm"
               />
@@ -418,7 +456,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
           <h3 className="font-bold text-gray-700 dark:text-text-light flex justify-between items-center">
             <span>Vista Previa del Diseño</span>
             <span className="text-[10px] uppercase bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">
-              {config.columns} {config.columns === 1 ? 'Columna' : 'Columnas'}
+              {config.columns}×{config.rows || 1} etiquetas por hoja
             </span>
           </h3>
           <div className="flex justify-center bg-gray-200 dark:bg-gray-900 p-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 overflow-auto min-h-[400px] items-start">
@@ -426,12 +464,15 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               className="grid p-2 bg-white/50 dark:bg-white/10 rounded shadow-inner"
               style={{ 
                 gridTemplateColumns: `repeat(${config.columns}, ${config.width}mm)`,
+                gridTemplateRows: `repeat(${config.rows || 1}, ${config.height}mm)`,
                 columnGap: `${config.columnGap}mm`,
-                rowGap: '2mm',
+                rowGap: `${config.rowGap || 0}mm`,
+                paddingLeft: `${Math.max(0, config.horizontalOffset || 0)}mm`,
+                paddingTop: `${Math.max(0, config.verticalOffset || 0)}mm`,
                 width: 'max-content'
               }}
             >
-              {[...Array(config.columns * 2)].map((_, i) => {
+              {[...Array(config.columns * (config.rows || 1))].map((_, i) => {
                 const colIndex = i % config.columns;
                 const isLeftColumn = colIndex === 0;
                 const isRightColumn = colIndex === config.columns - 1 && config.columns > 1;
@@ -495,7 +536,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
               Impresión de Prueba
             </button>
           </div>
-          <p className="text-[10px] text-gray-500 text-center italic">La vista previa muestra {config.columns * 2} etiquetas para visualizar el diseño multi-columna.</p>
+          <p className="text-[10px] text-gray-500 text-center italic">La vista previa representa una hoja/avance real de {config.columns * (config.rows || 1)} etiqueta(s), incluidos sus espacios.</p>
         </div>
       </div>
 

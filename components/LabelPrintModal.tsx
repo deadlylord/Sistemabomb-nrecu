@@ -37,6 +37,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     height: 48,
     columns: 1,
     columnGap: 0,
+    rows: 1,
+    rowGap: 0,
     orientation: 'portrait',
     fontSize: 8,
     showPrice: true,
@@ -46,7 +48,15 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     barcodeWidth: 1.5,
     barcodeHeight: 25,
     horizontalOffset: 0,
+    verticalOffset: 0,
     centerOffset: 0,
+  };
+
+  const resolvedConfig: LabelConfig = {
+    ...config,
+    rows: Math.max(1, Math.floor(config.rows || 1)),
+    rowGap: config.rowGap || 0,
+    verticalOffset: config.verticalOffset || 0,
   };
 
   const handleQuantityChange = (productId: string, qty: number) => {
@@ -69,8 +79,10 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
       return;
     }
 
-    const totalWidth = (config.width * config.columns) + (config.columnGap * (config.columns - 1));
-    const centerOffset = config.centerOffset || 0;
+    const rows = resolvedConfig.rows || 1;
+    const labelsPerPage = resolvedConfig.columns * rows;
+    const totalWidth = (resolvedConfig.width * resolvedConfig.columns) + (resolvedConfig.columnGap * (resolvedConfig.columns - 1));
+    const totalHeight = (resolvedConfig.height * rows) + ((resolvedConfig.rowGap || 0) * (rows - 1));
 
     // Create a hidden iframe for printing to avoid "about:blank" title issues
     let printFrame = document.getElementById('label-print-frame') as HTMLIFrameElement;
@@ -94,9 +106,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
 
     let labelsHtml = '';
 
-    for (let i = 0; i < allLabels.length; i += config.columns) {
+    for (let i = 0; i < allLabels.length; i += labelsPerPage) {
       labelsHtml += '<div class="container">';
-      for (let j = 0; j < config.columns; j++) {
+      for (let j = 0; j < labelsPerPage; j++) {
         const product = allLabels[i + j] as Product & { lastPurchaseDate?: string };
         if (product) {
           const purchaseDate = product.lastPurchaseDate ? new Date(product.lastPurchaseDate) : new Date();
@@ -114,19 +126,19 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             <div class="label">
               <div class="label-inner">
                 <div class="store-name">${store.receiptName || store.name || 'Boutique'}</div>
-                ${config.showName ? `<div class="product-name">${displayName}</div>` : ''}
+                ${resolvedConfig.showName ? `<div class="product-name">${displayName}</div>` : ''}
                   <svg class="barcode" 
                     jsbarcode-value="${barcodeValue}"
                     jsbarcode-format="CODE128"
-                    jsbarcode-width="${config.barcodeWidth}"
-                    jsbarcode-height="${config.barcodeHeight}"
+                    jsbarcode-width="${resolvedConfig.barcodeWidth}"
+                    jsbarcode-height="${resolvedConfig.barcodeHeight}"
                     jsbarcode-displayValue="false"
                     jsbarcode-margin="0"
                   ></svg>
-                ${config.showSku ? `<div class="sku">${product.sku}</div>` : ''}
+                ${resolvedConfig.showSku ? `<div class="sku">${product.sku}</div>` : ''}
                 <div class="cipher">${cipherCode}</div>
-                ${config.showPrice ? `<div class="price">$ ${product.price.toLocaleString()}</div>` : ''}
-                ${config.showSupplier && product.supplier ? `<div class="supplier">${product.supplier}</div>` : ''}
+                ${resolvedConfig.showPrice ? `<div class="price">$ ${product.price.toLocaleString()}</div>` : ''}
+                ${resolvedConfig.showSupplier && product.supplier ? `<div class="supplier">${product.supplier}</div>` : ''}
               </div>
             </div>
           `;
@@ -146,7 +158,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
           <style>
             * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             @page { 
-              size: ${totalWidth}mm ${config.height}mm; 
+              size: ${totalWidth}mm ${totalHeight}mm;
               margin: 0 !important; 
             }
             @media print {
@@ -165,12 +177,15 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             }
             .container {
               display: grid;
-              grid-template-columns: repeat(${config.columns}, ${config.width}mm);
-              column-gap: ${config.columnGap}mm;
+              grid-template-columns: repeat(${resolvedConfig.columns}, ${resolvedConfig.width}mm);
+              grid-template-rows: repeat(${rows}, ${resolvedConfig.height}mm);
+              column-gap: ${resolvedConfig.columnGap}mm;
+              row-gap: ${resolvedConfig.rowGap || 0}mm;
               width: ${totalWidth}mm;
-              height: ${config.height}mm;
-              max-height: ${config.height}mm;
-              margin-left: ${config.horizontalOffset || 0}mm;
+              height: ${totalHeight}mm;
+              max-height: ${totalHeight}mm;
+              margin-left: ${resolvedConfig.horizontalOffset || 0}mm;
+              margin-top: ${resolvedConfig.verticalOffset || 0}mm;
               page-break-after: always;
               break-after: page;
               page-break-inside: avoid;
@@ -179,9 +194,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               overflow: hidden;
             }
             .label { 
-              width: ${config.width}mm; 
-              height: ${config.height}mm; 
-              max-height: ${config.height}mm;
+              width: ${resolvedConfig.width}mm;
+              height: ${resolvedConfig.height}mm;
+              max-height: ${resolvedConfig.height}mm;
               position: relative;
               overflow: hidden;
               display: flex;
@@ -199,9 +214,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               padding: 1mm;
               overflow: hidden;
               line-height: 1.1;
-              ${config.orientation === 'landscape' ? `
-                width: ${config.height}mm;
-                height: ${config.width}mm;
+              ${resolvedConfig.orientation === 'landscape' ? `
+                width: ${resolvedConfig.height}mm;
+                height: ${resolvedConfig.width}mm;
                 position: absolute;
                 top: 50%;
                 left: 50%;
@@ -212,9 +227,9 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 height: 100%;
               `}
             }
-            .store-name { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
+            .store-name { font-size: ${resolvedConfig.fontSize * 0.8}pt; font-weight: bold; text-transform: uppercase; margin-bottom: 0.5mm; }
             .product-name { 
-              font-size: ${config.fontSize}pt; 
+              font-size: ${resolvedConfig.fontSize}pt;
               font-weight: bold; 
               text-transform: uppercase; 
               margin-bottom: 0.5mm; 
@@ -234,10 +249,10 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
               margin: 0.2mm 0;
               shape-rendering: crispEdges;
             }
-            .sku { font-size: ${config.fontSize * 0.9}pt; font-weight: bold; }
-            .cipher { font-size: ${config.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
-            .price { font-size: ${config.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
-            .supplier { font-size: ${config.fontSize * 0.7}pt; opacity: 0.7; }
+            .sku { font-size: ${resolvedConfig.fontSize * 0.9}pt; font-weight: bold; }
+            .cipher { font-size: ${resolvedConfig.fontSize * 0.8}pt; font-weight: bold; border-top: 0.2mm solid #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+            .price { font-size: ${resolvedConfig.fontSize * 1.2}pt; font-weight: black; margin-top: 0.5mm; }
+            .supplier { font-size: ${resolvedConfig.fontSize * 0.7}pt; opacity: 0.7; }
           </style>
         </head>
         <body>
@@ -277,7 +292,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
               <p className="text-xs text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider mb-1">Configuración actual</p>
               <p className="text-sm font-medium">
-                {config.width}x{config.height}mm, {config.columns} {config.columns === 1 ? 'columna' : 'columnas'}.
+                {resolvedConfig.width}×{resolvedConfig.height} mm, {resolvedConfig.columns}×{resolvedConfig.rows || 1} por hoja, espacios {resolvedConfig.columnGap}/{resolvedConfig.rowGap || 0} mm.
               </p>
             </div>
             <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800">
