@@ -217,6 +217,8 @@ export interface LabelConfig {
   height: number; // mm
   columns: number;
   columnGap: number; // mm
+  rows?: number;
+  rowGap?: number; // mm
   orientation: 'portrait' | 'landscape';
   fontSize: number;
   showPrice: boolean;
@@ -226,6 +228,7 @@ export interface LabelConfig {
   barcodeWidth: number;
   barcodeHeight: number;
   horizontalOffset?: number;
+  verticalOffset?: number;
   centerOffset?: number;
 }
 

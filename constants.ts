@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.102',
+    date: '2026-09-26',
+    description: 'Configuración flexible y vista previa real de etiquetas',
+    isCurrent: true,
+    changes: [
+      'La impresión permite configurar ancho, alto, columnas, filas y separación horizontal y vertical.',
+      'La vista previa representa la misma distribución que se envía a la impresora, incluidos los espacios entre etiquetas.',
+      'Se añadió ajuste vertical para adaptar rollos y hojas de distintos formatos sin alterar las configuraciones anteriores.'
+    ]
+  },
+  {
     version: '1.1.101',
     date: '2026-09-26',
     description: 'Cambio de tienda inmediato en el punto de venta',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'El administrador conserva en memoria el inventario independiente de cada tienda durante la sesión.',
       'Al cambiar de tienda, los productos disponibles aparecen sin vaciar la pantalla.',
