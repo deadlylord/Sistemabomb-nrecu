@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.101',
+    date: '2026-09-26',
+    description: 'Cambio de tienda inmediato en el punto de venta',
+    isCurrent: true,
+    changes: [
+      'El administrador conserva en memoria el inventario independiente de cada tienda durante la sesión.',
+      'Al cambiar de tienda, los productos disponibles aparecen sin vaciar la pantalla.',
+      'El inventario se mantiene actualizado en segundo plano sin volver a leer el catálogo en cada cambio.'
+    ]
+  },
+  {
     version: '1.1.100',
     date: '2026-09-25',
     description: 'Orden inicial alfabético en el punto de venta',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'El punto de venta abre en orden alfabético, con productos disponibles primero y agotados al final.',
       'El administrador puede elegir manualmente los modos Inteligente, Tendencias o Recompra cuando los necesite.'

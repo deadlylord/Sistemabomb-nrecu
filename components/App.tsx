@@ -125,6 +125,8 @@ const App: React.FC = () => {
   const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]);
   const [currentUser, setCurrentUser] = useState<Seller | null>(null);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(localStorage.getItem('currentStoreId'));
+  const currentStoreIdRef = useRef<string | null>(currentStoreId);
+  const inventoryByStoreRef = useRef<Map<string, Product[]>>(new Map());
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'dark');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
@@ -182,6 +184,11 @@ const App: React.FC = () => {
   }, []);
 
   const handleSwitchStore = (id: string) => {
+    if (id === currentStoreIdRef.current) return;
+    currentStoreIdRef.current = id;
+    // Never leave the previous store's products visible. Administrators already
+    // keep each authorized store inventory in memory, so revisiting a store is instant.
+    setInventory(inventoryByStoreRef.current.get(id) || []);
     setCurrentStoreId(id);
     localStorage.setItem('currentStoreId', id);
   };
@@ -410,8 +417,30 @@ const App: React.FC = () => {
   const multisiteLoader = useRef(createSessionLoader());
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
+
+  useEffect(() => {
+    if (!isAdmin || !currentUser) return;
+
+    const storeIds: string[] = JSON.parse(companyStoreKey);
+    const unsubscribers = storeIds.map(storeId => {
+      const inventoryQuery = query(collection(db, 'inventory'), where('storeId', '==', storeId));
+      return onSnapshot(inventoryQuery, snapshot => {
+        const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product));
+        inventoryByStoreRef.current.set(storeId, storeInventory);
+
+        // This single session cache serves Dashboard, multisite search and POS.
+        // Switching stores therefore does not reconnect and reread the same catalog.
+        setGlobalInventoryForSearch(storeIds.flatMap(id => inventoryByStoreRef.current.get(id) || []));
+        if (currentStoreIdRef.current === storeId) setInventory(storeInventory);
+      }, error => console.error(`Error loading inventory for store ${storeId}:`, error));
+    });
+
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+  }, [isAdmin, currentUser, companyStoreKey, dataScope]);
+
   useEffect(() => {
     multisiteLoader.current.reset();
+    inventoryByStoreRef.current.clear();
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
     return () => multisiteLoader.current.reset();
   }, [dataScope, companyStoreKey]);
@@ -419,7 +448,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAdmin || !currentUser) return;
     const needsMultistoreAnalytics = isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION || (currentView === View.CEO_CENTER && isCeoCenterActivated);
-    const needsMultistoreCatalog = needsMultistoreAnalytics || currentView === View.PURCHASES || isGlobalMode;
     const storeIds: string[] = JSON.parse(companyStoreKey);
     const load = <T extends { id: string }>(name: string, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
       // Query stores instead of companyId to also include legacy records. Never
@@ -434,8 +462,9 @@ const App: React.FC = () => {
     if (needsMultistoreAnalytics) {
       load('sales', setAllSales); load('layaways', setAllLayaways); load('incidents', setAllIncidents);
     }
-    if (needsMultistoreCatalog) load('inventory', setGlobalInventoryForSearch);
-  }, [isReportsModalOpen, currentView, isAdmin, dataScope, companyStoreKey, isGlobalMode, isCeoCenterActivated]);
+    // Administrator inventory is maintained by the store-scoped session listeners
+    // above, avoiding a one-time global read plus another read for the active store.
+  }, [isReportsModalOpen, currentView, isAdmin, dataScope, companyStoreKey, isCeoCenterActivated]);
 
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
@@ -456,13 +485,13 @@ const App: React.FC = () => {
   const hasDataAccess = !!currentUser && userPermissions.length > 0;
   const canLoadStore = isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
   useEffect(() => {
-    setInventory([]); setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
+    setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
     setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
     setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setExpenses([]);
     setIncidents([]); setGiftVouchers([]); setFinancialRecords([]); setLoans([]); setExpenseCategories([]); setAccountingChatHistory([]);
   }, [currentStoreId, dataScope]);
 
-  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView), setInventory);
+  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView), setInventory);
   useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
   useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
   useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
@@ -2832,7 +2861,7 @@ const App: React.FC = () => {
     }
   };
   
-  const handleLogout = () => { setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setInventory([]); setHasShownBriefing(false); };
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />{isVersionModalOpen && <VersionHistoryModal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} />}</div>;
 
