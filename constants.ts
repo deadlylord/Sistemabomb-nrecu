@@ -58,6 +58,18 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.99',
+    date: '2026-09-27',
+    description: 'Auditoría de Etiquetas Sincronizada con Ventas',
+    isCurrent: true,
+    changes: [
+      'Las etiquetas faltantes se recalculan automáticamente con el stock actual.',
+      'Si se vende una prenda después de la auditoría, disminuye la cantidad pendiente por imprimir.',
+      'El modal de impresión permanece sincronizado con el inventario en tiempo real.',
+      'Las etiquetas marcadas para reetiquetado se conservan independientemente del faltante por stock.'
+    ]
+  },
+  {
     version: '1.1.102',
     date: '2026-09-26',
     description: 'Configuración flexible y vista previa real de etiquetas',
