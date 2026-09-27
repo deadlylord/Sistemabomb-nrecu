@@ -1580,9 +1580,16 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         <LabelPrintModal
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
-          selectedProducts={productsToPrint}
+          selectedProducts={productsToPrint.map(selected => inventory.find(p => p.id === selected.id) || selected)}
           store={store}
-          initialQuantities={printQuantities}
+          initialQuantities={Object.fromEntries(
+            productsToPrint.map(selected => {
+              const liveProduct = inventory.find(p => p.id === selected.id) || selected;
+              const scannedQty = sessionData?.scannedCounts[liveProduct.id] || 0;
+              const pendingTagQty = sessionData?.pendingTagCounts?.[liveProduct.id] || 0;
+              return [liveProduct.id, Math.max(0, Math.max(0, liveProduct.stock) - scannedQty) + pendingTagQty];
+            })
+          )}
         />
       )}
     </div>
