@@ -292,20 +292,22 @@ const App: React.FC = () => {
     return perms;
   }, [currentUser, roles, isDeveloper, currentCompany]);
 
+  // Enforce role permissions at the view level, not only in navigation.
+  // This prevents login/default/stale views from exposing modules the role cannot access.
   useEffect(() => {
-    if (!currentUser || isDeveloper) return;
-    if (currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0) {
-      if (!currentCompany.allowedViews.includes(currentView)) {
-        if (currentCompany.allowedViews.includes(View.POS)) {
-          setCurrentView(View.POS);
-        } else if (currentCompany.allowedViews.includes(View.DASHBOARD)) {
-          setCurrentView(View.DASHBOARD);
-        } else if (currentCompany.allowedViews[0]) {
-          setCurrentView(currentCompany.allowedViews[0] as View);
-        }
-      }
+    if (!currentUser || isDeveloper || roles.length === 0) return;
+
+    if (userPermissions.includes(currentView)) return;
+
+    const fallbackView =
+      (userPermissions.includes(View.POS) && View.POS) ||
+      (userPermissions.includes(View.DASHBOARD) && View.DASHBOARD) ||
+      userPermissions[0];
+
+    if (fallbackView) {
+      setCurrentView(fallbackView as View);
     }
-  }, [currentView, currentCompany, isDeveloper, currentUser]);
+  }, [currentView, currentUser, isDeveloper, roles.length, userPermissions]);
 
   const isVendedor = useMemo(() => {
       if (!currentUser || !roles.length) return false;
