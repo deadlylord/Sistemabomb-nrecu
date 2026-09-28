@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.100',
+    date: '2026-09-28',
+    description: 'Protección de Pantallas por Rol',
+    isCurrent: true,
+    changes: [
+      'Cada pantalla valida los permisos reales del rol del usuario.',
+      'Un usuario ya no puede quedar en Resumen del negocio si su rol no tiene ese permiso.',
+      'Al iniciar sesión se redirige automáticamente al primer módulo autorizado.',
+      'La protección aplica a todos los roles, no solamente al rol Vista.'
+    ]
+  },
+  {
     version: '1.1.99',
     date: '2026-09-27',
     description: 'Auditoría de Etiquetas Sincronizada con Ventas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Las etiquetas faltantes se recalculan automáticamente con el stock actual.',
       'Si se vende una prenda después de la auditoría, disminuye la cantidad pendiente por imprimir.',
