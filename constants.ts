@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.102',
+    date: '2026-09-29',
+    description: 'Recargo Configurable por Medio de Pago',
+    isCurrent: true,
+    changes: [
+      'Nuevo porcentaje de recargo al cliente configurable por medio de pago.',
+      'El recargo se calcula automáticamente al seleccionar el medio y funciona con pagos mixtos.',
+      'El valor queda guardado separado de la comisión del proveedor financiero.',
+      'Recibo impreso y WhatsApp discriminan subtotal, recargo y total final.'
+    ]
+  },
+  {
     version: '1.1.101',
     date: '2026-09-29',
     description: 'Corrección de Carga Masiva y Edición de Productos',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'La carga masiva convierte correctamente el nombre de categoría a categoryId.',
       'Los productos importados quedan asociados a su categoría real.',
