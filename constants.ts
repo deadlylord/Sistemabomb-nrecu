@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.101',
+    date: '2026-09-29',
+    description: 'Corrección de Carga Masiva y Edición de Productos',
+    isCurrent: true,
+    changes: [
+      'La carga masiva convierte correctamente el nombre de categoría a categoryId.',
+      'Los productos importados quedan asociados a su categoría real.',
+      'El editor ya no falla al abrir productos antiguos que quedaron sin categoryId.',
+      'Los nuevos productos masivos conservan companyId para el aislamiento por empresa.'
+    ]
+  },
+  {
     version: '1.1.100',
     date: '2026-09-28',
     description: 'Protección de Pantallas por Rol',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Cada pantalla valida los permisos reales del rol del usuario.',
       'Un usuario ya no puede quedar en Resumen del negocio si su rol no tiene ese permiso.',
