@@ -61,6 +61,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, company, onClo
       `${itemsText}\n` +
       `-----------------------------------\n\n` +
       `${paymentsText}\n` +
+      ((sale.paymentSurchargeAmount || 0) > 0 ? `*Recargo medio de pago:* +${formatCOP(sale.paymentSurchargeAmount || 0)}\n` : '') +
       `*TOTAL PAGADO: ${formatCOP(sale.totalAmount)}*\n\n` +
       `_${store.whatsappFooterText || ''}_\n\n` +
       `${store.contactInfo || company?.phone || ''}`;
@@ -224,6 +225,12 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, company, onClo
                     ))
                 ) : (
                     <p><strong>Método Pago:</strong> {sale.paymentMethod}</p>
+                )}
+                {(sale.paymentSurchargeAmount || 0) > 0 && (
+                    <>
+                      <p><strong>Subtotal antes de recargo:</strong> {formatCOP(sale.totalAmount - (sale.paymentSurchargeAmount || 0))}</p>
+                      <p><strong>Recargo medio de pago:</strong> +{formatCOP(sale.paymentSurchargeAmount || 0)}</p>
+                    </>
                 )}
                 <p className="text-lg font-bold">Total: {formatCOP(sale.totalAmount)}</p>
             </div>
