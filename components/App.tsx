@@ -722,7 +722,8 @@ const App: React.FC = () => {
             const subtotal = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
             const discountPercent = saleData.discountPercent || 0;
             const discountAmount = saleData.discountAmount || (discountPercent > 0 ? Math.round(subtotal * (discountPercent / 100)) : 0);
-            const totalAmount = subtotal - discountAmount;
+            const paymentSurchargeAmount = saleData.paymentSurchargeAmount || 0;
+            const totalAmount = subtotal - discountAmount + paymentSurchargeAmount;
 
             const newSale: Sale = {
                 id: saleRef.id,
@@ -739,6 +740,7 @@ const App: React.FC = () => {
                 companyId: operationalCompanyId,
                 discountPercent,
                 discountAmount,
+                paymentSurchargeAmount,
             };
 
             savedSale = newSale;
