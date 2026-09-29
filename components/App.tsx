@@ -2246,6 +2246,14 @@ const App: React.FC = () => {
       });
       
       products.forEach(p => {
+          const categoryName = (p.categoryName || '').trim();
+          const matchedCategory = categories.find(category =>
+            normalizeText(category.name) === normalizeText(categoryName)
+          );
+          if (!matchedCategory) {
+            throw new Error(`Categoría no encontrada para "${p.name}": ${categoryName || 'sin categoría'}`);
+          }
+
           const uniqueKey = p.name ? p.name.trim().toLowerCase() : '';
           let sku = skuByName.get(uniqueKey);
           
@@ -2258,7 +2266,16 @@ const App: React.FC = () => {
           }
           
           const newRef = doc(collection(db, 'inventory'));
-          batch.set(newRef, cleanObject({ ...p, id: newRef.id, sku, storeId, isDisabled: false }));
+          const { categoryName: _categoryName, ...productData } = p;
+          batch.set(newRef, cleanObject({
+            ...productData,
+            id: newRef.id,
+            sku,
+            categoryId: matchedCategory.id,
+            storeId,
+            companyId: operationalCompanyId,
+            isDisabled: false
+          }));
 
           const logRef = doc(collection(db, 'productHistory'));
           batch.set(logRef, {
