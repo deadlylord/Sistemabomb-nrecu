@@ -77,6 +77,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
         return;
     }
 
+    if (name.startsWith('surcharge_')) {
+        const method = name.split('_')[1] as PaymentMethod;
+        setLocalSettings(prev => prev ? ({
+            ...prev,
+            paymentSurcharges: {
+                ...(prev.paymentSurcharges || {}),
+                [method]: Math.max(0, parseFloat(value) / 100 || 0)
+            }
+        }) : null);
+        return;
+    }
+
     if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
         setLocalSettings(prev => prev ? ({...prev, [name]: checked }) : null);
@@ -365,6 +377,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
                     placeholder="0.00"
                     step="0.01"
                   />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+
+          <h3 className="text-lg font-bold text-gray-800 dark:text-text-light pt-4 border-t-2 border-gray-200 dark:border-gray-700">Recargo al Cliente por Medio de Pago (%)</h3>
+          <p className="text-xs text-gray-500 italic -mt-4">Porcentaje adicional que se suma al valor pagado por el cliente. Es independiente de la comisión que cobra el servicio.</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Object.values(PaymentMethod).filter(m => m !== PaymentMethod.Bono && m !== PaymentMethod.Efectivo).map(method => (
+              <div key={method} className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl">
+                <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">{method}</label>
+                <div className="relative">
+                  <input type="number" name={`surcharge_${method}`}
+                    value={((localSettings.paymentSurcharges?.[method] || 0) * 100).toFixed(2)}
+                    onChange={handleSettingsChange}
+                    className="w-full bg-white dark:bg-gray-700 p-2 pr-6 rounded-lg border outline-none font-bold text-sm"
+                    placeholder="0.00" step="0.01" min="0" />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
                 </div>
               </div>
