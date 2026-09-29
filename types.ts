@@ -269,6 +269,7 @@ export interface Store {
     qr: string;
   };
   paymentCommissions?: { [key in PaymentMethod]?: number };
+  paymentSurcharges?: { [key in PaymentMethod]?: number };
   labelConfig?: LabelConfig;
 }
 
@@ -472,6 +473,9 @@ export interface Payment {
   seller: string;
   voucherId?: string;
   voucherCode?: string;
+  baseAmount?: number;
+  surchargePercent?: number;
+  surchargeAmount?: number;
 }
 
 export interface Layaway {
@@ -507,6 +511,7 @@ export interface Sale {
   layawayId?: string;
   discountPercent?: number;
   discountAmount?: number;
+  paymentSurchargeAmount?: number;
 }
 
 export interface Purchase {
