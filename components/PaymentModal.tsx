@@ -10,7 +10,7 @@ interface PaymentModalProps {
   total: number;
   sellers: Seller[];
   customers: Customer[];
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => void;
   saleDate: Date;
   onHoldSale: (data: { customer: { name: string; phone: string }; sellerName: string; }) => void;
   initialCustomerInfo: {name: string, phone: string} | null;
@@ -40,7 +40,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
   };
 
   const paidAmount = useMemo(() => payments.reduce((sum, p) => sum + p.amount, 0), [payments]);
-  const remainingAmount = total - paidAmount;
+  const coveredBaseAmount = useMemo(() => payments.reduce((sum, p) => sum + (p.baseAmount ?? p.amount), 0), [payments]);
+  const paymentSurchargeAmount = useMemo(() => payments.reduce((sum, p) => sum + (p.surchargeAmount || 0), 0), [payments]);
+  const finalTotal = total + paymentSurchargeAmount;
+  const remainingAmount = total - coveredBaseAmount;
   const change = remainingAmount < 0 ? Math.abs(remainingAmount) : 0;
   const isFullyPaid = remainingAmount <= 0;
 
@@ -85,8 +88,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }
     
     // Calculate current remaining amount based on current payments state
-    const currentPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const currentRemaining = total - currentPaid;
+    const currentCovered = payments.reduce((sum, p) => sum + (p.baseAmount ?? p.amount), 0);
+    const currentRemaining = total - currentCovered;
 
     if (method === PaymentMethod.Bono) {
         const trimmedCode = voucherCode.trim().toUpperCase();
@@ -129,7 +132,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                 return;
             }
         }
-        setPayments(prev => [...prev, { amount: amountToUse, method }]);
+        const baseAmount = Math.min(amount, currentRemaining);
+        const surchargePercent = currentStore?.paymentSurcharges?.[method] || 0;
+        const surchargeAmount = Math.round(baseAmount * surchargePercent);
+        setPayments(prev => [...prev, {
+          amount: baseAmount + surchargeAmount,
+          baseAmount,
+          method,
+          surchargePercent,
+          surchargeAmount
+        }]);
     }
   };
 
@@ -169,6 +181,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       seller: selectedSeller,
       discountPercent,
       discountAmount,
+      paymentSurchargeAmount,
     }, saleDate);
     
     onClose();
@@ -223,7 +236,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800/40 px-3 py-1 rounded-xl border border-slate-100 dark:border-slate-800 text-right">
                   <span className="block text-[9px] text-slate-400 font-black uppercase tracking-wider">Total Final</span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white leading-none">{formatCOP(total)}</span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white leading-none">{formatCOP(finalTotal)}</span>
                 </div>
               </div>
             ) : (
@@ -360,6 +373,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                           {p.voucherCode && <span className="ml-1 px-1 bg-pink-100 dark:bg-pink-950 text-pink-600 dark:text-pink-400 font-mono text-[9px] rounded font-bold">{p.voucherCode}</span>}
                       </p>
                       <p className="text-xs font-black text-accent">{formatCOP(p.amount)}</p>
+                      {(p.surchargeAmount || 0) > 0 && <p className="text-[9px] text-slate-400">Incluye recargo {((p.surchargePercent || 0) * 100).toFixed(2)}%: {formatCOP(p.surchargeAmount || 0)}</p>}
                     </div>
                     <button 
                       onClick={() => handleRemovePayment(index)} 
@@ -379,6 +393,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             </div>
 
             <div className="border-t border-dashed border-slate-200 dark:border-slate-700/80 pt-2.5 mt-2 space-y-1.5 text-xs">
+              {paymentSurchargeAmount > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400 font-bold">
+                  <span>Recargo medio de pago:</span>
+                  <span>+{formatCOP(paymentSurchargeAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-500 dark:text-slate-400 font-bold">
                 <span>Total Pagado:</span> 
                 <span className="font-black text-slate-800 dark:text-white">{formatCOP(paidAmount)}</span>
