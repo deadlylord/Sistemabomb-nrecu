@@ -28,7 +28,7 @@ interface PosViewProps {
   onUpdateCartItemPrice: (productId: string, newPrice: number) => void;
   onRemoveFromCart: (productId: string) => void;
   onClearCart: () => void;
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, saleDate: Date) => void;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
   onResumeSale: (heldCartId: string) => void;
   onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
@@ -209,7 +209,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, selectedDate: Date) => {
+  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, selectedDate: Date) => {
     const now = new Date();
     const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
     props.onProcessSale(saleData, finalDate);
