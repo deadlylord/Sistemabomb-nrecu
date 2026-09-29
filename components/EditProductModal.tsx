@@ -20,7 +20,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
     stock: product.stock.toString(),
     sku: product.sku || '',
     description: product.description,
-    categoryId: product.categoryId.toString(),
+    categoryId: product.categoryId?.toString() || '',
     supplier: product.supplier || '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -35,7 +35,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({ isOpen, product, ca
       stock: product.stock.toString(),
       sku: product.sku || '',
       description: product.description,
-      categoryId: product.categoryId.toString(),
+      categoryId: product.categoryId?.toString() || '',
       supplier: product.supplier || '',
     });
     setImageFile(null);
