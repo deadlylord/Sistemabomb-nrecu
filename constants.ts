@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.108',
+    date: '2026-09-30',
+    description: 'Tipografía Vestika',
+    isCurrent: true,
+    changes: ['Nombre Vestika más grande y con tipografía serif en el inicio de sesión.']
+  },
+  {
     version: '1.1.107',
     date: '2026-09-30',
     description: 'Logo Vestika Actualizado',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Se utiliza el nuevo archivo vestika.png en el login, la pestaña y la aplicación instalada.']
   },
   {
