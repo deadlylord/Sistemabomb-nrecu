@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bombon-pos-cache-v1.1.85-network-first';
+const CACHE_NAME = 'bombon-pos-cache-v1.1.114-local-styles';
 const urlsToCache = [
     '/',
     '/index.html',
