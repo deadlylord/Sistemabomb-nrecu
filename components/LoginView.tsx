@@ -35,7 +35,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onOpenVersio
         />
       </div>
       
-      <h1 className="text-3xl font-black text-slate-850 dark:text-text-light mb-1.5 tracking-tight uppercase">
+      <h1 className="text-5xl sm:text-[3.5rem] font-semibold text-slate-850 dark:text-text-light mb-2 tracking-tight leading-none" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
         <span className="text-accent normal-case">vestika</span>
       </h1>
       <p className="text-xs text-slate-500 dark:text-text-dark mb-7 font-semibold uppercase tracking-wider">POS para tiendas de moda</p>
