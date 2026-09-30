@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.111',
+    date: '2026-09-30',
+    description: 'Degradado Vestika Más Intenso',
+    isCurrent: true,
+    changes: ['Degradado azul cielo, morado y rosa más intenso en ik, conservando el borde luminoso y las demás letras blancas.']
+  },
+  {
     version: '1.1.110',
     date: '2026-09-30',
     description: 'Colores Suaves de Vestika',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Letras blancas y degradado azul cielo, lavanda y rosa claro en ik, con borde luminoso.']
   },
   {
