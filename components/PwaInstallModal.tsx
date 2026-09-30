@@ -194,7 +194,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
                   3
                 </div>
                 <p className="leading-relaxed">
-                  Desliza hacia abajo en el menú de compartir y selecciona la opción <strong>"Agregar a inicio"</strong>. Ponle de nombre "Sistema POS" y pulsa Agregar.
+                  Desliza hacia abajo en el menú de compartir y selecciona la opción <strong>"Agregar a inicio"</strong>. Ponle de nombre "Vestika" y pulsa Agregar.
                 </p>
               </div>
             </div>
