@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.104',
+    date: '2026-09-30',
+    description: 'Corrección de Referencia en Carga Masiva',
+    isCurrent: true,
+    changes: ['Se importa normalizeText para permitir resolver y crear las categorías en la carga masiva.']
+  },
+  {
     version: '1.1.103',
     date: '2026-09-30',
     description: 'Carga Masiva con Guardado Confirmado',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Las categorías nuevas se crean junto con los productos en un único guardado.',
       'La ventana espera la confirmación del guardado antes de cerrarse.',

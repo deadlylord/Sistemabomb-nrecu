@@ -32,7 +32,7 @@ import { useStoreCollection } from '../services/useStoreCollection';
 import StockTakeModal from './StockTakeModal';
 import LoginView from './LoginView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku } from '../constants';
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku, normalizeText } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
