@@ -247,21 +247,12 @@ const App: React.FC = () => {
       if (!currentUser) return false;
       const userRole = roles.find(r => r.id === currentUser.roleId);
       const roleName = (userRole?.name || '').toLowerCase().trim();
-      const username = (currentUser.username || '').toLowerCase().trim();
-      const name = (currentUser.name || '').toLowerCase().trim();
 
-      return !!currentUser.isDeveloper || 
-             roleName === 'developer' || 
-             roleName === 'desarrollador' || 
-             (userRole?.permissions && userRole.permissions.includes(View.DEVELOPER_CENTER)) ||
-             username === 'developer' || 
-             username === 'dev' || 
-             username.includes('carlos') ||
-             username === 'carlos.cas8852@gmail.com' ||
-             name.includes('carlos') ||
-             name === 'developer' ||
-             name === 'desarrollador' ||
-             (name === 'developer' && username === 'developer');
+      return !!currentUser.isDeveloper ||
+             userRole?.userType === 'developer' ||
+             roleName === 'developer' ||
+             roleName === 'desarrollador' ||
+             !!userRole?.permissions?.includes(View.DEVELOPER_CENTER);
   }, [currentUser, roles]);
 
   // Multi-company isolation: every operational view is scoped to exactly one company.
