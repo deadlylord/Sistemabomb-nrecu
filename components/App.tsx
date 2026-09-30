@@ -1,3 +1,4 @@
+import { hasTemporaryCarlosDeveloperAccess } from '../services/developerAccess';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { db, auth } from '../firebase';
@@ -248,7 +249,7 @@ const App: React.FC = () => {
       const userRole = roles.find(r => r.id === currentUser.roleId);
       const roleName = (userRole?.name || '').toLowerCase().trim();
 
-      return !!currentUser.isDeveloper ||
+      return hasTemporaryCarlosDeveloperAccess(currentUser) || !!currentUser.isDeveloper ||
              userRole?.userType === 'developer' ||
              roleName === 'developer' ||
              roleName === 'desarrollador' ||

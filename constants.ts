@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.115',
+    date: '2026-09-30',
+    description: 'Acceso Temporal Carlos Developer',
+    isCurrent: true,
+    changes: ['Excepción temporal para el usuario exacto Carlos; no se conceden privilegios por coincidencias parciales como Carlos V.']
+  },
+  {
     version: '1.1.114',
     date: '2026-09-30',
     description: 'Estilos Integrados en Vestika',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Los estilos se generan durante la compilación y se cargan desde Vestika, sin depender del CDN de Tailwind.', 'Se conservan el tema, las animaciones y los estilos de impresión.']
   },
   {
