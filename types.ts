@@ -418,7 +418,7 @@ export const VIEW_LABELS: Record<View, string> = {
     [View.FINANCIAL_RECONCILIATION]: 'Libro de Caja / Conciliación',
     [View.GIFT_VOUCHERS]: 'Bonos de Regalo',
     [View.CEO_CENTER]: 'CEO Center 💎',
-    [View.TAG_SCANNING]: 'Control de Etiquetas',
+    [View.TAG_SCANNING]: 'Revisión de Etiquetas',
     [View.DEVELOPER_CENTER]: 'Developer Center ⚙️',
 };
 
@@ -442,7 +442,7 @@ export const ALL_CLIENT_MODULES: CompanyModuleInfo[] = [
   { id: View.PURCHASES, label: 'Registro de Compras', category: 'Inventario y Logística', description: 'Ingreso de mercancía por proveedores y costos' },
   { id: View.INVENTORY_TRANSFER, label: 'Traslados Internos', category: 'Inventario y Logística', description: 'Movimientos y despachos de stock entre sedes' },
   { id: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', category: 'Inventario y Logística', description: 'Conteos físicos, auditorías y cruces de inventario' },
-  { id: View.TAG_SCANNING, label: 'Control de Etiquetas', category: 'Inventario y Logística', description: 'Escanear y detectar prendas sin etiqueta' },
+  { id: View.TAG_SCANNING, label: 'Revisión de Etiquetas', category: 'Inventario y Logística', description: 'Escanear y detectar prendas sin etiqueta' },
 
   // Finanzas y Contabilidad
   { id: View.ACCOUNTING, label: 'Contabilidad e Informes', category: 'Finanzas y Contabilidad', description: 'Estado de resultados PyG, ventas globales y auditoría contable' },
