@@ -58,10 +58,21 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.105',
+    date: '2026-09-30',
+    description: 'Límites de Usuarios por Empresa',
+    isCurrent: true,
+    changes: [
+      'El Developer configura cupos separados para administradores y vendedores.',
+      'La creación y el cambio de rol se bloquean al alcanzar el cupo contratado.',
+      'Los roles personalizados se clasifican por tipo de licencia para evitar evadir límites.'
+    ]
+  },
+  {
     version: '1.1.104',
     date: '2026-09-30',
     description: 'Corrección de Referencia en Carga Masiva',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Se importa normalizeText para permitir resolver y crear las categorías en la carga masiva.']
   },
   {
