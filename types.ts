@@ -124,6 +124,8 @@ export interface Company {
   address?: string;
   status: 'active' | 'suspended';
   maxStores: number; // Límite de sedes contratadas
+  maxAdmins?: number; // Límite de usuarios con licencia administrativa
+  maxSellers?: number; // Límite de usuarios con licencia de vendedor
   createdAt: string;
   updatedAt?: string;
   logoUrl?: string | null;
@@ -299,10 +301,13 @@ export interface ExpenseCategory {
   storeId: string;
 }
 
+export type UserLicenseType = 'admin' | 'seller' | 'developer';
+
 export interface Role {
   id: string;
   name: string;
   permissions: View[];
+  userType?: UserLicenseType; // Clasificación de licencia; evita evadir límites con roles personalizados
 }
 
 export interface Seller {
