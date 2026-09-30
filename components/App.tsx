@@ -2236,6 +2236,10 @@ const App: React.FC = () => {
   };
   
   const handleBulkAddProducts = async (products: any[], storeId: string) => {
+      if (!currentUser || !storeId || !visibleStoreIds.has(storeId)) {
+        throw new Error('Selecciona una tienda autorizada antes de importar.');
+      }
+      if (!products.length) return;
       const batch = writeBatch(db);
       const existingSkus = new Set<string>(inventory.map(p => p.sku).filter(Boolean) as string[]);
       const skuByName = new Map<string, string>();
@@ -2247,13 +2251,26 @@ const App: React.FC = () => {
         }
       });
       
+      // Resolve categories once and save new categories atomically with products.
+      const categoryByName = new Map(categories.map(category => [normalizeText(category.name), category]));
+      let writeCount = 0;
       products.forEach(p => {
           const categoryName = (p.categoryName || '').trim();
-          const matchedCategory = categories.find(category =>
-            normalizeText(category.name) === normalizeText(categoryName)
-          );
+          if (!p.name?.trim() || !categoryName || ![p.price, p.cost, p.stock].every(value => Number.isFinite(value) && value >= 0) || !Number.isInteger(p.stock)) {
+            throw new Error(`Datos inválidos para "${p.name || 'Producto'}". Revisa nombre, categoría, precio, costo y stock.`);
+          }
+          const categoryKey = normalizeText(categoryName);
+          let matchedCategory = categoryByName.get(categoryKey);
           if (!matchedCategory) {
-            throw new Error(`Categoría no encontrada para "${p.name}": ${categoryName || 'sin categoría'}`);
+            const categoryRef = doc(collection(db, 'categories'));
+            matchedCategory = { id: categoryRef.id, name: toTitleCase(categoryName) };
+            categoryByName.set(categoryKey, matchedCategory);
+            batch.set(categoryRef, matchedCategory);
+            writeCount++;
+          }
+          writeCount += 2;
+          if (writeCount > 500) {
+            throw new Error('La carga es demasiado grande. Divide los productos en grupos de máximo 150.');
           }
 
           const uniqueKey = p.name ? p.name.trim().toLowerCase() : '';
@@ -2285,6 +2302,7 @@ const App: React.FC = () => {
               productId: newRef.id,
               productName: p.name || 'Producto',
               storeId,
+              companyId: operationalCompanyId,
               changedBy: currentUser?.name || 'Administrador',
               timestamp: new Date().toISOString(),
               changeType: ProductChangeType.CREATED,

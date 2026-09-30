@@ -11,7 +11,7 @@ interface BulkAddProductsModalProps {
   categories: Category[];
   stores: Store[];
   currentStoreId: string;
-  onConfirm: (productsToAdd: any[], storeId: string) => void;
+  onConfirm: (productsToAdd: any[], storeId: string) => Promise<void>;
 }
 
 type PreviewStatus = 'new' | 'error' | 'warning' | 'existing';
@@ -93,7 +93,10 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const [importError, setImportError] = useState('');
+
   const resetState = () => {
+    setImportError('');
     setStep(1);
     setPastedData('');
     setPreview([]);
@@ -101,6 +104,7 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
   };
 
   const handleClose = () => {
+    if (isProcessing) return;
     resetState();
     onClose();
   };
@@ -263,7 +267,9 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
     );
   }, [preview]);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (isProcessing) return;
+    setImportError('');
     const productsToCreate = preview
       .filter(row => row.userAction !== 'skip' && (row.parsedData || row.originalData))
       .map(row => {
@@ -276,10 +282,17 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
           }
       });
     
-    if (productsToCreate.length > 0) {
-      onConfirm(productsToCreate, currentStoreId);
+    if (productsToCreate.length === 0) return;
+    setIsProcessing(true);
+    try {
+      await onConfirm(productsToCreate, currentStoreId);
+      resetState();
+      onClose();
+    } catch (error: any) {
+      setImportError(error?.message || 'No se pudo guardar la carga. Intenta nuevamente.');
+    } finally {
+      setIsProcessing(false);
     }
-    handleClose();
   };
   
   if (!isOpen) return null;
@@ -319,6 +332,7 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
             </div>
         )}
 
+        {importError && <p role="alert" className="mb-4 rounded-md bg-red-100 text-red-700 p-3 text-sm">{importError}</p>}
         {step === 2 && (
             <div className="flex-grow flex flex-col min-h-0">
                 <div className="flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-3 rounded-md mb-4 text-sm">
@@ -326,7 +340,7 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
                         <span className="font-bold text-green-500">{importCount} productos para importar.</span>
                         <span className="font-bold text-gray-500 ml-4">{skippedCount} productos omitidos.</span>
                     </div>
-                    <button onClick={() => setStep(1)} className="text-accent hover:underline text-xs">Volver a editar</button>
+                    <button disabled={isProcessing} onClick={() => setStep(1)} className="text-accent hover:underline text-xs">Volver a editar</button>
                 </div>
                 <div className="flex-grow overflow-y-auto">
                     <table className="w-full text-left text-sm">
@@ -392,9 +406,9 @@ const BulkAddProductsModal: React.FC<BulkAddProductsModalProps> = ({
                 </div>
                  <div className="mt-6 flex justify-end space-x-3 border-t-2 border-accent/30 pt-4">
                     <button type="button" onClick={handleClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md">Cancelar</button>
-                    <button onClick={handleConfirm} disabled={importCount === 0} className="px-4 py-2 bg-accent text-white rounded-md disabled:bg-gray-400 flex items-center space-x-2">
+                    <button onClick={handleConfirm} disabled={importCount === 0 || isProcessing} className="px-4 py-2 bg-accent text-white rounded-md disabled:bg-gray-400 flex items-center space-x-2">
                         <UploadIcon />
-                        <span>Importar {importCount} Producto(s)</span>
+                        <span>{isProcessing ? 'Guardando productos...' : `Importar ${importCount} Producto(s)`}</span>
                     </button>
                 </div>
             </div>

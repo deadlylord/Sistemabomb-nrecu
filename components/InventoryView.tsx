@@ -35,7 +35,7 @@ interface InventoryViewProps {
       imageUrl?: string;
     }[],
     storeId: string
-  ) => void;
+  ) => Promise<void>;
   onDeleteProduct: (productId: string) => void;
   onAddCategory: (name: string) => void;
   onUpdateCategory: (id: string, newName: string) => void;

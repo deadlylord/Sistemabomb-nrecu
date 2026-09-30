@@ -58,10 +58,22 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.103',
+    date: '2026-09-30',
+    description: 'Carga Masiva con Guardado Confirmado',
+    isCurrent: true,
+    changes: [
+      'Las categorías nuevas se crean junto con los productos en un único guardado.',
+      'La ventana espera la confirmación del guardado antes de cerrarse.',
+      'Si falla la importación, muestra el error y conserva los datos para reintentar.',
+      'El historial de productos conserva la empresa de la tienda.'
+    ]
+  },
+  {
     version: '1.1.102',
     date: '2026-09-29',
     description: 'Recargo Configurable por Medio de Pago',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'Nuevo porcentaje de recargo al cliente configurable por medio de pago.',
       'El recargo se calcula automáticamente al seleccionar el medio y funciona con pagos mixtos.',
@@ -109,7 +121,7 @@ export const APP_VERSIONS: VersionLog[] = [
     version: '1.1.102',
     date: '2026-09-26',
     description: 'Configuración flexible y vista previa real de etiquetas',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'La impresión permite configurar ancho, alto, columnas, filas y separación horizontal y vertical.',
       'La vista previa representa la misma distribución que se envía a la impresora, incluidos los espacios entre etiquetas.',
