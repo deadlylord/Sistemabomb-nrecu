@@ -115,24 +115,15 @@ const Header: React.FC<HeaderProps> = ({
 
   const userRole = roles.find(r => r.id === currentUser.roleId);
   const roleName = (userRole?.name || '').toLowerCase().trim();
-  const username = (currentUser.username || '').toLowerCase().trim();
-  const name = (currentUser.name || '').toLowerCase().trim();
 
   const isDeveloper = isDeveloperProp !== undefined
     ? isDeveloperProp
     : (
         !!currentUser.isDeveloper ||
+        userRole?.userType === 'developer' ||
         roleName === 'developer' ||
         roleName === 'desarrollador' ||
-        userRole?.permissions?.includes(View.DEVELOPER_CENTER) ||
-        username === 'developer' ||
-        username === 'dev' ||
-        username.includes('carlos') ||
-        username === 'carlos.cas8852@gmail.com' ||
-        name.includes('carlos') ||
-        name === 'developer' ||
-        name === 'desarrollador' ||
-        (name === 'developer' && username === 'developer')
+        !!userRole?.permissions?.includes(View.DEVELOPER_CENTER)
       );
 
   const filteredGroups = useMemo(() => {
