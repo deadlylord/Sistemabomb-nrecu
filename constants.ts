@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.110',
+    date: '2026-09-30',
+    description: 'Colores Suaves de Vestika',
+    isCurrent: true,
+    changes: ['Letras blancas y degradado azul cielo, lavanda y rosa claro en ik, con borde luminoso.']
+  },
+  {
     version: '1.1.109',
     date: '2026-09-30',
     description: 'Marca Vestika dentro del POS',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Vestika reemplaza el nombre Sistema POS en la cabecera.', 'Las letras i y k utilizan un degradado rosa y violeta en el login y la cabecera.']
   },
   {
