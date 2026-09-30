@@ -285,7 +285,7 @@ const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="hidden xl:block">
                 <h1 className="text-lg font-semibold tracking-tight leading-none dark:text-white">
-                  <span aria-label="Vestika"><span>Vest</span><span style={{ backgroundImage: 'linear-gradient(135deg, #ff007f 0%, #8b5cf6 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>ik</span><span>a</span></span>
+                  <span aria-label="Vestika" style={{ color: '#ffffff' }}><span>Vest</span><span style={{ backgroundImage: 'linear-gradient(110deg, #b9e6ff 0%, #cbb8f2 48%, #f8c8de 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextStroke: '0.3px rgba(240, 246, 255, 0.8)', filter: 'drop-shadow(0 0 2px rgba(210, 228, 255, 0.7)) drop-shadow(0 0 5px rgba(216, 192, 245, 0.35))' }}>ik</span><span>a</span></span>
                 </h1>
               </div>
             </div>
