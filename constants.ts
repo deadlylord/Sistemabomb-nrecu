@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.106',
+    date: '2026-09-30',
+    description: 'Identidad Vestika POS',
+    isCurrent: true,
+    changes: ['Logo original de Vestika en el inicio de sesión.', 'Nombre Vestika POS en la pestaña y la aplicación instalada.']
+  },
+  {
     version: '1.1.105',
     date: '2026-09-30',
     description: 'Límites de Usuarios por Empresa',
-    isCurrent: true,
+    isCurrent: false,
     changes: [
       'El Developer configura cupos separados para administradores y vendedores.',
       'La creación y el cambio de rol se bloquean al alcanzar el cupo contratado.',
