@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.112',
+    date: '2026-09-30',
+    description: 'Permisos de Revisión de Etiquetas',
+    isCurrent: true,
+    changes: ['El acceso desde el POS respeta los permisos efectivos del rol y los módulos de la empresa.', 'El permiso Revisión de Etiquetas identifica claramente el acceso a auditoría y verificador.']
+  },
+  {
     version: '1.1.111',
     date: '2026-09-30',
     description: 'Degradado Vestika Más Intenso',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Degradado azul cielo, morado y rosa más intenso en ik, conservando el borde luminoso y las demás letras blancas.']
   },
   {
