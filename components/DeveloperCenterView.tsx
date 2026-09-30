@@ -71,6 +71,8 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const [newCompanyEmail, setNewCompanyEmail] = useState('');
   const [newCompanyAddress, setNewCompanyAddress] = useState('');
   const [newCompanyMaxStores, setNewCompanyMaxStores] = useState<number>(2);
+  const [newCompanyMaxAdmins, setNewCompanyMaxAdmins] = useState<number>(1);
+  const [newCompanyMaxSellers, setNewCompanyMaxSellers] = useState<number>(5);
   const [newCompanyInitialStoreName, setNewCompanyInitialStoreName] = useState('Sede Principal');
   const [newCompanyAllowedViews, setNewCompanyAllowedViews] = useState<View[]>(DEFAULT_CLIENT_ALLOWED_VIEWS);
   const [newAdminName, setNewAdminName] = useState('');
@@ -201,6 +203,19 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
     return sellers.filter(s => (s.companyId || 'default_company') === activeCompany.id || storeIds.has(s.storeId));
   }, [sellers, activeCompany, companyStores]);
 
+  const getRoleUserType = (role?: Role): 'admin' | 'seller' | 'developer' => {
+    if (!role) return 'seller';
+    const name = role.name.toLowerCase().trim();
+    if (role.userType === 'developer' || name === 'developer' || name === 'desarrollador' || role.permissions?.includes(View.DEVELOPER_CENTER)) return 'developer';
+    if (role.userType === 'admin' || name === 'administrator' || name === 'administrador' || role.permissions?.includes(View.ROLE_MANAGER) || role.permissions?.includes(View.CEO_CENTER)) return 'admin';
+    return 'seller';
+  };
+
+  const companyAdminCount = companyUsers.filter(user => getRoleUserType(roles.find(role => role.id === user.roleId)) === 'admin').length;
+  const companySellerCount = companyUsers.filter(user => getRoleUserType(roles.find(role => role.id === user.roleId)) === 'seller').length;
+  const maxCompanyAdmins = activeCompany?.maxAdmins ?? companyAdminCount;
+  const maxCompanySellers = activeCompany?.maxSellers ?? companySellerCount;
+
   const handleToggleModule = async (moduleId: View) => {
     if (!activeCompany) return;
     const currentAllowed = activeCompany.allowedViews && activeCompany.allowedViews.length > 0 
@@ -278,6 +293,8 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
           email: newCompanyEmail.trim(),
           address: newCompanyAddress.trim(),
           maxStores: Number(newCompanyMaxStores) || 1,
+          maxAdmins: Math.max(1, Number(newCompanyMaxAdmins) || 1),
+          maxSellers: Math.max(0, Number(newCompanyMaxSellers) || 0),
           status: 'active',
           allowedViews: newCompanyAllowedViews
         },
@@ -296,6 +313,8 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       setNewCompanyEmail('');
       setNewCompanyAddress('');
       setNewCompanyMaxStores(2);
+      setNewCompanyMaxAdmins(1);
+      setNewCompanyMaxSellers(5);
       setNewCompanyInitialStoreName('Sede Principal');
       setNewCompanyAllowedViews(DEFAULT_CLIENT_ALLOWED_VIEWS);
       setNewAdminName('');
@@ -705,16 +724,18 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                        Usuarios y Administradores ({companyUsers.length})
+                        Usuarios: {companyAdminCount}/{maxCompanyAdmins} administradores · {companySellerCount}/{maxCompanySellers} vendedores
                       </h3>
                       <p className="text-xs text-slate-400">
-                        Gestiona los usuarios, consulta y actualiza sus contraseñas o datos de acceso.
+                        Los roles personalizados consumen el cupo según su tipo de licencia.
                       </p>
                     </div>
 
                     <button
                       onClick={() => setIsNewAdminModalOpen(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white transition-all shadow-sm"
+                      disabled={companyAdminCount >= maxCompanyAdmins}
+                      title={companyAdminCount >= maxCompanyAdmins ? 'Límite de administradores alcanzado' : 'Crear administrador'}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition-all shadow-sm ${companyAdminCount >= maxCompanyAdmins ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600'}`}
                     >
                       <UsersIcon className="w-3.5 h-3.5" />
                       <span>+ Crear Admin</span>
@@ -1354,6 +1375,21 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Límite de Administradores</label>
+                  <input type="number" min="1" max="100" required value={newCompanyMaxAdmins}
+                    onChange={(e) => setNewCompanyMaxAdmins(parseInt(e.target.value) || 1)}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Límite de Vendedores</label>
+                  <input type="number" min="0" max="500" required value={newCompanyMaxSellers}
+                    onChange={(e) => setNewCompanyMaxSellers(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+              </div>
+
               {/* Modules selection */}
               <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between">
@@ -1858,6 +1894,23 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                   onChange={(e) => setEditingCompany({ ...editingCompany, phone: e.target.value })}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Límite Administradores</label>
+                  <input type="number" min={companyAdminCount} max="100" required
+                    value={editingCompany.maxAdmins ?? companyAdminCount}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, maxAdmins: Math.max(companyAdminCount, parseInt(e.target.value) || 0) })}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm font-bold text-indigo-600" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Límite Vendedores</label>
+                  <input type="number" min={companySellerCount} max="500" required
+                    value={editingCompany.maxSellers ?? companySellerCount}
+                    onChange={(e) => setEditingCompany({ ...editingCompany, maxSellers: Math.max(companySellerCount, parseInt(e.target.value) || 0) })}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm font-bold text-indigo-600" />
+                </div>
               </div>
 
               {/* Modules selection for existing company */}
