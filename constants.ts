@@ -58,10 +58,17 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.113',
+    date: '2026-09-30',
+    description: 'Corrección de Acceso Developer',
+    isCurrent: true,
+    changes: ['El nombre y el usuario ya no conceden acceso Developer; se exige asignación explícita o rol autorizado.']
+  },
+  {
     version: '1.1.112',
     date: '2026-09-30',
     description: 'Permisos de Revisión de Etiquetas',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['El acceso desde el POS respeta los permisos efectivos del rol y los módulos de la empresa.', 'El permiso Revisión de Etiquetas identifica claramente el acceso a auditoría y verificador.']
   },
   {
