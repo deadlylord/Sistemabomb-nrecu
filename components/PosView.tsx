@@ -36,6 +36,7 @@ interface PosViewProps {
   dailyNotes: DailyNote[];
   onAddDailyNote: (content: string, seller: string) => void;
   onNavigate: (view: View) => void;
+  canAccessTagScanning: boolean;
   currentStore: Store | undefined;
   incidents: Incident[];
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
@@ -523,7 +524,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const CartAndActionsContent = ({ isMobile = false }) => (
     <div className="space-y-3">
         {/* Quick link to Tag Scanning Audit */}
-        <div className="bg-indigo-100 dark:bg-indigo-900/70 border border-indigo-500/50 text-indigo-700 dark:text-indigo-300 p-2.5 rounded-xl shadow-sm" role="alert">
+        {props.canAccessTagScanning && <div className="bg-indigo-100 dark:bg-indigo-900/70 border border-indigo-500/50 text-indigo-700 dark:text-indigo-300 p-2.5 rounded-xl shadow-sm" role="alert">
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                     <span className="text-base flex-shrink-0">🏷️</span>
@@ -539,7 +540,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     Comenzar
                 </button>
             </div>
-        </div>
+        </div>}
 
         {(pendingApprovals.length > 0 || activeWarranties.length > 0 || pendingPreOrders.length > 0) && (
             <div className="space-y-2">
