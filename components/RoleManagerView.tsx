@@ -1,12 +1,12 @@
 
 
 import React, { useState } from 'react';
-import { Role, View, VIEW_LABELS } from '../types';
+import { Role, View, VIEW_LABELS, UserLicenseType } from '../types';
 import { PlusCircleIcon, ShieldCheckIcon, SparklesIcon, CheckIcon } from './Icons';
 
 interface RoleManagerViewProps {
   roles: Role[];
-  onAddRole: (name: string) => void;
+  onAddRole: (name: string, userType?: UserLicenseType) => void;
   onUpdateRole: (updatedRole: Role) => void;
   isDeveloper?: boolean;
 }
@@ -14,6 +14,7 @@ interface RoleManagerViewProps {
 const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onUpdateRole, isDeveloper = false }) => {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id || null);
   const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleUserType, setNewRoleUserType] = useState<UserLicenseType>('seller');
 
   const selectedRole = roles.find(r => r.id === selectedRoleId);
 
@@ -39,14 +40,15 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
         alert("No tienes permisos para crear roles de Desarrollador.");
         return;
       }
-      onAddRole(trimmed);
+      onAddRole(trimmed, newRoleUserType);
       setNewRoleName('');
+      setNewRoleUserType('seller');
     }
   };
 
   const handleCreateDeveloperRole = () => {
     if (!isDeveloper) return;
-    onAddRole('Developer');
+    onAddRole('Developer', 'developer');
   };
 
   const handlePermissionChange = (view: View, isChecked: boolean) => {
@@ -63,7 +65,8 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
     } else {
       newPermissions = currentPermissions.filter(p => p !== view);
     }
-    onUpdateRole({ ...selectedRole, permissions: newPermissions });
+    const requiresAdminLicense = newPermissions.includes(View.ROLE_MANAGER) || newPermissions.includes(View.CEO_CENTER);
+    onUpdateRole({ ...selectedRole, permissions: newPermissions, userType: requiresAdminLicense ? 'admin' : selectedRole.userType });
   };
 
   const handleSelectAll = (selectAll: boolean) => {
@@ -109,7 +112,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                 const isDevRole = role.name.toLowerCase() === 'developer' || 
                                   role.name.toLowerCase() === 'desarrollador' ||
                                   (role.permissions && role.permissions.includes(View.DEVELOPER_CENTER));
-                const isAdminRole = role.name.toLowerCase() === 'administrator';
+                const isAdminRole = role.userType === 'admin' || role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'administrador';
 
                 return (
                   <button
@@ -145,7 +148,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Crear Nuevo Rol</p>
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <input
                 type="text"
                 value={newRoleName}
@@ -154,6 +157,16 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-accent focus:border-accent outline-none"
                 onKeyDown={(e) => e.key === 'Enter' && handleAddRole()}
               />
+              <div className="flex gap-2">
+                <select
+                  value={newRoleUserType}
+                  onChange={(e) => setNewRoleUserType(e.target.value as UserLicenseType)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs"
+                >
+                  <option value="seller">Cupo de vendedor</option>
+                  <option value="admin">Cupo de administrador</option>
+                  {isDeveloper && <option value="developer">Developer</option>}
+                </select>
               <button 
                 onClick={handleAddRole} 
                 className="bg-accent text-white px-3 py-2 rounded-xl hover:bg-accent-hover flex-shrink-0 font-bold transition-all shadow-md shadow-accent/20"
@@ -161,6 +174,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
               >
                 <PlusCircleIcon className="w-5 h-5" />
               </button>
+              </div>
             </div>
           </div>
         </div>
@@ -194,6 +208,20 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                     Desmarcar
                   </button>
                 </div>
+              </div>
+
+              <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 p-3">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">Tipo de licencia:</label>
+                <select
+                  value={selectedRole.userType || ((selectedRole.name.toLowerCase() === 'administrator' || selectedRole.name.toLowerCase() === 'administrador') ? 'admin' : ((selectedRole.name.toLowerCase() === 'developer' || selectedRole.name.toLowerCase() === 'desarrollador' || selectedRole.permissions?.includes(View.DEVELOPER_CENTER)) ? 'developer' : 'seller'))}
+                  disabled={selectedRole.name.toLowerCase() === 'administrator' || selectedRole.name.toLowerCase() === 'administrador' || selectedRole.name.toLowerCase() === 'developer' || selectedRole.name.toLowerCase() === 'desarrollador' || selectedRole.permissions?.includes(View.DEVELOPER_CENTER)}
+                  onChange={(e) => onUpdateRole({ ...selectedRole, userType: e.target.value as UserLicenseType })}
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs disabled:opacity-60"
+                >
+                  <option value="seller">Vendedor</option>
+                  <option value="admin">Administrador</option>
+                  {isDeveloper && <option value="developer">Developer</option>}
+                </select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
