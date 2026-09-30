@@ -284,8 +284,8 @@ const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
               <div className="hidden xl:block">
-                <h1 className="text-sm font-black uppercase tracking-tight leading-none dark:text-white">
-                  SISTEMA POS
+                <h1 className="text-lg font-semibold tracking-tight leading-none dark:text-white">
+                  <span aria-label="Vestika"><span>Vest</span><span style={{ backgroundImage: 'linear-gradient(135deg, #ff007f 0%, #8b5cf6 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>ik</span><span>a</span></span>
                 </h1>
               </div>
             </div>
