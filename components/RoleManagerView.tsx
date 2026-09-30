@@ -251,6 +251,11 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                         </div>
                         <div className="truncate">
                           <span className="text-xs truncate block">{VIEW_LABELS[view]}</span>
+                          {view === View.TAG_SCANNING && (
+                            <span className="text-[9px] block font-normal whitespace-normal">
+                              Permite abrir la auditoría y el verificador de etiquetas desde el POS.
+                            </span>
+                          )}
                           {isDevCenter && (
                             <span className="text-[9px] text-indigo-600 dark:text-indigo-400 block font-normal">
                               🛠️ Panel Global Multi-Empresa
