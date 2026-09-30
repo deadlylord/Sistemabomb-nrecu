@@ -94,6 +94,25 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
+const getRoleUserType = (role?: Role): 'admin' | 'seller' | 'developer' => {
+  if (!role) return 'seller';
+  const normalizedName = (role.name || '').toLowerCase().trim();
+  if (
+    role.userType === 'developer' ||
+    normalizedName === 'developer' ||
+    normalizedName === 'desarrollador' ||
+    role.permissions?.includes(View.DEVELOPER_CENTER)
+  ) return 'developer';
+  if (
+    role.userType === 'admin' ||
+    normalizedName === 'administrator' ||
+    normalizedName === 'administrador' ||
+    role.permissions?.includes(View.ROLE_MANAGER) ||
+    role.permissions?.includes(View.CEO_CENTER)
+  ) return 'admin';
+  return 'seller';
+};
+
 const App: React.FC = () => {
   const [giftVouchers, setGiftVouchers] = useState<GiftVoucher[]>([]);
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -2554,7 +2573,9 @@ const App: React.FC = () => {
       phone: companyData.phone || '',
       email: companyData.email || '',
       address: companyData.address || '',
-      maxStores: companyData.maxStores || 2,
+      maxStores: Math.max(1, Number(companyData.maxStores) || 2),
+      maxAdmins: Math.max(1, Number(companyData.maxAdmins) || 1),
+      maxSellers: Math.max(0, Number(companyData.maxSellers) || 0),
       status: 'active',
       createdAt: new Date().toISOString(),
       allowedViews: companyData.allowedViews && companyData.allowedViews.length > 0 
@@ -2636,12 +2657,39 @@ const App: React.FC = () => {
     await setDoc(storeRef, cleanObject(newStore));
   };
 
+  const assertUserLimit = (companyId: string, roleId: string, excludedUserId?: string) => {
+    const role = roles.find(r => r.id === roleId);
+    const userType = getRoleUserType(role);
+    if (userType === 'developer') {
+      if (!isDeveloper) throw new Error('Solo el desarrollador puede crear usuarios Developer.');
+      return;
+    }
+
+    const company = companies.find(c => c.id === companyId);
+    if (!company) throw new Error('No se encontró la empresa del usuario.');
+
+    const companyUsers = sellers.filter(s => {
+      if (s.id === excludedUserId) return false;
+      const sellerCompanyId = s.companyId || stores.find(store => store.id === s.storeId)?.companyId || DEFAULT_COMPANY_ID;
+      return sellerCompanyId === companyId && getRoleUserType(roles.find(r => r.id === s.roleId)) === userType;
+    });
+    const configuredLimit = userType === 'admin' ? company.maxAdmins : company.maxSellers;
+    const effectiveLimit = configuredLimit === undefined ? companyUsers.length : configuredLimit;
+    const label = userType === 'admin' ? 'administradores' : 'vendedores';
+
+    if (companyUsers.length >= effectiveLimit) {
+      throw new Error(`La empresa alcanzó el límite de ${label} (${effectiveLimit}). El desarrollador debe ampliar la licencia.`);
+    }
+  };
+
   const handleCreateAdminUser = async (
     companyId: string,
     storeId: string,
     adminData: { name: string; username: string; password: string }
   ) => {
     const adminRole = roles.find(r => r.name === 'Administrator');
+    if (!adminRole) throw new Error('No existe el rol Administrator.');
+    assertUserLimit(companyId, adminRole.id);
     const sellerRef = doc(collection(db, 'sellers'));
     const newAdmin: Seller = {
       id: sellerRef.id,
@@ -2658,6 +2706,7 @@ const App: React.FC = () => {
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
     const userCompanyId = operationalCompanyId;
     if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
+    assertUserLimit(userCompanyId, roleId);
     const newRef = doc(collection(db, 'sellers'));
     const newSellerData: any = {
       id: newRef.id,
@@ -2674,6 +2723,10 @@ const App: React.FC = () => {
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
     const targetSeller = sellers.find(s => s.id === id);
     const userCompanyId = targetSeller?.companyId || currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    if (!targetSeller) throw new Error('No se encontró el usuario.');
+    const oldType = getRoleUserType(roles.find(r => r.id === targetSeller.roleId));
+    const newType = getRoleUserType(roles.find(r => r.id === roleId));
+    if (oldType !== newType) assertUserLimit(userCompanyId, roleId, id);
     const data: any = { name, roleId, storeId, companyId: userCompanyId };
     if (password) data.password = password;
     if (username !== undefined) data.username = username;
@@ -2681,8 +2734,14 @@ const App: React.FC = () => {
   };
   const handleDeleteSeller = async (id: string) => { if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
   const handleToggleSellerStatus = async (id: string) => { const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
-  const handleAddRole = async (name: string) => { const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [] }); };
-  const handleUpdateRole = async (updatedRole: Role) => await setDoc(doc(db, 'roles', updatedRole.id), cleanObject(updatedRole));
+  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType }); };
+  const handleUpdateRole = async (updatedRole: Role) => {
+    const resolvedType = getRoleUserType(updatedRole);
+    if (resolvedType === 'developer' && !isDeveloper) {
+      throw new Error('Solo el desarrollador puede modificar un rol Developer.');
+    }
+    await setDoc(doc(db, 'roles', updatedRole.id), cleanObject({ ...updatedRole, userType: resolvedType }));
+  };
   
   const handleSavePayroll = async (payrollData: any) => {
       if (!currentStoreId || !currentUser) return;
