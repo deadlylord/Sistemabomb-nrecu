@@ -8,8 +8,8 @@ interface SellersViewProps {
   sellers: Seller[];
   roles: Role[];
   stores: Store[];
-  onAddSeller: (name: string, password: string, roleId: string, storeId: string, username?: string, isDeveloper?: boolean) => void;
-  onUpdateSeller: (id: string, newName: string, newPassword: string, newRoleId: string, newStoreId: string, username?: string, isDeveloper?: boolean) => void;
+  onAddSeller: (name: string, password: string, roleId: string, storeId: string, username?: string, isDeveloper?: boolean) => Promise<void>;
+  onUpdateSeller: (id: string, newName: string, newPassword: string, newRoleId: string, newStoreId: string, username?: string, isDeveloper?: boolean) => Promise<void>;
   onDeleteSeller: (id: string) => void;
   onToggleSellerStatus: (id: string) => void;
   isDeveloper?: boolean;
@@ -49,13 +49,17 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
     setIsModalOpen(true);
   };
   
-  const handleSave = (name: string, password: string, roleId: string, storeId: string, username?: string, isDev?: boolean) => {
-    if (editingSeller) {
-      onUpdateSeller(editingSeller.id, name, password, roleId, storeId, username, isDev);
-    } else {
-      onAddSeller(name, password, roleId, storeId, username, isDev);
+  const handleSave = async (name: string, password: string, roleId: string, storeId: string, username?: string, isDev?: boolean) => {
+    try {
+      if (editingSeller) {
+        await onUpdateSeller(editingSeller.id, name, password, roleId, storeId, username, isDev);
+      } else {
+        await onAddSeller(name, password, roleId, storeId, username, isDev);
+      }
+      setIsModalOpen(false);
+    } catch (error: any) {
+      alert(error?.message || 'No se pudo guardar el usuario.');
     }
-    setIsModalOpen(false);
   };
 
   const filteredSellers = useMemo(() => {
