@@ -153,6 +153,17 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     setPayments(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
+  const handleToggleSurcharge = (paymentIndex: number) => {
+    setPayments(prev => prev.map((payment, index) => {
+      if (index !== paymentIndex || payment.method === PaymentMethod.Bono) return payment;
+      const baseAmount = payment.baseAmount ?? (payment.amount - (payment.surchargeAmount || 0));
+      const surchargePercent = (payment.surchargeAmount || 0) > 0
+        ? 0 : (currentStore?.paymentSurcharges?.[payment.method] || 0);
+      const surchargeAmount = Math.round(baseAmount * surchargePercent);
+      return { ...payment, baseAmount, surchargePercent, surchargeAmount, amount: baseAmount + surchargeAmount };
+    }));
+  };
+
   const handleFinalize = () => {
     setErrorMsg(null);
     if (!isFullyPaid) {
@@ -246,7 +257,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             ) : (
               <div className="bg-slate-50 dark:bg-slate-800/40 px-3 py-1 rounded-xl border border-slate-100 dark:border-slate-800 text-right">
                 <span className="block text-[9px] text-slate-400 font-black uppercase tracking-wider">Total a Pagar</span>
-                <span className="text-xl font-black text-slate-900 dark:text-white leading-none">{formatCOP(total)}</span>
+                <span className="text-xl font-black text-slate-900 dark:text-white leading-none">{formatCOP(finalTotal)}</span>
               </div>
             )}
           </div>
@@ -379,6 +390,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                       </p>
                       <p className="text-xs font-black text-accent">{formatCOP(p.amount)}</p>
                       {(p.surchargeAmount || 0) > 0 && <p className="text-[9px] text-slate-400">Incluye recargo {((p.surchargePercent || 0) * 100).toFixed(2)}%: {formatCOP(p.surchargeAmount || 0)}</p>}
+                      {p.method !== PaymentMethod.Bono && (currentStore?.paymentSurcharges?.[p.method] || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSurcharge(index)}
+                          aria-label={`${(p.surchargeAmount || 0) > 0 ? 'Quitar' : 'Aplicar'} recargo de ${p.method}`}
+                          className="mt-1 text-xs font-bold text-accent underline underline-offset-2"
+                        >
+                          {(p.surchargeAmount || 0) > 0 ? 'Quitar recargo' : 'Aplicar recargo'}
+                        </button>
+                      )}
                     </div>
                     <button 
                       onClick={() => handleRemovePayment(index)} 
