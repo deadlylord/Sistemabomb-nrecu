@@ -1,4 +1,5 @@
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
+import { sellerRecordVisible, incidentIsActive } from '../services/sellerRecordVisibility';
 import React, { useState, useMemo } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
@@ -48,22 +49,12 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId,
 
   const filteredIncidents = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
 
     return [...incidents]
       .filter(i => {
+        if (!isAdmin && !sellerRecordVisible(i.createdAt, incidentIsActive(i.status))) return false;
         const matchesStatus = filter === 'ALL' ? true : i.status === filter;
         
-        // Restriction for non-admins: Only current month
-        if (!isAdmin) {
-          const createdAt = new Date(i.createdAt);
-          if (createdAt.getMonth() !== currentMonth || createdAt.getFullYear() !== currentYear) {
-            return false;
-          }
-        }
-
         const matchesSearch = normalizedSearch ? 
             normalizeText(i.description).includes(normalizedSearch) ||
             (i.productName && normalizeText(i.productName).includes(normalizedSearch)) ||

@@ -150,6 +150,11 @@ const PosView: React.FC<PosViewProps> = (props) => {
         e.target instanceof HTMLSelectElement ||
         (e.target instanceof HTMLElement && e.target.isContentEditable);
       const isSearchInput = e.target === searchInputRef.current;
+      // The search field handles its own Enter; never process it twice here.
+      if (isSearchInput || e.defaultPrevented || e.repeat) {
+        barcodeBufferRef.current = '';
+        return;
+      }
       
       if (isInput && !isSearchInput) {
         return;
@@ -308,31 +313,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     }
 
     setTimeout(() => {
-      if (searchInputRef.current) {
-        searchInputRef.current.value = '';
-        searchInputRef.current.focus();
-      }
-    }, 30);
-
-    setTimeout(() => {
       setJustAddedProductId(null);
       setIsCartPulsing(false);
     }, 700);
   };
-
-  // Efecto para buscar y añadir automáticamente un producto al detectar coincidencia exacta del SKU/Código de barras
-  useEffect(() => {
-    const trimmed = searchTerm.trim();
-    if (trimmed.length >= 3) {
-      const normalizedTerm = normalizeText(trimmed);
-      const product = props.inventory.find(p => 
-        p.sku && normalizeText(p.sku) === normalizedTerm
-      );
-      if (product && product.stock > 0 && !product.isDisabled) {
-        handleAddToCartWithAnimation(product);
-      }
-    }
-  }, [searchTerm, props.inventory]);
 
   const pendingPreOrders = useMemo(() => {
     return props.layaways.filter(l => l.status === 'pre-order');
@@ -765,9 +749,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     setSearchTerm(val);
                                 }}
                                 onKeyDown={e => {
-                                    const trimmedSearch = searchTerm.trim();
+                                    const trimmedSearch = e.currentTarget.value.trim();
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
+                                        e.stopPropagation();
+                                        if (e.repeat) return;
+                                        barcodeBufferRef.current = '';
                                         if (trimmedSearch.length > 0) {
                                             const normalizedTerm = normalizeText(trimmedSearch);
                                             // 1. Buscar coincidencia de SKU exacta (Código de barras)

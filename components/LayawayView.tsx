@@ -1,6 +1,7 @@
 
 
 import React, { useState, useMemo } from 'react';
+import { sellerRecordVisible } from '../services/sellerRecordVisibility';
 import { Layaway, PaymentMethod, Seller, Role, Product } from '../types';
 import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, TrashIcon, CrossIcon, EditIcon } from './Icons';
@@ -253,8 +254,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
         return layaways.filter(l => {
             const matchesFilter = filter === 'all' ? true : l.status === filter;
             
-            // Restriction for sellers: Only active or pre-order layaways
-            if (!isAdmin && l.status !== 'active' && l.status !== 'pre-order') {
+            if (!isAdmin && !sellerRecordVisible(l.createdAt, l.status === 'active' || l.status === 'pre-order')) {
                 return false;
             }
 
