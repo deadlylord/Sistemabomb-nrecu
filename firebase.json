@@ -1,0 +1,3 @@
+{
+  "functions": [{ "source": "functions", "codebase": "vestika-identity", "ignore": ["node_modules", "*.local", ".env*", "README.md"] }]
+}

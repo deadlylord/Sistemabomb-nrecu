@@ -25,3 +25,7 @@ dist-ssr
 
 # Generated locally by the pinned Tailwind build tool
 .generated/
+
+# Server-only identity configuration
+functions/.env*
+functions/service-account*.json
