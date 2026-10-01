@@ -1,7 +1,7 @@
 {
   "name": "original-cambios-ok-conectarda-a-firestore-facturacion-bombon",
   "private": true,
-  "version": "1.1.126",
+  "version": "1.1.127",
   "type": "module",
   "scripts": {
     "dev": "npm run build:styles && vite",

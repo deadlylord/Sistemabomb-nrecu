@@ -1,3 +1,4 @@
+import { resolveTenantRole, tenantPermissions } from '../services/tenantIdentity';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
@@ -257,8 +258,8 @@ const App: React.FC = () => {
 
   const isAdmin = useMemo(() => {
       if (!currentUser || !roles.length) return false;
-      return getRoleUserType(roles.find(r => r.id === currentUser.roleId)) === 'admin';
-  }, [currentUser, roles]);
+      return getRoleUserType(resolveTenantRole(currentUser, roles, stores)) === 'admin';
+  }, [currentUser, roles, stores]);
 
   const isOwner = isPlatformOwner(currentUser);
   const isDeveloper = hasPlatformDeveloperAccess(currentUser, developerGrant);
@@ -339,24 +340,26 @@ const App: React.FC = () => {
     sellers.forEach(seller => {
       const companyId = seller.companyId || stores.find(store => store.id === seller.storeId)?.companyId || DEFAULT_COMPANY_ID;
       const role = roles.find(item => item.id === seller.roleId);
-      if (!role || isPlatformRole(role) || companyId === DEFAULT_COMPANY_ID || (role.companyId || DEFAULT_COMPANY_ID) !== DEFAULT_COMPANY_ID || roleRepairs.current.has(seller.id)) return;
+      if (companyId !== operationalCompanyId || !role || isPlatformRole(role) || companyId === DEFAULT_COMPANY_ID || (role.companyId || DEFAULT_COMPANY_ID) !== DEFAULT_COMPANY_ID || roleRepairs.current.has(seller.id)) return;
       roleRepairs.current.add(seller.id);
       isolateSellerRole(seller).catch(error => console.error('Error isolating user role:', error)).finally(() => roleRepairs.current.delete(seller.id));
     });
-  }, [currentUser?.id, isAppReady, sellers, stores, roles]);
+  }, [currentUser?.id, isAppReady, sellers, stores, roles, operationalCompanyId]);
   useEffect(() => {
     if (!currentUser) return;
     const seller = sellers.find(item => item.id === currentUser.id);
-    if (seller && (seller.roleId !== currentUser.roleId || seller.isDisabled !== currentUser.isDisabled)) setCurrentUser(user => user ? { ...user, roleId: seller.roleId, isDisabled: seller.isDisabled } : user);
-  }, [sellers, currentUser?.id, currentUser?.roleId, currentUser?.isDisabled]);
+    const store = stores.find(item => item.id === seller?.storeId);
+    const sellerCompanyId = seller?.companyId || store?.companyId || DEFAULT_COMPANY_ID;
+    if (seller && (seller.isDisabled || seller.storeId !== currentUser.storeId || sellerCompanyId !== currentUser.companyId)) {
+      handleLogout();
+      return;
+    }
+    if (seller && seller.roleId !== currentUser.roleId) setCurrentUser(user => user ? { ...user, roleId: seller.roleId } : user);
+  }, [sellers, stores, currentUser?.id, currentUser?.roleId, currentUser?.storeId, currentUser?.companyId]);
 
-  const visibleSellers = useMemo(() => {
-    return sellers.filter(seller => {
-      if (seller.companyId) return seller.companyId === operationalCompanyId;
-      // Backwards compatibility for legacy sellers without companyId.
-      return visibleStoreIds.has(seller.storeId);
-    });
-  }, [sellers, operationalCompanyId, visibleStoreIds]);
+  const visibleSellers = useMemo(() => sellers.filter(seller => {
+    try { assertTenantData('sellers', seller, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; } catch { return false; }
+  }), [sellers, operationalCompanyId, visibleStoreIds]);
 
   // If a developer changes company context, never leave an operational store from
   // another company selected. This prevents store-specific listeners from reading
@@ -367,18 +370,8 @@ const App: React.FC = () => {
     if (visibleStores.length > 0) handleSwitchStore(visibleStores[0].id);
   }, [currentUser, isDeveloper, currentView, currentStoreId, visibleStores, visibleStoreIds]);
 
-  const userPermissions = useMemo(() => {
-    if (!currentUser) return [];
-    const userRole = roles.find(role => role.id === currentUser.roleId);
-    let perms = (userRole?.permissions || []).filter(view => view !== View.DEVELOPER_CENTER);
-    
-    // Si no es desarrollador y la empresa tiene módulos restringidos, filtrar permisos
-    if (!isDeveloper && currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0) {
-      const allowedSet = new Set(currentCompany.allowedViews);
-      perms = perms.filter(p => allowedSet.has(p));
-    }
-    return perms;
-  }, [currentUser, roles, isDeveloper, currentCompany]);
+  const userPermissions = useMemo(() => tenantPermissions(currentUser, roles, stores, isDeveloper ? undefined : currentCompany?.allowedViews), [currentUser, roles, stores, isDeveloper, currentCompany]);
+  const canAccessCurrentView = isDeveloper || userPermissions.includes(currentView);
 
   // Enforce role permissions at the view level, not only in navigation.
   // This prevents login/default/stale views from exposing modules the role cannot access.
@@ -400,11 +393,11 @@ const App: React.FC = () => {
 
   const isVendedor = useMemo(() => {
       if (!currentUser || !roles.length) return false;
-      const userRole = roles.find(r => r.id === currentUser.roleId);
+      const userRole = resolveTenantRole(currentUser, roles, stores);
       if (!userRole || !userRole.name) return false;
       const name = userRole.name.toLowerCase();
       return name === 'vendedor' || name === 'vendedores';
-  }, [currentUser, roles]);
+  }, [currentUser, roles, stores]);
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
@@ -579,7 +572,7 @@ const App: React.FC = () => {
     return subscribeStoreRows('incidents', currentStoreId, dataScope, setIncidents);
   }, [currentUser?.id, currentStoreId, dataScope, visibleStoreIds]);
 
-  const hasDataAccess = !!currentUser && (isDeveloper || userPermissions.length > 0);
+  const hasDataAccess = !!currentUser && canAccessCurrentView;
   const canLoadStore = isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
 
 
@@ -2912,7 +2905,9 @@ const App: React.FC = () => {
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
     const userCompanyId = operationalCompanyId;
     if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
-    assertCompanyRole(roles.find(role => role.id === roleId));
+    const assignedRole = roles.find(role => role.id === roleId);
+    assertCompanyRole(assignedRole);
+    assertTenantData('roles', assignedRole, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
     assertUserLimit(userCompanyId, roleId);
     const newRef = doc(collection(db, 'sellers'));
     const newSellerData: any = {
@@ -2929,9 +2924,13 @@ const App: React.FC = () => {
   };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
     await assertCanManageUser(id);
-    assertCompanyRole(roles.find(role => role.id === roleId));
+    const assignedRole = roles.find(role => role.id === roleId);
+    assertCompanyRole(assignedRole);
+    assertTenantData('roles', assignedRole, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
     const targetSeller = sellers.find(s => s.id === id);
-    const userCompanyId = targetSeller?.companyId || currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
+    const userCompanyId = operationalCompanyId;
+    if (!visibleStoreIds.has(storeId)) throw new Error('La sede pertenece a otra empresa.');
+    assertTenantData('sellers', targetSeller, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
     if (!targetSeller) throw new Error('No se encontró el usuario.');
     const oldType = getRoleUserType(roles.find(r => r.id === targetSeller.roleId));
     const newType = getRoleUserType(roles.find(r => r.id === roleId));
@@ -2945,6 +2944,11 @@ const App: React.FC = () => {
   const handleToggleSellerStatus = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
   const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
   const handleUpdateRole = async (updatedRole: Role) => {
+    const original = roles.find(role => role.id === updatedRole.id);
+    assertTenantData('roles', original, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+    assertTenantData('roles', updatedRole, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+    const hasSharedLegacyUsers = sellers.some(seller => seller.roleId === updatedRole.id && (seller.companyId || stores.find(store => store.id === seller.storeId)?.companyId || DEFAULT_COMPANY_ID) !== operationalCompanyId);
+    if (hasSharedLegacyUsers && !isOwner) throw new Error('Carlos debe separar los roles históricos antes de editar este rol compartido.');
     const resolvedType = getRoleUserType(updatedRole);
     assertCompanyRole(updatedRole);
     if (isPlatformRole(roles.find(role => role.id === updatedRole.id))) throw new Error('Este rol de plataforma no se modifica desde roles de empresa.');
@@ -2969,7 +2973,7 @@ const App: React.FC = () => {
   };
   
   const handleBulkAddCustomers = async (newCustomers: any[]) => {
-      if (!currentStoreId) return;
+      if (!currentStoreId || operationContextRef.current !== contextAtRender || !visibleStoreIds.has(currentStoreId)) throw new Error('Selecciona una sede de la empresa activa.');
       const batch = writeBatch(db);
       newCustomers.forEach(c => {
           const newRef = doc(collection(db, 'customers'));
@@ -2977,7 +2981,10 @@ const App: React.FC = () => {
       });
       await batch.commit();
   };
-  const handleUpdateCustomer = async (id: string, name: string, phone: string) => await updateDoc(doc(db, 'customers', id), { name, phone });
+  const handleUpdateCustomer = async (id: string, name: string, phone: string) => {
+    if (!currentStoreId || operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir el cliente.');
+    await createTenantWriter(db, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId]) }).updateDoc(doc(db, 'customers', id), { name, phone });
+  };
 
   const handleAddExpense = async (expenseData: Omit<Expense, 'id'>) => {
       if (!currentStoreId || !currentUser) return;
@@ -3151,6 +3158,8 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <main key={currentView === View.DEVELOPER_CENTER ? currentUser.id : dataScope} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
+        {canAccessCurrentView && <>
+
         <Suspense fallback={<div className="p-6 text-center" role="status">Cargando módulo…</div>}>
         {currentView === View.DASHBOARD && <DashboardView stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
@@ -3160,10 +3169,10 @@ const App: React.FC = () => {
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={visibleSellers.filter(user => isOwner || user.id !== PLATFORM_OWNER_USER_ID && user.platformRole !== 'developer')} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={false} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
-        {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
+        {currentView === View.CUSTOMERS && <CustomersView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} storeId={currentStoreId || ''} sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={visibleRoles} />}
         {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
-        {currentView === View.SETTINGS && <SettingsView stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
+        {currentView === View.SETTINGS && <SettingsView key={dataScope} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && canLoadStore && (
@@ -3286,6 +3295,8 @@ const App: React.FC = () => {
           />
         )}
         </Suspense>
+
+        </>}
       </main>
       <ReportsModal key={dataScope} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}

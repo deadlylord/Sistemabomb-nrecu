@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 async function withWriter(run) {
  const dir = await mkdtemp(fileURLToPath(new URL('./.tenant-', import.meta.url)));
  try {
- const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/legacyCategoryIsolation'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
+ const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/tenantIdentity'; export * from './services/legacyCategoryIsolation'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
  export const records=new Map(), reads=[], writes=[];
  export const doc=(_,collection,id)=>({path:collection+'/'+id,id});
  const snapshot=ref=>({ref,id:ref.id,exists:()=>records.has(ref.path),data:()=>records.get(ref.path)});
@@ -40,6 +40,7 @@ test('tenant writer validates linked category, role and transfer destination and
  const writer=createTenantWriter({},scope);
  records.set('categories/foreign',{name:'Blusas',companyId:'bombon'});
  records.set('roles/foreign',{name:'Vendedor',companyId:'bombon'});
+ records.set('stores/mayla-1',{companyId:'mayla'});
  records.set('customers/legacy',{storeId:'mayla-1',name:'Original'});
  await writer.updateDoc(ref('customers/legacy'),{name:'Actualizado'});assert.equal(records.get('customers/legacy').companyId,'mayla');
  await assert.rejects(writer.setDoc(ref('inventory/new'),{storeId:'mayla-1',categoryId:'foreign'}));
@@ -208,4 +209,36 @@ test('scanning one new product validates only changed links rather than rereadin
  records.set('inventory/new',{companyId:'mayla',storeId:'mayla-1'});
  await writer.updateDoc(ref('tagScanningSessions/active'),{'scannedCounts.new':1,scanHistory:[{id:'new',productId:'new'},...history].slice(0,100)});
  assert.deepEqual(reads,['tagScanningSessions/active','inventory/new']);
+}));
+
+
+test('permission resolution rejects borrowed company roles, contradictory stores and disabled accounts',()=>withWriter(async({resolveTenantRole,tenantPermissions,View})=>{
+ const stores=[{id:'m',companyId:'mayla'},{id:'b',companyId:'default_company'}];
+ const roles=[{id:'own',companyId:'mayla',name:'Admin',permissions:[View.POS,View.SETTINGS]},{id:'legacy',name:'Administrator',permissions:[View.ROLE_MANAGER]}];
+ const user={id:'u',storeId:'m',companyId:'mayla',roleId:'own'};
+ assert.deepEqual(tenantPermissions(user,roles,stores),[View.POS,View.SETTINGS]);
+ assert.deepEqual(tenantPermissions(user,roles,stores,[View.POS]),[View.POS]);
+ for(const change of [{roleId:'legacy'},{storeId:'b'},{isDisabled:true}])assert.equal(resolveTenantRole({...user,...change},roles,stores),undefined);
+ assert.ok(resolveTenantRole({id:'u',storeId:'b',roleId:'legacy'},roles,stores));
+}));
+
+test('user/customer writes validate the actual store document and prevent platform privileges hidden inside an own-company role',()=>withWriter(async({createTenantWriter,records,writes,View})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('stores/mayla-1',{companyId:'other'});
+ records.set('roles/hidden',{companyId:'mayla',name:'Vendedor',permissions:[View.DEVELOPER_CENTER]});
+ for(const name of ['sellers','customers'])await assert.rejects(writer.setDoc(ref(name+'/new'),{storeId:'mayla-1',name:'Cuenta'}));
+ records.set('stores/mayla-1',{companyId:'mayla'});
+ await assert.rejects(writer.setDoc(ref('sellers/new'),{storeId:'mayla-1',roleId:'hidden'}));
+ await assert.rejects(writer.setDoc(ref('roles/new'),{name:'Vendedor',permissions:[View.DEVELOPER_CENTER]}));
+ assert.equal(writes.length,0);
+}));
+
+
+test('legacy role cloning preserves company permissions but cannot carry platform access into another company',()=>withWriter(async({ensureCompanyRole,records,View})=>{
+ records.set('roles/legacy-admin',{name:'Administrator',permissions:[View.POS,View.DEVELOPER_CENTER]});
+ const id=await ensureCompanyRole({},'legacy-admin','mayla');
+ assert.deepEqual(records.get('roles/'+id).permissions,[View.POS]);
+ assert.deepEqual(records.get('roles/legacy-admin').permissions,[View.POS,View.DEVELOPER_CENTER]);
+ records.set('roles/platform',{name:'Developer',permissions:[]});
+ await assert.rejects(ensureCompanyRole({},'platform','mayla'));
 }));

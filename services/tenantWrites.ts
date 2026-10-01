@@ -1,3 +1,4 @@
+import { assertCompanyRole, isPlatformRole } from './developerAccess';
 import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Firestore, DocumentReference, WriteBatch } from 'firebase/firestore';
 import { DEFAULT_COMPANY_ID } from '../types';
@@ -44,15 +45,20 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
     for (const op of operations) {
       const snapshot = await load(op.ref);
       const name = collectionName(op.ref);
-      if (snapshot.exists()) assertTenantData(name, snapshot.data(), scope);
+      if (snapshot.exists()) {
+        assertTenantData(name, snapshot.data(), scope);
+        if (name === 'roles' && isPlatformRole(snapshot.data())) throw new Error('Este rol de plataforma no se modifica desde roles de empresa.');
+      }
       if (op.kind === 'update' && !snapshot.exists()) throw new Error('No se encontró el registro a modificar.');
       if (op.kind === 'delete') continue;
       if (name === 'sellers' && op.data?.platformRole !== undefined) throw new Error('El rol de plataforma solo se asigna desde Developer Center por Carlos.');
       const data = { ...(snapshot.exists() ? snapshot.data() : {}), ...op.data, companyId: op.data?.companyId || scope.companyId };
       assertTenantData(name, data, scope);
+      if (name === 'roles') assertCompanyRole(data);
       op.data = { ...op.data, companyId: scope.companyId };
       const references: DocumentReference[] = [];
       if (data.categoryId) references.push(doc(db, 'categories', data.categoryId));
+      if (['sellers', 'customers'].includes(name) && data.storeId) references.push(doc(db, 'stores', data.storeId));
       if (data.roleId) references.push(doc(db, 'roles', data.roleId));
       if (data.productId && !data.productId.startsWith('voucher-')) references.push(doc(db, 'inventory', data.productId));
       for (const item of Object.values(data.items || {}) as any[]) {
@@ -97,6 +103,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
         if (!staged && !linked.exists()) throw new Error('No se encontró un registro vinculado.');
         const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked.data();
         assertTenantData(collectionName(ref), linkedData, scope);
+        if (collectionName(ref) === 'roles') assertCompanyRole(linkedData);
         const expectedStore = name === 'inventoryTransfers' ? data.fromStoreId : data.storeId;
         if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers'].includes(name)) {
           if (linkedData.storeId !== expectedStore) throw new Error('El producto vinculado pertenece a otra sede.');

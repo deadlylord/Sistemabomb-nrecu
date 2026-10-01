@@ -1,3 +1,6 @@
+import { useAsyncScope } from '../services/useAsyncScope';
+import { resolveTenantRole } from '../services/tenantIdentity';
+import { DEFAULT_COMPANY_ID } from '../types';
 
 import React, { useState, useEffect } from 'react';
 import { Store, Seller, Role, Product, Category, PaymentMethod, LabelConfig, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
@@ -7,6 +10,7 @@ import { db } from '../firebase';
 import { LabelConfigPanel } from './LabelConfigPanel';
 
 interface SettingsViewProps {
+  companyId: string;
   stores: Store[];
   allInventory: Product[];
   categories: Category[];
@@ -21,19 +25,20 @@ interface SettingsViewProps {
   onReactivateAllProducts: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory, categories, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
-  const adminRole = roles.find(r => r.name === 'Administrator');
-  const isAdmin = currentUser.roleId === adminRole?.id;
+export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: rawStores, allInventory, categories, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
+  const stores = React.useMemo(() => rawStores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === companyId), [rawStores, companyId]);
+  const ownRole = resolveTenantRole(currentUser, roles, stores);
+  const isAdmin = ownRole?.userType === 'admin' || ['administrator', 'administrador'].includes((ownRole?.name || '').toLowerCase());
 
-  const [selectedStoreId, setSelectedStoreId] = useState<string>(currentUser.storeId || stores[0]?.id || '');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>((stores.some(store => store.id === currentUser.storeId) ? currentUser.storeId : stores[0]?.id) || '');
   const [localSettings, setLocalSettings] = useState<Store | null>(stores.find(s => s.id === selectedStoreId) || null);
   
 
+  const beginImage = useAsyncScope(JSON.stringify([companyId, selectedStoreId]));
   useEffect(() => {
     const storeToEdit = stores.find(s => s.id === selectedStoreId);
-    if (storeToEdit) {
-      setLocalSettings(storeToEdit);
-    }
+    setLocalSettings(storeToEdit || null);
+    if (!storeToEdit && stores.length) setSelectedStoreId(stores[0].id);
   }, [selectedStoreId, stores]);
 
 
@@ -103,7 +108,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     if (file) {
       if (file.type.startsWith('image/')) {
         try {
+          const isCurrent = beginImage();
           const compressedImage = await compressImage(file, 'logo');
+          if (!isCurrent()) return;
           setLocalSettings(prev => prev ? ({ ...prev, logo: compressedImage }) : null);
         } catch (error) {
           console.error("Error compressing logo:", error);
@@ -128,7 +135,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ stores, allInventory
     if (file) {
       if (file.type === 'image/png' || file.type === 'image/jpeg') {
         try {
+          const isCurrent = beginImage();
           const compressedImage = await compressImage(file, 'background');
+          if (!isCurrent()) return;
           setLocalSettings(prev => prev ? ({ ...prev, loginBackgroundUrl: compressedImage }) : null);
         } catch (error) {
           console.error("Error compressing background image:", error);

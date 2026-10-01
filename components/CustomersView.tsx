@@ -1,3 +1,4 @@
+import { selectAnalyticsRows } from '../services/analyticsScope';
 
 import React, { useState, useMemo } from 'react';
 import { Sale, Layaway, Customer } from '../types';
@@ -7,6 +8,8 @@ import BulkImportCustomersModal from './BulkImportCustomersModal';
 import EditCustomerModal from './EditCustomerModal';
 
 interface CustomersViewProps {
+  companyId: string;
+  storeId: string;
   sales: Sale[];
   layaways: Layaway[];
   allCustomers: Customer[];
@@ -138,7 +141,11 @@ const CustomerRow: React.FC<{ customerData: EnrichedCustomerData; onEdit: (custo
   );
 };
 
-const CustomersView: React.FC<CustomersViewProps> = ({ sales, layaways, allCustomers, onBulkAddCustomers, onUpdateCustomer }) => {
+const CustomersView: React.FC<CustomersViewProps> = ({ companyId, storeId, sales: rawSales, layaways: rawLayaways, allCustomers: rawCustomers, onBulkAddCustomers, onUpdateCustomer }) => {
+  const scope = useMemo(() => ({ companyId, storeIds: new Set<string>([storeId]) }), [companyId, storeId]);
+  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
+  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
+  const allCustomers = useMemo(() => selectAnalyticsRows<Customer>('customers', rawCustomers, scope), [rawCustomers, scope]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
