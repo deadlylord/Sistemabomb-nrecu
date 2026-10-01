@@ -1,3 +1,4 @@
+import { getInventoryCategorySummary } from '../services/inventoryCategories';
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
 import { InventoryTable } from './InventoryTable';
@@ -360,16 +361,9 @@ const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, 
     return filteredProducts;
   }, [inventory, searchTerm, filterCategoryId, filterVelocity, hideZeroStock, sortConfig, categories, sales, layaways, purchases, productHistory, showDisabledProducts, showOnlyDisabled]);
 
-  const categorySummary = useMemo(() => {
-    return categories.map(category => {
-      const productsInCategory = inventory.filter(p => p.categoryId === category.id);
-      const productCount = productsInCategory.length;
-      const totalStock = productsInCategory.reduce((sum, p) => sum + p.stock, 0);
-      return { ...category, productCount, totalStock };
-    })
-    .filter(cat => cat.totalStock > 0)
-    .sort((a,b) => b.totalStock - a.totalStock);
-  }, [inventory, categories]);
+  const categorySummary = useMemo(() =>
+    getInventoryCategorySummary(inventory, categories)
+      .sort((a, b) => b.totalStock - a.totalStock), [inventory, categories]);
 
   const inventoryCostHistory = useMemo(() => {
     let days = valuationRange;

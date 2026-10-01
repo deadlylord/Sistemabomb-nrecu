@@ -58,10 +58,15 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 
 export const APP_VERSIONS: VersionLog[] = [
   {
+    version: '1.1.116', date: '2026-09-30',
+    description: 'Inventario de Apertura y Medios de Pago', isCurrent: true,
+    changes: ['La verificación carga el inventario de la sede y muestra categorías con productos incluso en cero o sin referencia de categoría.', 'Se informa la carga, errores o inventario vacío antes de permitir guardar.', 'Los medios de pago permanecen visibles cuando una venta tiene total cero.']
+  },
+  {
     version: '1.1.115',
     date: '2026-09-30',
     description: 'Acceso Temporal Carlos Developer',
-    isCurrent: true,
+    isCurrent: false,
     changes: ['Excepción temporal para el usuario exacto Carlos; no se conceden privilegios por coincidencias parciales como Carlos V.']
   },
   {

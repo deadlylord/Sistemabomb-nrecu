@@ -81,6 +81,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
   
   const handleAddPayment = async (method: PaymentMethod) => {
     setErrorMsg(null);
+    if (remainingAmount <= 0) {
+      triggerError('No hay saldo pendiente para agregar un pago.');
+      return;
+    }
     const amount = parseFloat(amountInput);
     if (isNaN(amount) || amount <= 0) {
       triggerError("Por favor, ingresa un monto válido.");
@@ -296,7 +300,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
             </div>
             
             {/* Agregar Pago */}
-            {!isFullyPaid && (
+            {(
               <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2.5 space-y-2.5 flex-grow flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Monto y Redención de Bonos</h3>
@@ -334,6 +338,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
 
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Método de Pago</label>
+                  {total <= 0 && <p className="text-xs text-amber-600" role="status">La venta tiene total cero. Revisa los precios y descuentos si esperabas cobrar un valor.</p>}
                   <div className="grid grid-cols-3 gap-1.5">
                     {Object.values(PaymentMethod).filter(m => m !== PaymentMethod.Bono).map(method => {
                       let label: string = method;

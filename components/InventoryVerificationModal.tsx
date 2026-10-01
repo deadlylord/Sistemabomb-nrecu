@@ -1,3 +1,4 @@
+import { getInventoryCategorySummary } from '../services/inventoryCategories';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, Seller, StockTake, Store } from '../types';
@@ -10,6 +11,8 @@ interface InventoryVerificationModalProps {
   sellers: Seller[];
   isOpen: boolean;
   isAdmin: boolean;
+  isLoadingInventory?: boolean;
+  inventoryError?: string | null;
   isVendedor?: boolean;
   currentStore?: Store;
   onClose: () => void;
@@ -25,6 +28,8 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   sellers,
   isOpen,
   isAdmin,
+  isLoadingInventory = false,
+  inventoryError = null,
   isVendedor = false,
   currentStore,
   onClose,
@@ -70,18 +75,17 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
         setIsSaving(false);
         setSaveSuccess(false);
     }
-  }, [isOpen]);
+  }, [isOpen, currentStore?.id]);
 
-  const categoryTotals = useMemo(() => {
-    return categories
-      .map(category => {
-        const totalStock = inventory
-          .filter(p => p.categoryId === category.id)
-          .reduce((sum, p) => sum + p.stock, 0);
-        return { ...category, totalStock };
-      })
-      .filter(category => category.totalStock > 0);
-  }, [inventory, categories]);
+  useEffect(() => {
+    setCounts({}); setDetailedCounts({}); setActiveCategoryForDetails(null);
+  }, [currentStore?.id]);
+
+  const storeInventory = useMemo(() => inventory.filter(product =>
+    !product.isDisabled && (!currentStore || product.storeId === currentStore.id)
+  ), [inventory, currentStore?.id]);
+  const categoryTotals = useMemo(() =>
+    getInventoryCategorySummary(storeInventory, categories), [storeInventory, categories]);
 
   if (!isOpen) return null;
 
@@ -132,6 +136,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   };
 
   const handleSubmit = async () => {
+    if (isLoadingInventory || inventoryError || categoryTotals.length === 0) return;
     if (!selectedSeller) {
       alert("Por favor, selecciona el vendedor que realiza la verificación.");
       return;
@@ -139,7 +144,16 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
 
     setIsSaving(true);
     try {
-      const verificationData = categoryTotals.map(cat => {
+      const countedCategories = categoryTotals.filter(cat => counts[cat.id] !== undefined && counts[cat.id] !== '');
+      if (countedCategories.length === 0) {
+        alert('Ingresa el conteo físico de al menos una categoría.');
+        return;
+      }
+      if (countedCategories.some(cat => !Number.isInteger(Number(counts[cat.id])) || Number(counts[cat.id]) < 0)) {
+        alert('Los conteos deben ser números enteros mayores o iguales a cero.');
+        return;
+      }
+      const verificationData = countedCategories.map(cat => {
         const physicalCountStr = counts[cat.id];
         const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : 0;
         return {
@@ -184,7 +198,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   const handleSaveDraftWithSnapshot = async (catId: string, productCounts: Record<string, number>) => {
       // Tomamos una "foto" del stock del sistema actual para todos los productos de la categoría
       const systemSnapshot: Record<string, number> = {};
-      inventory
+      storeInventory
         .filter(p => p.categoryId === catId && !p.isDisabled)
         .forEach(p => {
             systemSnapshot[p.id] = p.stock;
@@ -251,7 +265,12 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {categoryTotals.map(category => {
+                {(isLoadingInventory || inventoryError || categoryTotals.length === 0) && (
+                  <tr><td colSpan={isDetailedVerificationVisible ? 4 : 3} className="p-6 text-center text-sm text-gray-500" role="status">
+                    {isLoadingInventory ? 'Cargando inventario de la sede…' : inventoryError || 'No hay productos activos en esta sede para verificar.'}
+                  </td></tr>
+                )}
+                {!isLoadingInventory && !inventoryError && categoryTotals.map(category => {
                   const physicalCountStr = counts[category.id];
                   const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : null;
                   const difference = physicalCount !== null ? physicalCount - category.totalStock : null;
@@ -290,7 +309,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           </div>
           <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t-2 border-accent/30 pt-4">
               <button onClick={onClose} disabled={isSaving} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center font-black text-xs uppercase tracking-widest text-gray-500 disabled:opacity-50">Cerrar</button>
-              <button onClick={handleSubmit} disabled={isSaving || saveSuccess} className={`px-10 py-4 ${saveSuccess ? 'bg-green-500' : (isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover')} text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest text-sm disabled:opacity-70`}>
+              <button onClick={handleSubmit} disabled={isSaving || saveSuccess || isLoadingInventory || !!inventoryError || categoryTotals.length === 0} className={`px-10 py-4 ${saveSuccess ? 'bg-green-500' : (isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-accent hover:bg-accent-hover')} text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 active:scale-95 uppercase tracking-widest text-sm disabled:opacity-70`}>
                   {isSaving ? (
                     <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : saveSuccess ? (
@@ -308,13 +327,13 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           isOpen={!!activeCategoryForDetails}
           onClose={() => setActiveCategoryForDetails(null)}
           category={activeCategoryForDetails}
-          products={inventory.filter(p => p.categoryId === activeCategoryForDetails.id && !p.isDisabled)}
+          products={storeInventory.filter(p => p.categoryId === activeCategoryForDetails.id && !p.isDisabled)}
           initialCounts={detailedCounts[activeCategoryForDetails.id] || {}}
           onApplyCounts={(productCounts) => handleApplyDetailedCountsFromModal(activeCategoryForDetails.id, productCounts)}
           isAdmin={isAdmin}
           onSaveDraft={(counts) => handleSaveDraftWithSnapshot(activeCategoryForDetails.id, counts)}
           onApplyAdjustments={(counts) => onApplyDetailedVerification(activeCategoryForDetails.id, counts)}
-          storeId={inventory[0]?.storeId || ''}
+          storeId={currentStore?.id || storeInventory[0]?.storeId || ''}
         />
       )}
     </>

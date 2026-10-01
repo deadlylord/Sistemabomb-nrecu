@@ -162,6 +162,8 @@ const App: React.FC = () => {
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [isVerificationInventoryLoading, setIsVerificationInventoryLoading] = useState(false);
+  const [verificationInventoryError, setVerificationInventoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCeoCenterActivated, setIsCeoCenterActivated] = useState(false);
   
@@ -495,7 +497,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [currentUser, currentStoreId]);
 
-  const hasDataAccess = !!currentUser && userPermissions.length > 0;
+  const hasDataAccess = !!currentUser && (isDeveloper || userPermissions.length > 0);
   const canLoadStore = isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
   useEffect(() => {
     setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
@@ -504,7 +506,35 @@ const App: React.FC = () => {
     setIncidents([]); setGiftVouchers([]); setFinancialRecords([]); setLoans([]); setExpenseCategories([]); setAccountingChatHistory([]);
   }, [currentStoreId, dataScope]);
 
-  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView), setInventory);
+  // The verification dialog also needs inventory when opened outside a catalog view.
+  // Read the selected store afresh and ignore responses after a store/company change.
+  useEffect(() => {
+    if (!isVerificationModalOpen) return;
+    let active = true;
+    setVerificationInventoryError(null);
+    setIsVerificationInventoryLoading(true);
+    if (!canLoadStore || !currentStoreId) {
+      setVerificationInventoryError('Selecciona una sede con acceso antes de verificar inventario.');
+      setIsVerificationInventoryLoading(false);
+      return;
+    }
+    getDocs(query(collection(db, 'inventory'), where('storeId', '==', currentStoreId)))
+      .then(snapshot => {
+        if (!active) return;
+        const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product));
+        inventoryByStoreRef.current.set(currentStoreId, items);
+        setInventory(items);
+      })
+      .catch(error => {
+        if (!active) return;
+        console.error('Error loading verification inventory:', error);
+        setVerificationInventoryError('No se pudo cargar el inventario. Cierra y vuelve a abrir para reintentar.');
+      })
+      .finally(() => { if (active) setIsVerificationInventoryLoading(false); });
+    return () => { active = false; };
+  }, [isVerificationModalOpen, canLoadStore, currentStoreId, dataScope]);
+
+  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
   useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
   useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
   useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
@@ -3094,6 +3124,8 @@ const App: React.FC = () => {
       {isVerificationModalOpen && (
           <InventoryVerificationModal
               isOpen={isVerificationModalOpen}
+              isLoadingInventory={isVerificationInventoryLoading}
+              inventoryError={verificationInventoryError}
               isAdmin={isAdmin}
               isVendedor={isVendedor}
               currentStore={currentStore}
