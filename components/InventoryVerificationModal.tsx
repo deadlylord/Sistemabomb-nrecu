@@ -85,7 +85,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
     !product.isDisabled && (!currentStore || product.storeId === currentStore.id)
   ), [inventory, currentStore?.id]);
   const categoryTotals = useMemo(() =>
-    getInventoryCategorySummary(storeInventory, categories), [storeInventory, categories]);
+    getInventoryCategorySummary(storeInventory, categories).filter(category => category.totalStock !== 0), [storeInventory, categories]);
 
   if (!isOpen) return null;
 
@@ -267,7 +267,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {(isLoadingInventory || inventoryError || categoryTotals.length === 0) && (
                   <tr><td colSpan={isDetailedVerificationVisible ? 4 : 3} className="p-6 text-center text-sm text-gray-500" role="status">
-                    {isLoadingInventory ? 'Cargando inventario de la sede…' : inventoryError || 'No hay productos activos en esta sede para verificar.'}
+                    {isLoadingInventory ? 'Cargando inventario de la sede…' : inventoryError || 'No hay categorías con existencias distintas de cero en esta sede para verificar.'}
                   </td></tr>
                 )}
                 {!isLoadingInventory && !inventoryError && categoryTotals.map(category => {

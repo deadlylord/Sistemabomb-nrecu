@@ -57,7 +57,10 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.118', date: '2026-09-30', description: 'Protección de Categorías con Productos', isCurrent: true,
+  { version: '1.1.119', date: '2026-09-30', description: 'Conteo sin Categorías en Cero', isCurrent: true,
+    changes: ['La revisión de apertura oculta categorías cuya existencia total es cero en la sede seleccionada, conservando el catálogo y los historiales. Las existencias negativas siguen visibles para revisar inconsistencias.']
+  },
+  { version: '1.1.118', date: '2026-09-30', description: 'Protección de Categorías con Productos', isCurrent: false,
     changes: ['Se impide eliminar categorías con productos vinculados en cualquier sede, incluyendo productos deshabilitados o con existencias en cero.']
   },
   { version: '1.1.117', date: '2026-09-30', description: 'Categorías Independientes por Empresa', isCurrent: false,

@@ -28,7 +28,7 @@ test('verification keeps zero stock and orphan categories, handles missing/strin
   assert.equal(result.length, 3);
 });
 
-test('verification renders zero stock, blocks empty/loading/error saves and excludes another store; zero-total checkout still shows payment methods', async () => {
+test('verification hides zero totals per store, keeps negatives, blocks empty/loading/error saves; zero-total checkout still shows payment methods', async () => {
   const dir = await mkdtemp(fileURLToPath(new URL('./.verification-', import.meta.url)));
   try {
     const bundle = await build({
@@ -44,10 +44,14 @@ test('verification renders zero stock, blocks empty/loading/error saves and excl
     const { InventoryVerificationModal, PaymentModal } = await import(pathToFileURL(path).href);
     const props = { inventory: [...products, { id: 'other', categoryId: 'foreign', stock: 30, storeId: 's2' }], categories, sellers: [], isOpen: true, isAdmin: true, currentStore: { id: 's1' } };
     const render = overrides => renderToStaticMarkup(React.createElement(InventoryVerificationModal, { ...props, ...overrides }));
-    assert.match(render(), /Camisas/);
+    assert.doesNotMatch(render(), /Camisas/);
     assert.match(render(), /Jeans/);
+    assert.match(render(), /Categoría no encontrada/);
     assert.doesNotMatch(render(), /foreign/);
-    for (const overrides of [{ inventory: [] }, { isLoadingInventory: true }, { inventoryError: 'No se pudo cargar' }]) {
+    assert.doesNotMatch(render({ inventory: [products[0], { id: 'other-shirt', categoryId: 'shirts', stock: 30, storeId: 's2' }] }), /Camisas/);
+    assert.doesNotMatch(render({ inventory: [{ id: 'positive', categoryId: 'shirts', stock: 3, storeId: 's1' }, { id: 'negative', categoryId: 'shirts', stock: -3, storeId: 's1' }] }), /Camisas/);
+    assert.match(render({ currentStore: { id: 's2' }, inventory: [{ id: 'own', categoryId: 'shirts', stock: 30, storeId: 's2' }, products[0]] }), /Camisas/);
+    for (const overrides of [{ inventory: [] }, { inventory: [products[0]] }, { isLoadingInventory: true }, { inventoryError: 'No se pudo cargar' }]) {
       const markup = render(overrides);
       assert.match(markup, /role="status"/);
       assert.match(markup, /<button[^>]*disabled=""[^>]*>[\s\S]*?Guardar y Aplicar Stock/);
@@ -60,12 +64,13 @@ test('verification renders zero stock, blocks empty/loading/error saves and excl
     })); });
     const buttons = renderer.root.findAllByType('button');
     await act(async () => { buttons.find(button => button.children.includes('Carlos')).props.onClick(); });
-    const countInput = renderer.root.findAllByType('input').find(input => input.props.type === 'number' && !input.props.id);
+    const jeansRow = renderer.root.findAllByType('tr').find(row => row.findAllByType('p').some(p => p.children.includes('Jeans')));
+    const countInput = jeansRow.findByType('input');
     await act(async () => { countInput.props.onChange({ target: { value: '0' } }); });
     const save = renderer.root.findAllByType('button').find(button => button.findAllByType('span').some(span => span.children.includes('Guardar y Aplicar Stock')));
     await act(async () => { await save.props.onClick(); });
     assert.equal(saved.verification.length, 1, 'unentered categories must not be recorded as zero');
-    assert.equal(saved.verification[0].categoryId, 'shirts');
+    assert.equal(saved.verification[0].categoryId, 'jeans');
     assert.equal(saved.verification[0].physicalCount, 0, 'an explicitly entered zero is valid');
     assert.deepEqual(saved.productCounts, {}, 'category review must not overwrite product stocks');
     await act(async () => { renderer.unmount(); });
