@@ -1,3 +1,4 @@
+import { inPayrollScope, payrollDate, payrollTime, payrollLogins, payrollShiftUnits } from '../services/payrollScope';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
@@ -5,12 +6,13 @@ import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, CrossIcon, TrashIcon, PlusCircleIcon, DollarIcon, UsersIcon, ShieldCheckIcon, WhatsAppIcon, PrintIcon, EditIcon, CheckIcon, PlusIcon, AlertTriangleIcon } from './Icons';
 
 interface PayrollViewProps {
+  companyId: string;
   sellers: Seller[];
   sales: Sale[];
   layaways: Layaway[];
   loginHistory: LoginRecord[];
   payrollHistory: PayrollRecord[];
-  onSavePayroll: (payrollData: Omit<PayrollRecord, 'id' | 'paidAt' | 'paidBy' | 'storeId'>) => Promise<void>;
+  onSavePayroll: (payrollData: Omit<PayrollRecord, 'id' | 'paidAt' | 'paidBy'>) => Promise<void>;
   onDeletePayroll: (payrollId: string) => Promise<void>;
   currentUser: Seller;
   currentStore: Store | undefined;
@@ -111,13 +113,15 @@ const PayrollReceiptModal: React.FC<{
     );
 };
 
-const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, onDeletePayroll, currentUser, currentStore }) => {
+const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, onDeletePayroll, currentUser, currentStore }) => {
+  const scope = { storeId: currentStore?.id || '', companyId };
+  const salaryKey = `payrollBaseSalary:${companyId}:${scope.storeId}`;
   const [selectedSeller, setSelectedSeller] = useState('');
   const [isManualName, setIsManualName] = useState(false);
   const [manualName, setManualName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [baseSalary, setBaseSalary] = useState(() => localStorage.getItem('payrollBaseSalary') || '1500000');
+  const [baseSalary, setBaseSalary] = useState(() => localStorage.getItem(salaryKey) || '1500000');
   const [paymentType, setPaymentType] = useState<'nomina' | 'admin' | 'utilidad'>('nomina');
   const [manualAmount, setManualAmount] = useState('');
   
@@ -137,14 +141,14 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   const [newBonus, setNewBonus] = useState({ reason: '', amount: '' });
   
   const [extraDate, setExtraDate] = useState('');
-  const [registrationDate, setRegistrationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [registrationDate, setRegistrationDate] = useState(() => payrollDate(new Date().toISOString()));
 
   const COMMISSION_FLOOR = 0; 
   const COMMISSION_PER_UNIT = 1000;
 
   useEffect(() => {
-    localStorage.setItem('payrollBaseSalary', baseSalary);
-  }, [baseSalary]);
+    localStorage.setItem(salaryKey, baseSalary);
+  }, [baseSalary, salaryKey]);
   
   useEffect(() => {
     setResult(null);
@@ -152,7 +156,16 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     setDeductions([]);
     setBonuses([]);
     setManualAmount('');
-  }, [selectedSeller, manualName, startDate, endDate, paymentType]);
+  }, [selectedSeller, manualName, startDate, endDate, paymentType, isManualName]);
+
+  useEffect(() => {
+    setResult(null);
+  }, [baseSalary, manualAmount, sales, layaways]);
+
+  useEffect(() => {
+    const name = isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '';
+    setLoginDays(days => days.map(day => ({ ...day, unitsSold: payrollShiftUnits([...sales, ...layaways], scope, name, day.date, day.startTime, day.endTime) })));
+  }, [sales, layaways, selectedSeller, manualName, isManualName, companyId, currentStore?.id]);
 
   const getStandardSchedule = (dateStr: string) => {
     const date = new Date(dateStr + 'T12:00:00');
@@ -189,15 +202,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     }
   };
 
-  const toLocalDateString = (date: Date) => {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   const handleLoadDays = () => {
-    const currentName = isManualName ? manualName : selectedSeller;
+    const currentName = isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '';
     if (!currentName || !startDate || !endDate) {
       alert('Por favor, ingresa el destinatario y el periodo.');
       return;
@@ -208,47 +214,27 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         return;
     }
 
-    const startFilterDate = new Date(startDate + 'T00:00:00');
-    const endFilterDate = new Date(endDate + 'T23:59:59');
-
+    if (!scope.storeId || startDate > endDate) {
+      alert('Selecciona una sede y un periodo válido.'); return;
+    }
+    const matchingSellers = sellers.filter(seller => seller.name === currentName);
+    if (matchingSellers.length > 1) {
+      alert('Hay usuarios con el mismo nombre en esta empresa. Las ventas antiguas no permiten distinguirlos; usa nombres únicos antes de calcular automáticamente.'); return;
+    }
+    const sellerId = isManualName ? matchingSellers[0]?.id || '' : selectedSeller;
     const loginsByDay = new Map<string, LoginRecord[]>();
-    loginHistory
-      .filter(record => {
-        const recordDate = new Date(record.date);
-        return record.sellerName === currentName && recordDate >= startFilterDate && recordDate <= endFilterDate;
-      })
-      .forEach(record => {
-        const dateStr = toLocalDateString(new Date(record.date));
-        if (!loginsByDay.has(dateStr)) {
-          loginsByDay.set(dateStr, []);
-        }
-        loginsByDay.get(dateStr)!.push(record);
-      });
-
+    payrollLogins(loginHistory, scope, sellerId, currentName, startDate, endDate).forEach(record => {
+      const date = payrollDate(record.date);
+      loginsByDay.set(date, [...(loginsByDay.get(date) || []), record]);
+    });
     const salesAndLayawaysByDay = new Map<string, number>();
-
-    const processTransactions = (transactions: (Sale | Layaway)[]) => {
-      transactions.forEach(t => {
-        // Solo contamos unidades si la transacción fue creada en el periodo
-        // Y si NO es una venta que viene de un apartado (para no duplicar unidades)
-        const isSettledLayaway = (t as Sale).layawayId;
-        const tDate = new Date(t.createdAt);
-        
-        if (!isSettledLayaway && tDate >= startFilterDate && tDate <= endFilterDate) {
-          if (t.seller === currentName) {
-            const dateStr = toLocalDateString(tDate);
-            const items = (Array.isArray(t.items) ? t.items : Object.values(t.items || {})) as any[];
-            // Exclude gift products (price 0) from commissionable units
-            const totalUnits = items.filter(item => item && (item.price || 0) > 0).reduce((sum, item) => sum + (item?.quantity || 0), 0);
-            
-            salesAndLayawaysByDay.set(dateStr, (salesAndLayawaysByDay.get(dateStr) || 0) + totalUnits);
-          }
-        }
-      });
-    };
-
-    processTransactions(sales);
-    processTransactions(layaways.filter(l => l.status !== 'cancelled' && l.status !== 'pre-order'));
+    for (const transaction of [...sales, ...layaways]) {
+      const date = payrollDate(transaction.createdAt);
+      if (!date || date < startDate || date > endDate || !inPayrollScope(transaction, scope) || transaction.seller !== currentName) continue;
+      const sched = getStandardSchedule(date);
+      const units = payrollShiftUnits([transaction], scope, currentName, date, sched.start, sched.end);
+      if (units > 0) salesAndLayawaysByDay.set(date, (salesAndLayawaysByDay.get(date) || 0) + units);
+    }
 
     const allDates = new Set<string>([...loginsByDay.keys(), ...salesAndLayawaysByDay.keys()]);
 
@@ -264,10 +250,10 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
         return {
           date: dateStr,
           unitsSold,
-          logins: dayLogins.map(l => new Date(l.date).toLocaleTimeString('es-CO')),
+          logins: dayLogins.map(l => payrollTime(l.date)),
           startTime: sched.start,
           endTime: sched.end,
-          checked: true,
+          checked: dayLogins.length > 0,
           hasInconsistency
         };
       })
@@ -278,15 +264,24 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   };
   
   const handleToggleDay = (date: string) => {
+    setResult(null);
     setLoginDays(prev => prev.map(day => day.date === date ? { ...day, checked: !day.checked } : day));
   };
 
   const handleUpdateTimes = (date: string, field: 'startTime' | 'endTime', value: string) => {
-    setLoginDays(prev => prev.map(day => day.date === date ? { ...day, [field]: value } : day));
+    setResult(null);
+    const currentName = isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '';
+    setLoginDays(prev => prev.map(day => {
+      if (day.date !== date) return day;
+      const updated = { ...day, [field]: value };
+      return { ...updated, unitsSold: payrollShiftUnits([...sales, ...layaways], scope, currentName, date, updated.startTime, updated.endTime) };
+    }));
   };
   
   const handleAddExtraDay = () => {
     if (!extraDate) return;
+    if (!startDate || !endDate || extraDate < startDate || extraDate > endDate) { alert('La jornada debe estar dentro del periodo seleccionado.'); return; }
+    setResult(null);
     if (loginDays.some(d => d.date === extraDate)) {
         alert("Esta fecha ya está en la lista.");
         return;
@@ -306,21 +301,27 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
   };
 
   const handleCalculate = () => {
-    const currentName = isManualName ? manualName : selectedSeller;
+    const currentName = isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '';
     if (!currentName) {
       alert('Por favor, selecciona un destinatario.');
       return;
     }
 
     if (paymentType === 'nomina') {
+        if (sellers.filter(seller => seller.name === currentName).length > 1) {
+            alert('Hay usuarios con el mismo nombre; no se puede atribuir con seguridad sus ventas antiguas.'); return;
+        }
         const checkedDays = loginDays.filter(day => day.checked);
         if (checkedDays.length === 0) {
             alert('Debes seleccionar al menos un día trabajado para calcular nómina.');
             return;
         }
+        if (checkedDays.some(day => day.date < startDate || day.date > endDate || day.startTime >= day.endTime)) { alert('Revisa las fechas y horarios de las jornadas seleccionadas.'); return; }
         const base = parseFloat(baseSalary);
+        if (!Number.isFinite(base) || base < 0) { alert('Ingresa un sueldo básico válido.'); return; }
         
-        const dailyBreakdown = checkedDays.map(({ date, unitsSold, startTime, endTime }) => {
+        const dailyBreakdown = checkedDays.map(({ date, startTime, endTime }) => {
+            const unitsSold = payrollShiftUnits([...sales, ...layaways], scope, currentName, date, startTime, endTime);
             const commissionableUnits = Math.max(0, unitsSold - COMMISSION_FLOOR);
             const commissionEarned = commissionableUnits * COMMISSION_PER_UNIT;
             const sched = getStandardSchedule(date);
@@ -409,7 +410,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     if (result && !isSaving) {
       const finalTotal = result.totalToPay + totalBonuses - totalDeductions;
       const typeLabel = result.paymentType === 'nomina' ? 'nómina' : (result.paymentType === 'admin' ? 'salario administrativo' : 'pago de utilidades');
-      const finalPaidAt = new Date(registrationDate + 'T12:00:00').toISOString();
+      const finalPaidAt = new Date(registrationDate + 'T12:00:00-05:00').toISOString();
 
       if (window.confirm(`¿Confirmas el registro del ${typeLabel} de ${formatCOP(finalTotal)} para ${result.sellerName}?`)) {
         setIsSaving(true);
@@ -420,7 +421,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
                 const hrs = calculateHoursDiff(day.startTime, day.endTime);
                 return { 
                     date: day.date, 
-                    times: day.logins,
+                    times: day.logins.filter(time => time >= day.startTime && time < day.endTime),
                     startTime: day.startTime,
                     endTime: day.endTime,
                     hoursWorked: hrs,
@@ -430,6 +431,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
             const finalData = {
               ...result,
+              storeId: scope.storeId,
+              companyId,
               totalToPay: finalTotal,
               deductions,
               totalDeductions,
@@ -472,18 +475,16 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
   const filteredHistory = useMemo(() => {
     const normalizedSearch = normalizeText(historySearchTerm);
-    return [...payrollHistory]
+    return payrollHistory.filter(record => inPayrollScope(record, scope))
       .filter(record => {
-        const recordDate = new Date(record.paidAt);
-        const start = historyStartDate ? new Date(historyStartDate + 'T00:00:00') : null;
-        const end = historyEndDate ? new Date(historyEndDate + 'T23:59:59') : null;
+        const recordDate = payrollDate(record.paidAt);
         const matchesSearch = normalizeText(record.sellerName).includes(normalizedSearch);
-        const matchesStartDate = start ? recordDate >= start : true;
-        const matchesEndDate = end ? recordDate <= end : true;
+        const matchesStartDate = historyStartDate ? recordDate >= historyStartDate : true;
+        const matchesEndDate = historyEndDate ? recordDate <= historyEndDate : true;
         return matchesSearch && matchesStartDate && matchesEndDate;
       })
       .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
-  }, [payrollHistory, historySearchTerm, historyStartDate, historyEndDate]);
+  }, [payrollHistory, historySearchTerm, historyStartDate, historyEndDate, companyId, currentStore?.id]);
 
   const formatSimpleTime = (time: string) => {
       if (!time) return '';
@@ -497,6 +498,8 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Nómina y Comisiones</h2>
+        <p className="text-sm text-gray-500 mb-4">Tienda: {currentStore?.name || 'Sin seleccionar'}. Los cálculos usan únicamente esta sede y los horarios elegidos.</p>
+        <p className="text-xs text-gray-500 mb-4">Revisa Entrada y Salida para jornadas parciales. Los inicios de sesión no registran la hora de salida.</p>
         
         <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl shadow-inner mb-6 overflow-x-auto scrollbar-hide">
             <button 
@@ -544,7 +547,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
               ) : (
                   <select id="seller" value={selectedSeller} onChange={e => setSelectedSeller(e.target.value)} className="w-full bg-white dark:bg-primary p-2 rounded-md border border-gray-300 dark:border-gray-700 font-bold">
                     <option value="" disabled>Selecciona...</option>
-                    {sellers.filter(s => !s.isDisabled).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    {sellers.filter(s => !s.isDisabled).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
               )}
             </div>
@@ -652,7 +655,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ sellers, sales, layaways, log
 
                   <div className="flex justify-between items-center px-1">
                     <span className="text-[10px] text-accent font-black uppercase">{day.unitsSold} uds vendidas</span>
-                    <button onClick={() => setLoginDays(prev => prev.filter(d => d.date !== day.date))} className="text-[10px] text-red-500 font-bold hover:underline">Quitar de lista</button>
+                    <button onClick={() => { setResult(null); setLoginDays(prev => prev.filter(d => d.date !== day.date)); }} className="text-[10px] text-red-500 font-bold hover:underline">Quitar de lista</button>
                   </div>
                 </div>
               )})}

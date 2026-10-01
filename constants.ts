@@ -57,7 +57,10 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.119', date: '2026-09-30', description: 'Conteo sin Categorías en Cero', isCurrent: true,
+  { version: '1.1.120', date: '2026-09-30', description: 'Nómina por Empresa, Sede y Horario', isCurrent: true,
+    changes: ['La nómina filtra accesos y pagos por empresa y sede y utiliza el identificador del vendedor para sus accesos.', 'Las comisiones se calculan dentro del horario de cada jornada en hora Colombia; ventas sin inicio de sesión requieren validar el día.', 'Cambiar sede limpia la liquidación; guardar y eliminar pagos valida la empresa y sede del registro.']
+  },
+  { version: '1.1.119', date: '2026-09-30', description: 'Conteo sin Categorías en Cero', isCurrent: false,
     changes: ['La revisión de apertura oculta categorías cuya existencia total es cero en la sede seleccionada, conservando el catálogo y los historiales. Las existencias negativas siguen visibles para revisar inconsistencias.']
   },
   { version: '1.1.118', date: '2026-09-30', description: 'Protección de Categorías con Productos', isCurrent: false,

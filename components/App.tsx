@@ -612,7 +612,7 @@ const App: React.FC = () => {
             fetchOnce(storeSpecificQuery('stockTakes'), setStockTakes);
             break;
         case View.PAYROLL:
-            fetchOnce(storeSpecificQuery('loginHistory'), setLoginHistory);
+            attach(storeSpecificQuery('loginHistory'), setLoginHistory);
             attach(storeSpecificQuery('payrollHistory'), setPayrollHistory);
             break;
         case View.INCIDENTS:
@@ -2832,14 +2832,19 @@ const App: React.FC = () => {
   };
   
   const handleSavePayroll = async (payrollData: any) => {
-      if (!currentStoreId || !currentUser) return;
+      if (!canLoadStore || !currentStoreId || !currentUser || payrollData.storeId !== currentStoreId || payrollData.companyId !== operationalCompanyId) throw new Error('El cálculo no corresponde a la empresa y sede activas.');
       const newRef = doc(collection(db, 'payrollHistory'));
       const paidAt = payrollData.paidAt || new Date().toISOString();
       await setDoc(newRef, cleanObject({ ...payrollData, id: newRef.id, paidAt, paidBy: currentUser.name, storeId: currentStoreId, companyId: operationalCompanyId }));
   };
 
   const handleDeletePayroll = async (payrollId: string) => {
-      await deleteDoc(doc(db, 'payrollHistory', payrollId));
+      if (!canLoadStore || !currentStoreId || !currentUser) throw new Error('Selecciona una sede autorizada.');
+      const ref = doc(db, 'payrollHistory', payrollId);
+      const snapshot = await getDoc(ref);
+      const data = snapshot.data();
+      if (!data || data.storeId !== currentStoreId || (data.companyId && data.companyId !== operationalCompanyId)) throw new Error('El pago pertenece a otra empresa o sede.');
+      await deleteDoc(ref);
   };
   
   const handleBulkAddCustomers = async (newCustomers: any[]) => {
@@ -3066,7 +3071,7 @@ const App: React.FC = () => {
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={roles} />}
-        {currentView === View.PAYROLL && <PayrollView sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
+        {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
         {currentView === View.SETTINGS && <SettingsView stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={roles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={roles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={isDeveloper} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={roles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
