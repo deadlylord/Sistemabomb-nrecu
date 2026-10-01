@@ -1,3 +1,4 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { useAsyncScope } from '../services/useAsyncScope';
 import { resolveTenantRole } from '../services/tenantIdentity';
 import { DEFAULT_COMPANY_ID } from '../types';
@@ -186,7 +187,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
 
   const handleExportConsolidatedProducts = () => {
     const uniqueProducts = new Map<string, Product>();
-    allInventory.forEach(product => {
+    selectAnalyticsRows<Product>('inventory', allInventory, analyticsScope(companyId, stores)).forEach(product => {
       if (!product || !product.name) return;
       const key = product.name.toLowerCase().trim();
       if (!uniqueProducts.has(key)) {
@@ -194,7 +195,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
       }
     });
     const productsToExport = Array.from(uniqueProducts.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+    const categoryMap = new Map(selectAnalyticsRows<Category>('categories', categories, analyticsScope(companyId, stores)).map(c => [c.id, c.name]));
     const headers = ['Nombre', 'Costo', 'Proveedor', 'Categoría'];
     const csvRows = [headers.join(',')];
     productsToExport.forEach(product => {

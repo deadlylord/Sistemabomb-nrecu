@@ -1,3 +1,4 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { getInventoryCategorySummary } from '../services/inventoryCategories';
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Product, Category, View, Store, ProductHistoryLog, Sale, Purchase, Layaway, ProductChangeType, Seller, Role } from '../types';
@@ -14,6 +15,7 @@ import { TagIcon } from './Icons';
 import { normalizeText } from '../constants';
 
 interface InventoryViewProps {
+  companyId: string;
   inventory: Product[];
   allInventory: Product[];
   sales: Sale[];
@@ -58,7 +60,17 @@ type SortConfig = {
 };
 
 
-const InventoryView: React.FC<InventoryViewProps> = ({ inventory, allInventory, sales, purchases, layaways, categories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onDeleteProductHistoryLog }) => {
+const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: rawInventory, allInventory: rawAllInventory, sales: rawSales, purchases: rawPurchases, layaways: rawLayaways, categories: rawCategories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory: rawProductHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onDeleteProductHistoryLog }) => {
+  const scope = analyticsScope(companyId, stores);
+  const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(currentStoreId) ? [currentStoreId] : []) };
+  const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
+  const allInventory = selectAnalyticsRows<Product>('inventory', rawAllInventory, scope);
+  const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
+  const purchases = selectAnalyticsRows<Purchase>('purchases', rawPurchases, storeScope);
+  const layaways = selectAnalyticsRows<Layaway>('layaways', rawLayaways, storeScope);
+  const categories = selectAnalyticsRows<Category>('categories', rawCategories, scope);
+  const productHistory = selectAnalyticsRows<ProductHistoryLog>('productHistory', rawProductHistory, storeScope);
+
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   

@@ -242,3 +242,28 @@ test('legacy role cloning preserves company permissions but cannot carry platfor
  records.set('roles/platform',{name:'Developer',permissions:[]});
  await assert.rejects(ensureCompanyRole({},'platform','mayla'));
 }));
+
+test('incidents reject foreign exchange products and original sales atomically',()=>withWriter(async({createTenantWriter,records,writes,reads})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('inventory/own',{storeId:'mayla-1',companyId:'mayla',stock:5});
+ records.set('inventory/foreign',{storeId:'metro',companyId:'bombon',stock:8});
+ records.set('sales/foreign',{storeId:'metro',companyId:'bombon'});
+ const incident={storeId:'mayla-1',type:'Cambio de Producto',returnedItems:[{productId:'own',quantity:1}],takenItems:[{productId:'foreign',quantity:1}]};
+ const batch=writer.writeBatch();batch.update(ref('inventory/own'),{stock:6});batch.set(ref('incidents/new'),incident);
+ await assert.rejects(batch.commit());assert.equal(writes.length,0);assert.equal(records.get('inventory/own').stock,5);
+ await assert.rejects(writer.setDoc(ref('incidents/new'),{...incident,takenItems:[],originalSaleId:'foreign'}));
+ assert.equal(writes.length,0);
+}));
+
+test('incident links respect source store, allow own-company transfers and reuse product reads',()=>withWriter(async({createTenantWriter,records,reads})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('inventory/own',{storeId:'mayla-1',companyId:'mayla'});
+ records.set('inventory/other-store',{storeId:'mayla-2',companyId:'mayla'});
+ records.set('sales/other-store',{storeId:'mayla-2',companyId:'mayla'});
+ await assert.rejects(writer.setDoc(ref('incidents/warranty'),{storeId:'mayla-1',productId:'other-store'}));
+ await assert.rejects(writer.setDoc(ref('incidents/exchange'),{storeId:'mayla-1',originalSaleId:'other-store'}));
+ await writer.setDoc(ref('incidents/transfer'),{storeId:'mayla-2',type:'Solicitud de Traslado',fromStoreId:'mayla-1',toStoreId:'mayla-2',productId:'own'});
+ reads.length=0;
+ await writer.setDoc(ref('incidents/exchange'),{storeId:'mayla-1',returnedItems:[{productId:'own'}],takenItems:[{productId:'own'}]});
+ assert.equal(reads.filter(path=>path==='inventory/own').length,1);
+}));

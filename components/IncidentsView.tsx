@@ -1,3 +1,4 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import React, { useState, useMemo } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
@@ -8,6 +9,8 @@ import EditIncidentModal from './EditIncidentModal';
 import EditExchangeIncidentModal from './EditExchangeIncidentModal';
 
 interface IncidentsViewProps {
+  companyId: string;
+  activeStoreId: string;
   incidents: Incident[];
   inventory: Product[];
   currentUser: Seller;
@@ -23,7 +26,14 @@ interface IncidentsViewProps {
   onDeleteIncident: (incidentId: string) => void;
 }
 
-const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, currentUser, roles, sales, stores, customers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
+const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
+  const scope = analyticsScope(companyId, stores);
+  const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
+  const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, storeScope);
+  const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
+  const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
+  const customers = selectAnalyticsRows<Customer>('customers', rawCustomers, storeScope);
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditExchangeModalOpen, setIsEditExchangeModalOpen] = useState(false);
@@ -305,6 +315,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ incidents, inventory, cur
             sales={sales}
             stores={stores}
             currentUser={currentUser}
+            activeStoreId={activeStoreId}
             roles={roles}
             customers={customers}
             onCreateIncident={onCreateIncident}

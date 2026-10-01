@@ -1,3 +1,4 @@
+import { selectAnalyticsRows } from '../services/analyticsScope';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { DEFAULT_COMPANY_ID } from '../types';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -48,12 +49,15 @@ export interface LooseTagCheckResult {
 }
 
 export const TagScanningView: React.FC<TagScanningViewProps> = ({
-  inventory,
+  inventory: rawInventory,
   store,
   currentUser,
-  categories,
+  categories: rawCategories,
   isAdmin
 }) => {
+  const scope = useMemo(() => ({ companyId: store.companyId || DEFAULT_COMPANY_ID, storeIds: new Set([store.id]) }), [store.id, store.companyId]);
+  const inventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawInventory, scope), [rawInventory, scope]);
+  const categories = useMemo(() => selectAnalyticsRows<Category>('categories', rawCategories, scope), [rawCategories, scope]);
   const { setDoc, updateDoc, deleteDoc } = useMemo(() => createTenantWriter(db, { companyId: store.companyId || DEFAULT_COMPANY_ID, storeIds: new Set([store.id]) }), [store.id, store.companyId]);
   const [sessionData, setSessionData] = useState<{
     id: string;
@@ -177,18 +181,15 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
         if (data.scanHistory && Array.isArray(data.scanHistory)) {
           setRecentScans(data.scanHistory);
           try {
-            localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(data.scanHistory));
+            localStorage.setItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`, JSON.stringify(data.scanHistory));
           } catch (e) {}
         } else {
-          const saved = localStorage.getItem(`tag_scans_${store.id}`);
-          if (saved) {
-            try { setRecentScans(JSON.parse(saved)); } catch (e) {}
-          }
+          setRecentScans([]);
         }
       } else {
         setSessionData(null);
         setRecentScans([]);
-        localStorage.removeItem(`tag_scans_${store.id}`);
+        localStorage.removeItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`);
       }
       setIsLoading(false);
     }, (error) => {
@@ -221,7 +222,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       };
       await setDoc(sessionDocRef, newSession);
       setRecentScans([]);
-      localStorage.removeItem(`tag_scans_${store.id}`);
+      localStorage.removeItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`);
       setScanStatus({ type: 'success', message: '¡Sesión de identificación de etiquetas iniciada con éxito!' });
     } catch (error) {
       console.error("Error starting session:", error);
@@ -238,7 +239,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       await deleteDoc(sessionDocRef);
       setSessionData(null);
       setRecentScans([]);
-      localStorage.removeItem(`tag_scans_${store.id}`);
+      localStorage.removeItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`);
       setIsCameraActive(false);
       setScanStatus({ type: null, message: '' });
     } catch (error) {
@@ -326,7 +327,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
       setRecentScans(updatedHistory);
       try {
-        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+        localStorage.setItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`, JSON.stringify(updatedHistory));
       } catch (e) {}
     } catch (error) {
       console.error("Error logging scan:", error);
@@ -453,7 +454,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
       setRecentScans(updatedHistory);
       try {
-        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+        localStorage.setItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`, JSON.stringify(updatedHistory));
       } catch (e) {}
     } catch (err) {
       console.error("Error removing scan count:", err);
@@ -544,7 +545,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
       setRecentScans(updatedHistory);
       try {
-        localStorage.setItem(`tag_scans_${store.id}`, JSON.stringify(updatedHistory));
+        localStorage.setItem(`tag_scans_${store.companyId || DEFAULT_COMPANY_ID}_${store.id}`, JSON.stringify(updatedHistory));
       } catch (e) {}
 
       // Reset & close modal

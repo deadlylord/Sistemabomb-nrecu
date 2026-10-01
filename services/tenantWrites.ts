@@ -1,7 +1,7 @@
 import { assertCompanyRole, isPlatformRole } from './developerAccess';
 import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Firestore, DocumentReference, WriteBatch } from 'firebase/firestore';
-import { DEFAULT_COMPANY_ID } from '../types';
+import { DEFAULT_COMPANY_ID, IncidentType } from '../types';
 
 export type TenantScope = { companyId: string; storeIds: Set<string> };
 export function assertTenantData(collectionName: string, data: any, scope: TenantScope) {
@@ -61,7 +61,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       if (['sellers', 'customers'].includes(name) && data.storeId) references.push(doc(db, 'stores', data.storeId));
       if (data.roleId) references.push(doc(db, 'roles', data.roleId));
       if (data.productId && !data.productId.startsWith('voucher-')) references.push(doc(db, 'inventory', data.productId));
-      for (const item of Object.values(data.items || {}) as any[]) {
+      for (const item of [...Object.values(data.items || {}), ...(name === 'incidents' ? [...(data.returnedItems || []), ...(data.takenItems || [])] : [])] as any[]) {
         const id = item?.productId || item?.id;
         if (id && !id.startsWith('voucher-')) references.push(doc(db, 'inventory', id));
       }
@@ -81,6 +81,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       // Historical links may outlive their source document. Existing targets,
       // however, must always belong to this company, including staged mirrors.
       const historicalReferences: DocumentReference[] = [];
+      if (data.originalSaleId) historicalReferences.push(doc(db, 'sales', data.originalSaleId));
       if (data.saleId) historicalReferences.push(doc(db, 'sales', data.saleId));
       if (data.layawayId) historicalReferences.push(doc(db, 'layaways', data.layawayId));
       if (data.relatedRecordId) historicalReferences.push(doc(db, 'financialRecords', data.relatedRecordId));
@@ -91,10 +92,11 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       for (const entry of data.verification || []) if (entry.categoryId) historicalReferences.push(doc(db, 'categories', entry.categoryId));
       for (const ref of historicalReferences) {
         const staged = pending.get(ref.path);
-        if (staged) assertTenantData(collectionName(ref), { ...staged, companyId: staged.companyId || scope.companyId }, scope);
-        else {
-          const linked = await load(ref);
-          if (linked.exists()) assertTenantData(collectionName(ref), linked.data(), scope);
+        const linked = staged ? null : await load(ref);
+        const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked?.exists() ? linked.data() : null;
+        if (linkedData) {
+          assertTenantData(collectionName(ref), linkedData, scope);
+          if (name === 'incidents' && collectionName(ref) === 'sales' && ref.id === data.originalSaleId && linkedData.storeId !== data.storeId) throw new Error('La venta original pertenece a otra sede.');
         }
       }
       for (const ref of references) {
@@ -104,8 +106,8 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
         const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked.data();
         assertTenantData(collectionName(ref), linkedData, scope);
         if (collectionName(ref) === 'roles') assertCompanyRole(linkedData);
-        const expectedStore = name === 'inventoryTransfers' ? data.fromStoreId : data.storeId;
-        if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers'].includes(name)) {
+        const expectedStore = name === 'inventoryTransfers' || (name === 'incidents' && data.type === IncidentType.INVENTORY_TRANSFER_REQUEST) ? data.fromStoreId : data.storeId;
+        if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers', 'incidents'].includes(name)) {
           if (linkedData.storeId !== expectedStore) throw new Error('El producto vinculado pertenece a otra sede.');
           if (['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name) && linkedData.categoryId !== data.categoryId) throw new Error('El producto no pertenece a la categoría del conteo.');
         }

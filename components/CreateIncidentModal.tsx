@@ -12,6 +12,7 @@ interface CreateIncidentModalProps {
   sales: Sale[];
   stores: Store[];
   currentUser: Seller;
+  activeStoreId?: string;
   roles: Role[];
   customers: Customer[];
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; surplusPaymentMethod?: PaymentMethod; incidentDate?: string; }) => void;
@@ -24,7 +25,7 @@ const toYYYYMMDD = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClose, inventory, sales, stores, currentUser, roles, customers, onCreateIncident }) => {
+const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClose, inventory, sales, stores, currentUser, activeStoreId, roles, customers, onCreateIncident }) => {
   const [type, setType] = useState<IncidentType>(IncidentType.DAMAGED);
   
   // Common
@@ -65,7 +66,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
 
 
   // Transfer Request
-  const [fromStoreId, setFromStoreId] = useState<string>(currentUser.storeId);
+  const [fromStoreId, setFromStoreId] = useState<string>(activeStoreId || currentUser.storeId);
   const [toStoreId, setToStoreId] = useState<string>('');
   const [quantity, setQuantity] = useState('');
 

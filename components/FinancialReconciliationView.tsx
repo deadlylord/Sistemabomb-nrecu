@@ -1,8 +1,9 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { createTenantWriter } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
+import { DEFAULT_COMPANY_ID, FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
@@ -95,7 +96,13 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores: rawStores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, incidents: rawIncidents, currentUser, onNavigate, onAddExpense }) => {
+  const stores = useMemo(() => rawStores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === companyId), [companyId, rawStores]);
+  const scope = useMemo(() => analyticsScope(companyId, stores), [companyId, stores]);
+  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
+  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
+  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, scope), [rawExpenses, scope]);
+  const incidents = useMemo(() => selectAnalyticsRows<Incident>('incidents', rawIncidents, scope), [rawIncidents, scope]);
   const storeKey = JSON.stringify(stores.map(store => store.id).sort());
   const writer = useMemo(() => createTenantWriter(db, { companyId, storeIds: new Set<string>(JSON.parse(storeKey)) }), [companyId, storeKey]);
   const { setDoc, updateDoc, deleteDoc } = writer;
@@ -107,8 +114,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const activeStoreId = propsActiveStoreId || internalActiveStoreId;
   const setActiveStoreId = onSetActiveStoreId || setInternalActiveStoreId;
 
-  const [records, setRecords] = useState<FinancialRecord[]>([]);
-  const [allRecords, setAllRecords] = useState<FinancialRecord[]>([]);
+
+  const [rawAllRecords, setAllRecords] = useState<FinancialRecord[]>([]);
+  const allRecords = useMemo(() => selectAnalyticsRows<FinancialRecord>('financialRecords', rawAllRecords, scope), [rawAllRecords, scope]);
+  const records = useMemo(() => allRecords.filter(record => record.storeId === activeStoreId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id)), [allRecords, activeStoreId]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [closuresActiveTab, setClosuresActiveTab] = useState<AccountType>('cash');
   const [sisteRangeStart, setSisteRangeStart] = useState('');
@@ -144,7 +153,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [tempInitialBalances, setTempInitialBalances] = useState({ cash: 0, qr: 0, addi: 0 });
 
   // Historial y restauración de auditoría para el libro mayor
-  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const [rawHistoryLogs, setHistoryLogs] = useState<any[]>([]);
+  const historyLogs = useMemo(() => selectAnalyticsRows<any>('financialRecordsHistory', rawHistoryLogs, scope), [rawHistoryLogs, scope]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [historyActionFilter, setHistoryActionFilter] = useState<'all' | 'create' | 'update' | 'delete' | 'restore'>('all');
@@ -184,15 +194,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   useCompanyCollection('financialRecords', stores.map(store => store.id), `${currentUser.id}:${companyId}`, true, setAllRecords);
   useCompanyCollection('financialRecordsHistory', stores.map(store => store.id), `${currentUser.id}:${companyId}`, showHistoryModal, setHistoryLogs);
 
-  useEffect(() => {
-    if (!activeStoreId) return;
-    const list = allRecords.filter(r => r.storeId === activeStoreId);
-    setRecords(list.sort((a, b) => {
-        const timeA = new Date(a.date).getTime();
-        const timeB = new Date(b.date).getTime();
-        return timeB - timeA || b.id.localeCompare(a.id);
-    }));
-  }, [activeStoreId, allRecords]);
+
 
   // Limpiar selección de movimientos al cambiar de cuenta o de sede
   useEffect(() => {
@@ -983,7 +985,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleExportAccountExcel = (customRecords?: any[], customFilenamePrefix?: string) => {
-    const listToExport = customRecords || recordsWithBalance;
+    const listToExport = selectAnalyticsRows<any>('financialRecords', customRecords || recordsWithBalance, { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) });
     if (listToExport.length === 0) {
       alert("No hay movimientos para exportar en esta cuenta.");
       return;
