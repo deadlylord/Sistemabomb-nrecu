@@ -1,5 +1,7 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
+import { useAsyncScope } from '../services/useAsyncScope';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, Product, Purchase, PaymentMethod, FinancialRecord, View, Loan } from '../types';
+import { Sale, Layaway, Expense, Store, PayrollRecord, Seller, Product, Purchase, PaymentMethod, FinancialRecord, View, Loan, DEFAULT_COMPANY_ID } from '../types';
 import { formatCOP } from '../constants';
 import { SparklesIcon, DollarIcon, PlusCircleIcon, TrashIcon, ChartBarIcon, ReceiptIcon, EditIcon, CheckIcon, HistoryIcon, CrossIcon, SettingsIcon, PackageIcon, ChevronDownIcon } from './Icons';
 import { getAccountingChatResponse } from '../services/geminiService';
@@ -78,14 +80,14 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 };
 
 const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
-  sales,
-  layaways,
-  expenses,
-  payrollHistory,
-  inventory,
-  purchases,
-  financialRecords,
-  loans,
+  sales: rawSales,
+  layaways: rawLayaways,
+  expenses: rawExpenses,
+  payrollHistory: rawPayrollHistory,
+  inventory: rawInventory,
+  purchases: rawPurchases,
+  financialRecords: rawFinancialRecords,
+  loans: rawLoans,
   currentStore,
   currentUser,
   onAddExpense,
@@ -99,6 +101,17 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   onToggleFinancialRecordAccounting,
   onNavigate
 }) => {
+  const scope = useMemo(() => analyticsScope(currentStore?.companyId || DEFAULT_COMPANY_ID, currentStore ? [currentStore] : []), [currentStore]);
+  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
+  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
+  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, scope), [rawExpenses, scope]);
+  const payrollHistory = useMemo(() => selectAnalyticsRows<PayrollRecord>('payrollHistory', rawPayrollHistory, scope), [rawPayrollHistory, scope]);
+  const inventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawInventory, scope), [rawInventory, scope]);
+  const purchases = useMemo(() => selectAnalyticsRows<Purchase>('purchases', rawPurchases, scope), [rawPurchases, scope]);
+  const financialRecords = useMemo(() => selectAnalyticsRows<FinancialRecord>('financialRecords', rawFinancialRecords, scope), [rawFinancialRecords, scope]);
+  const loans = useMemo(() => selectAnalyticsRows<Loan>('loans', rawLoans, scope), [rawLoans, scope]);
+
+
   const [activeTab, setActiveTab] = useState<'summary' | 'loans' | 'ai'>('summary');
   const [expandedConceptGroups, setExpandedConceptGroups] = useState<Record<string, boolean>>({});
   const [expandedBreakdownCategories, setExpandedBreakdownCategories] = useState<Record<string, boolean>>({});
@@ -131,6 +144,10 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
   const [userInput, setUserInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const chatScopeKey = JSON.stringify([currentUser.id, currentStore?.companyId, currentStore?.id, selectedYear, selectedMonth]);
+  const beginChat = useAsyncScope(chatScopeKey);
+  useEffect(() => { setIsAiLoading(false); }, [chatScopeKey]);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const currentMonthName = monthNames[selectedMonth];
@@ -386,9 +403,11 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
 
   // --- Chat Functions ---
   const requestSpecialReport = async (query: string) => {
+    const isCurrent = beginChat();
     setIsAiLoading(true);
     const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: query }];
     await onUpdateChatMessages(newMessages);
+    if (!isCurrent()) return;
 
     try {
         const apiHistory = chatMessages.map(msg => ({
@@ -397,22 +416,26 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         }));
 
         const response = await getAccountingChatResponse(stats, apiHistory, query);
+        if (!isCurrent()) return;
         const finalMessages: ChatMessage[] = [...newMessages, { role: 'model', content: response }];
         await onUpdateChatMessages(finalMessages);
     } catch (error) {
+        if (!isCurrent()) return;
         const errorMessages: ChatMessage[] = [...newMessages, { role: 'model', content: "Error al generar el reporte solicitado." }];
         await onUpdateChatMessages(errorMessages);
     } finally {
-        setIsAiLoading(false);
+        if (isCurrent()) setIsAiLoading(false);
     }
   }
 
   const handleStartAudit = async () => {
+    const isCurrent = beginChat();
     setIsAiLoading(true);
     const initialQuery = `Haz una auditoría detallada de mis números de ${currentMonthName} ${selectedYear} y dame consejos estratégicos para mejorar.`;
     
     try {
         const response = await getAccountingChatResponse(stats, [], initialQuery);
+        if (!isCurrent()) return;
         const finalMessages: ChatMessage[] = [
             { role: 'user', content: initialQuery },
             { role: 'model', content: response }
@@ -421,11 +444,12 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     } catch (error) {
         console.error(error);
     } finally {
-        setIsAiLoading(false);
+        if (isCurrent()) setIsAiLoading(false);
     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
+    const isCurrent = beginChat();
     e.preventDefault();
     if (!userInput.trim() || isAiLoading) return;
 
@@ -434,6 +458,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     
     const newMessages: ChatMessage[] = [...chatMessages, { role: 'user', content: userMsg }];
     await onUpdateChatMessages(newMessages);
+    if (!isCurrent()) return;
     setIsAiLoading(true);
 
     try {
@@ -443,18 +468,22 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
         }));
 
         const response = await getAccountingChatResponse(stats, apiHistory, userMsg);
+        if (!isCurrent()) return;
         const finalMessages: ChatMessage[] = [...newMessages, { role: 'model', content: response }];
         await onUpdateChatMessages(finalMessages);
     } catch (error) {
+        if (!isCurrent()) return;
         const errorMessages: ChatMessage[] = [...newMessages, { role: 'model', content: "Hubo un problema procesando tu mensaje. Revisa tu conexión." }];
         await onUpdateChatMessages(errorMessages);
     } finally {
-        setIsAiLoading(false);
+        if (isCurrent()) setIsAiLoading(false);
     }
   };
 
   const handleResetChat = async () => {
       if (window.confirm("¿Deseas reiniciar la conversación con el contador? Esto borrará el historial de la nube para todos los dispositivos de esta sede.")) {
+          beginChat();
+          setIsAiLoading(false);
           await onUpdateChatMessages([]);
           setUserInput('');
       }

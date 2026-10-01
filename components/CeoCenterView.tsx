@@ -1,3 +1,5 @@
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
+import { useAsyncScope } from '../services/useAsyncScope';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -15,6 +17,9 @@ import { formatCOP } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 
 interface CeoCenterViewProps {
+  companyId: string;
+  selectedStoreId: string;
+  onSelectStore: (storeId: string) => void;
   sales: Sale[];
   layaways: Layaway[];
   inventory: Product[];
@@ -32,21 +37,32 @@ interface CeoCenterViewProps {
 type SubTab = 'consolidated' | 'product_performance' | 'slow' | 'store_info' | 'ai';
 
 export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
-  sales,
-  layaways,
-  inventory,
-  purchases,
-  expenses,
-  stores,
-  sellers,
-  ceoNotes,
+  companyId, selectedStoreId, onSelectStore,
+  sales: rawSales,
+  layaways: rawLayaways,
+  inventory: rawInventory,
+  purchases: rawPurchases,
+  expenses: rawExpenses,
+  stores: rawStores,
+  sellers: rawSellers,
+  ceoNotes: rawCeoNotes,
   currentUser,
   onAddCeoNote,
   onNavigate,
   categories = []
 }) => {
+  const scope = useMemo(() => analyticsScope(companyId, rawStores), [companyId, rawStores]);
+  const stores = useMemo(() => rawStores.filter(store => scope.storeIds.has(store.id)), [rawStores, scope]);
+  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
+  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
+  const inventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawInventory, scope), [rawInventory, scope]);
+  const purchases = useMemo(() => selectAnalyticsRows<Purchase>('purchases', rawPurchases, scope), [rawPurchases, scope]);
+  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, scope), [rawExpenses, scope]);
+  const sellers = useMemo(() => selectAnalyticsRows<Seller>('sellers', rawSellers, scope), [rawSellers, scope]);
+  const ceoNotes = useMemo(() => selectAnalyticsRows<CeoDailyNote>('daily_notes', rawCeoNotes, scope), [rawCeoNotes, scope]);
+
   const [activeTab, setActiveTab] = useState<SubTab>('consolidated');
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('all');
+
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('month');
   
   // Product Performance state
@@ -62,6 +78,14 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
   const [proactiveInsights, setProactiveInsights] = useState<string>('');
   const [isInsightsLoading, setIsInsightsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const aiScopeKey = JSON.stringify([companyId, currentUser.id, selectedStoreId, timeRange]);
+  const beginChat = useAsyncScope(aiScopeKey);
+  const beginInsights = useAsyncScope(aiScopeKey);
+  useEffect(() => {
+    setChatMessages([]); setChatInput(''); setProactiveInsights('');
+    setIsAiLoading(false); setIsInsightsLoading(false);
+  }, [aiScopeKey]);
 
   // Exclude training stores
   const nonTrainingStores = useMemo(() => stores.filter(s => !s.name.toLowerCase().includes('training')), [stores]);
@@ -806,9 +830,9 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
     };
   }, [filteredLayaways, stores]);
 
-  // Fetch AI Pro-active insights once data or store changes
-  useEffect(() => {
-    const fetchInsights = async () => {
+  // Insights run only on request, using the current selected scope.
+  const fetchInsights = async () => {
+      const isCurrent = beginInsights();
       setIsInsightsLoading(true);
       try {
         const payload = {
@@ -827,24 +851,24 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
           estrellas: starProducts.map(s => ({ name: s.product.name, qty: s.qty, total: s.totalRev })),
           abonos_pendientes: layawaysOverview.totalPendingAmt,
           notas_vendedoras: filteredCeoNotes.filter(n => n.energia || n.pregunta_cliente).slice(0, 5)
-        };
+      };
         const insights = await generateProactiveCeoInsights(payload);
-        setProactiveInsights(insights);
+        if (isCurrent()) setProactiveInsights(insights);
       } catch (err) {
+        if (!isCurrent()) return;
         console.error("Error loading proactive insights:", err);
         setProactiveInsights("Asegúrate de registrar tus cuentas de gastos, ventas y energía hoy para que pueda darte sugerencias más profundas.");
       } finally {
-        setIsInsightsLoading(false);
+        if (isCurrent()) setIsInsightsLoading(false);
       }
-    };
+  };
 
-    fetchInsights();
-  }, [selectedStoreId, timeRange, totalSalesAmount, inventoryAlerts.lowStock.length, filteredCeoNotes.length]);
 
   // Chat Submission handler
   const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isAiLoading) return;
+    const isCurrent = beginChat();
 
     const userMsg = chatInput.trim();
     setChatInput('');
@@ -874,12 +898,13 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
       }));
 
       const reply = await getCeoCenterChatResponse(payload, historyFormatted, userMsg);
-      setChatMessages(prev => [...prev, { role: 'model', content: reply }]);
+      if (isCurrent()) setChatMessages(prev => [...prev, { role: 'model', content: reply }]);
     } catch (err) {
+      if (!isCurrent()) return;
       console.error("Street IA error:", err);
       setChatMessages(prev => [...prev, { role: 'model', content: "Lo siento, tuve un problema analizando los balances de tus sedes en este momento. Revisa tu conexión." }]);
     } finally {
-      setIsAiLoading(false);
+      if (isCurrent()) setIsAiLoading(false);
     }
   };
 
@@ -913,7 +938,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
         <div className="flex flex-wrap gap-2.5">
           <select 
             value={selectedStoreId} 
-            onChange={(e) => setSelectedStoreId(e.target.value)}
+            onChange={(e) => onSelectStore(e.target.value)}
             className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl py-2 px-3.5 text-xs font-black uppercase tracking-wider outline-none cursor-pointer focus:ring-2 focus:ring-indigo-400"
           >
             <option value="all" className="bg-slate-900 text-white font-bold">Todas las Sedes</option>
@@ -921,6 +946,9 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
               <option key={store.id} value={store.id} className="bg-slate-900 text-white font-bold">{store.name}</option>
             ))}
           </select>
+          <button onClick={fetchInsights} disabled={isInsightsLoading} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-50">
+            {isInsightsLoading ? 'Analizando...' : 'Generar sugerencias IA'}
+          </button>
 
           <div className="flex bg-white/10 backdrop-blur-md border border-white/20 p-1 rounded-xl">
             {(['today', 'week', 'month', 'year'] as const).map((range) => (

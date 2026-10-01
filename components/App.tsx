@@ -173,6 +173,12 @@ const App: React.FC = () => {
   const [isVerificationInventoryLoading, setIsVerificationInventoryLoading] = useState(false);
   const [verificationInventoryError, setVerificationInventoryError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [ceoActivationScope, setCeoActivationScope] = useState('');
+  const [ceoSelectedStoreId, setCeoSelectedStoreId] = useState<string>('all');
+  const [ceoSales, setCeoSales] = useState<Sale[]>([]);
+  const [ceoLayaways, setCeoLayaways] = useState<Layaway[]>([]);
+  const [ceoPurchases, setCeoPurchases] = useState<Purchase[]>([]);
+  const [ceoExpenses, setCeoExpenses] = useState<Expense[]>([]);
   const [isCeoCenterActivated, setIsCeoCenterActivated] = useState(false);
   
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
@@ -195,6 +201,7 @@ const App: React.FC = () => {
 
   const [loadFullPurchases, setLoadFullPurchases] = useState(false);
 
+  const [accountingChatScope, setAccountingChatScope] = useState('');
   const [accountingChatHistory, setAccountingChatHistory] = useState<any[]>([]);
   const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -298,6 +305,7 @@ const App: React.FC = () => {
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
   const operationContextRef = useRef({ key: operationContext, version: 0 });
   if (operationContextRef.current.key !== operationContext) operationContextRef.current = { key: operationContext, version: operationContextRef.current.version + 1 };
+  const contextAtRender = operationContextRef.current;
   useEffect(() => {
     setActiveCart([]); setVerifiedProducts(new Set()); setSaleForReceipt(null); setShowReceiptModal(false);
     setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
@@ -308,6 +316,8 @@ const App: React.FC = () => {
   useEffect(() => {
     inventoryByStoreRef.current.clear();
     setInventory([]); setInventoryTransfers([]); setCeoNotes([]);
+    setCeoSales([]); setCeoLayaways([]); setCeoPurchases([]); setCeoExpenses([]);
+    setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
   }, [dataScope, companyStoreKey]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
@@ -475,7 +485,7 @@ const App: React.FC = () => {
     if (operationalCompanyId === DEFAULT_COMPANY_ID) queries.push(query(collection(db, 'daily_notes'), where('tienda', '==', 'all')));
     const unsubscribers = queries.map((q, index) => onSnapshot(q, snapshot => {
       if (!active) return;
-      rows.set(String(index), snapshot.docs.map(document => ({ ...document.data(), id: document.id } as CeoDailyNote)).filter(note => !note.companyId || note.companyId === operationalCompanyId));
+      rows.set(String(index), snapshot.docs.map(document => ({ ...document.data(), id: document.id } as CeoDailyNote)).filter(note => { try { assertTenantData('daily_notes', note, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; } catch { return false; } }));
       setCeoNotes([...new Map([...rows.values()].flat().map(note => [note.id, note])).values()]);
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
@@ -543,11 +553,17 @@ const App: React.FC = () => {
   }, [isAdmin, currentUser, companyStoreKey, dataScope]);
 
 
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION || (currentView === View.CEO_CENTER && isCeoCenterActivated));
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION);
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
   useCompanyCollection('incidents', companyStoreIds, dataScope, liveAnalytics, setAllIncidents);
+  const liveCeo = isAppReady && isAuthReady && !!currentUser && currentView === View.CEO_CENTER && isCeoCenterActivated && ceoActivationScope === dataScope;
+  const ceoStoreIds = ceoSelectedStoreId === 'all' ? companyStoreIds : companyStoreIds.filter(id => id === ceoSelectedStoreId);
+  useCompanyCollection('sales', ceoStoreIds, dataScope, liveCeo, setCeoSales);
+  useCompanyCollection('layaways', ceoStoreIds, dataScope, liveCeo, setCeoLayaways);
+  useCompanyCollection('purchases', ceoStoreIds, dataScope, liveCeo, setCeoPurchases);
+  useCompanyCollection('expenses', ceoStoreIds, dataScope, liveCeo, setCeoExpenses);
 
   useEffect(() => {
     if (!isGlobalMode || !isAppReady || !currentUser) {
@@ -662,12 +678,15 @@ const App: React.FC = () => {
             attachStore('financialRecords', setFinancialRecords);
             attachStore('loans', setLoans);
             const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
-            unsubscribers.push(onSnapshot(chatRef, (doc) => {
-              if (doc.exists()) {
-                setAccountingChatHistory(doc.data().messages || []);
-              } else {
-                setAccountingChatHistory([]);
-              }
+            unsubscribers.push(onSnapshot(chatRef, snapshot => {
+              if (!active) return;
+              setAccountingChatScope(`${dataScope}:${currentStoreId}`);
+              const data = snapshot.exists() ? snapshot.data() : null;
+              try {
+                if (!data) { setAccountingChatHistory([]); return; }
+                assertTenantData('accountingChatHistory', data, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId]) });
+                setAccountingChatHistory(Array.isArray(data.messages) ? data.messages : []);
+              } catch { setAccountingChatHistory([]); }
             }));
             break;
         case View.FINANCIAL_RECONCILIATION:
@@ -726,10 +745,12 @@ const App: React.FC = () => {
   }, [isAppReady, stores]);
 
   useEffect(() => {
-    if (currentView === View.ACCOUNTING && expenseCategories.length === 0 && currentStoreId) {
+    if (currentView === View.ACCOUNTING && canLoadStore && expenseCategories.length === 0 && currentStoreId) {
+        const startedContext = operationContextRef.current;
         const checkAndInitCategories = async () => {
             const q = query(collection(db, 'expenseCategories'), where('storeId', '==', currentStoreId));
             const snap = await getDocs(q);
+            if (operationContextRef.current !== startedContext) return;
             if (snap.empty) {
                 const defaults = ["Arriendo", "Servicios", "Publicidad", "Insumos", "Mantenimiento", "Otro"];
                 const batch = writeBatch(db);
@@ -742,7 +763,7 @@ const App: React.FC = () => {
         };
         checkAndInitCategories();
     }
-  }, [currentView, expenseCategories.length, currentStoreId]);
+  }, [currentView, expenseCategories.length, currentStoreId, canLoadStore, dataScope]);
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -3041,7 +3062,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateAccountingChat = async (messages: any[]) => {
-    if (!currentStoreId) return;
+    if (!currentStoreId || operationContextRef.current !== contextAtRender) return;
     const chatRef = doc(db, 'accountingChatHistory', currentStoreId);
     await setDoc(chatRef, { messages, lastUpdated: new Date().toISOString(), storeId: currentStoreId, companyId: operationalCompanyId });
   };
@@ -3145,8 +3166,8 @@ const App: React.FC = () => {
         {currentView === View.SETTINGS && <SettingsView stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
-        {currentView === View.ACCOUNTING && (
-          <SmartAccountantView 
+        {currentView === View.ACCOUNTING && canLoadStore && (
+          <SmartAccountantView key={`${dataScope}:${currentStoreId}`}
             sales={sales} 
             layaways={layaways} 
             expenses={expenses} 
@@ -3163,7 +3184,7 @@ const App: React.FC = () => {
             onAddLoan={handleAddLoan}
             onUpdateLoan={handleUpdateLoan}
             onDeleteLoan={handleDeleteLoan}
-            chatMessages={accountingChatHistory}
+            chatMessages={accountingChatScope === `${dataScope}:${currentStoreId}` ? accountingChatHistory : []}
             onUpdateChatMessages={handleUpdateAccountingChat}
             onToggleFinancialRecordAccounting={handleToggleFinancialRecordAccounting}
             onNavigate={setCurrentView}
@@ -3196,21 +3217,24 @@ const App: React.FC = () => {
             sales={sales}
           />
         )}
-        {currentView === View.CEO_CENTER && currentUser && !isCeoCenterActivated && (
+        {currentView === View.CEO_CENTER && currentUser && (!isCeoCenterActivated || ceoActivationScope !== dataScope) && (
           <div className="max-w-2xl mx-auto mt-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 text-center shadow-sm">
             <div className="text-4xl mb-4">💎</div>
             <h2 className="text-xl font-black text-slate-900 dark:text-white">CEO Center</h2>
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">El análisis está en pausa para mantener el sistema ligero. Los datos y cálculos del CEO Center solo se cargarán cuando tú los solicites.</p>
-            <button onClick={() => setIsCeoCenterActivated(true)} className="mt-6 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black shadow-lg">Cargar y analizar CEO Center</button>
+            <button onClick={() => { setCeoSelectedStoreId(currentStoreId && visibleStoreIds.has(currentStoreId) ? currentStoreId : visibleStores[0]?.id || 'all'); setCeoActivationScope(dataScope); setIsCeoCenterActivated(true); }} className="mt-6 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black shadow-lg">Cargar y analizar CEO Center</button>
           </div>
         )}
-        {currentView === View.CEO_CENTER && currentUser && isCeoCenterActivated && (
+        {currentView === View.CEO_CENTER && currentUser && isCeoCenterActivated && ceoActivationScope === dataScope && (
           <CeoCenterView
-            sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales}
-            layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways}
+            companyId={operationalCompanyId}
+            selectedStoreId={ceoSelectedStoreId}
+            onSelectStore={setCeoSelectedStoreId}
+            sales={ceoSales}
+            layaways={ceoLayaways}
             inventory={isAdmin ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory}
-            purchases={purchases}
-            expenses={expenses}
+            purchases={ceoPurchases}
+            expenses={ceoExpenses}
             stores={visibleStores}
             sellers={visibleSellers}
             ceoNotes={ceoNotes}
@@ -3263,7 +3287,7 @@ const App: React.FC = () => {
         )}
         </Suspense>
       </main>
-      <ReportsModal isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
+      <ReportsModal key={dataScope} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {showRecaudoReceipt && lastRecaudo && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (

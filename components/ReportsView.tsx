@@ -1,9 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
+import { useAsyncScope } from '../services/useAsyncScope';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Product, Store, Category, CartItem } from '../types';
 import { analyzeSalesData, generateStrategicReport } from '../services/geminiService';
 import { SparklesIcon, CrossIcon, FileTextIcon } from './Icons';
 
 interface ReportsModalProps {
+  companyId: string;
   isOpen: boolean;
   onClose: () => void;
   allSales: Sale[];
@@ -29,7 +32,13 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 };
 
 
-const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, allInventory, stores, categories }) => {
+const ReportsModal: React.FC<ReportsModalProps> = ({ companyId, isOpen, onClose, allSales: rawAllSales, allInventory: rawAllInventory, stores: rawStores, categories }) => {
+  const scope = useMemo(() => analyticsScope(companyId, rawStores), [companyId, rawStores]);
+  const stores = useMemo(() => rawStores.filter(store => scope.storeIds.has(store.id)), [rawStores, scope]);
+  const allSales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawAllSales, scope), [rawAllSales, scope]);
+  const allInventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawAllInventory, scope), [rawAllInventory, scope]);
+
+
     const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 6)).toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() => stores.map(s => s.id));
@@ -39,6 +48,9 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
     const [isStrategicLoading, setIsStrategicLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const requestScope = JSON.stringify([companyId, isOpen, startDate, endDate, [...selectedStoreIds].sort()]);
+    const beginAnalysis = useAsyncScope(requestScope);
+    useEffect(() => { setAnalysis(''); setError(''); setIsLoading(false); setIsStrategicLoading(false); }, [requestScope]);
     if (!isOpen) return null;
 
     const handleStoreSelection = (storeId: string) => {
@@ -50,6 +62,7 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
     };
 
     const handleGenerateAnalysis = async (query: string, isStrategic: boolean = false) => {
+        const isCurrent = beginAnalysis();
         if (isStrategic) setIsStrategicLoading(true);
         else setIsLoading(true);
         setError('');
@@ -117,12 +130,12 @@ const ReportsModal: React.FC<ReportsModalProps> = ({ isOpen, onClose, allSales, 
             const result = isStrategic 
                 ? await generateStrategicReport(dataForAI)
                 : await analyzeSalesData(dataForAI, query);
-            setAnalysis(result);
+            if (isCurrent()) setAnalysis(result);
         } catch (e: any) {
+            if (!isCurrent()) return;
             setError(e.message || 'Ocurrió un error desconocido al generar el análisis.');
         } finally {
-            setIsLoading(false);
-            setIsStrategicLoading(false);
+            if (isCurrent()) { setIsLoading(false); setIsStrategicLoading(false); }
         }
     };
 
