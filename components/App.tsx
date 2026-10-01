@@ -1,3 +1,5 @@
+import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
+import { belongsToCompany, selectCompanyCategories } from '../services/companyCategories';
 import { hasTemporaryCarlosDeveloperAccess } from '../services/developerAccess';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
@@ -131,7 +133,8 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryState, setCategoryState] = useState<{ companyId: string; items: Category[] }>({ companyId: '', items: [] });
+  const categoryRepairs = useRef(new Set<string>());
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -267,6 +270,8 @@ const App: React.FC = () => {
     return currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
   }, [currentUser, currentStore, isDeveloper, activeCompanyId]);
 
+  const categories = useMemo(() => selectCompanyCategories(categoryState, operationalCompanyId), [categoryState, operationalCompanyId]);
+
   const visibleStores = useMemo(() => {
     return stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId);
   }, [stores, operationalCompanyId]);
@@ -368,7 +373,7 @@ const App: React.FC = () => {
         if (snapshot.empty) {
           const batch = writeBatch(db);
           INITIAL_STORES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'stores', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_CATEGORIES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'categories', id), data); });
+          INITIAL_CATEGORIES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'categories', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
           INITIAL_ROLES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'roles', id), data); });
           INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
           INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
@@ -409,7 +414,6 @@ const App: React.FC = () => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers),
-      attachFirestoreListener(query(collection(db, 'categories')), setCategories),
       attachFirestoreListener(query(collection(db, 'inventoryTransfers')), setInventoryTransfers)
     ];
     if (isAdmin) {
@@ -429,6 +433,22 @@ const App: React.FC = () => {
     return () => unsubscribers.forEach(unsub => unsub());
   }, [currentUser, isAppReady, isAuthReady, isAdmin]);
   
+  useEffect(() => {
+    if (!isAppReady || !isAuthReady || !currentUser) return;
+    const companyId = operationalCompanyId;
+    // The original company also retains its historical untagged categories.
+    const categoryQuery = companyId === DEFAULT_COMPANY_ID
+      ? query(collection(db, 'categories'))
+      : query(collection(db, 'categories'), where('companyId', '==', companyId));
+    return onSnapshot(categoryQuery, snapshot => {
+      const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Category));
+      setCategoryState({ companyId, items: items.filter(category => belongsToCompany(category, companyId)) });
+    }, error => {
+      console.error('Error loading company categories:', error);
+      setCategoryState({ companyId, items: [] });
+    });
+  }, [isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
+
   const multisiteLoader = useRef(createSessionLoader());
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
@@ -533,6 +553,22 @@ const App: React.FC = () => {
       .finally(() => { if (active) setIsVerificationInventoryLoading(false); });
     return () => { active = false; };
   }, [isVerificationModalOpen, canLoadStore, currentStoreId, dataScope]);
+
+  useEffect(() => {
+    if (!canLoadStore || !currentStoreId || operationalCompanyId === DEFAULT_COMPANY_ID || categoryState.companyId !== operationalCompanyId) return;
+    const companyId = operationalCompanyId;
+    const storeId = currentStoreId;
+    const ownIds = new Set(categories.map(category => category.id));
+    const foreignIds = [...new Set<string>(inventory.filter(product => product.storeId === storeId && product.categoryId && !ownIds.has(product.categoryId)).map(product => product.categoryId))];
+    foreignIds.forEach(originalId => {
+      const repairKey = `${companyId}:${storeId}:${originalId}`;
+      if (categoryRepairs.current.has(repairKey)) return;
+      categoryRepairs.current.add(repairKey);
+      const productIds = inventory.filter(product => product.storeId === storeId && product.categoryId === originalId).map(product => product.id);
+      const repair = () => isolateLegacyCategoryForStore(db, companyId, storeId, originalId, productIds);
+      repair().catch(error => console.error('Error isolating legacy category:', error)).finally(() => categoryRepairs.current.delete(repairKey));
+    });
+  }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
   useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
   useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
@@ -724,7 +760,7 @@ const App: React.FC = () => {
 
   const handleClearCart = () => setActiveCart([]);
 
-  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => {
+  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
 
     try {
@@ -2069,6 +2105,7 @@ const App: React.FC = () => {
       const invalidStoreIds = selectedStoreIds.filter(id => !allowedStoreIds.has(id));
       if (invalidStoreIds.length > 0) throw new Error('Intento bloqueado: no se pueden crear productos en tiendas de otra empresa.');
       
+      await assertCategoryAccess(newProductData.categoryId);
       const q = query(collection(db, 'inventory'), where('name', '==', inputName));
       const rawSnapshot = await getDocs(q);
       // Product identity propagation must never cross company boundaries.
@@ -2158,6 +2195,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProduct = async (updatedProduct: Product, imageFile?: File) => {
+      await assertCategoryAccess(updatedProduct.categoryId);
       const productRef = doc(db, 'inventory', updatedProduct.id);
       
       const currentSnap = await getDoc(productRef);
@@ -2293,7 +2331,7 @@ const App: React.FC = () => {
       });
       
       // Resolve categories once and save new categories atomically with products.
-      const categoryByName = new Map(categories.map(category => [normalizeText(category.name), category]));
+      const categoryByName = new Map<string, Category>(categories.map(category => [normalizeText(category.name), category]));
       let writeCount = 0;
       products.forEach(p => {
           const categoryName = (p.categoryName || '').trim();
@@ -2304,7 +2342,7 @@ const App: React.FC = () => {
           let matchedCategory = categoryByName.get(categoryKey);
           if (!matchedCategory) {
             const categoryRef = doc(collection(db, 'categories'));
-            matchedCategory = { id: categoryRef.id, name: toTitleCase(categoryName) };
+            matchedCategory = { id: categoryRef.id, name: toTitleCase(categoryName), companyId: operationalCompanyId };
             categoryByName.set(categoryKey, matchedCategory);
             batch.set(categoryRef, matchedCategory);
             writeCount++;
@@ -2366,6 +2404,7 @@ const App: React.FC = () => {
       throw new Error('Intento bloqueado: una compra incluye una tienda de otra empresa.');
     }
     
+    await assertCategoryAccess(productInfo.categoryId);
     // Reuse product metadata only inside the active company.
     const globalQ = query(collection(db, 'inventory'), where('name', '==', inputName));
     const rawGlobalSnap = await getDocs(globalQ);
@@ -2537,9 +2576,24 @@ const App: React.FC = () => {
     await batch.commit();
   };
 
-  const handleAddCategory = async (name: string) => { const newRef = doc(collection(db, 'categories')); await setDoc(newRef, { id: newRef.id, name }); };
-  const handleUpdateCategory = async (id: string, name: string) => await updateDoc(doc(db, 'categories', id), { name });
-  const handleDeleteCategory = async (id: string) => await deleteDoc(doc(db, 'categories', id));
+  const assertCategoryAccess = async (id: string) => {
+    const snapshot = await getDoc(doc(db, 'categories', id));
+    if (!snapshot.exists() || !belongsToCompany({ ...snapshot.data(), id } as Category, operationalCompanyId)) {
+      throw new Error('La categoría no pertenece a la empresa seleccionada.');
+    }
+  };
+  const handleAddCategory = async (name: string) => {
+    const newRef = doc(collection(db, 'categories'));
+    await setDoc(newRef, { id: newRef.id, name, companyId: operationalCompanyId });
+  };
+  const handleUpdateCategory = async (id: string, name: string) => {
+    await assertCategoryAccess(id);
+    await updateDoc(doc(db, 'categories', id), { name, companyId: operationalCompanyId });
+  };
+  const handleDeleteCategory = async (id: string) => {
+    await assertCategoryAccess(id);
+    await deleteDoc(doc(db, 'categories', id));
+  };
   
   const handleAddExpenseCategory = async (name: string) => {
     if (!currentStoreId) return;

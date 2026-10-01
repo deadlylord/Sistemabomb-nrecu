@@ -57,9 +57,12 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
+  { version: '1.1.117', date: '2026-09-30', description: 'Categorías Independientes por Empresa', isCurrent: true,
+    changes: ['Las categorías se crean y se muestran únicamente en su empresa.', 'Las categorías históricas permanecen en la empresa original; referencias compartidas en otras empresas se convierten en categorías propias sin cambiar existencias.']
+  },
   {
     version: '1.1.116', date: '2026-09-30',
-    description: 'Inventario de Apertura y Medios de Pago', isCurrent: true,
+    description: 'Inventario de Apertura y Medios de Pago', isCurrent: false,
     changes: ['La verificación carga el inventario de la sede y muestra categorías con productos incluso en cero o sin referencia de categoría.', 'Se informa la carga, errores o inventario vacío antes de permitir guardar.', 'Los medios de pago permanecen visibles cuando una venta tiene total cero.']
   },
   {

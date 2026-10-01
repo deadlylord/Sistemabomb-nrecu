@@ -291,6 +291,7 @@ export interface InventoryTransfer {
 }
 
 export interface Category {
+  companyId?: string;
   id: string;
   name: string;
 }
