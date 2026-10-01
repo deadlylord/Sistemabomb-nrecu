@@ -20,6 +20,11 @@ export function assertTenantData(collectionName: string, data: any, scope: Tenan
   for (const key of ['fromStoreId', 'toStoreId', 'debtStoreId', 'physicalStoreId']) {
     if (data[key] && !scope.storeIds.has(data[key])) throw new Error('La operación referencia una sede de otra empresa.');
   }
+  if (collectionName === 'financialRecordsHistory') {
+    for (const state of [data.previousState, data.newState]) {
+      if (state) assertTenantData('financialRecords', state, scope);
+    }
+  }
 }
 
 type Operation = { kind: 'set' | 'update' | 'delete'; ref: DocumentReference; data?: any; options?: any };
@@ -56,6 +61,24 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       }
       for (const key of ['counts', 'productCounts', 'systemSnapshot']) {
         for (const id of Object.keys(data[key] || {})) references.push(doc(db, 'inventory', id));
+      }
+      // Historical links may outlive their source document. Existing targets,
+      // however, must always belong to this company, including staged mirrors.
+      const historicalReferences: DocumentReference[] = [];
+      if (data.saleId) historicalReferences.push(doc(db, 'sales', data.saleId));
+      if (data.layawayId) historicalReferences.push(doc(db, 'layaways', data.layawayId));
+      if (data.relatedRecordId) historicalReferences.push(doc(db, 'financialRecords', data.relatedRecordId));
+      if (name === 'financialRecordsHistory' && data.recordId) historicalReferences.push(doc(db, 'financialRecords', data.recordId));
+      for (const payment of Object.values(data.payments || {}) as any[]) {
+        if (payment?.voucherId) historicalReferences.push(doc(db, 'giftVouchers', payment.voucherId));
+      }
+      for (const ref of historicalReferences) {
+        const staged = pending.get(ref.path);
+        if (staged) assertTenantData(collectionName(ref), { ...staged, companyId: staged.companyId || scope.companyId }, scope);
+        else {
+          const linked = await load(ref);
+          if (linked.exists()) assertTenantData(collectionName(ref), linked.data(), scope);
+        }
       }
       for (const ref of references) {
         const staged = pending.get(ref.path);

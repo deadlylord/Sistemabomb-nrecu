@@ -107,3 +107,45 @@ test('only Carlos can assign/revoke developers inside Developer Center; grants c
  await assert.rejects(writer.setDoc(ref('platformDevelopers/forged'),{companyId:'mayla',userId:'forged',role:'developer',active:true,grantedBy:PLATFORM_OWNER_USER_ID}));
  await assert.rejects(writer.setDoc(ref('sellers/forged'),{storeId:'mayla-1',platformRole:'developer'}));
 }));
+
+
+test('financial links reject foreign vouchers, original sales, layaways and mirrored records before any writes',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('giftVouchers/foreign',{storeId:'metro',companyId:'bombon',currentValue:100});
+ records.set('sales/foreign',{storeId:'metro',companyId:'bombon',items:[]});
+ records.set('layaways/foreign',{storeId:'metro',companyId:'bombon',items:[]});
+ records.set('financialRecords/foreign',{storeId:'metro',companyId:'bombon'});
+ records.set('sales/own',{storeId:'mayla-1',companyId:'mayla',items:[],payments:[]});
+ await assert.rejects(writer.updateDoc(ref('sales/own'),{payments:[{voucherId:'foreign',amount:25}]}));
+ await assert.rejects(writer.setDoc(ref('giftVouchers/own'),{storeId:'mayla-1',saleId:'foreign'}));
+ await assert.rejects(writer.updateDoc(ref('sales/own'),{layawayId:'foreign'}));
+ await assert.rejects(writer.setDoc(ref('financialRecords/own'),{storeId:'mayla-1',relatedRecordId:'foreign'}));
+ assert.equal(writes.length,0);assert.equal(records.get('giftVouchers/foreign').currentValue,100);
+}));
+
+test('financial audit validates source ownership and both snapshots, including historical snapshots without companyId',()=>withWriter(async({createTenantWriter,records,writes,assertTenantData})=>{
+ const writer=createTenantWriter({},scope);
+ const foreign={storeId:'metro',companyId:'bombon',description:'Información ajena',amount:100};
+ records.set('financialRecords/foreign',foreign);
+ await assert.rejects(writer.setDoc(ref('financialRecordsHistory/log'),{storeId:'mayla-1',recordId:'foreign',previousState:foreign}));
+ await assert.rejects(writer.setDoc(ref('financialRecordsHistory/log'),{storeId:'mayla-1',recordId:'foreign',previousState:{storeId:'mayla-1',amount:100}}));
+ assert.throws(()=>assertTenantData('financialRecordsHistory',{storeId:'mayla-1',previousState:{storeId:'metro',amount:100}},scope));
+ assert.throws(()=>assertTenantData('financialRecordsHistory',{storeId:'mayla-1',newState:foreign},scope));
+ assert.equal(writes.length,0);
+ // An owned historical deletion remains restorable after its source was deleted.
+ const owned={storeId:'mayla-1',amount:100};
+ await writer.setDoc(ref('financialRecordsHistory/valid'),{storeId:'mayla-1',recordId:'deleted-own',previousState:owned});
+ assert.equal(records.get('financialRecordsHistory/valid').companyId,'mayla');
+}));
+
+test('financial batches share reads for mirrors/history and rejected audit prevents all changes',()=>withWriter(async({createTenantWriter,records,reads,writes})=>{
+ const writer=createTenantWriter({},scope);records.set('financialRecords/own',{storeId:'mayla-1',amount:20});
+ const bad=writer.writeBatch();bad.update(ref('financialRecords/own'),{amount:40});bad.set(ref('financialRecordsHistory/log'),{storeId:'mayla-1',recordId:'own',previousState:{storeId:'metro',amount:20}});
+ await assert.rejects(bad.commit());assert.equal(writes.length,0);assert.equal(records.get('financialRecords/own').amount,20);
+ reads.length=0;const good=writer.writeBatch();
+ for(const id of ['a','b','ha','hb'])writer.registerNew(ref((id.startsWith('h')?'financialRecordsHistory/':'financialRecords/')+id));
+ good.set(ref('financialRecords/a'),{storeId:'mayla-1',relatedRecordId:'b'});good.set(ref('financialRecords/b'),{storeId:'mayla-2',relatedRecordId:'a'});
+ good.set(ref('financialRecordsHistory/ha'),{storeId:'mayla-1',recordId:'a',newState:{storeId:'mayla-1',relatedRecordId:'b'}});
+ good.set(ref('financialRecordsHistory/hb'),{storeId:'mayla-2',recordId:'b',newState:{storeId:'mayla-2',relatedRecordId:'a'}});
+ await good.commit();assert.equal(reads.length,0);assert.equal(records.get('financialRecordsHistory/hb').companyId,'mayla');
+}));

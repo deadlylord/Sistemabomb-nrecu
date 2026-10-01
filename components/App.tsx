@@ -6,6 +6,7 @@ import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolati
 import { belongsToCompany, selectCompanyCategories } from '../services/companyCategories';
 import { hasPlatformDeveloperAccess, isPlatformOwner, isPlatformRole, assertCompanyRole, assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
 import { setPlatformDeveloper } from '../services/platformDevelopers';
+import { operationContextKey } from '../services/operationContext';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { db, auth } from '../firebase';
@@ -296,6 +297,9 @@ const App: React.FC = () => {
 
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
+  const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
+  const operationContextRef = useRef({ key: operationContext, version: 0 });
+  if (operationContextRef.current.key !== operationContext) operationContextRef.current = { key: operationContext, version: operationContextRef.current.version + 1 };
   useEffect(() => {
     setActiveCart([]); setVerifiedProducts(new Set()); setSaleForReceipt(null); setShowReceiptModal(false);
     setSales([]); setPurchases([]); setLayaways([]); setStockTakes([]);
@@ -793,6 +797,7 @@ const App: React.FC = () => {
 
   const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
+    const startedContext = operationContextRef.current;
 
     try {
         let savedSale: Sale | null = null;
@@ -913,7 +918,7 @@ const App: React.FC = () => {
             }
         });
 
-        if (savedSale) {
+        if (savedSale && operationContextRef.current === startedContext) {
             setSaleForReceipt(savedSale);
             setShowReceiptModal(true);
             if (!saleData.items) {
@@ -929,6 +934,7 @@ const App: React.FC = () => {
 
   const handleHoldSale = async (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => {
     if (!currentStoreId) return;
+    const startedContext = operationContextRef.current;
     const cartRef = doc(collection(db, 'heldCarts'));
     const heldCart: HeldCart = {
         id: cartRef.id,
@@ -940,19 +946,21 @@ const App: React.FC = () => {
         sellerName: data?.sellerName ?? null,
     };
     await setDoc(cartRef, heldCart);
-    handleClearCart();
+    if (operationContextRef.current === startedContext) handleClearCart();
   };
 
   const handleResumeSale = async (heldCartId: string) => {
     const cart = heldCarts.find(c => c.id === heldCartId);
     if (cart) {
-        setActiveCart(cart.items);
+        const startedContext = operationContextRef.current;
         await deleteDoc(doc(db, 'heldCarts', heldCartId));
+        if (operationContextRef.current === startedContext) setActiveCart(cart.items);
     }
   };
 
   const handleCreateLayaway = async (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
     if (!currentStoreId) return;
+    const startedContext = operationContextRef.current;
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -1022,7 +1030,7 @@ const App: React.FC = () => {
             }
         });
 
-        handleClearCart();
+        if (operationContextRef.current === startedContext) handleClearCart();
     } catch (e) {
         console.error("Layaway transaction failed:", e);
         alert("Error al crear abono. Intente nuevamente.");
@@ -1032,6 +1040,8 @@ const App: React.FC = () => {
   const handleAddPaymentToLayaway = async (layawayId: string, amount: number, method: PaymentMethod, seller: string) => {
     const layaway = layaways.find(l => l.id === layawayId);
     if (!layaway) return;
+    const startedContext = operationContextRef.current;
+    let completedTransactionReceipt: Sale | null = null;
     const newPayment: Payment = { date: new Date().toISOString(), amount, method, seller };
     const layawayRef = doc(db, 'layaways', layawayId);
     const newPaidAmount = layaway.paidAmount + amount;
@@ -1043,9 +1053,9 @@ const App: React.FC = () => {
     if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && (layaway.status === 'active' || layaway.status === 'pre-order')) {
       updateData.status = 'completed';
       const fullPaymentsList = [...layaway.payments, newPayment];
-      const completedTransactionReceipt: any = {
+      completedTransactionReceipt = {
           id: layaway.id,
-          invoiceNumber: layaway.invoiceNumber,
+          invoiceNumber: Number(layaway.invoiceNumber),
           customerName: layaway.customerName,
           customerPhone: layaway.customerPhone,
           items: layaway.items,
@@ -1054,9 +1064,8 @@ const App: React.FC = () => {
           seller: seller,
           createdAt: new Date().toISOString(),
           storeId: layaway.storeId,
+          companyId: operationalCompanyId,
       };
-      setSaleForReceipt(completedTransactionReceipt);
-      setShowReceiptModal(true);
     }
 
     if (isPreOrderCompleting) {
@@ -1089,6 +1098,10 @@ const App: React.FC = () => {
       });
     } else {
       await updateDoc(layawayRef, updateData);
+    }
+    if (completedTransactionReceipt && operationContextRef.current === startedContext) {
+      setSaleForReceipt(completedTransactionReceipt);
+      setShowReceiptModal(true);
     }
   };
 
@@ -2952,11 +2965,12 @@ const App: React.FC = () => {
         const templateRef = doc(collection(db, 'expenses'));
         await setDoc(templateRef, { ...expenseData, id: templateRef.id, storeId: currentStoreId, companyId: operationalCompanyId });
       } else {
-        await setDoc(newRef, cleanObject(financialRecord));
+        const batch = writeBatch(db);
+        batch.set(newRef, cleanObject(financialRecord));
 
         // Log history
         const historyRef = doc(collection(db, 'financialRecordsHistory'));
-        await setDoc(historyRef, {
+        batch.set(historyRef, {
             id: historyRef.id,
             recordId: newRef.id,
             action: 'create',
@@ -2967,73 +2981,41 @@ const App: React.FC = () => {
             companyId: operationalCompanyId,
             accountType: 'cash'
         });
+        await batch.commit();
       }
   };
 
   const handleUpdateExpense = async (expense: Expense) => {
-      if (expense.isRecurring) {
-        await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
-        return;
-      }
-
+    if (expense.isRecurring) {
+      await updateDoc(doc(db, 'expenses', expense.id), { ...expense });
+      return;
+    }
+    await runTransaction(db, async transaction => {
       const recordRef = doc(db, 'financialRecords', expense.id);
-      const docSnap = await getDoc(recordRef);
-      let previousState = null;
-      if (docSnap.exists()) {
-        previousState = docSnap.data();
-      }
-
-      const updateData = {
-          description: expense.description,
-          amount: -Math.abs(expense.amount),
-          subCategory: expense.category,
-          date: expense.date
-      };
-      await updateDoc(recordRef, updateData);
-
-      if (previousState) {
-        const historyRef = doc(collection(db, 'financialRecordsHistory'));
-        await setDoc(historyRef, {
-            id: historyRef.id,
-            recordId: expense.id,
-            action: 'update',
-            timestamp: new Date().toISOString(),
-            changedBy: currentUser?.name || 'Sistema',
-            previousState: previousState,
-            newState: { ...previousState, ...updateData },
-            storeId: currentStoreId,
-            accountType: previousState.accountType || 'cash'
-        });
-      }
+      const snapshot = await transaction.get(recordRef);
+      if (!snapshot.exists()) throw new Error('No se encontró el gasto.');
+      const previousState = snapshot.data() as FinancialRecord;
+      const updateData = { description: expense.description, amount: -Math.abs(expense.amount), subCategory: expense.category, date: expense.date };
+      transaction.update(recordRef, updateData);
+      const historyRef = doc(collection(db, 'financialRecordsHistory'));
+      transaction.set(historyRef, { id: historyRef.id, recordId: expense.id, action: 'update', timestamp: new Date().toISOString(), changedBy: currentUser?.name || 'Sistema', previousState, newState: { ...previousState, ...updateData }, storeId: previousState.storeId, accountType: previousState.accountType || 'cash' });
+    });
   };
 
   const handleDeleteExpense = async (id: string) => {
-      if (!window.confirm('¿Eliminar este registro de gasto?')) return;
-      
+    if (!window.confirm('¿Eliminar este registro de gasto?')) return;
+    await runTransaction(db, async transaction => {
       const expenseRef = doc(db, 'expenses', id);
+      const expense = await transaction.get(expenseRef);
+      if (expense.exists()) { transaction.delete(expenseRef); return; }
       const financialRef = doc(db, 'financialRecords', id);
-      
-      const expenseDoc = await getDoc(expenseRef);
-      if (expenseDoc.exists()) {
-        await deleteDoc(expenseRef);
-      } else {
-        const docSnap = await getDoc(financialRef);
-        if (docSnap.exists()) {
-          const previousState = docSnap.data() as FinancialRecord;
-          const historyRef = doc(collection(db, 'financialRecordsHistory'));
-          await setDoc(historyRef, {
-              id: historyRef.id,
-              recordId: id,
-              action: 'delete',
-              timestamp: new Date().toISOString(),
-              changedBy: currentUser?.name || 'Sistema',
-              previousState: previousState,
-              storeId: currentStoreId,
-              accountType: previousState.accountType || 'cash'
-          });
-        }
-        await deleteDoc(financialRef);
-      }
+      const snapshot = await transaction.get(financialRef);
+      if (!snapshot.exists()) return;
+      const previousState = snapshot.data() as FinancialRecord;
+      const historyRef = doc(collection(db, 'financialRecordsHistory'));
+      transaction.set(historyRef, { id: historyRef.id, recordId: id, action: 'delete', timestamp: new Date().toISOString(), changedBy: currentUser?.name || 'Sistema', previousState, storeId: previousState.storeId, accountType: previousState.accountType || 'cash' });
+      transaction.delete(financialRef);
+    });
   };
 
   const handleToggleFinancialRecordAccounting = async (id: string, exclude: boolean) => {

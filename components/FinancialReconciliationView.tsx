@@ -786,10 +786,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         ? `${transaction.description} (${getAccountName(accountType)}) [ACTUALIZADO]`
                         : `Cierre Diario ${idPrefix === 'addi' ? 'Addi' : (idPrefix === 'sistecredito' ? 'Sistecredito' : getAccountName(accountType))} (${dateStr}) [ACTUALIZADO]`
                 };
-                await updateDoc(doc(db, 'financialRecords', recordId), updatedFields);
+                const batch = writeBatch(db);
+                batch.update(doc(db, 'financialRecords', recordId), updatedFields);
 
                 const historyRef = doc(collection(db, 'financialRecordsHistory'));
-                await setDoc(historyRef, {
+                batch.set(historyRef, {
                     id: historyRef.id,
                     recordId: recordId,
                     action: 'update',
@@ -800,6 +801,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                     storeId: activeStoreId,
                     accountType: accountType
                 });
+                await batch.commit();
             }
             return;
         }
@@ -832,10 +834,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         isConfirmed: true, 
         affectsCashBalance: true 
     };
-    await setDoc(doc(db, 'financialRecords', recordId), newRecord);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'financialRecords', recordId), newRecord);
 
     const historyRef = doc(collection(db, 'financialRecordsHistory'));
-    await setDoc(historyRef, {
+    batch.set(historyRef, {
         id: historyRef.id,
         recordId: recordId,
         action: 'create',
@@ -845,6 +848,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         storeId: activeStoreId,
         accountType: accountType
     });
+    await batch.commit();
   };
 
   const initialBalanceValue = useMemo(() => {
@@ -1362,11 +1366,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       recordToSave.date = dateTime; recordToSave.amount = amountVal;
 
       const originalRecord = allRecords.find(r => r.id === recordToSave.id);
-      await setDoc(doc(db, 'financialRecords', recordToSave.id), recordToSave, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'financialRecords', recordToSave.id), recordToSave, { merge: true });
 
       if (originalRecord) {
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
-          await setDoc(historyRef, {
+          batch.set(historyRef, {
               id: historyRef.id,
               recordId: recordToSave.id,
               action: 'update',
@@ -1379,6 +1384,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           });
       }
 
+      await batch.commit();
       setEditingRecord(null);
   };
 
@@ -1386,8 +1392,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   const confirmDelete = async () => {
       if (recordToDelete) {
+          const batch = writeBatch(db);
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
-          await setDoc(historyRef, {
+          batch.set(historyRef, {
               id: historyRef.id,
               recordId: recordToDelete.id,
               action: 'delete',
@@ -1398,7 +1405,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               accountType: recordToDelete.accountType
           });
 
-          await deleteDoc(doc(db, 'financialRecords', recordToDelete.id));
+          batch.delete(doc(db, 'financialRecords', recordToDelete.id));
+          await batch.commit();
           setRecordToDelete(null);
       }
   };
@@ -1421,11 +1429,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const currentRecord = allRecords.find(r => r.id === recordId);
 
           // Restore record in Firestore
-          await setDoc(doc(db, 'financialRecords', recordId), recordToRestore);
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'financialRecords', recordId), recordToRestore);
 
           // Log restore action
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
-          await setDoc(historyRef, {
+          batch.set(historyRef, {
               id: historyRef.id,
               recordId: recordId,
               action: 'restore',
@@ -1438,6 +1447,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               description: `Restaurado a la versión modificada el ${new Date(log.timestamp).toLocaleString()}`
           });
 
+          await batch.commit();
           alert("Registro restaurado exitosamente.");
       } catch (error) {
           console.error("Error restoring record:", error);
