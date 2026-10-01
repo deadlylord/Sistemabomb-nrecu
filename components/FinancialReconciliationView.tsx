@@ -1,12 +1,16 @@
+import { createTenantWriter } from '../services/tenantWrites';
+import { useCompanyCollection } from '../services/useCompanyCollection';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc as nativeDoc } from 'firebase/firestore';
 
 interface FinancialReconciliationViewProps {
+  companyId: string;
+  isAdmin: boolean;
   stores: Store[];
   activeStoreId?: string;
   onSetActiveStoreId?: (id: string) => void;
@@ -91,7 +95,12 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ stores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales, layaways, expenses, incidents, currentUser, onNavigate, onAddExpense }) => {
+  const storeKey = JSON.stringify(stores.map(store => store.id).sort());
+  const writer = useMemo(() => createTenantWriter(db, { companyId, storeIds: new Set<string>(JSON.parse(storeKey)) }), [companyId, storeKey]);
+  const { setDoc, updateDoc, deleteDoc } = writer;
+  const doc = ((...args: any[]) => { const ref = (nativeDoc as any)(...args); if (args.length === 1) writer.registerNew(ref); return ref; }) as typeof nativeDoc;
+  const writeBatch = (_?: any) => writer.writeBatch();
   const filteredStores = useMemo(() => stores.filter(s => !(s.name || '').toLowerCase().includes('training')), [stores]);
   const [internalActiveStoreId, setInternalActiveStoreId] = useState<string>(currentUser.storeId || filteredStores[0]?.id || '');
   
@@ -158,7 +167,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const activeStore = useMemo(() => stores.find(s => s.id === activeStoreId), [activeStoreId, stores]);
-  const isAdmin = currentUser.roleId === '1';
 
   const years = useMemo(() => {
     const currentY = new Date().getFullYear();
@@ -173,23 +181,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  useEffect(() => {
-    const q = query(collection(db, 'financialRecords'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as FinancialRecord));
-        setAllRecords(list);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(db, 'financialRecordsHistory'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-        const list = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as any));
-        setHistoryLogs(list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
-    return () => unsubscribe();
-  }, []);
+  useCompanyCollection('financialRecords', stores.map(store => store.id), `${currentUser.id}:${companyId}`, true, setAllRecords);
+  useCompanyCollection('financialRecordsHistory', stores.map(store => store.id), `${currentUser.id}:${companyId}`, showHistoryModal, setHistoryLogs);
 
   useEffect(() => {
     if (!activeStoreId) return;

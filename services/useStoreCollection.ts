@@ -1,6 +1,5 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { subscribeStoreRows } from './storeSubscriptions';
 
 // Keep shared operational subscriptions when navigating between views that need
 // the same collection. Neither a store metadata update nor a view name change
@@ -11,8 +10,6 @@ export function useStoreCollection<T extends { id: string }>(
 ) {
   useEffect(() => {
     if (!enabled || !storeId) return;
-    return onSnapshot(query(collection(db, name), where('storeId', '==', storeId)), snapshot => {
-      setter(snapshot.docs.map(document => ({ ...document.data(), id: document.id } as T)));
-    }, error => console.error(`Error loading ${name}:`, error));
+    return subscribeStoreRows(name, storeId, scope, rows => setter(rows as T[]));
   }, [name, storeId, scope, enabled, setter]);
 }

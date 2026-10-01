@@ -17,7 +17,7 @@ test('shared store subscription survives navigation and metadata renders, cleans
     const entry = fileURLToPath(new URL('../services/useStoreCollection.ts', import.meta.url));
     const bundle = await build({
       ...{ bundle: true, write: false, format: 'esm', platform: 'node', external: ['react'] },
-      stdin: { contents: `export { useStoreCollection } from ${JSON.stringify(entry)}; export { connections } from 'firebase/firestore';`, resolveDir: process.cwd() },
+      stdin: { contents: `export { useStoreCollection } from ${JSON.stringify(entry)}; export { subscribeStoreRows } from './services/storeSubscriptions'; export { connections } from 'firebase/firestore';`, resolveDir: process.cwd() },
       plugins: [{ name: 'fake-firestore', setup(builder) {
         builder.onResolve({ filter: /^(firebase\/firestore|\.\.\/firebase)$/ }, args => ({ path: args.path, namespace: 'fake' }));
         builder.onLoad({ filter: /.*/, namespace: 'fake' }, args => ({ contents: args.path === '../firebase' ? 'export const db = {};' : `
@@ -35,7 +35,7 @@ test('shared store subscription survives navigation and metadata renders, cleans
     });
     const modulePath = join(temp, 'hook.mjs');
     await writeFile(modulePath, bundle.outputFiles[0].text);
-    const { useStoreCollection, connections } = await import(pathToFileURL(modulePath).href);
+    const { useStoreCollection, subscribeStoreRows, connections } = await import(pathToFileURL(modulePath).href);
     const values = [];
     const setter = value => values.push(value);
     function Screen({ store = 'Metro', scope = 'Paula:Bombon', enabled = true }) {
@@ -57,6 +57,20 @@ test('shared store subscription survives navigation and metadata renders, cleans
     assert.equal(connections.length, 3);
     await act(async () => { renderer.update(React.createElement(Screen, { enabled: false })); });
     assert.ok(connections.every(connection => connection.closed));
+    const left = [], right = [];
+    const stopLeft = subscribeStoreRows('financialRecords', 'Mayla1', 'Carlos:Mayla', rows => left.push(rows));
+    const stopRight = subscribeStoreRows('financialRecords', 'Mayla1', 'Carlos:Mayla', rows => right.push(rows));
+    assert.equal(connections.length, 4, 'two consumers share one database listener');
+    const finance = connections[3];
+    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 10 }) }, { id: 'foreign', data: () => ({ companyId: 'Bombon', amount: 99 }) }] });
+    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 25 }) }] });
+    assert.equal(left.at(-1)[0].amount, 25);
+    assert.deepEqual(left, right, 'changes reach both consumers without reload');
+    assert.equal(left[0].length, 1, 'foreign company row is excluded');
+    stopLeft(); assert.equal(finance.closed, false);
+    stopRight(); assert.equal(finance.closed, true);
+    finance.apply({ docs: [] });
+    assert.equal(right.length, 2, 'late callbacks from old scope are ignored');
     await act(async () => { renderer.unmount(); });
     renderer = null;
   } finally {

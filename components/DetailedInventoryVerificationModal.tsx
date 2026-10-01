@@ -220,7 +220,10 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   const handleDeleteHistoryEntry = async (id: string) => {
     if (!window.confirm("¿Eliminar este registro permanentemente?")) return;
     try {
-      await deleteDoc(doc(db, 'detailedVerificationHistory', id));
+      const ref = doc(db, 'detailedVerificationHistory', id);
+      const existing = await getDoc(ref);
+      if (!existing.exists() || existing.data().storeId !== storeId || existing.data().categoryId !== category.id) throw new Error('El historial pertenece a otra sede o categoría.');
+      await deleteDoc(ref);
       setHistoryList(prev => prev.filter(item => item.id !== id));
     } catch (error) {
       alert("Error al eliminar.");

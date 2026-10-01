@@ -1,11 +1,13 @@
+import { createTenantWriter } from '../services/tenantWrites';
+import { DEFAULT_COMPANY_ID } from '../types';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { 
   doc, 
   onSnapshot, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc
+  setDoc as nativeSetDoc,
+  updateDoc as nativeUpdateDoc,
+  deleteDoc as nativeDeleteDoc
 } from 'firebase/firestore';
 import { Product, Store, Category, Seller } from '../types';
 import { 
@@ -52,6 +54,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
   categories,
   isAdmin
 }) => {
+  const { setDoc, updateDoc, deleteDoc } = useMemo(() => createTenantWriter(db, { companyId: store.companyId || DEFAULT_COMPANY_ID, storeIds: new Set([store.id]) }), [store.id, store.companyId]);
   const [sessionData, setSessionData] = useState<{
     id: string;
     storeId: string;

@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.120', date: '2026-09-30', description: 'Nómina por Empresa, Sede y Horario', isCurrent: true,
+  { version: '1.1.121', date: '2026-10-01', description: 'Protección entre Empresas y Conciliación en Vivo', isCurrent: true, changes: ['Validación de empresa antes de modificar registros y sus referencias.', 'Conciliación y reportes con suscripciones compartidas en tiempo real.', 'Roles independientes por empresa y caché compatible con varias pestañas.'] },
+  { version: '1.1.120', date: '2026-09-30', description: 'Nómina por Empresa, Sede y Horario', isCurrent: false,
     changes: ['La nómina filtra accesos y pagos por empresa y sede y utiliza el identificador del vendedor para sus accesos.', 'Las comisiones se calculan dentro del horario de cada jornada en hora Colombia; ventas sin inicio de sesión requieren validar el día.', 'Cambiar sede limpia la liquidación; guardar y eliminar pagos valida la empresa y sede del registro.']
   },
   { version: '1.1.119', date: '2026-09-30', description: 'Conteo sin Categorías en Cero', isCurrent: false,

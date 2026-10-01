@@ -306,6 +306,7 @@ export type UserLicenseType = 'admin' | 'seller' | 'developer';
 
 export interface Role {
   id: string;
+  companyId?: string;
   name: string;
   permissions: View[];
   userType?: UserLicenseType; // Clasificación de licencia; evita evadir límites con roles personalizados
