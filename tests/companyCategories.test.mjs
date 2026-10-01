@@ -28,6 +28,7 @@ test('companies have independent category lists; old scope, legacy and other com
     assert.deepEqual(selectCompanyCategories({ companyId: 'default_company', items: [legacy] }, 'mayla'), []);
     assert.deepEqual(selectCompanyCategories({ companyId: 'mayla', items: [legacy, own, { id: 'other', name: 'Jeans', companyId: 'other' }] }, 'mayla'), [own]);
     assert.deepEqual(selectCompanyCategories({ companyId: 'default_company', items: [legacy, own] }, 'default_company'), [legacy]);
+    records.set('stores/mayla-store', { companyId: 'mayla' });
     records.set('categories/blouses', legacy);
     records.set('inventory/p1', { storeId: 'mayla-store', categoryId: 'blouses', stock: 12 });
     records.set('inventory/p2', { storeId: 'bombon-store', categoryId: 'blouses', stock: 40 });

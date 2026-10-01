@@ -1,4 +1,4 @@
-import { createTenantWriter } from '../services/tenantWrites';
+import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { DEFAULT_COMPANY_ID } from '../types';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
@@ -160,12 +160,19 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
 
   // Subscribe to real-time scanning session
   useEffect(() => {
+    let active = true;
+    setSessionData(null);
+    setRecentScans([]);
     setIsLoading(true);
     const sessionDocRef = doc(db, 'tagScanningSessions', `active_${store.id}`);
     
     const unsubscribe = onSnapshot(sessionDocRef, (snapshot) => {
+      if (!active) return;
       if (snapshot.exists()) {
         const data = snapshot.data() as any;
+        try { assertTenantData('tagScanningSessions', data, { companyId: store.companyId || DEFAULT_COMPANY_ID, storeIds: new Set([store.id]) }); }
+        catch { setSessionData(null); setRecentScans([]); setIsLoading(false); return; }
+        if (data.storeId !== store.id) { setIsLoading(false); return; }
         setSessionData(data);
         if (data.scanHistory && Array.isArray(data.scanHistory)) {
           setRecentScans(data.scanHistory);
@@ -185,12 +192,13 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
       }
       setIsLoading(false);
     }, (error) => {
+      if (!active) return;
       console.error("Error reading tag scanning session:", error);
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [store.id]);
+    return () => { active = false; unsubscribe(); };
+  }, [store.id, store.companyId]);
 
   // Auto focus input field on mount or when status changes
   useEffect(() => {

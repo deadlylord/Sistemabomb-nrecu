@@ -1,5 +1,5 @@
 import { ensureCompanyRole } from '../services/companyRoles';
-import { createTenantWriter } from '../services/tenantWrites';
+import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 import { subscribeStoreRows } from '../services/storeSubscriptions';
 import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
@@ -515,7 +515,9 @@ const App: React.FC = () => {
     const unsubscribers = ids.map(id => onSnapshot(query(collection(db, 'inventoryTransfers'), where('fromStoreId', '==', id)), snapshot => {
       if (!active) return;
       rows.set(id, snapshot.docs.map(document => ({ ...document.data(), id: document.id } as InventoryTransfer)));
-      setInventoryTransfers(ids.flatMap(store => rows.get(store) || []).filter(transfer => visibleStoreIds.has(transfer.toStoreId)));
+      setInventoryTransfers(ids.flatMap(store => rows.get(store) || []).filter(transfer => {
+        try { assertTenantData('inventoryTransfers', transfer, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; } catch { return false; }
+      }));
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [isAppReady, isAuthReady, currentUser?.id, companyStoreKey]);
@@ -523,11 +525,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAdmin || !currentUser) return;
 
+    let active = true;
     const storeIds: string[] = JSON.parse(companyStoreKey);
     const unsubscribers = storeIds.map(storeId => {
       const inventoryQuery = query(collection(db, 'inventory'), where('storeId', '==', storeId));
       return onSnapshot(inventoryQuery, snapshot => {
-        const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product));
+        if (!active) return;
+        const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
         inventoryByStoreRef.current.set(storeId, storeInventory);
 
         // This single session cache serves Dashboard, multisite search and POS.
@@ -537,7 +541,7 @@ const App: React.FC = () => {
       }, error => console.error(`Error loading inventory for store ${storeId}:`, error));
     });
 
-    return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+    return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [isAdmin, currentUser, companyStoreKey, dataScope]);
 
 
@@ -580,7 +584,7 @@ const App: React.FC = () => {
     getDocs(query(collection(db, 'inventory'), where('storeId', '==', currentStoreId)))
       .then(snapshot => {
         if (!active) return;
-        const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product));
+        const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
         inventoryByStoreRef.current.set(currentStoreId, items);
         setInventory(items);
       })
@@ -1156,12 +1160,15 @@ const App: React.FC = () => {
       const fromProductDoc = await getDoc(fromProductRef);
       if (!fromProductDoc.exists()) throw new Error("Producto no encontrado en la tienda de origen.");
       const fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
+      if (!isOwnInventory(fromProduct) || fromProduct.storeId !== fromStoreId) throw new Error('El producto no pertenece a la sede de origen.');
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('La cantidad debe ser positiva.');
       if (fromProduct.stock < quantity) throw new Error("Stock insuficiente.");
       const toProductQuery = query(collection(db, 'inventory'), where('name', '==', fromProduct.name), where('storeId', '==', toStoreId), limit(1));
       const toProductSnapshot = await getDocs(toProductQuery);
       if (toProductSnapshot.empty) throw new Error(`Producto "${fromProduct.name}" debe existir en la tienda de destino antes de hacer el traslado.`);
       const toProductDoc = toProductSnapshot.docs[0];
       const toProduct = { id: toProductDoc.id, ...toProductDoc.data() } as Product;
+      if (!isOwnInventory(toProduct) || toProduct.storeId !== toStoreId) throw new Error('Producto destino no autorizado.');
       const toProductRef = toProductDoc.ref;
       batch.update(fromProductRef, { stock: increment(-quantity) });
       const updateData: { [key: string]: any } = { stock: increment(quantity) };
@@ -1223,7 +1230,7 @@ const App: React.FC = () => {
         }
       }
 
-      if (fromProductRef && fromProductDoc.exists()) {
+      if (fromProduct && fromProductRef && fromProductDoc.exists()) {
         batch.update(fromProductRef, { stock: increment(transfer.quantity) });
         const outLog = createProductHistoryLog(
           fromProduct || { id: fromProductRef.id, name: transfer.productName, storeId: transfer.fromStoreId, cost: transfer.productCost, price: 0, categoryId: '', stock: 0 },
@@ -1617,7 +1624,7 @@ const App: React.FC = () => {
             }
           }
 
-          if (fromProductRef && fromProductDoc && fromProductDoc.exists()) {
+          if (fromProduct && fromProductRef && fromProductDoc && fromProductDoc.exists()) {
             batch.update(fromProductRef, { stock: increment(qty) });
             const log = createProductHistoryLog(
               fromProduct || { id: fromProductRef.id, name: incident.productName || 'Producto', storeId: incident.fromStoreId, cost: 0, price: 0, categoryId: '', stock: 0 },
@@ -2028,7 +2035,8 @@ const App: React.FC = () => {
         lastUpdatedBy: currentUser.name, 
         updatedAt: now 
     };
-    await setDoc(draftRef, cleanObject(draftData));
+    const batch = writeBatch(db);
+    batch.set(draftRef, cleanObject(draftData));
 
     const historyRef = doc(collection(db, 'detailedVerificationHistory'));
     
@@ -2040,13 +2048,14 @@ const App: React.FC = () => {
         };
     });
 
-    await setDoc(historyRef, cleanObject({
+    batch.set(historyRef, cleanObject({
         ...draftData,
         id: historyRef.id,
         draftId: draftId,
         counts: historicalCounts, 
         updatedAt: now 
     }));
+    await batch.commit();
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {
@@ -2054,7 +2063,8 @@ const App: React.FC = () => {
     const batch = writeBatch(db);
     Object.entries(counts).forEach(([pid, count]) => {
       const productRef = doc(db, 'inventory', pid);
-      const product = inventory.find(p => p.id === pid);
+      const product = inventory.find(p => p.id === pid && p.storeId === currentStoreId && p.categoryId === categoryId);
+      if (!product || !isOwnInventory(product)) throw new Error('El conteo contiene un producto de otra sede o categoría.');
       if (product) {
         batch.update(productRef, { stock: count });
         const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste detallado de stock a ${count} unidades por administrador.`);
@@ -2143,9 +2153,13 @@ const App: React.FC = () => {
     }
   };
 
+  const isOwnInventory = (data: Product) => {
+    try { assertTenantData('inventory', data, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; } catch { return false; }
+  };
+
   const findCompanyProducts = async (name: string) => {
     const snapshots = await Promise.all([...visibleStoreIds].map(storeId => getDocs(query(collection(db, 'inventory'), where('storeId', '==', storeId), where('name', '==', name)))));
-    const docs = snapshots.flatMap(snapshot => snapshot.docs);
+    const docs = snapshots.flatMap(snapshot => snapshot.docs).filter(document => isOwnInventory(document.data() as Product));
     return { docs, empty: docs.length === 0 };
   };
 
@@ -2248,6 +2262,7 @@ const App: React.FC = () => {
       const productRef = doc(db, 'inventory', updatedProduct.id);
       
       const currentSnap = await getDoc(productRef);
+      if (!currentSnap.exists() || !isOwnInventory(currentSnap.data() as Product)) throw new Error('Producto no autorizado.');
       const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
       const oldStock = currentSnap.exists() ? (currentSnap.data().stock || 0) : 0;
       const oldPrice = currentSnap.exists() ? (currentSnap.data().price || 0) : 0;
@@ -2571,7 +2586,11 @@ const App: React.FC = () => {
     const purchaseRef = doc(db, 'purchases', updatedPurchase.id);
     const productRef = doc(db, 'inventory', updatedPurchase.productId);
 
-    const qtyDiff = updatedPurchase.quantity - originalQuantity;
+    const existing = await getDoc(purchaseRef);
+    if (!existing.exists()) throw new Error('Compra no encontrada.');
+    assertTenantData('purchases', existing.data(), { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+    if (existing.data().storeId !== updatedPurchase.storeId || existing.data().productId !== updatedPurchase.productId) throw new Error('No se puede cambiar la sede o el producto de una compra existente.');
+    const qtyDiff = updatedPurchase.quantity - existing.data().quantity;
 
     batch.update(purchaseRef, { ...updatedPurchase });
     batch.update(productRef, {

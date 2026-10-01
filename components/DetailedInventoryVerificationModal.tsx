@@ -2,7 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, PendingDetailedVerification } from '../types';
 import { SearchIcon, CrossIcon, CheckIcon, PackageIcon, EyeIcon, HistoryIcon, TrashIcon, ChevronDownIcon, AlertTriangleIcon, PlusCircleIcon } from './Icons';
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
+import { DEFAULT_COMPANY_ID } from '../types';
 import { formatCOP } from '../constants';
 
 interface DetailedInventoryVerificationModalProps {
@@ -16,6 +18,7 @@ interface DetailedInventoryVerificationModalProps {
   onSaveDraft: (counts: Record<string, number>) => Promise<void>;
   onApplyAdjustments: (counts: Record<string, number>) => Promise<void>;
   storeId: string;
+  companyId?: string;
 }
 
 type SortKey = 'name' | 'supplier' | 'stock' | 'physical' | 'difference';
@@ -30,7 +33,8 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
   isAdmin,
   onSaveDraft,
   onApplyAdjustments,
-  storeId
+  storeId,
+  companyId = DEFAULT_COMPANY_ID
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [localCounts, setLocalCounts] = useState<Record<string, string>>(initialCounts);
@@ -55,56 +59,44 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
     }));
   };
 
-  // Fetch current draft and history logs
-  const fetchDraftAndHistory = async () => {
-    setIsLoadingDraft(true);
-    try {
-      const draftId = `${category.id}_${storeId}`;
-      
-      // 1. Current Active Draft
-      const draftDoc = await getDoc(doc(db, 'pendingDetailedVerifications', draftId));
-      if (draftDoc.exists()) {
-        const data = draftDoc.data() as PendingDetailedVerification;
-        setDraftInfo(data);
-        
-        if (Object.keys(localCounts).length === 0) {
-          const newCounts: Record<string, string> = {};
-          Object.entries(data.counts).forEach(([pid, val]) => {
-            newCounts[pid] = (val as number).toString();
-          });
-          setLocalCounts(newCounts);
-        }
-      } else {
-        setDraftInfo(null);
-      }
-
-      // 2. Chronological History (Solo para Admin)
-      if (isAdmin) {
-          const historyQuery = query(
-            collection(db, 'detailedVerificationHistory'),
-            where('draftId', '==', draftId)
-          );
-          const historySnap = await getDocs(historyQuery);
-          const historyData = historySnap.docs
-            .map(d => ({ ...d.data(), id: d.id } as any))
-            // FIX: Explicitly converted updatedAt to string to satisfy Date constructor type requirements
-            .sort((a: any, b: any) => new Date(String(a.updatedAt)).getTime() - new Date(String(b.updatedAt)).getTime())
-            .slice(0, 15);
-          setHistoryList(historyData);
-      }
-
-    } catch (error) {
-      console.error("Error loading verification data:", error);
-    } finally {
-      setIsLoadingDraft(false);
-    }
-  };
-
+  // Every response belongs to one dialog selection; cleanup rejects stale reads.
   useEffect(() => {
-    if (isOpen) {
-      fetchDraftAndHistory();
-    }
-  }, [isOpen, category.id, storeId, isAdmin]);
+    let active = true;
+    setLocalCounts(initialCounts);
+    setDraftInfo(null);
+    setHistoryList([]);
+    setAuditModeEntry(null);
+    setShowHistory(false);
+    if (!isOpen) return;
+    setIsLoadingDraft(true);
+    const owns = (data: any) => {
+      try {
+        assertTenantData('pendingDetailedVerifications', data, { companyId, storeIds: new Set([storeId]) });
+        return data.storeId === storeId && data.categoryId === category.id;
+      } catch { return false; }
+    };
+    const load = async () => {
+      try {
+        const draftId = `${category.id}_${storeId}`;
+        const draftDoc = await getDoc(doc(db, 'pendingDetailedVerifications', draftId));
+        if (!active) return;
+        if (draftDoc.exists() && owns(draftDoc.data())) {
+          const data = draftDoc.data() as PendingDetailedVerification;
+          setDraftInfo(data);
+          setLocalCounts(current => Object.keys(current).length ? current : Object.fromEntries(Object.entries(data.counts).map(([id, count]) => [id, String(count)])));
+        }
+        if (isAdmin) {
+          const snapshot = await getDocs(query(collection(db, 'detailedVerificationHistory'), where('draftId', '==', draftId)));
+          if (!active) return;
+          setHistoryList(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as any)).filter(owns)
+            .sort((a, b) => new Date(String(b.updatedAt)).getTime() - new Date(String(a.updatedAt)).getTime()).slice(0, 15));
+        }
+      } catch (error) { if (active) console.error('Error loading verification data:', error); }
+      finally { if (active) setIsLoadingDraft(false); }
+    };
+    void load();
+    return () => { active = false; };
+  }, [isOpen, category.id, storeId, companyId, isAdmin]);
 
   const filteredAndSortedProducts = useMemo(() => {
     let result = products.filter(p => 
@@ -223,7 +215,7 @@ const DetailedInventoryVerificationModal: React.FC<DetailedInventoryVerification
       const ref = doc(db, 'detailedVerificationHistory', id);
       const existing = await getDoc(ref);
       if (!existing.exists() || existing.data().storeId !== storeId || existing.data().categoryId !== category.id) throw new Error('El historial pertenece a otra sede o categoría.');
-      await deleteDoc(ref);
+      await createTenantWriter(db, { companyId, storeIds: new Set([storeId]) }).deleteDoc(ref);
       setHistoryList(prev => prev.filter(item => item.id !== id));
     } catch (error) {
       alert("Error al eliminar.");

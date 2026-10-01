@@ -333,6 +333,8 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           isAdmin={isAdmin}
           onSaveDraft={(counts) => handleSaveDraftWithSnapshot(activeCategoryForDetails.id, counts)}
           onApplyAdjustments={(counts) => onApplyDetailedVerification(activeCategoryForDetails.id, counts)}
+          key={`${currentStore?.companyId}:${currentStore?.id}:${activeCategoryForDetails.id}`}
+          companyId={currentStore?.companyId}
           storeId={currentStore?.id || storeInventory[0]?.storeId || ''}
         />
       )}

@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 async function withWriter(run) {
  const dir = await mkdtemp(fileURLToPath(new URL('./.tenant-', import.meta.url)));
  try {
- const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
+ const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/legacyCategoryIsolation'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
  export const records=new Map(), reads=[], writes=[];
  export const doc=(_,collection,id)=>({path:collection+'/'+id,id});
  const snapshot=ref=>({ref,id:ref.id,exists:()=>records.has(ref.path),data:()=>records.get(ref.path)});
@@ -148,4 +148,64 @@ test('financial batches share reads for mirrors/history and rejected audit preve
  good.set(ref('financialRecordsHistory/ha'),{storeId:'mayla-1',recordId:'a',newState:{storeId:'mayla-1',relatedRecordId:'b'}});
  good.set(ref('financialRecordsHistory/hb'),{storeId:'mayla-2',recordId:'b',newState:{storeId:'mayla-2',relatedRecordId:'a'}});
  await good.commit();assert.equal(reads.length,0);assert.equal(records.get('financialRecordsHistory/hb').companyId,'mayla');
+}));
+
+
+test('inventory counts, purchases and transfers reject products from another own-company store',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('inventory/other-store',{companyId:'mayla',storeId:'mayla-2',categoryId:'c',stock:10});
+ records.set('categories/c',{companyId:'mayla',name:'Propia'});
+ for(const collection of ['purchases','productHistory','stockTakes','pendingDetailedVerifications','detailedVerificationHistory','tagScanningSessions']){
+  const data={storeId:'mayla-1',categoryId:'c'};
+  if(['purchases','productHistory'].includes(collection)) data.productId='other-store';
+  else data[collection==='tagScanningSessions'?'scannedCounts':'counts']={'other-store':2};
+  await assert.rejects(writer.setDoc(ref(collection+'/test'),data));
+ }
+ await assert.rejects(writer.setDoc(ref('inventoryTransfers/test'),{fromStoreId:'mayla-1',toStoreId:'mayla-2',productId:'other-store'}));
+ assert.equal(writes.length,0);assert.equal(records.get('inventory/other-store').stock,10);
+}));
+
+test('category count references and dotted tag scan updates cannot link foreign records',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ const writer=createTenantWriter({},scope);
+ records.set('categories/foreign',{companyId:'bombon',name:'Ajena'});
+ records.set('inventory/foreign',{companyId:'bombon',storeId:'metro',stock:9});
+ records.set('tagScanningSessions/active',{companyId:'mayla',storeId:'mayla-1',scannedCounts:{}});
+ await assert.rejects(writer.setDoc(ref('stockTakes/test'),{storeId:'mayla-1',verification:[{categoryId:'foreign'}]}));
+ await assert.rejects(writer.updateDoc(ref('tagScanningSessions/active'),{'scannedCounts.foreign':1}));
+ await assert.rejects(writer.updateDoc(ref('tagScanningSessions/active'),{scanHistory:[{productId:'foreign'}]}));
+ assert.equal(writes.length,0);
+}));
+
+test('legacy category repair verifies actual store ownership and rejects categories from another new company',()=>withWriter(async({isolateLegacyCategoryForStore,records,writes})=>{
+ records.set('stores/metro',{companyId:'default_company'});
+ records.set('stores/mayla-1',{companyId:'mayla'});
+ records.set('categories/legacy',{name:'Blusas'});
+ records.set('categories/foreign',{name:'Secreto',companyId:'other'});
+ records.set('inventory/legacy',{storeId:'metro',categoryId:'legacy',stock:12});
+ await assert.rejects(isolateLegacyCategoryForStore({},'mayla','metro','legacy',['legacy']));
+ await assert.rejects(isolateLegacyCategoryForStore({},'mayla','mayla-1','foreign',['legacy']));
+ assert.equal(writes.length,0);assert.equal(records.get('inventory/legacy').stock,12);
+}));
+
+test('legacy repair only relinks eligible own-store products and preserves stock, source and historical records',()=>withWriter(async({isolateLegacyCategoryForStore,records})=>{
+ records.set('stores/mayla-1',{companyId:'mayla'});
+ records.set('categories/legacy',{name:'Blusas'});
+ records.set('inventory/own',{storeId:'mayla-1',categoryId:'legacy',stock:12});
+ records.set('inventory/foreign',{companyId:'other',storeId:'mayla-1',categoryId:'legacy',stock:7});
+ records.set('stockTakes/history',{storeId:'mayla-1',verification:[{categoryId:'legacy',physicalCount:12}]});
+ const history=JSON.stringify(records.get('stockTakes/history'));
+ await isolateLegacyCategoryForStore({},'mayla','mayla-1','legacy',['own','foreign']);
+ assert.equal(records.get('inventory/own').companyId,'mayla');assert.equal(records.get('inventory/own').stock,12);
+ assert.equal(records.get('inventory/foreign').categoryId,'legacy');assert.equal(records.get('categories/legacy').companyId,undefined);
+ assert.equal(JSON.stringify(records.get('stockTakes/history')),history);
+}));
+
+
+test('scanning one new product validates only changed links rather than rereading the entire session',()=>withWriter(async({createTenantWriter,records,reads})=>{
+ const writer=createTenantWriter({},scope);
+ const history=Array.from({length:100},(_,i)=>({id:'s'+i,productId:'p'+i}));
+ records.set('tagScanningSessions/active',{companyId:'mayla',storeId:'mayla-1',scannedCounts:Object.fromEntries(history.map(s=>[s.productId,1])),scanHistory:history});
+ records.set('inventory/new',{companyId:'mayla',storeId:'mayla-1'});
+ await writer.updateDoc(ref('tagScanningSessions/active'),{'scannedCounts.new':1,scanHistory:[{id:'new',productId:'new'},...history].slice(0,100)});
+ assert.deepEqual(reads,['tagScanningSessions/active','inventory/new']);
 }));

@@ -59,8 +59,18 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
         const id = item?.productId || item?.id;
         if (id && !id.startsWith('voucher-')) references.push(doc(db, 'inventory', id));
       }
-      for (const key of ['counts', 'productCounts', 'systemSnapshot']) {
-        for (const id of Object.keys(data[key] || {})) references.push(doc(db, 'inventory', id));
+      for (const key of ['counts', 'productCounts', 'systemSnapshot', 'scannedCounts']) {
+        const values = name === 'tagScanningSessions' && op.kind === 'update' ? op.data?.[key] : data[key];
+        for (const id of Object.keys(values || {})) references.push(doc(db, 'inventory', id));
+      }
+      if (name === 'tagScanningSessions') {
+        const previousScans = new Set(op.kind === 'update' && snapshot.exists() ? (snapshot.data().scanHistory || []).map((scan: any) => JSON.stringify([scan.id, scan.productId])) : []);
+        for (const scan of op.data?.scanHistory || []) {
+          if (scan.productId && !previousScans.has(JSON.stringify([scan.id, scan.productId]))) references.push(doc(db, 'inventory', scan.productId));
+        }
+        for (const key of Object.keys(op.data || {})) {
+          if (key.startsWith('scannedCounts.')) references.push(doc(db, 'inventory', key.slice('scannedCounts.'.length)));
+        }
       }
       // Historical links may outlive their source document. Existing targets,
       // however, must always belong to this company, including staged mirrors.
@@ -72,6 +82,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       for (const payment of Object.values(data.payments || {}) as any[]) {
         if (payment?.voucherId) historicalReferences.push(doc(db, 'giftVouchers', payment.voucherId));
       }
+      for (const entry of data.verification || []) if (entry.categoryId) historicalReferences.push(doc(db, 'categories', entry.categoryId));
       for (const ref of historicalReferences) {
         const staged = pending.get(ref.path);
         if (staged) assertTenantData(collectionName(ref), { ...staged, companyId: staged.companyId || scope.companyId }, scope);
@@ -82,11 +93,14 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       }
       for (const ref of references) {
         const staged = pending.get(ref.path);
-        if (staged) assertTenantData(collectionName(ref), { ...staged, companyId: staged.companyId || scope.companyId }, scope);
-        else {
-          const linked = await load(ref);
-          if (!linked.exists()) throw new Error('No se encontró un registro vinculado.');
-          assertTenantData(collectionName(ref), linked.data(), scope);
+        const linked = staged ? null : await load(ref);
+        if (!staged && !linked.exists()) throw new Error('No se encontró un registro vinculado.');
+        const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked.data();
+        assertTenantData(collectionName(ref), linkedData, scope);
+        const expectedStore = name === 'inventoryTransfers' ? data.fromStoreId : data.storeId;
+        if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers'].includes(name)) {
+          if (linkedData.storeId !== expectedStore) throw new Error('El producto vinculado pertenece a otra sede.');
+          if (['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name) && linkedData.categoryId !== data.categoryId) throw new Error('El producto no pertenece a la categoría del conteo.');
         }
       }
     }
