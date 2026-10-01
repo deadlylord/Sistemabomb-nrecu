@@ -1,3 +1,4 @@
+import VersionHistoryModal from './VersionHistoryModal';
 import PlatformDevelopersPanel from './PlatformDevelopersPanel';
 import { PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -54,6 +55,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   onDeleteUser,
   onToggleUserStatus
 }) => {
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(activeCompanyId);
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
   const [isEditCompanyModalOpen, setIsEditCompanyModalOpen] = useState(false);
@@ -479,6 +481,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <VersionHistoryModal isOpen={isVersionHistoryOpen} onClose={() => setIsVersionHistoryOpen(false)} />
       {isOwner && <PlatformDevelopersPanel sellers={sellers} stores={stores} grants={developerGrants} onAssign={onSetPlatformDeveloper} onCreate={onCreatePlatformDeveloper} />}
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -496,6 +499,10 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => setIsVersionHistoryOpen(true)} className="flex items-center gap-2 border border-indigo-400/40 hover:bg-indigo-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-all">
+            <ClipboardListIcon className="w-4 h-4" />
+            <span>Historial de versiones</span>
+          </button>
           <button
             onClick={() => setIsNewCompanyModalOpen(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/30 active:scale-95 transition-all"

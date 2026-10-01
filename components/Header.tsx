@@ -28,7 +28,6 @@ interface HeaderProps {
   onToggleGlobalMode: () => void;
   incidents: Incident[];
   onOpenBriefing: () => void;
-  onOpenVersionHistory: () => void;
   isDeveloper?: boolean;
 }
 
@@ -51,7 +50,7 @@ interface NavGroup {
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
   currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
-  onToggleGlobalMode, incidents, onOpenBriefing, onOpenVersionHistory, isDeveloper: isDeveloperProp
+  onToggleGlobalMode, incidents, onOpenBriefing, isDeveloper: isDeveloperProp
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
@@ -424,10 +423,9 @@ const Header: React.FC<HeaderProps> = ({
                           <span>🛠️ Panel Developer Center</span>
                         </button>
                       )}
-                      <button onClick={() => { onOpenVersionHistory(); setIsUserDropdownOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
-                        <SparklesIcon className="w-5 h-5 text-accent" />
+                      <span className="flex items-center gap-3 px-3 py-2 text-sm font-bold text-slate-600 dark:text-slate-300">
                         Versión v{currentVersion}
-                      </button>
+                      </span>
                     </div>
                     <div className="p-2 border-t dark:border-slate-800">
                       <button onClick={onLogout} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-black text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all uppercase tracking-widest">

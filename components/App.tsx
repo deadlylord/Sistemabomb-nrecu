@@ -46,7 +46,6 @@ import RecaudoReceiptModal from './RecaudoReceiptModal';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
 import { InventoryVerificationModal } from './InventoryVerificationModal';
 import PendingIncidentsBriefingModal from './PendingIncidentsBriefingModal';
-import VersionHistoryModal from './VersionHistoryModal';
 import { PwaInstallModal } from './PwaInstallModal';
 
 const PosView = lazy(() => import('./PosView'));
@@ -178,7 +177,6 @@ const App: React.FC = () => {
   
   const [hasShownBriefing, setHasShownBriefing] = useState(false);
   const [isBriefingModalOpen, setIsBriefingModalOpen] = useState(false);
-  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
@@ -3126,11 +3124,11 @@ const App: React.FC = () => {
   
   const handleLogout = () => { currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
 
-  if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} onOpenVersionHistory={() => setIsVersionModalOpen(true)} />{isVersionModalOpen && <VersionHistoryModal isOpen={isVersionModalOpen} onClose={() => setIsVersionModalOpen(false)} />}</div>;
+  if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} onOpenVersionHistory={() => setIsVersionModalOpen(true)} isDeveloper={isDeveloper} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <main key={currentView === View.DEVELOPER_CENTER ? currentUser.id : dataScope} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
         <Suspense fallback={<div className="p-6 text-center" role="status">Cargando módulo…</div>}>
         {currentView === View.DASHBOARD && <DashboardView stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
@@ -3302,12 +3300,7 @@ const App: React.FC = () => {
         onNavigate={setCurrentView}
       />
       
-      {isVersionModalOpen && (
-        <VersionHistoryModal 
-            isOpen={isVersionModalOpen} 
-            onClose={() => setIsVersionModalOpen(false)} 
-        />
-      )}
+
 
     </div>
   );
