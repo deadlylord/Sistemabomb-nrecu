@@ -321,6 +321,7 @@ export interface Seller {
   storeId: string;
   companyId?: string;
   isDeveloper?: boolean;
+  platformRole?: 'developer' | null; // Display/protection metadata; authorization uses platformDevelopers.
   isDisabled?: boolean;
 }
 

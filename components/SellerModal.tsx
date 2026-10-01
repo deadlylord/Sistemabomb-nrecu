@@ -1,5 +1,6 @@
 
 
+import { isPlatformRole } from '../services/developerAccess';
 import React, { useState, useEffect } from 'react';
 import { Seller, Role, Store, View } from '../types';
 import { EyeIcon, EyeOffIcon, ShieldCheckIcon } from './Icons';
@@ -21,14 +22,12 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
   const [showPassword, setShowPassword] = useState(false);
   const [roleId, setRoleId] = useState<string | ''>('');
   const [storeId, setStoreId] = useState<string | ''>('');
-  const [isDeveloper, setIsDeveloper] = useState(false);
 
   // Filter roles available to the current user
   const availableRoles = React.useMemo(() => {
-    if (isDeveloperUser) return roles;
     return roles.filter(r => {
       const rName = (r.name || '').toLowerCase().trim();
-      const isDev = rName === 'developer' || rName === 'desarrollador' || (r.permissions && r.permissions.includes(View.DEVELOPER_CENTER));
+      const isDev = isPlatformRole(r) || rName === 'developer' || rName === 'desarrollador' || (r.permissions && r.permissions.includes(View.DEVELOPER_CENTER));
       return !isDev;
     });
   }, [roles, isDeveloperUser]);
@@ -40,7 +39,6 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
       setRoleId(seller.roleId || '');
       setStoreId(seller.storeId || '');
       setPassword(seller.password || '');
-      setIsDeveloper(!!seller.isDeveloper);
       setShowPassword(false);
     } else {
       setName('');
@@ -49,7 +47,6 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
       setRoleId(defaultRole);
       setStoreId(stores.length > 0 ? stores[0].id : '');
       setPassword('');
-      setIsDeveloper(false);
       setShowPassword(false);
     }
   }, [seller, availableRoles, stores, isOpen]);
@@ -63,17 +60,12 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
         alert("La contraseña es obligatoria.");
         return;
       }
-      // If the current user is not a developer, they cannot grant or toggle developer access
-      const finalIsDev = isDeveloperUser ? isDeveloper : (seller ? !!seller.isDeveloper : false);
-      onSave(name.trim(), password.trim(), roleId, storeId, username.trim() || undefined, finalIsDev);
+      // Platform access is managed exclusively in Developer Center.
+      onSave(name.trim(), password.trim(), roleId, storeId, username.trim() || undefined);
     } else {
       alert("Por favor, completa todos los campos.");
     }
   };
-
-  const selectedRole = roles.find(r => r.id === roleId);
-  const isDevRole = (selectedRole?.name || '').toLowerCase() === 'developer' || 
-                    (selectedRole?.name || '').toLowerCase() === 'desarrollador';
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -144,13 +136,7 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
               <select
                 id="sellerRole"
                 value={roleId}
-                onChange={e => {
-                  setRoleId(e.target.value);
-                  const r = roles.find(item => item.id === e.target.value);
-                  if (isDeveloperUser && (r?.name || '').toLowerCase() === 'developer') {
-                    setIsDeveloper(true);
-                  }
-                }}
+                onChange={e => setRoleId(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 focus:ring-2 focus:ring-accent focus:border-accent outline-none text-sm font-medium"
                 required
               >
@@ -177,27 +163,6 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
               </select>
             </div>
           </div>
-
-          {/* Developer Access Toggle (Only visible and configurable by developers) */}
-          {isDeveloperUser && (
-            <div className="p-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
-              <div className="pr-2">
-                <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 block">
-                  🛠️ Privilegios de Desarrollador
-                </span>
-                <span className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 block leading-tight">
-                  Permite acceso al Developer Center y gestión global multi-empresa.
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={isDeveloper || isDevRole}
-                disabled={isDevRole}
-                onChange={e => setIsDeveloper(e.target.checked)}
-                className="h-5 w-5 rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
-              />
-            </div>
-          )}
 
           <div className="mt-6 flex justify-end space-x-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-bold text-xs">Cancelar</button>

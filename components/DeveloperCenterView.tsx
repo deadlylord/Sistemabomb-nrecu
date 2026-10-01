@@ -1,5 +1,7 @@
+import PlatformDevelopersPanel from './PlatformDevelopersPanel';
+import { PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
 import React, { useState, useMemo, useEffect } from 'react';
-import { Company, Store, Seller, Role, View, ALL_CLIENT_MODULES, DEFAULT_CLIENT_ALLOWED_VIEWS, CompanyModuleInfo, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
+import { Company, Store, Seller, Role, View, DEFAULT_COMPANY_ID, ALL_CLIENT_MODULES, DEFAULT_CLIENT_ALLOWED_VIEWS, CompanyModuleInfo, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
 import { formatCOP } from '../constants';
 import { compressImage } from '../services/storageService';
 import { 
@@ -11,6 +13,10 @@ import {
 } from './Icons';
 
 interface DeveloperCenterViewProps {
+  isOwner: boolean;
+  developerGrants: PlatformDeveloperGrant[];
+  onSetPlatformDeveloper: (userId: string, active: boolean) => Promise<void>;
+  onCreatePlatformDeveloper: (data: { name: string; username: string; password: string; storeId: string }) => Promise<void>;
   companies: Company[];
   stores: Store[];
   sellers: Seller[];
@@ -30,6 +36,7 @@ interface DeveloperCenterViewProps {
 }
 
 const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
+  isOwner, developerGrants, onSetPlatformDeveloper, onCreatePlatformDeveloper,
   companies,
   stores,
   sellers,
@@ -200,8 +207,8 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const companyUsers = useMemo(() => {
     if (!activeCompany) return [];
     const storeIds = new Set(companyStores.map(s => s.id));
-    return sellers.filter(s => (s.companyId || 'default_company') === activeCompany.id || storeIds.has(s.storeId));
-  }, [sellers, activeCompany, companyStores]);
+    return sellers.filter(s => (isOwner || s.id !== PLATFORM_OWNER_USER_ID && s.platformRole !== 'developer') && ((s.companyId || 'default_company') === activeCompany.id || storeIds.has(s.storeId)));
+  }, [sellers, activeCompany, companyStores, isOwner]);
 
   const getRoleUserType = (role?: Role): 'admin' | 'seller' | 'developer' => {
     if (!role) return 'seller';
@@ -472,6 +479,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {isOwner && <PlatformDevelopersPanel sellers={sellers} stores={stores} grants={developerGrants} onAssign={onSetPlatformDeveloper} onCreate={onCreatePlatformDeveloper} />}
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -1789,7 +1797,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                     onChange={(e) => setEditUserRoleId(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-sm"
                   >
-                    {roles.map(r => (
+                    {roles.filter(role => (role.companyId || DEFAULT_COMPANY_ID) === (editingUser?.companyId || DEFAULT_COMPANY_ID)).map(r => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>

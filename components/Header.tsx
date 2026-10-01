@@ -1,4 +1,4 @@
-import { hasTemporaryCarlosDeveloperAccess } from '../services/developerAccess';
+import { isPlatformOwner } from '../services/developerAccess';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Seller, Store, Role, Incident, IncidentStatus, Company } from '../types';
@@ -119,14 +119,7 @@ const Header: React.FC<HeaderProps> = ({
 
   const isDeveloper = isDeveloperProp !== undefined
     ? isDeveloperProp
-    : (
-        hasTemporaryCarlosDeveloperAccess(currentUser) ||
-        !!currentUser.isDeveloper ||
-        userRole?.userType === 'developer' ||
-        roleName === 'developer' ||
-        roleName === 'desarrollador' ||
-        !!userRole?.permissions?.includes(View.DEVELOPER_CENTER)
-      );
+    : isPlatformOwner(currentUser);
 
   const filteredGroups = useMemo(() => {
     const companyAllowed = currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0

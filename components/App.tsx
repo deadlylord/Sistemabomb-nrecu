@@ -4,7 +4,8 @@ import { useCompanyCollection } from '../services/useCompanyCollection';
 import { subscribeStoreRows } from '../services/storeSubscriptions';
 import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
 import { belongsToCompany, selectCompanyCategories } from '../services/companyCategories';
-import { hasTemporaryCarlosDeveloperAccess } from '../services/developerAccess';
+import { hasPlatformDeveloperAccess, isPlatformOwner, isPlatformRole, assertCompanyRole, assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
+import { setPlatformDeveloper } from '../services/platformDevelopers';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { db, auth } from '../firebase';
@@ -106,8 +107,7 @@ const getRoleUserType = (role?: Role): 'admin' | 'seller' | 'developer' => {
   if (
     role.userType === 'developer' ||
     normalizedName === 'developer' ||
-    normalizedName === 'desarrollador' ||
-    role.permissions?.includes(View.DEVELOPER_CENTER)
+    normalizedName === 'desarrollador'
   ) return 'developer';
   if (
     role.userType === 'admin' ||
@@ -150,6 +150,8 @@ const App: React.FC = () => {
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
   const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]);
   const [currentUser, setCurrentUser] = useState<Seller | null>(null);
+  const [developerGrant, setDeveloperGrant] = useState<PlatformDeveloperGrant | null>(null);
+  const [developerGrants, setDeveloperGrants] = useState<PlatformDeveloperGrant[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(localStorage.getItem('currentStoreId'));
   const currentStoreIdRef = useRef<string | null>(currentStoreId);
   const inventoryByStoreRef = useRef<Map<string, Product[]>>(new Map());
@@ -252,17 +254,26 @@ const App: React.FC = () => {
       return getRoleUserType(roles.find(r => r.id === currentUser.roleId)) === 'admin';
   }, [currentUser, roles]);
 
-  const isDeveloper = useMemo(() => {
-      if (!currentUser) return false;
-      const userRole = roles.find(r => r.id === currentUser.roleId);
-      const roleName = (userRole?.name || '').toLowerCase().trim();
-
-      return hasTemporaryCarlosDeveloperAccess(currentUser) || !!currentUser.isDeveloper ||
-             userRole?.userType === 'developer' ||
-             roleName === 'developer' ||
-             roleName === 'desarrollador' ||
-             !!userRole?.permissions?.includes(View.DEVELOPER_CENTER);
-  }, [currentUser, roles]);
+  const isOwner = isPlatformOwner(currentUser);
+  const isDeveloper = hasPlatformDeveloperAccess(currentUser, developerGrant);
+  useEffect(() => {
+    setDeveloperGrant(null);
+    if (!isAuthReady || !currentUser || isOwner) return;
+    let active = true;
+    const unsubscribe = onSnapshot(nativeDoc(db, 'platformDevelopers', currentUser.id), snapshot => {
+      if (active) setDeveloperGrant(snapshot.exists() ? snapshot.data() as PlatformDeveloperGrant : null);
+    }, () => { if (active) setDeveloperGrant(null); });
+    return () => { active = false; unsubscribe(); };
+  }, [isAuthReady, currentUser?.id, isOwner]);
+  useEffect(() => {
+    setDeveloperGrants([]);
+    if (!isAuthReady || !isOwner || currentView !== View.DEVELOPER_CENTER) return;
+    let active = true;
+    const unsubscribe = onSnapshot(collection(db, 'platformDevelopers'), snapshot => {
+      if (active) setDeveloperGrants(snapshot.docs.map(document => document.data() as PlatformDeveloperGrant).filter(grant => grant.grantedBy === PLATFORM_OWNER_USER_ID));
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [isAuthReady, isOwner, currentView]);
 
   // Multi-company isolation: every operational view is scoped to exactly one company.
   // Developers can switch the operational context from Developer Center, but only
@@ -302,7 +313,7 @@ const App: React.FC = () => {
   const doc = ((...args: any[]) => { const ref = (nativeDoc as any)(...args); if (args.length === 1) tenantWriter.registerNew(ref); return ref; }) as typeof nativeDoc;
   const writeBatch = (_?: any) => tenantWriter.writeBatch();
 
-  const visibleRoles = useMemo(() => roles.filter(role => (role.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId), [roles, operationalCompanyId]);
+  const visibleRoles = useMemo(() => roles.filter(role => (role.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId && !isPlatformRole(role)).map(role => ({ ...role, permissions: role.permissions.filter(view => view !== View.DEVELOPER_CENTER) })), [roles, operationalCompanyId]);
   const roleRepairs = useRef(new Set<string>());
   const isolateSellerRole = async (seller: Seller) => {
     const companyId = seller.companyId || stores.find(store => store.id === seller.storeId)?.companyId || DEFAULT_COMPANY_ID;
@@ -316,7 +327,7 @@ const App: React.FC = () => {
     sellers.forEach(seller => {
       const companyId = seller.companyId || stores.find(store => store.id === seller.storeId)?.companyId || DEFAULT_COMPANY_ID;
       const role = roles.find(item => item.id === seller.roleId);
-      if (!role || companyId === DEFAULT_COMPANY_ID || (role.companyId || DEFAULT_COMPANY_ID) !== DEFAULT_COMPANY_ID || roleRepairs.current.has(seller.id)) return;
+      if (!role || isPlatformRole(role) || companyId === DEFAULT_COMPANY_ID || (role.companyId || DEFAULT_COMPANY_ID) !== DEFAULT_COMPANY_ID || roleRepairs.current.has(seller.id)) return;
       roleRepairs.current.add(seller.id);
       isolateSellerRole(seller).catch(error => console.error('Error isolating user role:', error)).finally(() => roleRepairs.current.delete(seller.id));
     });
@@ -324,8 +335,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
     const seller = sellers.find(item => item.id === currentUser.id);
-    if (seller && seller.roleId !== currentUser.roleId) setCurrentUser(user => user ? { ...user, roleId: seller.roleId } : user);
-  }, [sellers, currentUser?.id, currentUser?.roleId]);
+    if (seller && (seller.roleId !== currentUser.roleId || seller.isDisabled !== currentUser.isDisabled)) setCurrentUser(user => user ? { ...user, roleId: seller.roleId, isDisabled: seller.isDisabled } : user);
+  }, [sellers, currentUser?.id, currentUser?.roleId, currentUser?.isDisabled]);
 
   const visibleSellers = useMemo(() => {
     return sellers.filter(seller => {
@@ -347,7 +358,7 @@ const App: React.FC = () => {
   const userPermissions = useMemo(() => {
     if (!currentUser) return [];
     const userRole = roles.find(role => role.id === currentUser.roleId);
-    let perms = userRole ? userRole.permissions : [];
+    let perms = (userRole?.permissions || []).filter(view => view !== View.DEVELOPER_CENTER);
     
     // Si no es desarrollador y la empresa tiene módulos restringidos, filtrar permisos
     if (!isDeveloper && currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0) {
@@ -369,6 +380,7 @@ const App: React.FC = () => {
       (userPermissions.includes(View.DASHBOARD) && View.DASHBOARD) ||
       userPermissions[0];
 
+    if (!fallbackView && currentView === View.DEVELOPER_CENTER) setCurrentView(View.POS);
     if (fallbackView) {
       setCurrentView(fallbackView as View);
     }
@@ -2777,10 +2789,7 @@ const App: React.FC = () => {
   const assertUserLimit = (companyId: string, roleId: string, excludedUserId?: string) => {
     const role = roles.find(r => r.id === roleId);
     const userType = getRoleUserType(role);
-    if (userType === 'developer') {
-      if (!isDeveloper) throw new Error('Solo el desarrollador puede crear usuarios Developer.');
-      return;
-    }
+    if (isPlatformRole(role)) throw new Error('Developer solo se asigna desde Developer Center por Carlos.');
 
     const company = companies.find(c => c.id === companyId);
     if (!company) throw new Error('No se encontró la empresa del usuario.');
@@ -2788,7 +2797,7 @@ const App: React.FC = () => {
     const companyUsers = sellers.filter(s => {
       if (s.id === excludedUserId) return false;
       const sellerCompanyId = s.companyId || stores.find(store => store.id === s.storeId)?.companyId || DEFAULT_COMPANY_ID;
-      return sellerCompanyId === companyId && getRoleUserType(roles.find(r => r.id === s.roleId)) === userType;
+      return s.id !== PLATFORM_OWNER_USER_ID && s.platformRole !== 'developer' && sellerCompanyId === companyId && getRoleUserType(roles.find(r => r.id === s.roleId)) === userType;
     });
     const configuredLimit = userType === 'admin' ? company.maxAdmins : company.maxSellers;
     const effectiveLimit = configuredLimit === undefined ? companyUsers.length : configuredLimit;
@@ -2824,9 +2833,35 @@ const App: React.FC = () => {
     };
     await nativeSetDoc(sellerRef, cleanObject(newAdmin));
   };
+  const assertCanManageUser = async (id: string) => {
+    if (isOwner) return;
+    if (id === PLATFORM_OWNER_USER_ID) throw new Error('Solo Carlos puede modificar su cuenta de propietario.');
+    const grant = await getDoc(nativeDoc(db, 'platformDevelopers', id));
+    if (grant.exists() && grant.data().active) throw new Error('Solo Carlos puede modificar una cuenta de plataforma.');
+  };
+  const handleSetPlatformDeveloper = async (userId: string, active: boolean) => {
+    await setPlatformDeveloper(db, currentUser, currentView, userId, active);
+  };
+  const handleCreatePlatformDeveloper = async (data: { name: string; username: string; password: string; storeId: string }) => {
+    assertPlatformOwnerAction(currentUser, currentView);
+    if (!data.name.trim() || !data.username.trim() || !data.password.trim()) throw new Error('Completa nombre, usuario y contraseña.');
+    if (sellers.some(seller => (seller.username || seller.name || '').trim().toLowerCase() === data.username.trim().toLowerCase())) throw new Error('Ese usuario ya existe.');
+    const store = await getDoc(nativeDoc(db, 'stores', data.storeId));
+    if (!store.exists()) throw new Error('Selecciona una sede existente para el usuario.');
+    const companyId = store.data().companyId || DEFAULT_COMPANY_ID;
+    const adminRole = roles.find(role => role.name === 'Administrator' && (role.companyId || DEFAULT_COMPANY_ID) === DEFAULT_COMPANY_ID);
+    if (!adminRole) throw new Error('No se encontró el rol base de la empresa.');
+    const roleId = await ensureCompanyRole(db, adminRole.id, companyId);
+    const ref = nativeDoc(collection(db, 'sellers'));
+    const batch = nativeWriteBatch(db);
+    batch.set(ref, { id: ref.id, name: data.name.trim(), username: data.username.trim(), password: data.password.trim(), storeId: data.storeId, companyId, roleId, platformRole: 'developer', isDisabled: false });
+    batch.set(nativeDoc(db, 'platformDevelopers', ref.id), { userId: ref.id, role: 'developer', active: true, grantedBy: PLATFORM_OWNER_USER_ID, grantedAt: new Date().toISOString() });
+    await batch.commit();
+  };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
     const userCompanyId = operationalCompanyId;
     if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
+    assertCompanyRole(roles.find(role => role.id === roleId));
     assertUserLimit(userCompanyId, roleId);
     const newRef = doc(collection(db, 'sellers'));
     const newSellerData: any = {
@@ -2842,6 +2877,8 @@ const App: React.FC = () => {
     await setDoc(newRef, cleanObject(newSellerData));
   };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    await assertCanManageUser(id);
+    assertCompanyRole(roles.find(role => role.id === roleId));
     const targetSeller = sellers.find(s => s.id === id);
     const userCompanyId = targetSeller?.companyId || currentUser?.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
     if (!targetSeller) throw new Error('No se encontró el usuario.');
@@ -2853,14 +2890,13 @@ const App: React.FC = () => {
     if (username !== undefined) data.username = username;
     await updateDoc(doc(db, 'sellers', id), cleanObject(data));
   };
-  const handleDeleteSeller = async (id: string) => { if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
-  const handleToggleSellerStatus = async (id: string) => { const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
-  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
+  const handleDeleteSeller = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
+  const handleToggleSellerStatus = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
+  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
   const handleUpdateRole = async (updatedRole: Role) => {
     const resolvedType = getRoleUserType(updatedRole);
-    if (resolvedType === 'developer' && !isDeveloper) {
-      throw new Error('Solo el desarrollador puede modificar un rol Developer.');
-    }
+    assertCompanyRole(updatedRole);
+    if (isPlatformRole(roles.find(role => role.id === updatedRole.id))) throw new Error('Este rol de plataforma no se modifica desde roles de empresa.');
     await Promise.all(sellers.filter(seller => seller.roleId === updatedRole.id && (seller.companyId || stores.find(store => store.id === seller.storeId)?.companyId || DEFAULT_COMPANY_ID) !== operationalCompanyId).map(isolateSellerRole));
     await setDoc(doc(db, 'roles', updatedRole.id), cleanObject({ ...updatedRole, userType: resolvedType }));
   };
@@ -3102,13 +3138,13 @@ const App: React.FC = () => {
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
         {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
-        {currentView === View.SELLERS && <SellersView sellers={visibleSellers} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={isDeveloper} />}
+        {currentView === View.SELLERS && <SellersView sellers={visibleSellers.filter(user => isOwner || user.id !== PLATFORM_OWNER_USER_ID && user.platformRole !== 'developer')} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={false} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={visibleRoles} />}
         {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
         {currentView === View.SETTINGS && <SettingsView stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
-        {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={isDeveloper} />}
+        {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
         {currentView === View.INCIDENTS && <IncidentsView incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && (
           <SmartAccountantView 
@@ -3196,10 +3232,14 @@ const App: React.FC = () => {
         )}
         {currentView === View.DEVELOPER_CENTER && isDeveloper && (
           <DeveloperCenterView
+            isOwner={isOwner}
+            developerGrants={developerGrants}
+            onSetPlatformDeveloper={handleSetPlatformDeveloper}
+            onCreatePlatformDeveloper={handleCreatePlatformDeveloper}
             companies={companies}
             stores={stores}
             sellers={sellers}
-            roles={roles}
+            roles={roles.filter(role => !isPlatformRole(role)).map(role => ({ ...role, permissions: role.permissions.filter(view => view !== View.DEVELOPER_CENTER) }))}
             activeCompanyId={activeCompanyId}
             onSetActiveCompanyId={(id) => {
               setActiveCompanyId(id);

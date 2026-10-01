@@ -1,3 +1,4 @@
+import { PLATFORM_OWNER_USER_ID } from '../services/developerAccess';
 import React, { useState, useMemo } from 'react';
 import { Seller, Role, Store } from '../types';
 import { EditIcon, PlusCircleIcon, TrashIcon, SearchIcon, CrossIcon, PowerIcon, EyeIcon, EyeOffIcon } from './Icons';
@@ -145,10 +146,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredSellers.map((seller) => {
                   const roleName = getRoleName(seller.roleId);
-                  const isDev = !!seller.isDeveloper || 
-                                roleName.toLowerCase() === 'developer' || 
-                                roleName.toLowerCase() === 'desarrollador' ||
-                                (seller.username || '').toLowerCase() === 'developer';
+                  const isDev = seller.id === PLATFORM_OWNER_USER_ID || seller.platformRole === 'developer';
 
                   return (
                     <tr key={seller.id} className={`transition-colors ${seller.isDisabled ? 'bg-red-50 dark:bg-red-900/20 opacity-60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}>

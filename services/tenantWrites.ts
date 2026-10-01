@@ -6,7 +6,7 @@ export type TenantScope = { companyId: string; storeIds: Set<string> };
 export function assertTenantData(collectionName: string, data: any, scope: TenantScope) {
   if (!data) throw new Error('No se encontró el registro.');
   if (data.companyId && data.companyId !== scope.companyId) throw new Error('Operación bloqueada: el registro pertenece a otra empresa.');
-  if (collectionName === 'companies') throw new Error('La gestión de empresas requiere acceso Developer.');
+  if (['companies', 'platformDevelopers'].includes(collectionName)) throw new Error('La gestión de empresas requiere acceso Developer.');
   if (['stores', 'categories', 'roles'].includes(collectionName)) {
     if ((data.companyId || DEFAULT_COMPANY_ID) !== scope.companyId) throw new Error('El registro pertenece a otra empresa.');
   } else if (data.storeId) {
@@ -42,6 +42,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       if (snapshot.exists()) assertTenantData(name, snapshot.data(), scope);
       if (op.kind === 'update' && !snapshot.exists()) throw new Error('No se encontró el registro a modificar.');
       if (op.kind === 'delete') continue;
+      if (name === 'sellers' && op.data?.platformRole !== undefined) throw new Error('El rol de plataforma solo se asigna desde Developer Center por Carlos.');
       const data = { ...(snapshot.exists() ? snapshot.data() : {}), ...op.data, companyId: op.data?.companyId || scope.companyId };
       assertTenantData(name, data, scope);
       op.data = { ...op.data, companyId: scope.companyId };

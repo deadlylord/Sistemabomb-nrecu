@@ -1,5 +1,6 @@
 
 
+import { isPlatformRole } from '../services/developerAccess';
 import React, { useState } from 'react';
 import { Role, View, VIEW_LABELS, UserLicenseType } from '../types';
 import { PlusCircleIcon, ShieldCheckIcon, SparklesIcon, CheckIcon } from './Icons';
@@ -11,32 +12,27 @@ interface RoleManagerViewProps {
   isDeveloper?: boolean;
 }
 
-const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onUpdateRole, isDeveloper = false }) => {
+const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles, onAddRole, onUpdateRole }) => {
+  const roles = providedRoles.filter(role => !isPlatformRole(role)).map(role => ({ ...role, permissions: role.permissions.filter(view => view !== View.DEVELOPER_CENTER) }));
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id || null);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleUserType, setNewRoleUserType] = useState<UserLicenseType>('seller');
 
   const selectedRole = roles.find(r => r.id === selectedRoleId);
 
-  const hasDeveloperRole = roles.some(r => 
-    r.name.toLowerCase() === 'developer' || 
-    r.name.toLowerCase() === 'desarrollador' ||
-    (r.permissions && r.permissions.includes(View.DEVELOPER_CENTER))
-  );
-
   const availableViews = React.useMemo(() => {
     return Object.values(View).filter(v => {
       if (v === View.DEVELOPER_CENTER) {
-        return !!isDeveloper;
+        return false;
       }
       return true;
     });
-  }, [isDeveloper]);
+  }, []);
 
   const handleAddRole = () => {
     const trimmed = newRoleName.trim();
     if (trimmed) {
-      if (!isDeveloper && (trimmed.toLowerCase() === 'developer' || trimmed.toLowerCase() === 'desarrollador')) {
+      if (trimmed.toLowerCase() === 'developer' || trimmed.toLowerCase() === 'desarrollador') {
         alert("No tienes permisos para crear roles de Desarrollador.");
         return;
       }
@@ -46,14 +42,9 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
     }
   };
 
-  const handleCreateDeveloperRole = () => {
-    if (!isDeveloper) return;
-    onAddRole('Developer', 'developer');
-  };
-
   const handlePermissionChange = (view: View, isChecked: boolean) => {
     if (!selectedRole) return;
-    if (view === View.DEVELOPER_CENTER && !isDeveloper) {
+    if (view === View.DEVELOPER_CENTER) {
       alert("Solo el desarrollador puede asignar permisos de Developer Center.");
       return;
     }
@@ -84,19 +75,11 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
             <span>Control de Roles y Permisos</span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 ml-1 mt-1">
-            Administra los roles del personal y define qué usuarios tienen acceso exclusivo a cada módulo o al Developer Center.
+            Administra los roles del personal y define qué usuarios tienen acceso exclusivo a cada módulo de su empresa.
           </p>
         </div>
 
-        {isDeveloper && !hasDeveloperRole && (
-          <button
-            onClick={handleCreateDeveloperRole}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-          >
-            <SparklesIcon className="w-4 h-4 text-yellow-300" />
-            <span>Crear Rol Developer</span>
-          </button>
-        )}
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -109,7 +92,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
             <div className="space-y-2 mb-4">
               {roles.map(role => {
                 const isSelected = selectedRoleId === role.id;
-                const isDevRole = role.name.toLowerCase() === 'developer' || 
+                const isDevRole = role.name.toLowerCase() === 'developer' ||
                                   role.name.toLowerCase() === 'desarrollador' ||
                                   (role.permissions && role.permissions.includes(View.DEVELOPER_CENTER));
                 const isAdminRole = role.userType === 'admin' || role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'administrador';
@@ -119,8 +102,8 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                     key={role.id}
                     onClick={() => setSelectedRoleId(role.id)}
                     className={`w-full text-left p-3 rounded-xl transition-all flex items-center justify-between border ${
-                      isSelected 
-                        ? 'bg-accent text-white border-accent shadow-md shadow-accent/20 font-bold' 
+                      isSelected
+                        ? 'bg-accent text-white border-accent shadow-md shadow-accent/20 font-bold'
                         : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                     }`}
                   >
@@ -165,10 +148,10 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                 >
                   <option value="seller">Cupo de vendedor</option>
                   <option value="admin">Cupo de administrador</option>
-                  {isDeveloper && <option value="developer">Developer</option>}
+
                 </select>
-              <button 
-                onClick={handleAddRole} 
+              <button
+                onClick={handleAddRole}
                 className="bg-accent text-white px-3 py-2 rounded-xl hover:bg-accent-hover flex-shrink-0 font-bold transition-all shadow-md shadow-accent/20"
                 title="Crear Rol"
               >
@@ -220,7 +203,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                 >
                   <option value="seller">Vendedor</option>
                   <option value="admin">Administrador</option>
-                  {isDeveloper && <option value="developer">Developer</option>}
+
                 </select>
               </div>
 
@@ -230,12 +213,12 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                   const isDevCenter = view === View.DEVELOPER_CENTER;
 
                   return (
-                    <div 
-                      key={view} 
+                    <div
+                      key={view}
                       onClick={() => handlePermissionChange(view, !isChecked)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-center justify-between gap-2 ${
-                        isChecked 
-                          ? isDevCenter 
+                        isChecked
+                          ? isDevCenter
                             ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 font-bold'
                             : 'bg-accent/5 dark:bg-accent/10 border-accent/30 text-slate-900 dark:text-white font-bold'
                           : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-400 opacity-60 hover:opacity-100'
@@ -243,8 +226,8 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles, onAddRole, onU
                     >
                       <div className="flex items-center gap-2.5 truncate">
                         <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-colors ${
-                          isChecked 
-                            ? isDevCenter ? 'bg-indigo-600 text-white' : 'bg-accent text-white' 
+                          isChecked
+                            ? isDevCenter ? 'bg-indigo-600 text-white' : 'bg-accent text-white'
                             : 'border border-slate-400 dark:border-slate-600 bg-transparent'
                         }`}>
                           {isChecked && <CheckIcon className="w-3 h-3 stroke-[3]" />}

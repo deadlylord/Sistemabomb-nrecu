@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 async function withWriter(run) {
  const dir = await mkdtemp(fileURLToPath(new URL('./.tenant-', import.meta.url)));
  try {
- const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/companyRoles'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
+ const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
  export const records=new Map(), reads=[], writes=[];
  export const doc=(_,collection,id)=>({path:collection+'/'+id,id});
  const snapshot=ref=>({ref,id:ref.id,exists:()=>records.has(ref.path),data:()=>records.get(ref.path)});
@@ -69,4 +69,41 @@ test('company roles preserve old permissions and an existing company role custom
  const id=await ensureCompanyRole({},'seller','mayla');assert.equal(records.get('roles/'+id).companyId,'mayla');assert.deepEqual(records.get('roles/seller').permissions,['pos']);
  records.get('roles/'+id).permissions=['pos','payroll'];await ensureCompanyRole({},'seller','mayla');assert.deepEqual(records.get('roles/'+id).permissions,['pos','payroll']);
  records.set('roles/foreign',{companyId:'other',permissions:['developer']});await assert.rejects(ensureCompanyRole({},'foreign','mayla'));
+}));
+
+
+test('only the immutable Carlos account initially has platform access; names, legacy flags and company roles cannot grant it',()=>withWriter(async({PLATFORM_OWNER_USER_ID,hasPlatformDeveloperAccess,assertCompanyRole,assertPlatformOwnerAction,View})=>{
+ const owner={id:PLATFORM_OWNER_USER_ID,name:'Carlos',roleId:'1',storeId:'2'};
+ assert.equal(hasPlatformDeveloperAccess(owner),true);
+ assert.equal(hasPlatformDeveloperAccess({...owner,name:'Nombre cambiado',username:'otro'}),true);
+ for(const name of ['Carlos','Carlos V','Developer'])assert.equal(hasPlatformDeveloperAccess({id:'other',name,username:'Carlos',isDeveloper:true,roleId:'developer'}),false);
+ const grant={userId:'other',role:'developer',active:true,grantedBy:PLATFORM_OWNER_USER_ID};
+ assert.equal(hasPlatformDeveloperAccess({id:'other'},grant),true);
+ assert.equal(hasPlatformDeveloperAccess({id:'third'},grant),false);
+ assert.equal(hasPlatformDeveloperAccess({id:'other',isDisabled:true},grant),false);
+ assert.equal(hasPlatformDeveloperAccess({id:'other'},{...grant,active:false}),false);
+ assert.equal(hasPlatformDeveloperAccess({id:'other'},{...grant,grantedBy:'other'}),false);
+ assert.throws(()=>assertCompanyRole({id:'x',name:'Vendedor',permissions:[View.DEVELOPER_CENTER]}));
+ assert.throws(()=>assertCompanyRole({id:'x',name:'Developer',permissions:[]}));
+ assert.throws(()=>assertCompanyRole({id:'x',name:'Personalizado',userType:'developer',permissions:[]}));
+ assert.throws(()=>assertPlatformOwnerAction({id:'other'},View.DEVELOPER_CENTER));
+ assert.throws(()=>assertPlatformOwnerAction(owner,View.ROLE_MANAGER));
+}));
+
+test('only Carlos can assign/revoke developers inside Developer Center; grants cannot remove owner or activate missing/disabled accounts',()=>withWriter(async({setPlatformDeveloper,PLATFORM_OWNER_USER_ID,View,records,writes,createTenantWriter})=>{
+ const owner={id:PLATFORM_OWNER_USER_ID};records.set('sellers/other',{name:'Cuenta',isDisabled:false});
+ await assert.rejects(setPlatformDeveloper({}, {id:'other'},View.DEVELOPER_CENTER,'other',true));
+ await assert.rejects(setPlatformDeveloper({},owner,View.SELLERS,'other',true));
+ assert.equal(writes.length,0);
+ await setPlatformDeveloper({},owner,View.DEVELOPER_CENTER,'other',true);
+ assert.equal(records.get('platformDevelopers/other').grantedBy,PLATFORM_OWNER_USER_ID);
+ assert.equal(records.get('sellers/other').platformRole,'developer');
+ await setPlatformDeveloper({},owner,View.DEVELOPER_CENTER,'other',false);
+ assert.equal(records.get('platformDevelopers/other').active,false);assert.equal(records.get('sellers/other').platformRole,null);
+ await assert.rejects(setPlatformDeveloper({},owner,View.DEVELOPER_CENTER,PLATFORM_OWNER_USER_ID,false));
+ await assert.rejects(setPlatformDeveloper({},owner,View.DEVELOPER_CENTER,'missing',true));
+ records.set('sellers/disabled',{isDisabled:true});await assert.rejects(setPlatformDeveloper({},owner,View.DEVELOPER_CENTER,'disabled',true));
+ const writer=createTenantWriter({},scope);
+ await assert.rejects(writer.setDoc(ref('platformDevelopers/forged'),{companyId:'mayla',userId:'forged',role:'developer',active:true,grantedBy:PLATFORM_OWNER_USER_ID}));
+ await assert.rejects(writer.setDoc(ref('sellers/forged'),{storeId:'mayla-1',platformRole:'developer'}));
 }));
