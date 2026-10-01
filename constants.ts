@@ -57,7 +57,10 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.117', date: '2026-09-30', description: 'Categorías Independientes por Empresa', isCurrent: true,
+  { version: '1.1.118', date: '2026-09-30', description: 'Protección de Categorías con Productos', isCurrent: true,
+    changes: ['Se impide eliminar categorías con productos vinculados en cualquier sede, incluyendo productos deshabilitados o con existencias en cero.']
+  },
+  { version: '1.1.117', date: '2026-09-30', description: 'Categorías Independientes por Empresa', isCurrent: false,
     changes: ['Las categorías se crean y se muestran únicamente en su empresa.', 'Las categorías históricas permanecen en la empresa original; referencias compartidas en otras empresas se convierten en categorías propias sin cambiar existencias.']
   },
   {

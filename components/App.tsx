@@ -2591,8 +2591,20 @@ const App: React.FC = () => {
     await updateDoc(doc(db, 'categories', id), { name, companyId: operationalCompanyId });
   };
   const handleDeleteCategory = async (id: string) => {
-    await assertCategoryAccess(id);
-    await deleteDoc(doc(db, 'categories', id));
+    try {
+      await assertCategoryAccess(id);
+      // Check persisted products, including disabled/zero-stock products and
+      // stores not currently loaded in the category manager.
+      const references = await getDocs(query(collection(db, 'inventory'), where('categoryId', '==', id), limit(1)));
+      if (!references.empty) {
+        alert('No se puede eliminar esta categoría: todavía tiene productos vinculados. Reasígnalos antes de eliminarla.');
+        return;
+      }
+      await deleteDoc(doc(db, 'categories', id));
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      alert('No se pudo eliminar la categoría. Verifica la conexión y la empresa seleccionada.');
+    }
   };
   
   const handleAddExpenseCategory = async (name: string) => {
