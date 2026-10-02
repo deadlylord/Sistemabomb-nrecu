@@ -61,13 +61,15 @@
 </script>
 </head>
 <body class="bg-slate-100 text-gray-900 dark:bg-slate-950 dark:text-text-light font-sans transition-colors duration-300">
+  <div id="startup-status" role="status" style="padding:32px;text-align:center">Abriendo Vestika…</div>
+  <script src="/startup.js"></script>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const registerServiceWorker = () => {
-        const swUrl = new URL('/sw.js?v=1.1.114', window.location.origin);
-        navigator.serviceWorker.register(swUrl).then(registration => {
+        const swUrl = new URL('/sw.js?v=1.1.132', window.location.origin);
+        navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' }).then(registration => {
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
         }, err => {
           console.log('ServiceWorker registration failed: ', err);

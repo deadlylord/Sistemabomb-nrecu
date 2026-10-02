@@ -1,7 +1,13 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './components/App';
+import AppErrorBoundary from './components/AppErrorBoundary';
+const App = React.lazy(() => import('./components/App'));
+
+function Startup() {
+  React.useEffect(() => { window.dispatchEvent(new Event('vestika:mounted')); }, []);
+  return <AppErrorBoundary><React.Suspense fallback={<div role="status" className="p-8 text-center">Abriendo Vestika…</div>}><App /></React.Suspense></AppErrorBoundary>;
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +17,6 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <Startup />
   </React.StrictMode>
 );
