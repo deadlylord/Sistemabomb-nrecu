@@ -1,13 +1,13 @@
 
 
 import React, { useState, useMemo } from 'react';
-import { sellerRecordVisible } from '../services/sellerRecordVisibility';
 import { Layaway, PaymentMethod, Seller, Role, Product } from '../types';
 import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, TrashIcon, CrossIcon, EditIcon } from './Icons';
 import EditLayawayModal from './EditLayawayModal';
 
 interface LayawayViewProps {
+  readOnly?: boolean;
   layaways: Layaway[];
   sellers: Seller[];
   inventory: Product[];
@@ -19,7 +19,8 @@ interface LayawayViewProps {
   roles: Role[];
 }
 
-const LayawayCard: React.FC<{ 
+const LayawayCard: React.FC<{
+  readOnly?: boolean;
   layaway: Layaway, 
   sellers: Seller[], 
   inventory: Product[],
@@ -29,7 +30,7 @@ const LayawayCard: React.FC<{
   onUpdateLayaway: (updatedLayaway: Layaway, originalLayaway: Layaway) => void;
   currentUser: Seller;
   roles: Role[];
-}> = ({ layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+}> = ({ readOnly = false, layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -39,7 +40,7 @@ const LayawayCard: React.FC<{
   const [paymentSeller, setPaymentSeller] = useState<string>('');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
+  const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);
 
   const balance = layaway.totalAmount - layaway.paidAmount;
   const progress = (layaway.paidAmount / layaway.totalAmount) * 100;
@@ -142,7 +143,7 @@ const LayawayCard: React.FC<{
                           <TrashIcon className="w-5 h-5" />
                       </button>
                   )}
-                  {layaway.status === 'pre-order' && (
+                  {!readOnly && layaway.status === 'pre-order' && (
                       <button 
                         onClick={async () => {
                           if (isFulfilling) return;
@@ -159,7 +160,7 @@ const LayawayCard: React.FC<{
                           {isFulfilling ? 'Procesando...' : 'Marcar Recibido'}
                       </button>
                   )}
-                  {(layaway.status === 'active' || layaway.status === 'pre-order') && balance > 0 && (
+                  {!readOnly && (layaway.status === 'active' || layaway.status === 'pre-order') && balance > 0 && (
                       <button onClick={() => setIsPaymentModalOpen(true)} className="bg-accent text-white font-bold py-2 px-4 rounded-lg hover:bg-accent-hover transition-colors">
                           Registrar Abono
                       </button>
@@ -241,22 +242,15 @@ const LayawayCard: React.FC<{
 };
 
 
-export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState<Layaway['status'] | 'all'>('all');
 
     const filteredLayaways = useMemo(() => {
         const normalizedSearch = normalizeText(searchTerm);
-        
-        const adminRole = roles.find(r => r.name === 'Administrator');
-        const isAdmin = currentUser.roleId === adminRole?.id;
 
         return layaways.filter(l => {
             const matchesFilter = filter === 'all' ? true : l.status === filter;
-            
-            if (!isAdmin && !sellerRecordVisible(l.createdAt, l.status === 'active' || l.status === 'pre-order')) {
-                return false;
-            }
 
             const matchesSearch = normalizedSearch ?
                 normalizeText(l.customerName).includes(normalizedSearch) ||
@@ -265,7 +259,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
                 : true;
             return matchesFilter && matchesSearch;
         }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [layaways, searchTerm, filter, currentUser, roles]);
+    }, [layaways, searchTerm, filter]);
 
     const filterOptions: { value: Layaway['status'] | 'all', label: string }[] = [
         { value: 'all', label: 'Todos' },
@@ -319,6 +313,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ layaways, sellers, inv
                         filteredLayaways.map(layaway => (
                             <LayawayCard
                                 key={layaway.id}
+                                readOnly={readOnly}
                                 layaway={layaway}
                                 sellers={sellers}
                                 inventory={inventory}

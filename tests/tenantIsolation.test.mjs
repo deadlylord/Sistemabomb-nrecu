@@ -216,8 +216,8 @@ test('permission resolution rejects borrowed company roles, contradictory stores
  const stores=[{id:'m',companyId:'mayla'},{id:'b',companyId:'default_company'}];
  const roles=[{id:'own',companyId:'mayla',name:'Admin',permissions:[View.POS,View.SETTINGS]},{id:'legacy',name:'Administrator',permissions:[View.ROLE_MANAGER]}];
  const user={id:'u',storeId:'m',companyId:'mayla',roleId:'own'};
- assert.deepEqual(tenantPermissions(user,roles,stores),[View.POS,View.SETTINGS]);
- assert.deepEqual(tenantPermissions(user,roles,stores,[View.POS]),[View.POS]);
+ assert.deepEqual(tenantPermissions(user,roles,stores),[View.POS,View.SETTINGS,View.INCIDENTS,View.LAYAWAY,View.INVENTORY_TRANSFER]);
+ assert.deepEqual(tenantPermissions(user,roles,stores,[View.POS]),[View.POS,View.INCIDENTS,View.LAYAWAY,View.INVENTORY_TRANSFER]);
  for(const change of [{roleId:'legacy'},{storeId:'b'},{isDisabled:true}])assert.equal(resolveTenantRole({...user,...change},roles,stores),undefined);
  assert.ok(resolveTenantRole({id:'u',storeId:'b',roleId:'legacy'},roles,stores));
 }));

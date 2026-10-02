@@ -1,5 +1,4 @@
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
-import { sellerRecordVisible, incidentIsActive } from '../services/sellerRecordVisibility';
 import React, { useState, useMemo } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
@@ -10,6 +9,7 @@ import EditIncidentModal from './EditIncidentModal';
 import EditExchangeIncidentModal from './EditExchangeIncidentModal';
 
 interface IncidentsViewProps {
+  readOnly?: boolean;
   companyId: string;
   activeStoreId: string;
   incidents: Incident[];
@@ -27,7 +27,7 @@ interface IncidentsViewProps {
   onDeleteIncident: (incidentId: string) => void;
 }
 
-const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
+const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
   const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, storeScope);
@@ -45,14 +45,13 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId,
   const [searchTerm, setSearchTerm] = useState('');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
+  const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);
 
   const filteredIncidents = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
 
     return [...incidents]
       .filter(i => {
-        if (!isAdmin && !sellerRecordVisible(i.createdAt, incidentIsActive(i.status))) return false;
         const matchesStatus = filter === 'ALL' ? true : i.status === filter;
         
         const matchesSearch = normalizedSearch ? 
@@ -66,7 +65,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId,
         return matchesStatus && matchesSearch;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [incidents, filter, searchTerm, isAdmin]);
+  }, [incidents, filter, searchTerm]);
   
   const handleEditClick = (incident: Incident) => {
     setEditingIncident(incident);
@@ -189,7 +188,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId,
         <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b-2 border-accent/30 pb-2 gap-4">
             <h2 className="text-2xl font-bold text-accent">Novedades y Cambios</h2>
-            <button onClick={() => setIsCreateModalOpen(true)} className="bg-accent text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover self-end sm:self-center">
+            <button style={readOnly ? { display: 'none' } : undefined} onClick={() => !readOnly && setIsCreateModalOpen(true)} className="bg-accent text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover self-end sm:self-center">
               <PlusCircleIcon />
               <span>Crear Novedad</span>
             </button>
@@ -271,7 +270,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ companyId, activeStoreId,
                             </button>
                         )}
                         {canBeResolved && (
-                            <button onClick={() => onResolveIncident(incident.id)} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Marcar como Resuelto"}>
+                            <button style={readOnly ? { display: 'none' } : undefined} onClick={() => !readOnly && onResolveIncident(incident.id)} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Marcar como Resuelto"}>
                               <SwapIcon />
                             </button>
                         )}

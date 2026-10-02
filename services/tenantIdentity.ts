@@ -11,7 +11,12 @@ export function resolveTenantRole(user: Seller | null | undefined, roles: Role[]
   if ((store.companyId || DEFAULT_COMPANY_ID) !== companyId) return;
   return roles.find(role => role.id === user.roleId && (role.companyId || DEFAULT_COMPANY_ID) === companyId && !isPlatformRole(role));
 }
-export function tenantPermissions(user: Seller | null | undefined, roles: Role[], stores: Store[], allowedViews?: View[]): View[] {
+export const SHARED_RECORD_VIEWS = [View.INCIDENTS, View.LAYAWAY, View.INVENTORY_TRANSFER];
+export function tenantOperationPermissions(user: Seller | null | undefined, roles: Role[], stores: Store[], allowedViews?: View[]): View[] {
   const permissions = resolveTenantRole(user, roles, stores)?.permissions || [];
   return permissions.filter(view => view !== View.DEVELOPER_CENTER && (!allowedViews?.length || allowedViews.includes(view)));
+}
+export function tenantPermissions(user: Seller | null | undefined, roles: Role[], stores: Store[], allowedViews?: View[]): View[] {
+  if (!resolveTenantRole(user, roles, stores)) return [];
+  return [...new Set([...tenantOperationPermissions(user, roles, stores, allowedViews), ...SHARED_RECORD_VIEWS])];
 }

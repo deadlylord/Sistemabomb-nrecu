@@ -5,6 +5,7 @@ import { SwapIcon, SearchIcon, DollarIcon, TrashIcon } from './Icons';
 import { formatCOP, normalizeText } from '../constants';
 
 interface InventoryTransferViewProps {
+  readOnly?: boolean;
   inventory: Product[];
   stores: Store[];
   currentUser: Seller;
@@ -14,7 +15,7 @@ interface InventoryTransferViewProps {
   onResetBalances: () => void;
 }
 
-export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ inventory, stores, currentUser, transfers, onTransfer, onDeleteTransfer, onResetBalances }) => {
+export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ readOnly = false, inventory, stores, currentUser, transfers, onTransfer, onDeleteTransfer, onResetBalances }) => {
   const [fromStoreId, setFromStoreId] = useState<string | ''>(currentUser.storeId);
   const [toStoreId, setToStoreId] = useState<string | ''>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -72,6 +73,7 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const qty = parseInt(quantity, 10);
     if (!fromStoreId || !toStoreId || !selectedProduct || !qty || qty <= 0) {
       alert('Por favor, completa todos los campos con valores válidos.');
@@ -145,9 +147,9 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+      <div hidden={readOnly} className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Realizar Traslado de Inventario</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form hidden={readOnly} onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
               <label htmlFor="fromStore" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Desde Tienda</label>
@@ -215,7 +217,7 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
           <h2 className="text-2xl font-bold text-accent">Resumen de Saldos</h2>
           <button 
-            onClick={onResetBalances}
+            style={readOnly ? { display: 'none' } : undefined} onClick={() => !readOnly && onResetBalances()}
             className="bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center space-x-2 hover:bg-yellow-600 transition-colors self-end sm:self-center"
             title="Marcar todos los traslados visibles como liquidados y reiniciar los saldos a cero."
           >
@@ -275,7 +277,7 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ in
                     <td className="p-3 text-center">
                       <button
                         type="button"
-                        onClick={() => onDeleteTransfer(t.id)}
+                        style={readOnly ? { display: 'none' } : undefined} onClick={() => !readOnly && onDeleteTransfer(t.id)}
                         className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors inline-flex items-center justify-center"
                         title="Eliminar y Revertir Traslado"
                       >
