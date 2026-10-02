@@ -15,7 +15,7 @@ interface CreateIncidentModalProps {
   activeStoreId?: string;
   roles: Role[];
   customers: Customer[];
-  onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; surplusPaymentMethod?: PaymentMethod; incidentDate?: string; }) => void;
+  onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; surplusPaymentMethod?: PaymentMethod; incidentDate?: string; }) => void | Promise<void>;
 }
 
 const toYYYYMMDD = (date: Date) => {
@@ -30,6 +30,9 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
   
   // Common
   const [description, setDescription] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const savingRef = React.useRef(false);
   const [incidentDate, setIncidentDate] = useState(toYYYYMMDD(new Date()));
   
   // Customer
@@ -138,12 +141,14 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
     setShowSuggestions(false);
     setSurplusPaymentMethod('');
     setManualSurplus('');
-    setFromStoreId(currentUser.storeId);
+    setFromStoreId(activeStoreId || currentUser.storeId);
     setToStoreId('');
     setQuantity('');
   };
   
   const handleClose = () => {
+      if (savingRef.current) return;
+      setSaveError('');
       resetForm();
       onClose();
   }
@@ -183,8 +188,9 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
   }, [difference]);
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingRef.current) return;
     let data: any = { type, description };
     let product: Product | undefined;
 
@@ -254,8 +260,20 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
         break;
     }
     
-    onCreateIncident(data);
-    handleClose();
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onCreateIncident(data);
+      savingRef.current = false;
+      handleClose();
+    } catch (error) {
+      console.error('No se pudo guardar la novedad:', error);
+      setSaveError('No se guardó la novedad. Revisa la conexión y vuelve a intentarlo.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   };
   
   const handleDamagedProductSelect = (product: Product) => {
@@ -623,9 +641,10 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
           </div>
 
         </form>
+        {saveError && <p role="alert" className="mt-4 text-red-500">{saveError}</p>}
         <div className="mt-6 flex justify-end space-x-3 border-t-2 border-accent/30 pt-4">
-          <button type="button" onClick={handleClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md">Cancelar</button>
-          <button type="submit" form="incident-form" className="px-4 py-2 bg-accent text-white rounded-md">Guardar Novedad</button>
+          <button type="button" disabled={isSaving} onClick={handleClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md">Cancelar</button>
+          <button type="submit" disabled={isSaving} form="incident-form" className="px-4 py-2 bg-accent text-white rounded-md">{isSaving ? 'Guardando…' : 'Guardar Novedad'}</button>
         </div>
       </div>
     </div>

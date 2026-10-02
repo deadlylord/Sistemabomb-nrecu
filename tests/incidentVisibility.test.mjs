@@ -23,14 +23,18 @@ test('all roles see incidents of any age and status only within their company an
       stores: [{ id: 'm1', companyId: 'mayla' }, { id: 'm2', companyId: 'mayla' }, { id: 'b1', companyId: 'other' }],
       roles: [{ id: 'admin', name: 'Administrator' }, { id: 'seller', name: 'Seller' }],
       inventory: [], sales: [], customers: [],
-      incidents: [{...incident('OldCompletedTransfer', 'mayla', 'm1', 'Traslado Completado'), type: 'Solicitud de Traslado'}, incident('PendingLastMonth', 'mayla', 'm1', 'Pendiente de Aprobación'), incident('ResolvedLastMonth', 'mayla', 'm1', 'Devuelto y Resuelto'), incident('OtherCompanySecret', 'other', 'm1'), incident('OtherStoreSecret', 'mayla', 'm2')],
+      incidents: [{...incident('OldCompletedTransfer', 'mayla', 'm1', 'Traslado Completado'), type: 'Solicitud de Traslado', fromStoreId: 'm1', toStoreId: 'm2'}, incident('PendingLastMonth', 'mayla', 'm1', 'Pendiente de Aprobación'), incident('ResolvedLastMonth', 'mayla', 'm1', 'Devuelto y Resuelto'), {...incident('CrossCompanyTransfer', 'mayla', 'm1'),type:'Solicitud de Traslado',fromStoreId:'m1',toStoreId:'b1'}, incident('OtherCompanySecret', 'other', 'm1'), incident('OtherStoreSecret', 'mayla', 'm2')],
     };
     for (const roleId of ['seller', 'admin']) {
       const html = renderToStaticMarkup(React.createElement(IncidentsView, { ...props, currentUser: { id: roleId, roleId, companyId: 'mayla', storeId: 'm1' } }));
       assert.ok(html.includes('PendingLastMonth'), roleId);
       assert.ok(html.includes('OldCompletedTransfer'), roleId);
+      const destination = renderToStaticMarkup(React.createElement(IncidentsView, {...props, activeStoreId:'m2', currentUser:{id:roleId,roleId,storeId:'m2',companyId:'mayla'}}));
+      assert.ok(destination.includes('OldCompletedTransfer'), roleId);
+      assert.ok(!destination.includes('PendingLastMonth'), roleId);
       assert.equal(html.includes('ResolvedLastMonth'), true, roleId);
       assert.ok(!html.includes('OtherCompanySecret'), roleId);
+      assert.ok(!html.includes('CrossCompanyTransfer'), roleId);
       assert.ok(!html.includes('OtherStoreSecret'), roleId);
     }
   } finally {

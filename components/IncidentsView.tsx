@@ -30,7 +30,11 @@ interface IncidentsViewProps {
 const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
-  const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, storeScope);
+  const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, scope).filter(incident =>
+    scope.storeIds.has(activeStoreId) && (incident.storeId === activeStoreId ||
+      (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST &&
+        (incident.fromStoreId === activeStoreId || incident.toStoreId === activeStoreId)))
+  );
   const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
   const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
   const customers = selectAnalyticsRows<Customer>('customers', rawCustomers, storeScope);

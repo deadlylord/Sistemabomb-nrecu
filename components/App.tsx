@@ -573,7 +573,10 @@ const App: React.FC = () => {
   
   useEffect(() => {
     if (!currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
-    return subscribeStoreRows('incidents', currentStoreId, dataScope, setIncidents);
+    return subscribeStoreRows('incidents', currentStoreId, dataScope, rows => setIncidents(rows.filter(row => {
+      try { assertTenantData('incidents', row, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; }
+      catch { return false; }
+    })));
   }, [currentUser?.id, currentStoreId, dataScope, visibleStoreIds]);
 
   const hasDataAccess = !!currentUser && canAccessCurrentView;
