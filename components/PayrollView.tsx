@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { inPayrollScope, payrollDate, payrollTime, payrollLogins, payrollShiftUnits } from '../services/payrollScope';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -116,11 +117,11 @@ const PayrollReceiptModal: React.FC<{
 const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, layaways, loginHistory, payrollHistory, onSavePayroll, onDeletePayroll, currentUser, currentStore }) => {
   const scope = { storeId: currentStore?.id || '', companyId };
   const salaryKey = `payrollBaseSalary:${companyId}:${scope.storeId}`;
-  const [selectedSeller, setSelectedSeller] = useState('');
+  const [selectedSeller, setSelectedSeller] = useViewFilter('PayrollView:selectedSeller', '');
   const [isManualName, setIsManualName] = useState(false);
   const [manualName, setManualName] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useViewFilter('PayrollView:startDate', '');
+  const [endDate, setEndDate] = useViewFilter('PayrollView:endDate', '');
   const [baseSalary, setBaseSalary] = useState(() => localStorage.getItem(salaryKey) || '1500000');
   const [paymentType, setPaymentType] = useState<'nomina' | 'admin' | 'utilidad'>('nomina');
   const [manualAmount, setManualAmount] = useState('');

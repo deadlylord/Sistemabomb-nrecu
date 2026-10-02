@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 
 
 import React, { useState, useMemo } from 'react';
@@ -243,8 +244,8 @@ const LayawayCard: React.FC<{
 
 
 export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filter, setFilter] = useState<Layaway['status'] | 'all'>('all');
+    const [searchTerm, setSearchTerm] = useViewFilter('LayawayView:searchTerm', '');
+    const [filter, setFilter] = useViewFilter<Layaway['status'] | 'all'>('LayawayView:filter', 'all');
 
     const filteredLayaways = useMemo(() => {
         const normalizedSearch = normalizeText(searchTerm);

@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 
 import React, { useState, useMemo } from 'react';
 import { Sale, Seller, Product, Role, Category, CartItem, PaymentMethod, Payment } from '../types';
@@ -26,11 +27,11 @@ const toYYYYMMDD = (date: Date) => {
 };
 
 const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, categories, onUpdateSale, onDeleteSale, onReprintSale, currentUser, roles }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sellerFilter, setSellerFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [startDate, setStartDate] = useState(toYYYYMMDD(new Date()));
-  const [endDate, setEndDate] = useState(toYYYYMMDD(new Date()));
+  const [searchTerm, setSearchTerm] = useViewFilter('SalesView:searchTerm', '');
+  const [sellerFilter, setSellerFilter] = useViewFilter('SalesView:sellerFilter', '');
+  const [categoryFilter, setCategoryFilter] = useViewFilter('SalesView:categoryFilter', '');
+  const [startDate, setStartDate] = useViewFilter('SalesView:startDate', toYYYYMMDD(new Date()));
+  const [endDate, setEndDate] = useViewFilter('SalesView:endDate', toYYYYMMDD(new Date()));
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);

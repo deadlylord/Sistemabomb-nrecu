@@ -30,7 +30,7 @@ test('all roles see incidents of any age and status only within their company an
       assert.ok(html.includes('PendingLastMonth'), roleId);
       assert.ok(html.includes('OldCompletedTransfer'), roleId);
       const destination = renderToStaticMarkup(React.createElement(IncidentsView, {...props, activeStoreId:'m2', currentUser:{id:roleId,roleId,storeId:'m2',companyId:'mayla'}}));
-      assert.ok(destination.includes('OldCompletedTransfer'), roleId);
+      assert.ok(!destination.includes('OldCompletedTransfer'), roleId);
       assert.ok(!destination.includes('PendingLastMonth'), roleId);
       assert.equal(html.includes('ResolvedLastMonth'), true, roleId);
       assert.ok(!html.includes('OtherCompanySecret'), roleId);

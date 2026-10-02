@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bombon-pos-cache-v1.1.134-local-styles';
+const CACHE_NAME = 'bombon-pos-cache-v1.1.135-local-styles';
 const urlsToCache = ['/', '/index.html', '/startup.js', '/manifest.json', '/assets/icon.svg', '/assets/maskable_icon.svg', '/icon-192.png', '/icon-512.png'];
 const staticAsset = /^\/assets\/[^?]+\.(?:js|css|svg|png|jpe?g|webp|gif|ico|woff2?|ttf)$/i;
 self.addEventListener('install', event => {

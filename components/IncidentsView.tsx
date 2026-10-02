@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import React, { useState, useMemo } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
@@ -31,9 +32,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
   const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, scope).filter(incident =>
-    scope.storeIds.has(activeStoreId) && (incident.storeId === activeStoreId ||
-      (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST &&
-        (incident.fromStoreId === activeStoreId || incident.toStoreId === activeStoreId)))
+    scope.storeIds.has(activeStoreId) && incident.storeId === activeStoreId
   );
   const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
   const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
@@ -45,8 +44,8 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   const [historyIncident, setHistoryIncident] = useState<Incident | null>(null);
-  const [filter, setFilter] = useState<IncidentStatus | 'ALL'>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [filter, setFilter] = useViewFilter<IncidentStatus | 'ALL'>('IncidentsView:filter', 'ALL');
+  const [searchTerm, setSearchTerm] = useViewFilter('IncidentsView:searchTerm', '');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);

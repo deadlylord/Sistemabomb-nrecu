@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { getInventoryCategorySummary } from '../services/inventoryCategories';
 import React, { useState, useMemo, useCallback, useRef } from 'react';
@@ -71,13 +72,13 @@ const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: raw
   const categories = selectAnalyticsRows<Category>('categories', rawCategories, scope);
   const productHistory = selectAnalyticsRows<ProductHistoryLog>('productHistory', rawProductHistory, storeScope);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useViewFilter('InventoryView:searchTerm', '');
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
   const isAdmin = useMemo(() => currentUser.roleId === adminRole?.id, [currentUser, adminRole]);
-  const [filterCategoryId, setFilterCategoryId] = useState('');
-  const [filterVelocity, setFilterVelocity] = useState(''); 
+  const [filterCategoryId, setFilterCategoryId] = useViewFilter('InventoryView:filterCategoryId', '');
+  const [filterVelocity, setFilterVelocity] = useViewFilter('InventoryView:filterVelocity', '');
   const [historyModalProduct, setHistoryModalProduct] = useState<Product | null>(null);
   const [hideZeroStock, setHideZeroStock] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });

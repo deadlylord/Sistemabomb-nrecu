@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 
 import React, { useState, useMemo } from 'react';
 import { GiftVoucher, Seller, Store, Sale } from '../types';
@@ -17,8 +18,8 @@ interface GiftVouchersViewProps {
 }
 
 const GiftVouchersView: React.FC<GiftVouchersViewProps> = ({ vouchers, sellers, stores, currentUser, isAdmin, onUpdateVoucherStatus, onDeleteVoucher, sales }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'redeemed' | 'cancelled'>('all');
+  const [searchTerm, setSearchTerm] = useViewFilter('GiftVouchersView:searchTerm', '');
+  const [statusFilter, setStatusFilter] = useViewFilter<'all' | 'active' | 'redeemed' | 'cancelled'>('GiftVouchersView:statusFilter', 'all');
   const [voucherToDelete, setVoucherToDelete] = useState<GiftVoucher | null>(null);
 
   const filteredVouchers = useMemo(() => {

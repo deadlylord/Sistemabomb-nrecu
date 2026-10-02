@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { createTenantWriter } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
@@ -120,21 +121,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const records = useMemo(() => allRecords.filter(record => record.storeId === activeStoreId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id)), [allRecords, activeStoreId]);
   const [activeTab, setActiveTab] = useState<AccountType>('cash');
   const [closuresActiveTab, setClosuresActiveTab] = useState<AccountType>('cash');
-  const [sisteRangeStart, setSisteRangeStart] = useState('');
-  const [sisteRangeEnd, setSisteRangeEnd] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [sisteRangeStart, setSisteRangeStart] = useViewFilter('FinancialReconciliationView:sisteRangeStart', '');
+  const [sisteRangeEnd, setSisteRangeEnd] = useViewFilter('FinancialReconciliationView:sisteRangeEnd', '');
+  const [searchTerm, setSearchTerm] = useViewFilter('FinancialReconciliationView:searchTerm', '');
   
   // Filtros de fecha adicionales para la tabla principal
-  const [ledgerStartDate, setLedgerStartDate] = useState('');
-  const [ledgerEndDate, setLedgerEndDate] = useState('');
+  const [ledgerStartDate, setLedgerStartDate] = useViewFilter('FinancialReconciliationView:ledgerStartDate', '');
+  const [ledgerEndDate, setLedgerEndDate] = useViewFilter('FinancialReconciliationView:ledgerEndDate', '');
 
   // Filtro de tipo de movimiento (Ingreso / Egreso) sincronizado con las pestañas de resumen
-  const [financeTypeFilter, setFinanceTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [financeTypeFilter, setFinanceTypeFilter] = useViewFilter<'all' | 'income' | 'expense'>('FinancialReconciliationView:financeTypeFilter', 'all');
   const [summaryActiveTab, setSummaryActiveTab] = useState<'expense' | 'income'>('expense');
 
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useViewFilter('FinancialReconciliationView:selectedMonth', now.getMonth());
+  const [selectedYear, setSelectedYear] = useViewFilter('FinancialReconciliationView:selectedYear', now.getFullYear());
   const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
   const [showBothClosures, setShowBothClosures] = useState(false);
@@ -157,7 +158,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const historyLogs = useMemo(() => selectAnalyticsRows<any>('financialRecordsHistory', rawHistoryLogs, scope), [rawHistoryLogs, scope]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
-  const [historyActionFilter, setHistoryActionFilter] = useState<'all' | 'create' | 'update' | 'delete' | 'restore'>('all');
+  const [historyActionFilter, setHistoryActionFilter] = useViewFilter<'all' | 'create' | 'update' | 'delete' | 'restore'>('FinancialReconciliationView:historyActionFilter', 'all');
 
   // Selección múltiple de movimientos estilo Excel y cálculo en tiempo real
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());

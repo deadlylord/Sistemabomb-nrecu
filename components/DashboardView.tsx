@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
 import React, { useMemo, useState } from 'react';
@@ -229,9 +230,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   }, [allStockTakes, currentStore?.id, allIncidents]);
 
   const today = new Date();
-  const [startDate, setStartDate] = useState(toYYYYMMDD(today));
-  const [endDate, setEndDate] = useState(toYYYYMMDD(today));
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string[]>([]);
+  const [startDate, setStartDate] = useViewFilter('DashboardView:startDate', toYYYYMMDD(today));
+  const [endDate, setEndDate] = useViewFilter('DashboardView:endDate', toYYYYMMDD(today));
+  const [paymentMethodFilter, setPaymentMethodFilter] = useViewFilter<string[]>('DashboardView:paymentMethodFilter', []);
   const [isPaymentsReportVisible, setIsPaymentsReportVisible] = useState(true);
   const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(false);
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
@@ -239,17 +240,17 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [isSalesHistoryVisible, setIsSalesHistoryVisible] = useState(true);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const [salesSearchTerm, setSalesSearchTerm] = useState('');
-  const [salesSellerFilter, setSalesSellerFilter] = useState('');
-  const [salesCategoryFilter, setSalesCategoryFilter] = useState('');
-  const [salesMonthFilter, setSalesMonthFilter] = useState('');
+  const [salesSellerFilter, setSalesSellerFilter] = useViewFilter('DashboardView:salesSellerFilter', '');
+  const [salesCategoryFilter, setSalesCategoryFilter] = useViewFilter('DashboardView:salesCategoryFilter', '');
+  const [salesMonthFilter, setSalesMonthFilter] = useViewFilter('DashboardView:salesMonthFilter', '');
   const [salesHistoryStartDate, setSalesHistoryStartDate] = useState('');
   const [salesHistoryEndDate, setSalesHistoryEndDate] = useState('');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editingLayaway, setEditingLayaway] = useState<Layaway | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
-  const [priceVariationSellerFilters, setPriceVariationSellerFilters] = useState<string[]>([]);
-  const [priceVariationPaymentMethodFilters, setPriceVariationPaymentMethodFilters] = useState<string[]>([]);
+  const [priceVariationSellerFilters, setPriceVariationSellerFilters] = useViewFilter<string[]>('DashboardView:priceVariationSellerFilters', []);
+  const [priceVariationPaymentMethodFilters, setPriceVariationPaymentMethodFilters] = useViewFilter<string[]>('DashboardView:priceVariationPaymentMethodFilters', []);
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);

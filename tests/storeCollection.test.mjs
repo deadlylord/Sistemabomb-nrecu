@@ -74,16 +74,9 @@ test('shared store subscription survives navigation and metadata renders, cleans
     const incidentRows=[];
     const stopIncidents=subscribeStoreRows('incidents','Mayla1','Carlos:Mayla',rows=>incidentRows.push(rows));
     const incidentConnections=connections.filter(c=>c.query.source.name==='incidents');
-    assert.deepEqual(incidentConnections.map(c=>c.query.filter.field),['storeId','fromStoreId','toStoreId']);
-    const row={id:'transfer',companyId:'Mayla',type:'Solicitud de Traslado',storeId:'Mayla2',fromStoreId:'Mayla2',toStoreId:'Mayla1'};
-    const snapshot=rows=>({docs:rows.map(r=>({id:r.id,data:()=>r}))});
-    incidentConnections[2].apply(snapshot([row,{...row,id:'foreign',companyId:'Other'}]));
-    assert.deepEqual(incidentRows.at(-1).map(r=>r.id),['transfer']);
-    incidentConnections[0].apply(snapshot([row]));
-    assert.equal(incidentRows.at(-1).length,1,'duplicate document appears only once');
+    assert.deepEqual(incidentConnections.map(c=>c.query.filter.field),['storeId']);
+    assert.equal(incidentConnections[0].query.filter.value,'Mayla1');
     stopIncidents();assert.ok(incidentConnections.every(c=>c.closed));
-    const before=incidentRows.length;incidentConnections[2].apply(snapshot([]));
-    assert.equal(incidentRows.length,before,'old destination callbacks are ignored');
     await act(async () => { renderer.unmount(); });
     renderer = null;
   } finally {

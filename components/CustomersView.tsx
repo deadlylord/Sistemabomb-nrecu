@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { selectAnalyticsRows } from '../services/analyticsScope';
 
 import React, { useState, useMemo } from 'react';
@@ -146,7 +147,7 @@ const CustomersView: React.FC<CustomersViewProps> = ({ companyId, storeId, sales
   const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
   const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
   const allCustomers = useMemo(() => selectAnalyticsRows<Customer>('customers', rawCustomers, scope), [rawCustomers, scope]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useViewFilter('CustomersView:searchTerm', '');
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);

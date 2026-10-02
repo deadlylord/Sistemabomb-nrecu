@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryTransfer, Product, Store, Seller } from '../types';
@@ -23,8 +24,8 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [quantity, setQuantity] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useViewFilter('InventoryTransferView:startDate', '');
+  const [endDate, setEndDate] = useViewFilter('InventoryTransferView:endDate', '');
   
   const availableProducts = useMemo(() => {
     if (!fromStoreId) return [];

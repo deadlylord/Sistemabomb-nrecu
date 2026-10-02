@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 
 import React, { useState, useMemo } from 'react';
 import { StockTake, Seller, Role } from '../types';
@@ -16,9 +17,9 @@ interface StockTakeHistoryViewProps {
 
 const StockTakeHistoryView: React.FC<StockTakeHistoryViewProps> = ({ stockTakes, sellers, onDeleteStockTake, onAddNoteToStockTake, onApplyStockTake, currentUser, roles }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sellerFilter, setSellerFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [sellerFilter, setSellerFilter] = useViewFilter('StockTakeHistoryView:sellerFilter', '');
+  const [startDate, setStartDate] = useViewFilter('StockTakeHistoryView:startDate', '');
+  const [endDate, setEndDate] = useViewFilter('StockTakeHistoryView:endDate', '');
   const [newNote, setNewNote] = useState('');
 
   const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
