@@ -142,7 +142,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [showGlobalSummary, setShowGlobalSummary] = useState(false);
   const [showInterStoreModal, setShowInterStoreModal] = useState(false);
   const [interStoreFilterStoreId, setInterStoreFilterStoreId] = useState<string>('all');
-  const [interStoreSearchQuery, setInterStoreSearchQuery] = useState<string>('');
+  const [interStoreSearchQuery, setInterStoreSearchQuery] = useViewFilter<string>('FinancialReconciliationView:interStoreSearchQuery', '');
   const [showSettledBalances, setShowSettledBalances] = useState<boolean>(false);
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
@@ -157,7 +157,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [rawHistoryLogs, setHistoryLogs] = useState<any[]>([]);
   const historyLogs = useMemo(() => selectAnalyticsRows<any>('financialRecordsHistory', rawHistoryLogs, scope), [rawHistoryLogs, scope]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [historySearchTerm, setHistorySearchTerm] = useViewFilter('FinancialReconciliationView:historySearchTerm', '');
   const [historyActionFilter, setHistoryActionFilter] = useViewFilter<'all' | 'create' | 'update' | 'delete' | 'restore'>('FinancialReconciliationView:historyActionFilter', 'all');
 
   // Selección múltiple de movimientos estilo Excel y cálculo en tiempo real

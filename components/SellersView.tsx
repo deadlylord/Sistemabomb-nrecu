@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { PLATFORM_OWNER_USER_ID } from '../services/developerAccess';
 import React, { useState, useMemo } from 'react';
 import { Seller, Role, Store } from '../types';
@@ -19,7 +20,7 @@ interface SellersViewProps {
 const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAddSeller, onUpdateSeller, onDeleteSeller, onToggleSellerStatus, isDeveloper }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useViewFilter('SellersView:searchTerm', '');
   const [roleFilter, setRoleFilter] = useState('');
   const [storeFilter, setStoreFilter] = useState('');
   const [showInactive, setShowInactive] = useState(false);

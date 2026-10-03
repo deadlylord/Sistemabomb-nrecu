@@ -18,13 +18,14 @@ test('each repeated barcode and Enter adds exactly once, without auto-adding a p
     class Element {}
     class Input extends Element {value='';focus(){}}
     Object.assign(globalThis,{HTMLElement:Element,HTMLInputElement:Input,HTMLTextAreaElement:class extends Element{},HTMLSelectElement:class extends Element{},window:{addEventListener:(_,fn)=>handlers.add(fn),removeEventListener:(_,fn)=>handlers.delete(fn)},setTimeout:()=>1,clearTimeout:()=>{}});
-    const result=await build({entryPoints:['components/PosView.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'child-stubs',setup(b){b.onResolve({filter:/^\.\/(ProductGrid|ProductPerformanceModal|CartPanel|DailySalesReportModal|CreateIncidentModal|EditProductImageModal|SellVoucherModal|CheckVoucherModal|EditProductModal)$/},args=>({path:args.path,namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export default function Stub(){return null}'}));}}]});
+    const result=await build({stdin:{contents:"export {default} from './components/PosView';export {ViewFiltersProvider} from './services/viewFilters';",resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'child-stubs',setup(b){b.onResolve({filter:/^\.\/(ProductGrid|ProductPerformanceModal|CartPanel|DailySalesReportModal|CreateIncidentModal|EditProductImageModal|SellVoucherModal|CheckVoucherModal|EditProductModal)$/},args=>({path:args.path,namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export default function Stub(){return null}'}));}}]});
     const path=join(dir,'pos.mjs');await writeFile(path,result.outputFiles[0].text);
-    const {default:Pos}=await import(pathToFileURL(path).href);
+    const {default:Pos,ViewFiltersProvider}=await import(pathToFileURL(path).href);
     const added=[];const input=new Input();
     const product=(id,sku)=>({id,sku,name:id,stock:10,price:20,storeId:'m1',categoryId:'c1',createdAt:new Date().toISOString()});
     const props={inventory:[product('short','SKU-1'),product('long','SKU-12')],categories:[],sellers:[],stores:[],sales:[],purchases:[],layaways:[],allCustomers:[],activeCart:[],heldCarts:[],dailyNotes:[],incidents:[],roles:[],giftVouchers:[],ceoNotes:[],verifiedProducts:new Set(),currentUser:{id:'s',roleId:'seller'},currentStore:{id:'m1'},onAddToCart:p=>added.push(p.id),onClearVerifications:()=>{}};
-    await act(async()=>{renderer=create(React.createElement(Pos,props),{createNodeMock:node=>node.type==='input'?input:null});});
+    const screen=(store,scope='s:mayla')=>React.createElement(ViewFiltersProvider,{key:scope},React.createElement(Pos,{...props,key:store,currentStore:{id:store}}));
+    await act(async()=>{renderer=create(screen('m1'),{createNodeMock:node=>node.type==='input'?input:null});});
     const search=()=>renderer.root.findAllByType('input').find(n=>typeof n.props.onKeyDown==='function');
     const enter=()=>{let prevented=false,stopped=false;return {key:'Enter',target:input,currentTarget:input,repeat:false,get defaultPrevented(){return prevented},preventDefault(){prevented=true},stopPropagation(){stopped=true}};};
     for(let scan=0;scan<3;scan++){
@@ -39,6 +40,13 @@ test('each repeated barcode and Enter adds exactly once, without auto-adding a p
     // Scanning outside a text field also consumes the code once.
     await act(async()=>{for(const key of 'SKU-12')for(const fn of handlers)fn({key,target:new Element(),repeat:false});for(const fn of handlers)fn({key:'Enter',target:new Element(),repeat:false,preventDefault(){}});});
     assert.deepEqual(added,['long','long','long','long']);
+    input.value='chaqueta';await act(async()=>search().props.onChange({target:input}));
+    await act(async()=>renderer.update(screen('m2')));
+    assert.equal(search().props.value,'chaqueta','typed search survives store change');
+    await act(async()=>renderer.update(screen('m1')));
+    assert.equal(search().props.value,'chaqueta');
+    await act(async()=>renderer.update(screen('m1','other:company')));
+    assert.equal(search().props.value,'','new user/company starts with an empty search');
   } finally {
     if(renderer)await act(async()=>renderer.unmount());
     for(const key of keys)if(previous[key]===undefined)delete globalThis[key];else globalThis[key]=previous[key];

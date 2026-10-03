@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { selectAnalyticsRows } from '../services/analyticsScope';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { DEFAULT_COMPANY_ID } from '../types';
@@ -94,7 +95,7 @@ export const TagScanningView: React.FC<TagScanningViewProps> = ({
   // Wrong Tag Modal state
   const [isWrongTagModalOpen, setIsWrongTagModalOpen] = useState(false);
   const [wrongTagProductId, setWrongTagProductId] = useState<string>('');
-  const [correctTagSearch, setCorrectTagSearch] = useState<string>('');
+  const [correctTagSearch, setCorrectTagSearch] = useViewFilter<string>('TagScanningView:correctTagSearch', '');
   const [selectedCorrectProduct, setSelectedCorrectProduct] = useState<Product | null>(null);
   const [wrongTagQty, setWrongTagQty] = useState<number>(1);
 

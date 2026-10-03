@@ -239,7 +239,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [isUnitsSoldExpanded, setIsUnitsSoldExpanded] = useState(false);
   const [isSalesHistoryVisible, setIsSalesHistoryVisible] = useState(true);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
-  const [salesSearchTerm, setSalesSearchTerm] = useState('');
+  const [salesSearchTerm, setSalesSearchTerm] = useViewFilter('DashboardView:salesSearchTerm', '');
   const [salesSellerFilter, setSalesSellerFilter] = useViewFilter('DashboardView:salesSellerFilter', '');
   const [salesCategoryFilter, setSalesCategoryFilter] = useViewFilter('DashboardView:salesCategoryFilter', '');
   const [salesMonthFilter, setSalesMonthFilter] = useViewFilter('DashboardView:salesMonthFilter', '');

@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, CeoDailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
@@ -62,7 +63,7 @@ interface PosViewProps {
 const PosView: React.FC<PosViewProps> = (props) => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useViewFilter('PosView:searchTerm', '');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
   const [isSellVoucherModalOpen, setIsSellVoucherModalOpen] = useState(false);

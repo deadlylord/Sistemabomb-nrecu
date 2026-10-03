@@ -1,3 +1,4 @@
+import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { useAsyncScope } from '../services/useAsyncScope';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
@@ -67,7 +68,7 @@ export const CeoCenterView: React.FC<CeoCenterViewProps> = ({
   
   // Product Performance state
   const [productPerfFilter, setProductPerfFilter] = useState<'all' | 'trends' | 'restock' | 'stagnant' | 'negative'>('all');
-  const [productPerfSearch, setProductPerfSearch] = useState('');
+  const [productPerfSearch, setProductPerfSearch] = useViewFilter('CeoCenterView:productPerfSearch', '');
   const [compareSku, setCompareSku] = useState<string>('');
   const [compareProductName, setCompareProductName] = useState<string>('');
 

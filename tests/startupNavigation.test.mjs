@@ -51,7 +51,7 @@ test('startup bundle failure has a recovery button independently of React',async
 
 test('service worker serves an older cached chunk when deployment returns HTML or network fails; keeps one prior cache',async()=>{
  const handlers={},deleted=[],cached=new Response('old module',{headers:{'Content-Type':'application/javascript'}});
- const ctx={self:{addEventListener:(name,fn)=>handlers[name]=fn,location:{origin:'https://pos.test'},skipWaiting(){},clients:{claim(){}}},caches:{keys:async()=>['bombon-pos-cache-v1','bombon-pos-cache-v2','bombon-pos-cache-v1.1.135-local-styles'],delete:async name=>deleted.push(name),open:async()=>({match:async()=>undefined,put:async()=>{}}),match:async()=>cached.clone()},URL,Response,console,fetch:async()=>new Response('<html>',{headers:{'Content-Type':'text/html'}})};
+ const ctx={self:{addEventListener:(name,fn)=>handlers[name]=fn,location:{origin:'https://pos.test'},skipWaiting(){},clients:{claim(){}}},caches:{keys:async()=>['bombon-pos-cache-v1','bombon-pos-cache-v2','bombon-pos-cache-v1.1.136-local-styles'],delete:async name=>deleted.push(name),open:async()=>({match:async()=>undefined,put:async()=>{}}),match:async()=>cached.clone()},URL,Response,console,fetch:async()=>new Response('<html>',{headers:{'Content-Type':'text/html'}})};
  vm.runInNewContext(await readFile('public/sw.js','utf8'),ctx);
  let pending;handlers.activate({waitUntil:p=>pending=p});await pending;
  assert.deepEqual(deleted,['bombon-pos-cache-v1']);

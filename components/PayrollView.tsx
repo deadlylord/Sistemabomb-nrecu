@@ -131,7 +131,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
   const [receiptToShow, setReceiptToShow] = useState<any | null>(null);
 
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [historySearchTerm, setHistorySearchTerm] = useViewFilter('PayrollView:historySearchTerm', '');
   const [historyStartDate, setHistoryStartDate] = useState('');
   const [historyEndDate, setHistoryEndDate] = useState('');
 

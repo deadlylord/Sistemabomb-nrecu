@@ -68,7 +68,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   const [startDate, setStartDate] = useViewFilter('PurchasesView:startDate', toYYYYMMDD(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [endDate, setEndDate] = useViewFilter('PurchasesView:endDate', toYYYYMMDD(new Date()));
   
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [historySearchTerm, setHistorySearchTerm] = useViewFilter('PurchasesView:historySearchTerm', '');
   const [categoryFilter, setCategoryFilter] = useViewFilter('PurchasesView:categoryFilter', '');
   const [historySortConfig, setHistorySortConfig] = useState<{ key: HistorySortKey, direction: 'asc' | 'desc' }>({ key: 'createdAt', direction: 'desc' });
   const [successMessage, setSuccessMessage] = useState('');
