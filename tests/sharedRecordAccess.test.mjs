@@ -18,8 +18,15 @@ test('consultation is available to valid roles without adding operation permissi
  const roles=[{id:'viewer',companyId:'mayla',name:'Vista',permissions:[]},{id:'seller',companyId:'mayla',name:'Vendedor',permissions:[View.LAYAWAY]}];
  for(const role of roles){
  const user={id:'user',companyId:'mayla',storeId:'m1',roleId:role.id};
- for(const view of [View.LAYAWAY,View.INCIDENTS,View.INVENTORY_TRANSFER])assert.ok(tenantPermissions(user,roles,stores).includes(view));
+ for(const view of [View.LAYAWAY,View.INCIDENTS])assert.ok(tenantPermissions(user,roles,stores).includes(view));
  assert.deepEqual(tenantOperationPermissions(user,roles,stores),role.permissions);
+ assert.ok(!tenantPermissions(user,roles,stores).includes(View.INVENTORY_TRANSFER));
+ const forgedRole={...role,userType:'seller',permissions:[...role.permissions,View.INVENTORY_TRANSFER]};
+ assert.ok(!tenantPermissions(user,[forgedRole],stores).includes(View.INVENTORY_TRANSFER));
+ assert.ok(!tenantOperationPermissions(user,[forgedRole],stores).includes(View.INVENTORY_TRANSFER));
+ for(const administrator of [{...role,name:'Administrator'},{...role,name:'Administrador'},{...role,name:'Gerente',userType:'admin'}]) {
+   assert.ok(tenantPermissions(user,[administrator],stores).includes(View.INVENTORY_TRANSFER));
+ }
  for(const change of [{isDisabled:true},{companyId:'other'},{storeId:'unknown'},{roleId:'foreign'}])assert.deepEqual(tenantPermissions({...user,...change},roles,stores),[]);
  }
  let writes=0;const write=()=>writes++;
