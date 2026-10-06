@@ -3,7 +3,7 @@ import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope'
 import { createTenantWriter } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DEFAULT_COMPANY_ID, FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
@@ -189,6 +189,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   
   const [editingRecord, setEditingRecord] = useState<(FinancialRecord & { amountString?: string, timeString?: string, dateString?: string }) | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<FinancialRecord | null>(null);
+  const [isSavingReconciliation, setIsSavingReconciliation] = useState(false);
+  const saveInFlightRef = useRef(false);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
@@ -1216,6 +1218,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleSaveManualEntries = async () => {
+    if (saveInFlightRef.current) return;
     if (manualEntries.length === 0) { alert("Agrega al menos un movimiento antes de procesar."); return; }
     const incompleteEntry = manualEntries.find(e => !e.amount.trim() || !e.description.trim());
     if (incompleteEntry) {
@@ -1224,6 +1227,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         else alert(`Falta ingresar la DESCRIPCIÓN para el movimiento de: ${formatCOP(parseFloat(incompleteEntry.amount))}`);
         return;
     }
+    saveInFlightRef.current = true;
+    setIsSavingReconciliation(true);
     const batch = writeBatch(db);
     const activeStoreName = activeStore?.name || 'Local Actual';
     manualEntries.forEach(e => {
@@ -1345,8 +1350,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             });
         }
     });
-    await batch.commit();
-    setShowAddModal(false); setManualEntries([]);
+    try {
+      await batch.commit();
+      setShowAddModal(false);
+      setManualEntries([]);
+    } catch (error) {
+      console.error('Error saving reconciliation entries:', error);
+      alert('No se pudo guardar el movimiento. No vuelvas a procesarlo hasta verificar el mensaje.');
+    } finally {
+      saveInFlightRef.current = false;
+      setIsSavingReconciliation(false);
+    }
   };
 
   const handleOpenEdit = (record: FinancialRecord) => {
@@ -1361,7 +1375,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleUpdateSingleRecord = async (e: React.FormEvent) => {
-      e.preventDefault(); if (!editingRecord) return;
+      e.preventDefault();
+      if (!editingRecord || saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setIsSavingReconciliation(true);
       const { amountString, timeString, dateString, ...recordToSave } = editingRecord;
       if ('saldo' in recordToSave) delete (recordToSave as any).saldo;
       const amountVal = parseFloat(amountString || '0');
@@ -1387,8 +1404,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           });
       }
 
-      await batch.commit();
-      setEditingRecord(null);
+      try {
+          await batch.commit();
+          setEditingRecord(null);
+      } catch (error) {
+          console.error('Error updating reconciliation record:', error);
+          alert('No se pudo guardar el cambio. El registro no se reenviará automáticamente.');
+      } finally {
+          saveInFlightRef.current = false;
+          setIsSavingReconciliation(false);
+      }
   };
 
   const handleDeleteRecord = (record: FinancialRecord) => { setRecordToDelete(record); };
@@ -3282,7 +3307,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         </div>
                         <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
                     </div>
-                    <div className="p-4 sm:p-6 bg-gray-5 dark:bg-gray-900 border-t dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"><div className="text-[8px] sm:text-[10px] font-bold text-gray-400 italic text-center sm:text-left max-w-sm hidden sm:block">💡 Tip: Usa la "Configuración Cruzada" para pagar facturas de otros locales sin descuadrar tu propio arqueo final.</div><div className="flex gap-2 w-full sm:w-auto"><button onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-6 py-3.5 text-gray-500 font-black uppercase text-[10px] sm:text-xs">Cancelar</button><button onClick={handleSaveManualEntries} className="flex-[2] sm:flex-none bg-accent text-white font-black py-3.5 px-8 sm:px-12 rounded-2xl shadow-xl hover:bg-accent-hover transition-all active:scale-95 uppercase text-xs sm:text-sm">PROCESAR LOTE</button></div></div>
+                    <div className="p-4 sm:p-6 bg-gray-5 dark:bg-gray-900 border-t dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"><div className="text-[8px] sm:text-[10px] font-bold text-gray-400 italic text-center sm:text-left max-w-sm hidden sm:block">💡 Tip: Usa la "Configuración Cruzada" para pagar facturas de otros locales sin descuadrar tu propio arqueo final.</div><div className="flex gap-2 w-full sm:w-auto"><button onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-6 py-3.5 text-gray-500 font-black uppercase text-[10px] sm:text-xs">Cancelar</button><button onClick={handleSaveManualEntries} disabled={isSavingReconciliation} className="flex-[2] sm:flex-none bg-accent text-white font-black py-3.5 px-8 sm:px-12 rounded-2xl shadow-xl hover:bg-accent-hover transition-all active:scale-95 uppercase text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'GUARDANDO...' : 'PROCESAR LOTE'}</button></div></div>
                 </div>
             </div>
         )}
@@ -3323,7 +3348,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         </div>
                         <div className="flex gap-2 pt-3 border-t dark:border-gray-700">
                             <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-2 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
-                            <button type="submit" className="flex-1 bg-accent text-white font-black p-2 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-[10px]">Guardar Cambios</button>
+                            <button type="submit" disabled={isSavingReconciliation} className="flex-1 bg-accent text-white font-black p-2 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-[10px] disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'Guardando...' : 'Guardar Cambios'}</button>
                         </div>
                     </form>
                 </div>
