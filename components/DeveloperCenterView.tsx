@@ -5,6 +5,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Company, Store, Seller, Role, View, DEFAULT_COMPANY_ID, ALL_CLIENT_MODULES, DEFAULT_CLIENT_ALLOWED_VIEWS, CompanyModuleInfo, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
 import { formatCOP } from '../constants';
 import { compressImage } from '../services/storageService';
+import { useAsyncScope } from '../services/useAsyncScope';
 import { 
   BuildingStorefrontIcon, UsersIcon, ShieldCheckIcon, 
   SettingsIcon, CheckIcon, CrossIcon, EditIcon, TrashIcon,
@@ -36,7 +37,11 @@ interface DeveloperCenterViewProps {
   onToggleUserStatus?: (userId: string) => Promise<void>;
 }
 
-const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
+const DeveloperCompanyContent: React.FC<DeveloperCenterViewProps & {
+  selectedCompanyId: string;
+  onSelectCompany: (id: string) => void;
+}> = ({
+  selectedCompanyId, onSelectCompany,
   isOwner, developerGrants, onSetPlatformDeveloper, onCreatePlatformDeveloper,
   companies,
   stores,
@@ -56,7 +61,8 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   onToggleUserStatus
 }) => {
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(activeCompanyId);
+  const beginRequest = useAsyncScope(selectedCompanyId);
+  const beginLogoRequest = useAsyncScope(selectedCompanyId);
   const [isNewCompanyModalOpen, setIsNewCompanyModalOpen] = useState(false);
   const [isEditCompanyModalOpen, setIsEditCompanyModalOpen] = useState(false);
   const [isNewStoreModalOpen, setIsNewStoreModalOpen] = useState(false);
@@ -129,7 +135,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const activeCompany = useMemo(() => {
-    return companies.find(c => c.id === selectedCompanyId) || companies[0];
+    return companies.find(c => c.id === selectedCompanyId);
   }, [companies, selectedCompanyId]);
 
   useEffect(() => {
@@ -142,6 +148,17 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
     }
   }, [activeCompany?.id, activeCompany?.logoUrl, activeCompany?.primaryColor, activeCompany?.primaryColorHover, activeCompany?.secondaryColor, activeCompany?.palettePresetId]);
 
+  useEffect(() => {
+    if (!brandingSaveToast) return;
+    const timeout = setTimeout(() => setBrandingSaveToast(null), 3500);
+    return () => clearTimeout(timeout);
+  }, [brandingSaveToast]);
+  useEffect(() => {
+    if (!moduleSaveToast) return;
+    const timeout = setTimeout(() => setModuleSaveToast(null), 3500);
+    return () => clearTimeout(timeout);
+  }, [moduleSaveToast]);
+
   const handleApplyPalettePreset = (preset: ColorPalettePreset) => {
     setBrandingPresetId(preset.id);
     setBrandingPrimary(preset.primary);
@@ -153,10 +170,13 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       if (file.type.startsWith('image/')) {
+        const isCurrent = beginLogoRequest();
         try {
           const compressed = await compressImage(file, 'logo');
+          if (!isCurrent()) return;
           setBrandingLogo(compressed);
         } catch (err) {
+          if (!isCurrent()) return;
           console.error("Error compressing logo:", err);
           alert("Error al procesar el archivo de imagen.");
         }
@@ -174,6 +194,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
 
   const handleSaveBranding = async () => {
     if (!activeCompany) return;
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onUpdateCompany({
@@ -184,13 +205,14 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         secondaryColor: brandingSecondary,
         palettePresetId: brandingPresetId
       });
+      if (!isCurrent()) return;
       setBrandingSaveToast('¡Identidad y paleta de colores guardadas exitosamente!');
-      setTimeout(() => setBrandingSaveToast(null), 3500);
     } catch (err: any) {
+      if (!isCurrent()) return;
       console.error(err);
       alert("Error al guardar la personalización de la empresa: " + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -242,17 +264,19 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       updated = [...currentAllowed, moduleId];
     }
 
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onUpdateCompany({ ...activeCompany, allowedViews: updated });
+      if (!isCurrent()) return;
       const modLabel = ALL_CLIENT_MODULES.find(m => m.id === moduleId)?.label || moduleId;
       const isNowActive = updated.includes(moduleId);
       setModuleSaveToast(`Módulo "${modLabel}" ${isNowActive ? 'habilitado' : 'deshabilitado'} correctamente.`);
-      setTimeout(() => setModuleSaveToast(null), 3500);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error al actualizar módulos: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -273,15 +297,17 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       targetViews = [View.POS, View.INVENTORY, View.CUSTOMERS, View.SETTINGS];
     }
 
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onUpdateCompany({ ...activeCompany, allowedViews: targetViews });
+      if (!isCurrent()) return;
       setModuleSaveToast('Preset de módulos aplicado correctamente a ' + activeCompany.name);
-      setTimeout(() => setModuleSaveToast(null), 3500);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error al aplicar preset de módulos: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -292,6 +318,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       return;
     }
 
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onCreateCompany(
@@ -315,6 +342,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         } : undefined
       );
 
+      if (!isCurrent()) return;
       // Reset form
       setNewCompanyName('');
       setNewCompanyNit('');
@@ -331,9 +359,10 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       setNewAdminPassword('');
       setIsNewCompanyModalOpen(false);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error creando empresa: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -350,6 +379,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       return;
     }
 
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onCreateStoreForCompany(activeCompany.id, {
@@ -358,15 +388,17 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         contactInfo: newStoreContact.trim(),
         initialBalances: { cash: Number(newStoreCash) || 0, qr: Number(newStoreQr) || 0 }
       });
+      if (!isCurrent()) return;
       setNewStoreName('');
       setNewStoreContact('');
       setNewStoreCash(0);
       setNewStoreQr(0);
       setIsNewStoreModalOpen(false);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error creando sede: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -383,6 +415,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
 
     const targetStoreId = newAdminStoreId || companyStores[0].id;
 
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       await onCreateAdminUser(activeCompany.id, targetStoreId, {
@@ -390,6 +423,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         username: newAdminUsername.trim(),
         password: newAdminPassword.trim()
       });
+      if (!isCurrent()) return;
       setNewAdminName('');
       setNewAdminUsername('');
       setNewAdminPassword('');
@@ -397,9 +431,10 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       setNewAdminShowPassword(false);
       setIsNewAdminModalOpen(false);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error creando administrador: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -419,6 +454,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       alert('El nombre de la sede es obligatorio.');
       return;
     }
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       const updatedStore: Store = {
@@ -432,12 +468,14 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
         }
       };
       await onUpdateStore(updatedStore);
+      if (!isCurrent()) return;
       setIsEditStoreModalOpen(false);
       setEditingStore(null);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error actualizando sede: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -458,6 +496,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       alert('El nombre y la contraseña son obligatorios.');
       return;
     }
+    const isCurrent = beginRequest();
     try {
       setIsProcessing(true);
       if (onUpdateUser) {
@@ -470,12 +509,14 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
           editUserUsername.trim()
         );
       }
+      if (!isCurrent()) return;
       setIsEditUserModalOpen(false);
       setEditingUser(null);
     } catch (err: any) {
+      if (!isCurrent()) return;
       alert('Error actualizando usuario: ' + (err?.message || err));
     } finally {
-      setIsProcessing(false);
+      if (isCurrent()) setIsProcessing(false);
     }
   };
 
@@ -556,7 +597,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
               return (
                 <div
                   key={comp.id}
-                  onClick={() => setSelectedCompanyId(comp.id)}
+                  onClick={() => onSelectCompany(comp.id)}
                   className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col gap-2 ${
                     isSelected
                       ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 shadow-md shadow-indigo-500/10'
@@ -603,6 +644,7 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        onSelectCompany(comp.id);
                         onSetActiveCompanyId(comp.id);
                       }}
                       className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${
@@ -1854,14 +1896,17 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
 
             <form onSubmit={async (e) => {
               e.preventDefault();
+              const isCurrent = beginRequest();
               try {
                 setIsProcessing(true);
                 await onUpdateCompany(editingCompany);
+                if (!isCurrent()) return;
                 setIsEditCompanyModalOpen(false);
               } catch (err: any) {
+                if (!isCurrent()) return;
                 alert('Error actualizando empresa: ' + err?.message);
               } finally {
-                setIsProcessing(false);
+                if (isCurrent()) setIsProcessing(false);
               }
             }} className="space-y-4">
               <div>
@@ -2004,6 +2049,14 @@ const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = ({
       )}
     </div>
   );
+};
+
+// Company forms, visible passwords and pending UI feedback belong to the inspected
+// company. A new instance also invalidates async completions on A -> B -> A.
+const DeveloperCenterView: React.FC<DeveloperCenterViewProps> = props => {
+  const [selectedCompanyId, setSelectedCompanyId] = useState(props.activeCompanyId);
+  useEffect(() => setSelectedCompanyId(props.activeCompanyId), [props.activeCompanyId]);
+  return <DeveloperCompanyContent key={selectedCompanyId} {...props} selectedCompanyId={selectedCompanyId} onSelectCompany={setSelectedCompanyId} />;
 };
 
 export default DeveloperCenterView;

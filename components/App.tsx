@@ -85,13 +85,15 @@ const hexToRgb = (hex: string) => {
 };
 
 const attachFirestoreListener = <T extends { id: string }>(query: Query, setter: React.Dispatch<React.SetStateAction<T[]>>) => {
+  let active = true;
   const unsubscribe = onSnapshot(query, snapshot => {
+    if (!active) return;
     const list: T[] = snapshot.docs.map(doc => ({ ...(doc.data() as object), id: doc.id } as T));
     setter(list);
   }, error => {
     console.error(`Error attaching listener:`, error);
   });
-  return unsubscribe;
+  return () => { active = false; unsubscribe(); };
 };
 
 const cleanObject = (obj: any) => {
@@ -223,21 +225,43 @@ const App: React.FC = () => {
       setVerifiedProducts(new Set());
   }, []);
 
-  const handleSwitchStore = (id: string) => {
-    if (currentUser && !(isDeveloper && currentView === View.DEVELOPER_CENTER) && !stores.some(store => store.id === id && (store.companyId || DEFAULT_COMPANY_ID) === (isDeveloper ? activeCompanyId : currentUser.companyId || DEFAULT_COMPANY_ID))) return;
-    if (id === currentStoreIdRef.current) return;
+  const isOwner = isPlatformOwner(currentUser);
+  const isDeveloper = hasPlatformDeveloperAccess(currentUser, developerGrant);
+  // Identity stays attached to the signed-in user; operational context can only
+  // be changed across companies by an authorized platform developer.
+  const operationalCompanyId = isDeveloper
+    ? activeCompanyId || DEFAULT_COMPANY_ID
+    : currentUser?.companyId || stores.find(store => store.id === currentUser?.storeId)?.companyId || DEFAULT_COMPANY_ID;
+
+  const selectStore = (id: string | null) => {
     currentStoreIdRef.current = id;
+    setInventory(id ? inventoryByStoreRef.current.get(id) || [] : []);
+    setCurrentStoreId(id);
+    if (id) localStorage.setItem('currentStoreId', id);
+    else localStorage.removeItem('currentStoreId');
+  };
+
+  const handleSwitchStore = (id: string) => {
+    if (!currentUser || !stores.some(store => store.id === id && (store.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId)) return;
+    if (id === currentStoreIdRef.current) return;
     // Never leave the previous store's products visible. Administrators already
     // keep each authorized store inventory in memory, so revisiting a store is instant.
-    setInventory(inventoryByStoreRef.current.get(id) || []);
-    setCurrentStoreId(id);
-    localStorage.setItem('currentStoreId', id);
+    selectStore(id);
+  };
+
+  const handleConnectCompany = (id: string) => {
+    if (!isDeveloper || !companies.some(company => company.id === id)) return;
+    const companyStores = stores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === id);
+    const storeId = companyStores.find(store => store.id === currentStoreIdRef.current)?.id || companyStores[0]?.id || null;
+    if (id !== operationalCompanyId) inventoryByStoreRef.current.clear();
+    setActiveCompanyId(id);
+    localStorage.setItem('activeCompanyId', id);
+    selectStore(storeId);
   };
   
   const currentStore = useMemo(() => {
-    const store = stores.find(s => s.id === currentStoreId);
-    const targetCompanyId = currentUser?.companyId || store?.companyId || DEFAULT_COMPANY_ID;
-    const company = companies.find(c => c.id === targetCompanyId);
+    const store = stores.find(s => s.id === currentStoreId && (s.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId);
+    const company = companies.find(c => c.id === operationalCompanyId);
 
     const primaryColor = store?.accentColor || company?.primaryColor || '#ff007f';
     const primaryHover = store?.accentColorHover || company?.primaryColorHover || '#d9006c';
@@ -251,21 +275,18 @@ const App: React.FC = () => {
     if (secRgb) document.documentElement.style.setProperty('--color-accent-secondary', `${secRgb.r} ${secRgb.g} ${secRgb.b}`);
 
     return store;
-  }, [currentStoreId, stores, companies, currentUser]);
+  }, [currentStoreId, stores, companies, operationalCompanyId]);
 
   const currentCompany = useMemo(() => {
     if (!currentUser) return null;
-    const targetCompanyId = currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
-    return companies.find(c => c.id === targetCompanyId) || null;
-  }, [currentUser, currentStore, companies]);
+    return companies.find(c => c.id === operationalCompanyId) || null;
+  }, [currentUser, operationalCompanyId, companies]);
 
   const isAdmin = useMemo(() => {
       if (!currentUser || !roles.length) return false;
       return getRoleUserType(resolveTenantRole(currentUser, roles, stores)) === 'admin';
   }, [currentUser, roles, stores]);
 
-  const isOwner = isPlatformOwner(currentUser);
-  const isDeveloper = hasPlatformDeveloperAccess(currentUser, developerGrant);
   useEffect(() => {
     setDeveloperGrant(null);
     if (!isAuthReady || !currentUser || isOwner) return;
@@ -288,12 +309,6 @@ const App: React.FC = () => {
   // Multi-company isolation: every operational view is scoped to exactly one company.
   // Developers can switch the operational context from Developer Center, but only
   // Developer Center itself receives the global companies/stores/users collections.
-  const operationalCompanyId = useMemo(() => {
-    if (!currentUser) return DEFAULT_COMPANY_ID;
-    if (isDeveloper) return activeCompanyId || DEFAULT_COMPANY_ID;
-    return currentUser.companyId || currentStore?.companyId || DEFAULT_COMPANY_ID;
-  }, [currentUser, currentStore, isDeveloper, activeCompanyId]);
-
   const categories = useMemo(() => selectCompanyCategories(categoryState, operationalCompanyId), [categoryState, operationalCompanyId]);
 
   const visibleStores = useMemo(() => {
@@ -304,9 +319,20 @@ const App: React.FC = () => {
     return new Set(visibleStores.map(s => s.id));
   }, [visibleStores]);
 
+  const isOperationalView = currentView !== View.DEVELOPER_CENTER;
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
+  const [settledDataContext, setSettledDataContext] = useState(operationContext);
+  const dataContextReady = settledDataContext === operationContext;
+  const overlayScope = `${operationContext}:${currentView}`;
+  const [settledOverlayScope, setSettledOverlayScope] = useState(overlayScope);
+  useEffect(() => {
+    setIsReportsModalOpen(false); setIsVerificationModalOpen(false); setIsBriefingModalOpen(false);
+    setShowReceiptModal(false); setSaleForReceipt(null); setShowRecaudoReceipt(false); setLastRecaudo(null);
+    setVerificationInventoryError(null); setIsVerificationInventoryLoading(false);
+    setSettledOverlayScope(overlayScope);
+  }, [overlayScope]);
   const operationContextRef = useRef({ key: operationContext, version: 0 });
   if (operationContextRef.current.key !== operationContext) operationContextRef.current = { key: operationContext, version: operationContextRef.current.version + 1 };
   const contextAtRender = operationContextRef.current;
@@ -317,6 +343,7 @@ const App: React.FC = () => {
     setDailyNotes([]); setLoginHistory([]); setProductHistory([]);
     setPayrollHistory([]); setCustomers([]); setHeldCarts([]); setExpenses([]);
     setIncidents([]); setGiftVouchers([]); setFinancialRecords([]); setLoans([]); setExpenseCategories([]); setAccountingChatHistory([]);
+    setSettledDataContext(operationContext);
   }, [currentStoreId, dataScope]);
   useEffect(() => {
     inventoryByStoreRef.current.clear();
@@ -369,10 +396,11 @@ const App: React.FC = () => {
   // another company selected. This prevents store-specific listeners from reading
   // data belonging to the previous company.
   useEffect(() => {
-    if (!currentUser || !isDeveloper || currentView === View.DEVELOPER_CENTER) return;
+    if (!currentUser) return;
     if (currentStoreId && visibleStoreIds.has(currentStoreId)) return;
-    if (visibleStores.length > 0) handleSwitchStore(visibleStores[0].id);
-  }, [currentUser, isDeveloper, currentView, currentStoreId, visibleStores, visibleStoreIds]);
+    const nextStoreId = isDeveloper ? visibleStores[0]?.id || null : visibleStoreIds.has(currentUser.storeId) ? currentUser.storeId : null;
+    if (currentStoreId !== nextStoreId) selectStore(nextStoreId);
+  }, [currentUser?.id, currentUser?.storeId, isDeveloper, currentStoreId, companyStoreKey]);
 
   const userPermissions = useMemo(() => tenantPermissions(currentUser, roles, stores, isDeveloper ? undefined : currentCompany?.allowedViews), [currentUser, roles, stores, isDeveloper, currentCompany]);
   const recordReadOnly = !isDeveloper && !tenantOperationPermissions(currentUser, roles, stores, currentCompany?.allowedViews).includes(currentView);
@@ -474,7 +502,7 @@ const App: React.FC = () => {
   }, [isAppReady, isAuthReady, currentUser]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentUser) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     let active = true;
     const rows = new Map<string, CeoDailyNote[]>();
     const queries = operationalCompanyId === DEFAULT_COMPANY_ID
@@ -487,7 +515,7 @@ const App: React.FC = () => {
       setCeoNotes([...new Map([...rows.values()].flat().map(note => [note.id, note])).values()]);
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
@@ -495,26 +523,30 @@ const App: React.FC = () => {
       attachFirestoreListener(query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [currentUser, isAppReady, isAuthReady, isAdmin]);
+  }, [currentUser?.id, isAppReady, isAuthReady]);
   
   useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentUser) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     const companyId = operationalCompanyId;
     // The original company also retains its historical untagged categories.
     const categoryQuery = companyId === DEFAULT_COMPANY_ID
       ? query(collection(db, 'categories'))
       : query(collection(db, 'categories'), where('companyId', '==', companyId));
-    return onSnapshot(categoryQuery, snapshot => {
+    let active = true;
+    const unsubscribe = onSnapshot(categoryQuery, snapshot => {
+      if (!active) return;
       const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Category));
       setCategoryState({ companyId, items: items.filter(category => belongsToCompany(category, companyId)) });
     }, error => {
+      if (!active) return;
       console.error('Error loading company categories:', error);
       setCategoryState({ companyId, items: [] });
     });
-  }, [isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
+    return () => { active = false; unsubscribe(); };
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentUser) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     let active = true;
     const ids = [...visibleStoreIds];
     const rows = new Map<string, InventoryTransfer[]>();
@@ -526,10 +558,10 @@ const App: React.FC = () => {
       }));
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isAppReady, isAuthReady, currentUser?.id, companyStoreKey]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
 
   useEffect(() => {
-    if (!isAdmin || !currentUser) return;
+    if (!isOperationalView || !isAdmin || !currentUser) return;
 
     let active = true;
     const storeIds: string[] = JSON.parse(companyStoreKey);
@@ -548,7 +580,7 @@ const App: React.FC = () => {
     });
 
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isAdmin, currentUser, companyStoreKey, dataScope]);
+  }, [isOperationalView, isAdmin, currentUser?.id, companyStoreKey, dataScope]);
 
 
   const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION);
@@ -573,15 +605,15 @@ const App: React.FC = () => {
   }, [isGlobalMode, isAppReady, currentUser, isAdmin, globalInventoryForSearch.length]);
   
   useEffect(() => {
-    if (!currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
+    if (!isOperationalView || !currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
     return subscribeStoreRows('incidents', currentStoreId, dataScope, rows => setIncidents(rows.filter(row => {
       try { assertTenantData('incidents', row, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; }
       catch { return false; }
     })));
-  }, [currentUser?.id, currentStoreId, dataScope, visibleStoreIds]);
+  }, [isOperationalView, currentUser?.id, currentStoreId, dataScope, companyStoreKey]);
 
   const hasDataAccess = !!currentUser && canAccessCurrentView;
-  const canLoadStore = isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
+  const canLoadStore = isOperationalView && isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
 
 
   // The verification dialog also needs inventory when opened outside a catalog view.
@@ -697,7 +729,7 @@ const App: React.FC = () => {
     return () => { active = false; unsubscribers.forEach(unsub => unsub()); };
   }, [canLoadStore, currentStoreId, currentView, dataScope]);
   useEffect(() => {
-    if (currentUser && !hasShownBriefing) {
+    if (currentUser && !hasShownBriefing && dataContextReady && currentView !== View.DEVELOPER_CENTER) {
       const pendingIncidentsCount = incidents.filter(i => 
         [IncidentStatus.DAÑADO_REPORTADO, IncidentStatus.CAMBIO_SOLICITADO, IncidentStatus.TRASLADO_SOLICITADO, IncidentStatus.WARRANTY_ACTIVE].includes(i.status)
       ).length;
@@ -722,7 +754,7 @@ const App: React.FC = () => {
         setHasShownBriefing(true);
       }
     }
-  }, [currentUser, incidents, layaways, hasShownBriefing, isAdmin]);
+  }, [currentUser, incidents, layaways, hasShownBriefing, isAdmin, dataContextReady, currentView]);
 
   useEffect(() => {
     if (!isAppReady || stores.length === 0) return;
@@ -3136,7 +3168,7 @@ const App: React.FC = () => {
       setCurrentUser(sessionUser);
       setActiveCompanyId(resolvedCompanyId);
       localStorage.setItem('activeCompanyId', resolvedCompanyId);
-      handleSwitchStore(seller.storeId);
+      selectStore(seller.storeId);
 
       const sellerRole = roles.find(role => role.id === seller.roleId);
       if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
@@ -3161,11 +3193,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={incidents} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
-      <ViewFiltersProvider key={dataScope}>
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? incidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
+      <ViewFiltersProvider key={`filters:${dataScope}`}>
       <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
         {!canAccessCurrentView && <div role="status" className="p-6 text-center">Esperando los permisos de acceso. Si continúa, consulta al administrador.</div>}
-        {canAccessCurrentView && <AppErrorBoundary>
+        {canAccessCurrentView && dataContextReady && <AppErrorBoundary>
 
         <Suspense fallback={<div className="p-6 text-center" role="status">Cargando módulo…</div>}>
         {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
@@ -3281,15 +3313,7 @@ const App: React.FC = () => {
             sellers={sellers}
             roles={roles.filter(role => !isPlatformRole(role)).map(role => ({ ...role, permissions: role.permissions.filter(view => view !== View.DEVELOPER_CENTER) }))}
             activeCompanyId={activeCompanyId}
-            onSetActiveCompanyId={(id) => {
-              setActiveCompanyId(id);
-              localStorage.setItem('activeCompanyId', id);
-              // If current store is not in this company, switch store to first store of company
-              const compStores = stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === id);
-              if (compStores.length > 0 && !compStores.some(s => s.id === currentStoreId)) {
-                handleSwitchStore(compStores[0].id);
-              }
-            }}
+            onSetActiveCompanyId={handleConnectCompany}
             onCreateCompany={handleCreateCompany}
             onUpdateCompany={handleUpdateCompany}
             onDeleteCompany={handleDeleteCompany}
@@ -3307,7 +3331,8 @@ const App: React.FC = () => {
         </AppErrorBoundary>}
       </main>
       </ViewFiltersProvider>
-      <ReportsModal key={dataScope} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
+      {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
+      <ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {currentUser && showRecaudoReceipt && lastRecaudo && lastRecaudo.storeId === currentStoreId && (!lastRecaudo.companyId || lastRecaudo.companyId === operationalCompanyId) && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (
@@ -3343,9 +3368,7 @@ const App: React.FC = () => {
         layaways={layaways}
         onNavigate={setCurrentView}
       />
-      
-
-
+      </React.Fragment>}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { isPlatformOwner } from '../services/developerAccess';
+import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Seller, Store, Role, Incident, IncidentStatus, Company } from '../types';
@@ -62,8 +63,7 @@ const Header: React.FC<HeaderProps> = ({
   const storeMenuRef = useRef<HTMLDivElement>(null);
   const groupMenuRef = useRef<HTMLDivElement>(null);
 
-  const adminRole = roles.find(r => r.name === 'Administrator');
-  const isAdmin = currentUser.roleId === adminRole?.id;
+  const isAdmin = isTenantAdministrator(resolveTenantRole(currentUser, roles, stores));
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const groups: NavGroup[] = useMemo(() => [
@@ -119,6 +119,7 @@ const Header: React.FC<HeaderProps> = ({
   const isDeveloper = isDeveloperProp !== undefined
     ? isDeveloperProp
     : isPlatformOwner(currentUser);
+  const canSwitchStore = isAdmin || isDeveloper;
 
   const filteredGroups = useMemo(() => {
     const companyAllowed = currentCompany?.allowedViews && Array.isArray(currentCompany.allowedViews) && currentCompany.allowedViews.length > 0
@@ -128,7 +129,8 @@ const Header: React.FC<HeaderProps> = ({
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
-            if (item.view === View.DEVELOPER_CENTER) return isDeveloper;
+            if (isDeveloper) return true;
+            if (item.view === View.DEVELOPER_CENTER) return false;
             
             // Si el usuario no es desarrollador, verificar si la empresa tiene habilitado este módulo
             if (!isDeveloper && companyAllowed && !companyAllowed.has(item.view)) {
@@ -145,6 +147,13 @@ const Header: React.FC<HeaderProps> = ({
   const currentGroupIndex = useMemo(() => {
     return filteredGroups.findIndex(group => group.items.some(item => item.view === currentView));
   }, [currentView, filteredGroups]);
+
+  useEffect(() => {
+    setIsStoreDropdownOpen(false);
+    setIsUserDropdownOpen(false);
+    setIsMobileMenuOpen(false);
+    setPreviewGroupIndex(-1);
+  }, [currentUser.id, currentCompany?.id, currentStore?.id, currentView]);
 
   useEffect(() => {
     if (isMobileMenuOpen && previewGroupIndex === -1) {
@@ -277,18 +286,21 @@ const Header: React.FC<HeaderProps> = ({
 
             <div className="flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
               <button 
-                onClick={() => isAdmin && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                aria-label="Cambiar sede"
+                aria-expanded={canSwitchStore && isStoreDropdownOpen}
+                disabled={!canSwitchStore || stores.length === 0}
+                onClick={() => canSwitchStore && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
                 className="px-1.5 py-1.5 sm:px-3 sm:py-2 rounded-xl flex items-center gap-1.5 sm:gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
                 style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
               >
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
                 <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
-                  {currentStore?.name}
+                  {currentStore?.name || 'Sin sedes'}
                 </span>
-                {isAdmin && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
+                {canSwitchStore && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
               </button>
 
-              {isStoreDropdownOpen && isAdmin && (
+              {isStoreDropdownOpen && canSwitchStore && (
                 <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
                   <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                   {stores.map(store => (
