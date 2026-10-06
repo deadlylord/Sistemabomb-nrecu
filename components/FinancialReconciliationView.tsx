@@ -1350,11 +1350,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             });
         }
     });
+    // Cerrar el formulario al iniciar el guardado evita la sensación de bloqueo
+    // y deja claro que el lote ya fue enviado. Firestore mantiene el batch atómico.
+    setShowAddModal(false);
     try {
       await batch.commit();
-      setShowAddModal(false);
       setManualEntries([]);
     } catch (error) {
+      setShowAddModal(true);
       console.error('Error saving reconciliation entries:', error);
       alert('No se pudo guardar el movimiento. No vuelvas a procesarlo hasta verificar el mensaje.');
     } finally {
@@ -1404,12 +1407,25 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           });
       }
 
+      // Reflejar el cambio de inmediato en pantalla. El listener de Firestore
+      // lo confirmará después sin obligar al usuario a esperar el recálculo completo.
+      const optimisticRecord = { ...recordToSave } as FinancialRecord;
+      setAllRecords(previous => previous.map(record =>
+          record.id === optimisticRecord.id ? { ...record, ...optimisticRecord } : record
+      ));
+      setEditingRecord(null);
+
       try {
           await batch.commit();
-          setEditingRecord(null);
       } catch (error) {
           console.error('Error updating reconciliation record:', error);
-          alert('No se pudo guardar el cambio. El registro no se reenviará automáticamente.');
+          // Revertir únicamente si Firestore realmente rechazó la escritura.
+          if (originalRecord) {
+              setAllRecords(previous => previous.map(record =>
+                  record.id === originalRecord.id ? originalRecord : record
+              ));
+          }
+          alert('No se pudo guardar el cambio. Inténtalo nuevamente.');
       } finally {
           saveInFlightRef.current = false;
           setIsSavingReconciliation(false);
