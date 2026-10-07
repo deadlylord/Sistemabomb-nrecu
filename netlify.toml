@@ -1,0 +1,18 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Production values stay in Netlify UI, not in git.
+[context.production.environment]
+  VITE_APP_ENV = "production"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+
+# Deploy Previews are deliberately marked staging. Configure their Firebase
+# variables in Netlify UI to point to the dedicated Vestika staging project.
+[context.deploy-preview.environment]
+  VITE_APP_ENV = "staging"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+
+[context.branch-deploy.environment]
+  VITE_APP_ENV = "staging"
+  VITE_USE_FIREBASE_EMULATORS = "false"
