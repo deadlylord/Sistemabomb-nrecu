@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test:performance": "node --experimental-strip-types --test tests/*.test.mjs",
-    "build:styles": "npm exec --yes --package=tailwindcss@3.4.17 -- tailwindcss --config tailwind.config.cjs --input styles/tailwind.css --output .generated/tailwind.css --minify"
+    "build:styles": "npm exec --yes --package=tailwindcss@3.4.17 -- tailwindcss --config tailwind.config.cjs --input styles/tailwind.css --output .generated/tailwind.css --minify",
+    "emulators": "firebase emulators:start --config firebase.emulators.json --project demo-vestika",
+    "dev:safe": "npm run build:styles && vite --mode development"
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
