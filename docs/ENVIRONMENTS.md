@@ -45,3 +45,6 @@ Required:
 Optional when used:
 - VITE_FIREBASE_DATABASE_URL
 - VITE_FIREBASE_MEASUREMENT_ID
+
+## Staging branch deployment
+The `staging` branch is deployed as a Netlify branch deploy using the existing `vestika-staging` Firebase project configuration.
