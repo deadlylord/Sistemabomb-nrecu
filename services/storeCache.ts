@@ -41,3 +41,4 @@ export function cacheStoreRows(name: string, storeId: string, scope: string, row
   }
 }
 export function clearStoreCache() { cache.clear(); }
+export function invalidateStoreRows(name: string, storeId: string, scope: string) { cache.delete(storeCacheKey(name, storeId, scope)); }

@@ -1,0 +1,188 @@
+{
+  "source": "App real con SDK Firestore simulado; conteos de llamadas/listeners, no medición de tiempos o facturación Firebase",
+  "baselineCommit": "b7220c9",
+  "selectionBaselineRaw": {
+    "login": [],
+    "normal": [],
+    "A1": [
+      "A1",
+      "A1",
+      "A2",
+      "A1"
+    ],
+    "A1+A2": [
+      "A1",
+      "A1",
+      "A2"
+    ],
+    "global": [
+      "A1",
+      "A1",
+      "A2",
+      "A1",
+      "A0",
+      "A1",
+      "A2"
+    ],
+    "inventoryListeners": 1
+  },
+  "selectionAfter": {
+    "login": [],
+    "normal": [],
+    "selection-1": {
+      "ids": [
+        "A1"
+      ],
+      "queries": [
+        "A1"
+      ]
+    },
+    "selection-2": {
+      "ids": [
+        "A1",
+        "A2"
+      ],
+      "queries": [
+        "A1",
+        "A2"
+      ]
+    },
+    "selection-3": {
+      "ids": [
+        "A1"
+      ],
+      "queries": [
+        "A1",
+        "A2"
+      ]
+    },
+    "global": [
+      "A1",
+      "A2",
+      "A2"
+    ],
+    "inventoryListeners": 1
+  },
+  "startupAfter": [
+    {
+      "stores": 3,
+      "phases": {
+        "beforeLogin": {
+          "listeners": 0,
+          "inventoryListeners": 0,
+          "inventoryQueries": 0
+        },
+        "essential": {
+          "listeners": 8,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "afterLogin": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "pos": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "secondStore": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "revisit": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "global": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 2
+        }
+      }
+    },
+    {
+      "stores": 50,
+      "phases": {
+        "beforeLogin": {
+          "listeners": 0,
+          "inventoryListeners": 0,
+          "inventoryQueries": 0
+        },
+        "essential": {
+          "listeners": 8,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "afterLogin": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "pos": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "secondStore": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "revisit": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "global": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 49
+        }
+      }
+    },
+    {
+      "stores": 1000,
+      "phases": {
+        "beforeLogin": {
+          "listeners": 0,
+          "inventoryListeners": 0,
+          "inventoryQueries": 0
+        },
+        "essential": {
+          "listeners": 8,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "afterLogin": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "pos": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "secondStore": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "revisit": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 0
+        },
+        "global": {
+          "listeners": 12,
+          "inventoryListeners": 1,
+          "inventoryQueries": 999
+        }
+      }
+    }
+  ]
+}

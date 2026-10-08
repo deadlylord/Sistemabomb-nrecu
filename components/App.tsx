@@ -4,8 +4,10 @@ import { POS_PROGRESSIVE_DATA, schedulePosSecondary, type PosSecondaryCollection
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
+import { useRequestedInventory } from '../services/useRequestedInventory';
+import { findPurchaseProducts } from '../services/requestedInventory';
 import { subscribeStoreRows } from '../services/storeSubscriptions';
-import { cacheStoreRows, getCachedStoreRows, clearStoreCache } from '../services/storeCache';
+import { cacheStoreRows, getCachedStoreRows, clearStoreCache, invalidateStoreRows } from '../services/storeCache';
 import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
 import { belongsToCompany, selectCompanyCategories } from '../services/companyCategories';
 import { hasPlatformDeveloperAccess, isPlatformOwner, isPlatformRole, assertCompanyRole, assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
@@ -170,9 +172,8 @@ const App: React.FC = () => {
   const [storeDirectoryScope, setStoreDirectoryScope] = useState('');
   const [storeDirectorySnapshotScope, setStoreDirectorySnapshotScope] = useState('');
   const [analyticsDemandScope, setAnalyticsDemandScope] = useState('');
-  const [purchaseSearchStoreIds, setPurchaseSearchStoreIds] = useState<string[]>([]);
+  const [purchaseSearchState, setPurchaseSearchState] = useState<{ context: object | null; ids: string[] }>({ context: null, ids: [] });
   const [inventoryRequestRevision, setInventoryRequestRevision] = useState(0);
-  const [globalInventoryStatus, setGlobalInventoryStatus] = useState<{ scope: string; loading: boolean; error: string | null; updatedAt?: number }>({ scope: '', loading: false, error: null });
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'dark');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
@@ -184,7 +185,6 @@ const App: React.FC = () => {
   const [recompressProgress, setRecompressProgress] = useState({ current: 0, total: 0 });
   const [shouldIncludeDisabledProducts, setShouldIncludeDisabledProducts] = useState<boolean>(false);
   const [isGlobalMode, setIsGlobalMode] = useState<boolean>(false);
-  const [globalInventoryForSearch, setGlobalInventoryForSearch] = useState<Product[]>([]);
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
@@ -371,6 +371,15 @@ const App: React.FC = () => {
       return { context: contextAtRender, collections: [...new Set<PosSecondaryCollection>([...(previous.context === contextAtRender ? previous.collections : []), ...collections])] };
     });
   }, [contextAtRender, posVisitAtRender]);
+  const purchaseSearchStoreIds = purchaseSearchState.context === contextAtRender ? purchaseSearchState.ids : [];
+  const requestPurchaseInventory = useCallback((ids: string[]) => {
+    if (currentView !== View.PURCHASES || operationContextRef.current !== contextAtRender || posVisitRef.current !== posVisitAtRender) return;
+    const allowed = [...new Set(ids)].filter(id => visibleStoreIds.has(id) && id !== currentStoreId).sort();
+    setPurchaseSearchState({ context: contextAtRender, ids: allowed });
+  }, [currentView, contextAtRender, posVisitAtRender, companyStoreKey, currentStoreId]);
+  useEffect(() => {
+    if (currentView !== View.PURCHASES) setPurchaseSearchState(previous => previous.context ? { context: null, ids: [] } : previous);
+  }, [currentView]);
   useEffect(() => {
     if (currentView !== View.POS) setPosDemand(previous => previous.context ? { context: null, collections: [] } : previous);
   }, [currentView]);
@@ -385,12 +394,12 @@ const App: React.FC = () => {
   }, [currentStoreId, dataScope]);
   useEffect(() => {
     clearStoreCache();
-    setPurchaseSearchStoreIds([]);
+    setPurchaseSearchState({ context: null, ids: [] });
     setIsGlobalMode(false);
     setInventory([]); setInventoryTransfers([]); setCeoNotes([]);
     setCeoSales([]); setCeoLayaways([]); setCeoPurchases([]); setCeoExpenses([]);
     setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
-    setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
+    setAllSales([]); setAllLayaways([]); setAllIncidents([]);
   }, [dataScope]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
   const { setDoc, updateDoc, deleteDoc, addDoc, runTransaction } = tenantWriter;
@@ -677,47 +686,16 @@ const App: React.FC = () => {
   useCompanyCollection('purchases', ceoStoreIds, dataScope, liveCeo, setCeoPurchases);
   useCompanyCollection('expenses', ceoStoreIds, dataScope, liveCeo, setCeoExpenses);
 
-  const requestedInventoryStoreKey = JSON.stringify((storeDirectorySnapshotScope !== dataScope ? [] : isGlobalMode || liveAnalytics ? [...visibleStoreIds] : liveCeo ? ceoStoreIds : currentView === View.PURCHASES ? purchaseSearchStoreIds : []).filter(id => visibleStoreIds.has(id)).sort());
-  useEffect(() => {
-    const ids: string[] = JSON.parse(requestedInventoryStoreKey);
-    let active = true;
-    setGlobalInventoryForSearch([]);
-    if (!currentUser || !isAppReady || !isOperationalView || !ids.length) return;
-    setGlobalInventoryStatus({ scope: dataScope, loading: true, error: null });
-    const rows = new Map<string, Product[]>();
-    const publish = () => { if (active) setGlobalInventoryForSearch(ids.flatMap(id => rows.get(id) || [])); };
-    for (const id of ids) {
-      const cached = getCachedStoreRows('inventory', id, dataScope);
-      if (cached) rows.set(id, cached);
-    }
-    publish();
-    let next = 0;
-    let offlineResult = false;
-    const worker = async () => {
-      while (active && next < ids.length) {
-        const storeId = ids[next++];
-        const snapshot = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', storeId)));
-        if (!active) return;
-        const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(row => {
-          if (row.storeId !== storeId) return false;
-          try { assertTenantData('inventory', row, { companyId: operationalCompanyId, storeIds: new Set([storeId]) }); return true; } catch { return false; }
-        });
-        rows.set(storeId, items);
-        offlineResult ||= !!snapshot.metadata?.fromCache;
-        if (!snapshot.metadata?.fromCache) cacheStoreRows('inventory', storeId, dataScope, items);
-        publish();
-      }
-    };
-    Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker)).then(() => {
-      if (active) setGlobalInventoryStatus({ scope: dataScope, loading: false, error: offlineResult ? 'Consulta sin conexión: los inventarios pueden estar desactualizados.' : null, updatedAt: offlineResult ? undefined : Date.now() });
-    }).catch(error => {
-      if (!active) return;
-      active = false; // stop queued requests and ignore in-flight results
-      console.error('Error loading requested inventories:', error);
-      setGlobalInventoryStatus({ scope: dataScope, loading: false, error: 'No se pudo completar la consulta multitienda. Vuelve a activar el modo para reintentar.' });
-    });
-    return () => { active = false; };
-  }, [requestedInventoryStoreKey, dataScope, isAppReady, isOperationalView, inventoryRequestRevision]);
+  const globalCatalogView = [View.POS, View.INVENTORY, View.PURCHASES, View.SETTINGS].includes(currentView);
+  const needsActiveInventory = isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView);
+  const requestedInventoryStoreKey = JSON.stringify((storeDirectorySnapshotScope !== dataScope ? [] :
+    isGlobalMode && globalCatalogView && (isDeveloper || isAdmin) || liveAnalytics ? [...visibleStoreIds] :
+    liveCeo ? ceoStoreIds : currentView === View.PURCHASES ? purchaseSearchStoreIds : [])
+    .filter(id => visibleStoreIds.has(id) && (!needsActiveInventory || id !== currentStoreId)).sort());
+  const inventoryLookup = useRequestedInventory(requestedInventoryStoreKey, dataScope, currentView,
+    inventoryRequestRevision, !!currentUser && isAppReady && isAuthReady && isOperationalView && canAccessCurrentView);
+  const globalInventoryForSearch = inventoryLookup.rows;
+  const globalInventoryStatus = { ...inventoryLookup, scope: dataScope };
 
   useEffect(() => {
     if (!isOperationalView || (currentView === View.POS && !posRequested.has('incidents')) || !currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
@@ -828,7 +806,7 @@ const App: React.FC = () => {
     });
   }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
-  const inventorySync = useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
+  const inventorySync = useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && needsActiveInventory, setInventory);
   const progressiveRequested = POS_PROGRESSIVE_DATA.every(name => posRequested.has(name));
   useEffect(() => {
     if (!canLoadStore || currentView !== View.POS || progressiveRequested || (inventorySync.syncing && !inventory.length) || inventorySync.error) return;
@@ -836,9 +814,9 @@ const App: React.FC = () => {
   }, [canLoadStore, currentView, contextAtRender, progressiveRequested, inventorySync.syncing, inventorySync.error, !!inventory.length, requestPosData]);
   // Active-store updates remain live even while a requested multisite snapshot is open.
   const globalInventoryForView = useMemo(() => [
-    ...globalInventoryForSearch.filter(row => row.storeId !== currentStoreId && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)),
-    ...inventory.filter(row => row.storeId === currentStoreId && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)),
-  ], [globalInventoryForSearch, inventory, currentStoreId, visibleStoreIds, operationalCompanyId]);
+    ...globalInventoryForSearch.filter(row => (!needsActiveInventory || row.storeId !== currentStoreId) && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)),
+    ...(needsActiveInventory ? inventory.filter(row => row.storeId === currentStoreId && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)) : []),
+  ], [globalInventoryForSearch, inventory, currentStoreId, visibleStoreIds, operationalCompanyId, needsActiveInventory]);
   const salesSync = useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && ([View.DASHBOARD, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView) || (currentView === View.POS && posRequested.has('sales'))), setSales);
   const purchasesSync = useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && ([View.DASHBOARD, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView) || (currentView === View.POS && posRequested.has('purchases'))), setPurchases);
   const layawaysSync = useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && ([View.DASHBOARD, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView) || (currentView === View.POS && posRequested.has('layaways'))), setLayaways);
@@ -2692,7 +2670,10 @@ const App: React.FC = () => {
     storeEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }>;
   }) => {
     if (!currentUser) return;
-    
+    const assertCurrentPurchase = () => {
+      if (operationContextRef.current !== contextAtRender || posVisitRef.current !== posVisitAtRender) throw new Error('La sede o empresa cambió. Vuelve a abrir Compras.');
+    };
+    assertCurrentPurchase();
     const { productInfo, storeEntries } = data;
     const inputName = productInfo.name;
     const requestedStoreIds = Object.keys(storeEntries);
@@ -2701,18 +2682,21 @@ const App: React.FC = () => {
     }
     
     await assertCategoryAccess(productInfo.categoryId);
-    // Reuse product metadata only inside the active company.
-    const rawGlobalSnap = await findCompanyProducts(inputName);
-    const companyGlobalDocs = rawGlobalSnap.docs.filter(d => visibleStoreIds.has((d.data() as Product).storeId));
-    const globalSnap = { ...rawGlobalSnap, docs: companyGlobalDocs, empty: companyGlobalDocs.length === 0 } as typeof rawGlobalSnap;
+    const destinationProducts = await findPurchaseProducts(requestedStoreIds, inputName, operationalCompanyId,
+      () => operationContextRef.current === contextAtRender && posVisitRef.current === posVisitAtRender);
+    const companyGlobalDocs = requestedStoreIds.flatMap(id => destinationProducts.get(id)!.docs);
+    const sourceProduct = companyGlobalDocs[0]?.data() as Product | undefined ||
+      globalInventoryForView.find(product => product.name === inputName);
+    assertCurrentPurchase();
     
     let globalImage = '';
     let globalDesc = 'Sin descripción...';
     let globalCategoryId = productInfo.categoryId;
     let globalSku = '';
 
-    if (!globalSnap.empty) {
-        const d = globalSnap.docs[0].data() as Product;
+    if (sourceProduct) {
+        assertTenantData('inventory', sourceProduct, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+        const d = sourceProduct;
         globalImage = d.imageUrl;
         globalDesc = d.description;
         globalCategoryId = d.categoryId;
@@ -2723,11 +2707,8 @@ const App: React.FC = () => {
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
-            const q = query(collection(db, 'inventory'), 
-                           where('name', '==', inputName), 
-                           where('storeId', '==', storeId), 
-                           limit(1));
-            const snapshot = await getDocs(q);
+            assertCurrentPurchase();
+            const snapshot = destinationProducts.get(storeId)!;
             
             let productRef;
             let currentStock = 0;
@@ -2805,7 +2786,10 @@ const App: React.FC = () => {
             batch.set(logRef, log);
         }
 
+        assertCurrentPurchase();
         await batch.commit();
+        requestedStoreIds.forEach(storeId => invalidateStoreRows('inventory', storeId, dataScope));
+        if (operationContextRef.current === contextAtRender) setInventoryRequestRevision(value => value + 1);
     } catch (error: any) {
         console.error("Error al registrar compras multi-tienda:", error);
         alert(`Error al procesar la compra: ${error.message}`);
@@ -3382,14 +3366,14 @@ const App: React.FC = () => {
     } finally { loginPendingRef.current = false; }
   };
   
-  const handleLogout = () => { currentStoreIdRef.current = null; clearStoreCache(); identityRef.current = {}; setStores([]); setRoles([]); setSellers([]); setCompanies([]); setCurrentUser(null); setCurrentStoreId(null); setStoreDirectoryScope(''); setStoreDirectorySnapshotScope(''); setAnalyticsDemandScope(''); setPurchaseSearchStoreIds([]); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { currentStoreIdRef.current = null; clearStoreCache(); identityRef.current = {}; setStores([]); setRoles([]); setSellers([]); setCompanies([]); setCurrentUser(null); setCurrentStoreId(null); setStoreDirectoryScope(''); setStoreDirectorySnapshotScope(''); setAnalyticsDemandScope(''); setPurchaseSearchState({ context: null, ids: [] }); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       {canLoadStore && (inventorySync.syncing || inventorySync.error) && <div role="status" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{inventorySync.error || 'Sincronizando inventario de la tienda activa…'}</div>}
-      {globalInventoryStatus.scope === dataScope && (isGlobalMode || liveAnalytics || liveCeo || currentView === View.PURCHASES) && (globalInventoryStatus.loading || globalInventoryStatus.error) && <div role="status" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{globalInventoryStatus.error || 'Sincronizando inventarios solicitados…'}</div>}
+      {globalInventoryStatus.scope === dataScope && (isGlobalMode || liveAnalytics || liveCeo || currentView === View.PURCHASES) && (globalInventoryStatus.loading || globalInventoryStatus.error) && <div role="status" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{globalInventoryStatus.error || 'Sincronizando inventarios solicitados…'} {globalInventoryStatus.error && <button type="button" className="underline font-semibold" onClick={() => setInventoryRequestRevision(value => value + 1)}>Actualizar consulta</button>}</div>}
       {globalInventoryStatus.scope === dataScope && globalInventoryStatus.updatedAt && !globalInventoryStatus.loading && !globalInventoryStatus.error && (isGlobalMode || liveAnalytics || liveCeo || (currentView === View.PURCHASES && purchaseSearchStoreIds.length > 0)) && <div className="px-4 py-2 text-sm bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
         Inventario de otras sedes consultado a las {new Date(globalInventoryStatus.updatedAt).toLocaleTimeString('es-CO')}. <button type="button" className="underline font-semibold" onClick={() => setInventoryRequestRevision(value => value + 1)}>Actualizar consulta</button>
       </div>}
@@ -3407,7 +3391,7 @@ const App: React.FC = () => {
         {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForView : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={navigate} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView readOnly={recordReadOnly} layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
-        {currentView === View.PURCHASES && <PurchasesView onRequestStoreInventory={setPurchaseSearchStoreIds} purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForView} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
+        {currentView === View.PURCHASES && <PurchasesView key={operationContext} onRequestStoreInventory={requestPurchaseInventory} inventorySearchStatus={{ loading: inventorySync.syncing || globalInventoryStatus.loading, error: inventorySync.error || globalInventoryStatus.error }} purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForView} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={visibleSellers.filter(user => isOwner || user.id !== PLATFORM_OWNER_USER_ID && user.platformRole !== 'developer')} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={false} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} storeId={currentStoreId || ''} sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}

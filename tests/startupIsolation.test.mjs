@@ -30,7 +30,7 @@ test('pre-auth reads nothing and active POS inventory cost remains constant for 
   assert.equal(sample.afterLogin.listeners.stores,1);
   assert.ok(!sample.afterLogin.queries.some(q=>q.collection==='inventory'));
   assert.ok(sample.afterLogin.queries.filter(q=>q.collection==='sellers').every(q=>q.filters?.some(f=>f.field==='username'||f.field==='name')),'credential lookup is constrained');
-  assert.equal(sample.global.queries.filter(q=>q.collection==='inventory').length,size,'global cost appears only after explicit activation');
+  assert.equal(sample.global.queries.filter(q=>q.collection==='inventory').length,size-1,'explicit global activation queries only inactive stores; active inventory already has its listener');
  }
  assert.equal(new Set(samples.map(s=>s.afterLogin.total)).size,1);
  assert.equal(new Set(samples.map(s=>s.pos.total)).size,1);
@@ -183,6 +183,7 @@ test('late global reads cannot repaint or refill company A cache after the devel
   await act(async()=>{release();await Promise.resolve()});
   assert.deepEqual(s.renderer.root.findByProps({screen:'PosView'}).props.inventory.map(row=>row.id),['foreign-product']);
   assert.equal(s.getCachedStoreRows('inventory','A0',`${s.user.id}:A`),undefined);
+  assert.equal(s.getCachedStoreRows('inventory','A1',`${s.user.id}:A`),undefined);
   assert.ok(s.connections.filter(c=>!c.closed&&c.q.name==='inventory').every(c=>c.q.filters[0].value==='B0'));
  }finally{await s.cleanup()}
 });

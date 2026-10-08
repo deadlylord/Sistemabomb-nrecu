@@ -13,6 +13,7 @@ interface PurchasesViewProps {
   inventory: Product[];
   allInventoryForSearch?: Product[];
   onRequestStoreInventory?: (storeIds: string[]) => void;
+  inventorySearchStatus?: { loading: boolean; error: string | null };
   categories: Category[];
   stores: Store[];
   currentStoreId: string;
@@ -47,8 +48,8 @@ const toYYYYMMDD = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
-  const [productSearch, setProductSearch] = useState('');
+const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, inventorySearchStatus, purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
+  const [productSearch, setProductSearch] = useViewFilter('PurchasesView:productSearch', '');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeStoreIds, setActiveStoreIds] = useState<string[]>([currentStoreId]);
   const [globalSupplier, setGlobalSupplier] = useState('');
@@ -85,12 +86,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
   }, [successMessage]);
   
   const searchSource = useMemo(() => {
-    const globalList = allInventoryForSearch || [];
+    const globalList = (allInventoryForSearch || []).filter(product => activeStoreIds.includes(product.storeId));
     const unified = [...globalList];
     const existingIds = new Set(unified.map(p => p.id));
     inventory.forEach(p => { if (!existingIds.has(p.id)) unified.push(p); });
     return unified;
-  }, [allInventoryForSearch, inventory]);
+  }, [allInventoryForSearch, inventory, activeStoreIds]);
 
   const existingSuppliers = useMemo(() => {
     const suppliers = new Set<string>();
@@ -132,13 +133,22 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
   };
 
   const handleToggleActiveStore = (id: string) => {
+      if (isProcessingBatch || !stores.some(store => store.id === id)) return;
       const next = activeStoreIds.includes(id) ? (activeStoreIds.length > 1 ? activeStoreIds.filter(sid => sid !== id) : activeStoreIds) : [...activeStoreIds, id];
       setActiveStoreIds(next);
       onRequestStoreInventory?.(next.filter(sid => sid !== currentStoreId));
   };
-  useEffect(() => { setActiveStoreIds([currentStoreId]); onRequestStoreInventory?.([]); }, [currentStoreId, onRequestStoreInventory]);
+  const authorizedStoreKey = JSON.stringify(stores.map(store => store.id).sort());
+  useEffect(() => {
+    const allowed = new Set(stores.map(store => store.id));
+    const next = activeStoreIds.filter(id => allowed.has(id));
+    if (!next.length && allowed.has(currentStoreId)) next.push(currentStoreId);
+    if (JSON.stringify(next) !== JSON.stringify(activeStoreIds)) setActiveStoreIds(next);
+    onRequestStoreInventory?.(next.filter(id => id !== currentStoreId));
+  }, [currentStoreId, authorizedStoreKey, onRequestStoreInventory]);
 
   const handleProductSelect = (product: Product, targetStoreId: string | 'ALL') => {
+    if (inventorySearchStatus?.loading || inventorySearchStatus?.error) return;
     const prodName = (product.name || '').toLowerCase();
     const existingInBatch = batchItems.find(item => (item.productName || '').toLowerCase() === prodName);
     
@@ -272,7 +282,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
   }, [batchItems, activeStoreIds]);
 
   const handleProcessBatch = async () => {
-    if (batchItems.length === 0) return;
+    if (isProcessingBatch || inventorySearchStatus?.loading || inventorySearchStatus?.error || batchItems.length === 0) return;
     for (const item of batchItems) {
         if (!item.categoryId) { alert(`El producto "${item.productName}" no tiene categoría.`); return; }
         const hasQty = Object.entries(item.storeEntries).some(([sid, entry]) => activeStoreIds.includes(sid) && parseInt((entry as any).quantity) > 0);
@@ -478,6 +488,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
                         {stores.map(s => (
                             <button 
                                 key={s.id} 
+                                disabled={isProcessingBatch}
                                 onClick={() => handleToggleActiveStore(s.id)}
                                 className={`px-4 py-2 rounded-xl text-sm font-black transition-all border-2 ${activeStoreIds.includes(s.id) ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-transparent opacity-60'}`}
                             >
@@ -528,6 +539,8 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
                 )}
             </div>
 
+            {inventorySearchStatus?.loading && <p role="status" className="mt-2 text-sm text-amber-700">Sincronizando inventarios seleccionados… La búsqueda puede estar incompleta.</p>}
+            {inventorySearchStatus?.error && <p role="alert" className="mt-2 text-sm text-red-600">{inventorySearchStatus.error}</p>}
             {showSuggestions && (
                 <div className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-900 border-2 border-accent/20 rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
                     {suggestedProducts.length > 0 ? (
@@ -559,6 +572,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
                                         {activeStoreIds.map(sid => (
                                             <button 
                                                 key={sid}
+                                                disabled={inventorySearchStatus?.loading || !!inventorySearchStatus?.error}
                                                 onClick={() => handleProductSelect(p, sid)}
                                                 className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-[10px] font-black rounded-lg hover:bg-accent hover:text-white transition-all border border-transparent hover:border-accent"
                                             >
@@ -566,6 +580,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
                                             </button>
                                         ))}
                                         <button 
+                                            disabled={inventorySearchStatus?.loading || !!inventorySearchStatus?.error}
                                             onClick={() => handleProductSelect(p, 'ALL')}
                                             className="px-4 py-1.5 bg-accent text-white text-[10px] font-black rounded-lg hover:bg-accent-hover shadow-md active:scale-95"
                                         >
@@ -575,6 +590,8 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
                                 </div>
                             ))}
                         </div>
+                    ) : inventorySearchStatus?.loading || inventorySearchStatus?.error ? (
+                        <div className="p-6 text-center text-gray-500 text-sm">Espera a que se confirme el inventario antes de crear productos.</div>
                     ) : productSearch.length > 2 ? (
                         <div className="p-10 text-center space-y-4">
                             <p className="text-gray-500 font-medium italic">No se encontró "{productSearch}". ¿Es un producto nuevo?</p>
@@ -734,7 +751,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, 
               <div className="p-6 bg-gray-50 dark:bg-gray-900 border-t dark:border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-6">
                     <button onClick={() => setBatchItems([])} className="text-gray-400 font-bold text-xs hover:text-red-500 uppercase tracking-widest transition-colors">Limpiar Lote</button>
                     <div className="flex gap-4">
-                        <button onClick={handleProcessBatch} disabled={isProcessingBatch} className="bg-green-600 text-white font-black py-4 px-12 rounded-2xl hover:bg-green-700 transition-all shadow-xl shadow-green-600/30 active:scale-95 uppercase tracking-widest disabled:opacity-50 text-base">
+                        <button onClick={handleProcessBatch} disabled={isProcessingBatch || inventorySearchStatus?.loading || !!inventorySearchStatus?.error} className="bg-green-600 text-white font-black py-4 px-12 rounded-2xl hover:bg-green-700 transition-all shadow-xl shadow-green-600/30 active:scale-95 uppercase tracking-widest disabled:opacity-50 text-base">
                             {isProcessingBatch ? 'Procesando...' : 'FINALIZAR COMPRA DE LOTE'}
                         </button>
                     </div>
