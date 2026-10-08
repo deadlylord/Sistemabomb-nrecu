@@ -1,11 +1,14 @@
 /**
  * Seed seguro para Firebase STAGING de Vestika.
- * Requiere variables VITE_FIREBASE_* de staging y STAGING_SEED_USERNAME / STAGING_SEED_PASSWORD.
+ * Requiere variables VITE_FIREBASE_* de staging.
+ * --second-store preserva datos existentes y valida stagingadmin sin pedir contraseña.
+ * El modo inicial sin flags requiere STAGING_SEED_USERNAME / STAGING_SEED_PASSWORD.
  * Usa SDK cliente: respeta las reglas de Firestore y no contiene credenciales ni service accounts.
  */
-import { initializeApp } from 'firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, writeBatch } from 'firebase/firestore';
+import { getFirestore, doc, writeBatch, runTransaction } from 'firebase/firestore';
+import { assertStagingConfig, seedSecondStore, SECOND_STORE } from './stagingSecondStore.mjs';
 
 const REQUIRED_PROJECT_ID = 'vestika-staging';
 const config = {
@@ -22,7 +25,18 @@ if (config.projectId !== REQUIRED_PROJECT_ID) {
 if (config.authDomain !== 'vestika-staging.firebaseapp.com') {
   throw new Error('SAFETY STOP: authDomain no corresponde a staging');
 }
-for (const [key, value] of Object.entries(config)) if (!value) throw new Error(`Falta configuración: ${key}`);
+assertStagingConfig(config);
+
+const args = process.argv.slice(2);
+if (args.some(arg => arg !== '--second-store') || args.length > 1) throw new Error('Uso: node scripts/seed-staging.mjs [--second-store]');
+if (args.includes('--second-store')) {
+  const app = initializeApp(config);
+  try {
+    await signInAnonymously(getAuth(app));
+    const created = await seedSecondStore(getFirestore(app), { doc, runTransaction });
+    console.log(`Seed staging: ${SECOND_STORE}, ${created} documentos nuevos; datos existentes intactos.`);
+  } finally { await deleteApp(app); }
+} else {
 
 const username = process.env.STAGING_SEED_USERNAME;
 const password = process.env.STAGING_SEED_PASSWORD;
@@ -49,3 +63,5 @@ for(const p of [
 
 await batch.commit();
 console.log(`Seed staging completado en ${config.projectId}: ${COMPANY_ID} / ${STORE_ID}`);
+await deleteApp(app);
+}
