@@ -304,56 +304,8 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* CENTER: Navigation (Desktop & Mobile) */}
-          <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
-             {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-1 w-full max-w-[320px] sm:max-w-[380px]">
-                {filteredGroups.map((group, idx) => {
-                  const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
-                  const isCurrentActive = currentGroupIndex === idx;
-                  const GroupIcon = group.icon;
-                  
-                  return (
-                    <button 
-                      key={group.id}
-                      onClick={() => handleMobileGroupClick(idx)}
-                      className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border active:scale-95
-                        ${isActiveGroup 
-                          ? 'bg-accent/10 text-accent border-accent/30 shadow-sm' 
-                          : isCurrentActive
-                            ? 'bg-accent/5 text-accent border-accent/20'
-                            : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
-                    >
-                      <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-accent' : isCurrentActive ? 'text-accent' : 'text-slate-600 dark:text-slate-200'}`} />
-                      <span className="text-[9px] font-semibold tracking-tight mt-1">
-                        {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : group.id === 'finance' ? 'Finanzas' : 'Admin'}
-                      </span>
-                    </button>
-                  );
-                })}
-
-                {/* Dropdown for Mobile Submenus */}
-                {isMobileMenuOpen && displayedGroup && (
-                  <div className="absolute top-[68px] left-2 right-2 w-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-2xl shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
-                    <div className="flex items-center justify-between px-4 py-3 bg-accent/5 rounded-2xl mb-2">
-                        <div className="flex items-center gap-2">
-                            <displayedGroup.icon className="w-5 h-5 text-accent" />
-                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">{displayedGroup.label}</span>
-                        </div>
-                        <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 rounded-full bg-accent/10 text-accent">
-                            <CrossIcon className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-1 gap-1 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
-                       {displayedGroup.items.map(item => (
-                         <NavButton key={item.view} item={item} isMobile />
-                       ))}
-                    </div>
-                  </div>
-                )}
-             </div>
-          </div>
-
+          {/* Navigation groups are in the mobile bottom bar, not the narrow header. */}
+          <div className="hidden lg:flex flex-grow" />
           {/* RIGHT: User Actions & System Info */}
           <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
              <button 
@@ -431,6 +383,25 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Mobile bottom navigation: tenant permissions are inherited from filteredGroups. */}
+      <nav aria-label="Navegación principal" className="lg:hidden fixed bottom-0 inset-x-0 z-[110] border-t border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+        <div className="grid grid-cols-4 gap-1 px-2 pt-2 pb-1">
+          {filteredGroups.map((group, idx) => {
+            const GroupIcon = group.icon;
+            const active = currentGroupIndex === idx;
+            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`min-w-0 flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors ${active ? 'text-accent bg-accent/10' : 'text-slate-600 dark:text-slate-300'}`}>
+              <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
+            </button>;
+          })}
+        </div>
+        {isMobileMenuOpen && displayedGroup && (
+          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-3 max-h-[65vh] overflow-y-auto">
+            <div className="flex justify-between items-center px-2 pb-2 border-b dark:border-slate-700"><strong className="text-sm">{displayedGroup.label}</strong><button type="button" aria-label="Cerrar menú" onClick={() => setIsMobileMenuOpen(false)}><CrossIcon className="w-5 h-5" /></button></div>
+            <div className="grid gap-1 mt-2">{displayedGroup.items.map(item => <NavButton key={item.view} item={item} isMobile />)}</div>
+          </div>
+        )}
+      </nav>
 
       {/* Responsive Desktop Sidebar */}
       <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-60 px-3'}`}>
