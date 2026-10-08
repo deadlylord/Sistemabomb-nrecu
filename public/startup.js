@@ -2,10 +2,13 @@
 (function () {
   var mounted = false;
   var timer;
+  var revealTimer = setTimeout(function () { var panel = document.getElementById('startup-status'); if (!mounted && panel) panel.style.display = 'flex'; }, 1200);
   function showFailure() {
     if (mounted) return;
     var panel = document.getElementById('startup-status');
     if (!panel) return;
+    clearTimeout(revealTimer);
+    panel.style.display = 'flex';
     panel.textContent = '';
     var message = document.createElement('p');
     message.textContent = 'No se pudo abrir Vestika. Comprueba la conexión e intenta de nuevo.';
@@ -17,6 +20,7 @@
   window.addEventListener('vestika:mounted', function () {
     mounted = true;
     clearTimeout(timer);
+    clearTimeout(revealTimer);
     var panel = document.getElementById('startup-status');
     if (panel) panel.remove();
   }, { once: true });
