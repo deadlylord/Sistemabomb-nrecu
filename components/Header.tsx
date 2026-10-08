@@ -48,6 +48,17 @@ interface NavGroup {
     items: NavItem[];
 }
 
+const ScanNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16M8 9v6m3-6v6m3-6v6m3-6v6"/></svg>;
+const WalletNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="15" rx="2"/><path d="M3 10h18M7 6V4a1 1 0 0 1 1-1h10"/><circle cx="17" cy="15" r="1"/></svg>;
+const GiftNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M12 9v12M3 13h18M12 9C7 9 5 7 7 5s5 0 5 4Zm0 0c5 0 7-2 5-4s-5 0-5 4Z"/></svg>;
+const BoxNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4m-9 4v10"/></svg>;
+const CoinsNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7c0-2 4-3 8-3s8 1 8 3-4 3-8 3-8-1-8-3Zm0 0v5c0 2 4 3 8 3m8-8v5c0 2-4 3-8 3m-8-3v5c0 2 4 3 8 3s8-1 8-3v-5"/></svg>;
+const LandmarkNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-6 9 6H3Zm2 3v7m5-7v7m4-7v7m5-7v7M3 21h18"/></svg>;
+const SlidersNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>;
+const CheckNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 12l2 2 4-4"/></svg>;
+const TeamNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5"/></svg>;
+const ChartNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V4M4 20h16M8 16v-5m5 5V7m5 9v-8"/></svg>;
+
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
   currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
@@ -67,50 +78,34 @@ const Header: React.FC<HeaderProps> = ({
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const groups: NavGroup[] = useMemo(() => [
-    {
-        id: 'ops',
-        label: 'Operaciones de Venta',
-        icon: ShoppingCartIcon,
-        color: 'text-blue-500',
-        items: [
-            { view: View.POS, label: 'Punto de Venta', shortLabel: 'POS', description: 'Facturación rápida', icon: StoreIcon },
-            { view: View.LAYAWAY, label: 'Apartados y Abonos', shortLabel: 'Apartados', description: 'Gestionar pagos', icon: ReceiptIcon },
-            { view: View.INCIDENTS, label: 'Novedades y Cambios', shortLabel: 'Novedades', description: 'Garantías y devoluciones', icon: AlertTriangleIcon },
-            { view: View.GIFT_VOUCHERS, label: 'Bonos de Regalo', shortLabel: 'Bonos', description: 'Administrar bonos', icon: TagIcon },
-            { view: View.CUSTOMERS, label: 'Gestión de Clientes', shortLabel: 'Clientes', description: 'Directorio de clientes', icon: ContactIcon },
-        ]
-    },
-    {
-        id: 'inv',
-        label: 'Control de Inventarios',
-        icon: PackageIcon,
-        color: 'text-orange-500',
-        items: [
-            { view: View.INVENTORY, label: 'Stock de Productos', shortLabel: 'Stock', description: 'Consulta de existencias', icon: InventoryIcon },
-            { view: View.PURCHASES, label: 'Registro de Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
-            { view: View.INVENTORY_TRANSFER, label: 'Traslados Internos', shortLabel: 'Traslados', description: 'Entre sedes', icon: SwapIcon },
-            { view: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', shortLabel: 'Auditorías', description: 'Control físico', icon: ClipboardListIcon },
-            { view: View.TAG_SCANNING, label: 'Prendas sin Etiqueta', shortLabel: 'Etiquetas', description: 'Escanear y detectar prendas sin etiqueta', icon: TagIcon },
-        ]
-    },
-    {
-        id: 'admin',
-        label: 'Administración y Finanzas',
-        icon: DashboardIcon,
-        color: 'text-purple-500',
-        items: [
-            { view: View.DEVELOPER_CENTER, label: 'Developer Center ⚙️', shortLabel: 'Dev Center', description: 'Gestión de empresas y licencias', icon: SettingsIcon },
-            { view: View.CEO_CENTER, label: 'CEO Center 💎', shortLabel: 'CEO Center', description: 'Control unificado de las 3 tiendas', icon: SparklesIcon },
-            { view: View.DASHBOARD, label: 'Resumen de Negocio', shortLabel: 'Dashboard', description: 'Métricas de ventas y rendimiento', icon: DashboardIcon },
-            { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja y Conciliación', shortLabel: 'Libro Caja', description: 'Registro de movimientos diarios', icon: DollarIcon },
-            { view: View.ACCOUNTING, label: 'Contabilidad e Informes', shortLabel: 'Contabilidad', description: 'Informes PyG y Auditoría IA', icon: ChartPieIcon },
-            { view: View.PAYROLL, label: 'Cálculo de Nómina', shortLabel: 'Nómina', description: 'Liquidación de personal', icon: DollarIcon },
-            { view: View.SELLERS, label: 'Gestión de Equipo', shortLabel: 'Vendedores', description: 'Personal y usuarios', icon: UsersIcon },
-            { view: View.STORES, label: 'Sedes y Almacenes', shortLabel: 'Sedes', description: 'Tiendas físicas', icon: BuildingStorefrontIcon },
-            { view: View.ROLE_MANAGER, label: 'Jerarquía y Permisos', shortLabel: 'Seguridad', description: 'Roles y accesos', icon: ShieldCheckIcon },
-            { view: View.SETTINGS, label: 'Configuración General', shortLabel: 'Ajustes', description: 'Opciones del sistema', icon: SettingsIcon },
-        ]
-    }
+    { id: 'ops', label: 'Ventas', icon: ShoppingCartIcon, color: 'text-accent', items: [
+      { view: View.POS, label: 'Punto de venta', shortLabel: 'POS', description: 'Registrar ventas', icon: ScanNavIcon },
+      { view: View.LAYAWAY, label: 'Apartados', shortLabel: 'Apartados', description: 'Abonos y reservas', icon: WalletNavIcon },
+      { view: View.INCIDENTS, label: 'Novedades', shortLabel: 'Novedades', description: 'Cambios y garantías', icon: SwapIcon },
+      { view: View.CUSTOMERS, label: 'Clientes', shortLabel: 'Clientes', description: 'Directorio de clientes', icon: TeamNavIcon },
+      { view: View.GIFT_VOUCHERS, label: 'Bonos', shortLabel: 'Bonos', description: 'Bonos de regalo', icon: GiftNavIcon },
+    ] },
+    { id: 'inv', label: 'Inventario', icon: BoxNavIcon, color: 'text-accent', items: [
+      { view: View.INVENTORY, label: 'Stock', shortLabel: 'Stock', description: 'Existencias y productos', icon: BoxNavIcon },
+      { view: View.PURCHASES, label: 'Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
+      { view: View.INVENTORY_TRANSFER, label: 'Traslados', shortLabel: 'Traslados', description: 'Movimientos entre sedes', icon: SwapIcon },
+      { view: View.STOCK_TAKE_HISTORY, label: 'Conteos', shortLabel: 'Conteos', description: 'Auditorías físicas', icon: CheckNavIcon },
+      { view: View.TAG_SCANNING, label: 'Etiquetas', shortLabel: 'Etiquetas', description: 'Verificación de prendas', icon: TagIcon },
+    ] },
+    { id: 'finance', label: 'Finanzas', icon: ChartNavIcon, color: 'text-accent', items: [
+      { view: View.CEO_CENTER, label: 'CEO Center', shortLabel: 'CEO', description: 'Vista ejecutiva multisede', icon: SparklesIcon },
+      { view: View.DASHBOARD, label: 'Resumen', shortLabel: 'Resumen', description: 'Indicadores y ventas', icon: DashboardIcon },
+      { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de caja', shortLabel: 'Caja', description: 'Caja y conciliación', icon: WalletNavIcon },
+      { view: View.ACCOUNTING, label: 'Contabilidad', shortLabel: 'Informes', description: 'Informes financieros', icon: ChartNavIcon },
+      { view: View.PAYROLL, label: 'Nómina', shortLabel: 'Nómina', description: 'Pagos al equipo', icon: CoinsNavIcon },
+    ] },
+    { id: 'admin', label: 'Administración', icon: SlidersNavIcon, color: 'text-accent', items: [
+      { view: View.SELLERS, label: 'Equipo', shortLabel: 'Equipo', description: 'Personal y usuarios', icon: TeamNavIcon },
+      { view: View.STORES, label: 'Sedes', shortLabel: 'Sedes', description: 'Tiendas y sucursales', icon: BuildingStorefrontIcon },
+      { view: View.ROLE_MANAGER, label: 'Permisos', shortLabel: 'Permisos', description: 'Roles y accesos', icon: ShieldCheckIcon },
+      { view: View.SETTINGS, label: 'Ajustes', shortLabel: 'Ajustes', description: 'Configuración general', icon: SlidersNavIcon },
+      { view: View.DEVELOPER_CENTER, label: 'Developer Center', shortLabel: 'Developer', description: 'Gestión de plataforma', icon: SettingsIcon },
+    ] },
   ], []);
 
   const userRole = roles.find(r => r.id === currentUser.roleId);
@@ -327,7 +322,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* CENTER: Navigation (Desktop & Mobile) */}
           <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
              {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-1.5 w-full max-w-[230px] sm:max-w-[280px]">
+             <div className="lg:hidden flex items-center justify-center gap-1.5 w-full max-w-[300px] sm:max-w-[380px]">
                 {filteredGroups.map((group, idx) => {
                   const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
                   const isCurrentActive = currentGroupIndex === idx;
@@ -337,7 +332,7 @@ const Header: React.FC<HeaderProps> = ({
                     <button 
                       key={group.id}
                       onClick={() => handleMobileGroupClick(idx)}
-                      className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border-2 active:scale-95
+                      className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border active:scale-95
                         ${isActiveGroup 
                           ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
                           : isCurrentActive
@@ -345,8 +340,8 @@ const Header: React.FC<HeaderProps> = ({
                             : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
                     >
                       <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-white' : isCurrentActive ? 'text-accent' : 'text-slate-400'}`} />
-                      <span className="text-[8px] font-black uppercase tracking-tighter mt-1">
-                        {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : 'Admin'}
+                      <span className="text-[9px] font-semibold tracking-tight mt-1">
+                        {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : group.id === 'finance' ? 'Finanzas' : 'Admin'}
                       </span>
                     </button>
                   );
@@ -354,7 +349,7 @@ const Header: React.FC<HeaderProps> = ({
 
                 {/* Dropdown for Mobile Submenus */}
                 {isMobileMenuOpen && displayedGroup && (
-                  <div className="absolute top-[68px] left-2 right-2 w-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
+                  <div className="absolute top-[68px] left-2 right-2 w-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-2xl shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
                     <div className="flex items-center justify-between px-4 py-3 bg-accent/5 rounded-2xl mb-2">
                         <div className="flex items-center gap-2">
                             <displayedGroup.icon className="w-5 h-5 text-accent" />
@@ -453,7 +448,7 @@ const Header: React.FC<HeaderProps> = ({
       </header>
 
       {/* Responsive Desktop Sidebar */}
-      <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-64 px-3'}`}>
+      <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-60 px-3'}`}>
         <button onClick={toggleDesktopSidebar} className="sticky top-0 z-10 self-end mb-1 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-accent transition-all" title={isDesktopSidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}>
           {isDesktopSidebarCollapsed ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronLeftIcon className="w-4 h-4" />}
         </button>
@@ -464,7 +459,7 @@ const Header: React.FC<HeaderProps> = ({
               {/* Group Title */}
               <div className="flex items-center gap-2 px-3 py-1 text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1 mb-2">
                 <GroupIcon className="w-3.5 h-3.5 text-accent opacity-80" />
-                {!isDesktopSidebarCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>}
+                {!isDesktopSidebarCollapsed && <span className="text-[10px] font-semibold uppercase tracking-wide">{group.label}</span>}
               </div>
               
               {/* Group Items */}
@@ -478,7 +473,7 @@ const Header: React.FC<HeaderProps> = ({
                        onClick={() => setCurrentView(item.view)}
                        className={`flex items-center ${isDesktopSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} w-full py-2 rounded-xl transition-all duration-200 group text-left relative
                          ${isActive 
-                           ? 'bg-accent text-white shadow-md shadow-accent/15 font-bold scale-[1.01]' 
+                           ? 'bg-accent text-white shadow-md shadow-accent/15 font-semibold' 
                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                          }`}
                      >
@@ -486,7 +481,7 @@ const Header: React.FC<HeaderProps> = ({
                          <Icon className="w-4 h-4" />
                        </div>
                        {!isDesktopSidebarCollapsed && <div className="flex-grow min-w-0">
-                         <p className="text-xs font-black leading-none">{item.label}</p>
+                         <p className="text-xs font-semibold leading-none">{item.label}</p>
                          <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
                            {item.description}
                          </p>
