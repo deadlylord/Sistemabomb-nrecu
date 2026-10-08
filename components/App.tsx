@@ -445,65 +445,20 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
   
+  // Login must not wait for tenant data, database seeding or collection listeners.
   useEffect(() => {
-    if (!isAuthReady || isAppReady) return;
-    
-    const loadInitialData = async () => {
-      try {
-        // Ensure default company exists
-        const defaultCompanyDoc = await getDoc(doc(db, 'companies', DEFAULT_COMPANY_ID));
-        if (!defaultCompanyDoc.exists()) {
-          await nativeSetDoc(doc(db, 'companies', DEFAULT_COMPANY_ID), {
-            id: DEFAULT_COMPANY_ID,
-            name: 'Sistema POS Multisede',
-            nit: '900.123.456-1',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            maxStores: 3,
-            phone: '300 000 0000',
-            address: 'Principal'
-          });
-        }
-
-        const sellersQuery = query(collection(db, 'sellers'), limit(1));
-        const snapshot = await getDocs(sellersQuery);
-        if (snapshot.empty) {
-          const batch = nativeWriteBatch(db);
-          INITIAL_STORES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'stores', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_CATEGORIES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'categories', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_ROLES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'roles', id), data); });
-          INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
-          await batch.commit();
-        }
-      } catch (error) {
-        console.error("Error initializing database:", error);
-      } finally {
-        setIsAppReady(true);
-      }
-    };
-    loadInitialData();
-  }, [isAuthReady, isAppReady]);
+    if (isAuthReady) setIsAppReady(true);
+  }, [isAuthReady]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady) return;
-    // Before login, only stores are needed to validate a seller's assigned store.
-    // Roles and companies are operational metadata: defer their listeners until login.
+    if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'stores')), setStores),
+      attachFirestoreListener(query(collection(db, 'roles')), setRoles),
+      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
     ];
-    if (currentUser) {
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'roles')), setRoles));
-      unsubscribers.push(attachFirestoreListener(query(collection(db, 'companies')), setCompanies));
-    }
     return () => unsubscribers.forEach(unsub => unsub());
   }, [isAppReady, isAuthReady, !!currentUser]);
-
-  useEffect(() => {
-    if (!isAppReady || !isAuthReady || currentUser) return;
-    const unsubscribe = attachFirestoreListener(query(collection(db, 'sellers')), setSellers);
-    return () => unsubscribe();
-  }, [isAppReady, isAuthReady, currentUser]);
 
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
@@ -3140,7 +3095,18 @@ const App: React.FC = () => {
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanPass = (passwordAttempt || '').trim();
-    const matches = sellers.filter(s =>
+    // Fetch seller records only after the user submits credentials, not at startup.
+    // Preserve legacy case-insensitive username/name matching until secure auth migration.
+    let loginSellers: Seller[];
+    try {
+      const snapshot = await getDocs(collection(db, 'sellers'));
+      loginSellers = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Seller));
+    } catch (error) {
+      console.error('Could not load login identities:', error);
+      alert('No se pudieron verificar los usuarios. Intenta nuevamente.');
+      return;
+    }
+    const matches = loginSellers.filter(s =>
       s && (
         (s.username && s.username.trim().toLowerCase() === cleanId) ||
         (s.name && s.name.trim().toLowerCase() === cleanId)
@@ -3154,7 +3120,15 @@ const App: React.FC = () => {
         return;
       }
 
-      const sellerStore = stores.find(s => s.id === seller.storeId);
+      let sellerStore = stores.find(s => s.id === seller.storeId);
+      if (!sellerStore && seller.storeId) {
+        try {
+          const storeSnapshot = await getDoc(doc(db, 'stores', seller.storeId));
+          if (storeSnapshot.exists()) sellerStore = { ...storeSnapshot.data(), id: storeSnapshot.id } as Store;
+        } catch (error) {
+          console.error('Could not load seller store:', error);
+        }
+      }
       const resolvedCompanyId = seller.companyId || sellerStore?.companyId || DEFAULT_COMPANY_ID;
 
       if (!sellerStore || (sellerStore.companyId || DEFAULT_COMPANY_ID) !== resolvedCompanyId) { alert('La empresa del usuario no coincide con su sede. Contacta al administrador.'); return; }
