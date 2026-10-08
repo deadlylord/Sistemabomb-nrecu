@@ -1,3 +1,4 @@
+import VestikaLoader from './VestikaLoader';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
@@ -1300,7 +1301,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                                         </div>
                                     )}
                                 </>
-                            ) : <p className="text-xs text-gray-400">Cargando...</p>}
+                            ) : <VestikaLoader compact />}
                             </div>
                             <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative min-h-[150px]">
                                 {!activeInsightId ? <div className="text-center text-gray-400 text-xs"><SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" /><p>Selecciona un ítem.</p></div> : (
