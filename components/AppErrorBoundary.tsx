@@ -1,15 +1,29 @@
 import React from 'react';
 
-export default class AppErrorBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error: Error, info: React.ErrorInfo) { console.error('Error de aplicación:', error, info); }
+type ErrorState = { failed: boolean; message: string; component: string };
+
+export default class AppErrorBoundary extends React.Component<React.PropsWithChildren, ErrorState> {
+  state: ErrorState = { failed: false, message: '', component: '' };
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorState> {
+    return { failed: true, message: error?.message || 'Error desconocido' };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('Error de aplicación:', error, info);
+    this.setState({ component: info.componentStack || '' });
+  }
+
   render() {
     if (this.state.failed) return (
       <div role="alert" className="p-8 text-center text-slate-900 dark:text-white">
         <h1 className="text-xl font-bold">No se pudo cargar esta pantalla</h1>
-        <p className="my-4">Puedes elegir otro módulo o volver a abrir la aplicación.</p>
-        <button className="rounded-xl bg-indigo-600 px-5 py-3 text-white" onClick={() => window.location.reload()}>Volver a abrir</button>
+        <p className="my-4">Puedes elegir otro módulo. Si vuelve a ocurrir, comparte el diagnóstico.</p>
+        <details className="mx-auto my-4 max-w-xl rounded-lg border border-slate-500 p-3 text-left text-xs">
+          <summary className="cursor-pointer font-semibold">Ver diagnóstico del error</summary>
+          <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{this.state.message}{'\n'}{this.state.component}</pre>
+        </details>
+        <button className="rounded-xl bg-indigo-600 px-5 py-3 text-white" onClick={() => this.setState({ failed: false, message: '', component: '' })}>Reintentar pantalla</button>
       </div>
     );
     return this.props.children;
