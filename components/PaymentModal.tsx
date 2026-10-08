@@ -5,6 +5,9 @@ import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon } from './Icons';
 
 interface PaymentModalProps {
+  onRequestVouchers?: () => void;
+  vouchersStatus?: { loading: boolean; error: string | null };
+  customersStatus?: { loading: boolean; error: string | null };
   isOpen: boolean;
   onClose: () => void;
   total: number;
@@ -21,7 +24,7 @@ interface PaymentModalProps {
   discountAmount?: number;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher, discountPercent, discountAmount }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher, discountPercent, discountAmount, onRequestVouchers, vouchersStatus, customersStatus }) => {
   const [payments, setPayments] = useState<Omit<Payment, 'date' | 'seller'>[]>([]);
   const [amountInput, setAmountInput] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -78,6 +81,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         }
     }
   };
+  useEffect(() => {
+    if (!customerName && customerPhone.length === 10 && !customersStatus?.loading) {
+      const found = customers.find(customer => customer.phone === customerPhone);
+      if (found) setCustomerName(found.name);
+    }
+  }, [customers, customersStatus?.loading, customerPhone, customerName]);
   
   const handleAddPayment = async (method: PaymentMethod) => {
     setErrorMsg(null);
@@ -96,6 +105,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     const currentRemaining = total - currentCovered;
 
     if (method === PaymentMethod.Bono) {
+        onRequestVouchers?.();
+        if (vouchersStatus?.loading || vouchersStatus?.error) {
+          triggerError(vouchersStatus.error || 'Los bonos todavía se están sincronizando. Espera antes de redimir.');
+          return;
+        }
         const trimmedCode = voucherCode.trim().toUpperCase();
         if (!trimmedCode) {
             triggerError("Ingresa el código del bono.");
@@ -233,6 +247,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       <div 
         className="bg-white dark:bg-secondary rounded-2xl shadow-2xl p-4 w-full max-w-3xl max-h-[95vh] flex flex-col border border-slate-100 dark:border-slate-800"
       >
+        {customersStatus?.loading && <p role="status" className="text-xs">Cargando clientes para autocompletar. Puedes ingresar los datos manualmente.</p>}
+        {customersStatus?.error && <p role="alert" className="text-xs">{customersStatus.error} Puedes ingresar los datos manualmente.</p>}
         {/* Header Compacto */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <div>
@@ -332,18 +348,21 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
                     <input 
                         type="text" 
                         value={voucherCode} 
-                        onChange={e => setVoucherCode(e.target.value.toUpperCase())} 
+                        onFocus={() => onRequestVouchers?.()}
+                        onChange={e => { onRequestVouchers?.(); setVoucherCode(e.target.value.toUpperCase()); }}
                         className="w-24 bg-pink-500/5 dark:bg-pink-500/10 border border-pink-500/20 px-2 py-1.5 rounded-xl text-xs font-mono font-black text-pink-600 dark:text-pink-400" 
                         placeholder="COD. BONO"
                     />
                     <button 
                         type="button"
                         onClick={() => handleAddPayment(PaymentMethod.Bono)}
-                        disabled={isVoucherValidating || !voucherCode.trim()}
+                        disabled={isVoucherValidating || !voucherCode.trim() || vouchersStatus?.loading || !!vouchersStatus?.error}
                         className="px-3 py-1.5 bg-pink-500 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-pink-600 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 transition-all cursor-pointer shadow-sm hover:shadow active:scale-95"
                     >
                         {isVoucherValidating ? '...' : 'Redimir'}
                     </button>
+                    {voucherCode && vouchersStatus?.loading && <span role="status" className="text-xs">Sincronizando bonos…</span>}
+                    {voucherCode && vouchersStatus?.error && <span role="alert" className="text-xs">{vouchersStatus.error}</span>}
                   </div>
                 </div>
 

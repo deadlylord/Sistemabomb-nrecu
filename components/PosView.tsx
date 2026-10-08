@@ -1,19 +1,23 @@
 import { useViewFilter } from '../services/viewFilters';
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
+import type { PosDataStatus, PosSecondaryCollection } from '../services/posData';
+import { PosDataGate, PosModalLoading } from './PosDataGate';
 import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, CeoDailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
-import ProductPerformanceModal from './ProductPerformanceModal';
+const ProductPerformanceModal = lazy(() => import('./ProductPerformanceModal'));
 import CartPanel from './CartPanel';
-import DailySalesReportModal from './DailySalesReportModal';
+const DailySalesReportModal = lazy(() => import('./DailySalesReportModal'));
 import { ClipboardListIcon, ChartBarIcon, SearchIcon, AlertTriangleIcon, ShoppingCartIcon, CrossIcon, TruckIcon, SparklesIcon } from './Icons';
-import CreateIncidentModal from './CreateIncidentModal';
-import EditProductImageModal from './EditProductImageModal';
-import SellVoucherModal from './SellVoucherModal';
-import CheckVoucherModal from './CheckVoucherModal';
+const CreateIncidentModal = lazy(() => import('./CreateIncidentModal'));
+const EditProductImageModal = lazy(() => import('./EditProductImageModal'));
+const SellVoucherModal = lazy(() => import('./SellVoucherModal'));
+const CheckVoucherModal = lazy(() => import('./CheckVoucherModal'));
 import { formatCOP, normalizeText } from '../constants';
-import EditProductModal from './EditProductModal';
+const EditProductModal = lazy(() => import('./EditProductModal'));
 
 interface PosViewProps {
+  onRequestData?: (names: PosSecondaryCollection[]) => void;
+  dataStatus?: PosDataStatus;
   onRequestStores?: () => void;
   inventory: Product[];
   categories: Category[];
@@ -62,8 +66,9 @@ interface PosViewProps {
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
+  const requestData = (names: PosSecondaryCollection[]) => props.onRequestData?.(names);
+  const [selectedCategoryId, setSelectedCategoryId] = useViewFilter<string | null>('PosView:selectedCategoryId', null);
+  const [businessSortMode, setBusinessSortMode] = useViewFilter<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('PosView:businessSortMode', 'alfabetico');
   const [searchTerm, setSearchTerm] = useViewFilter('PosView:searchTerm', '');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
@@ -84,6 +89,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [customerQuestion, setCustomerQuestion] = useState('');
   const [isSubmittingCeoNote, setIsSubmittingCeoNote] = useState(false);
   const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(true);
+  useEffect(() => {
+    if (businessSortMode !== 'alfabetico') props.onRequestData?.(['sales']);
+  }, [businessSortMode, props.onRequestData]);
 
   const handleAddCeoDailyNotes = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,6 +284,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
     }, [props.inventory, props.categories, newArrivalsInventory]);
 
   const totalItems = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.quantity, 0), [props.activeCart]);
+  const reminderNames: PosSecondaryCollection[] = ['heldCarts', 'layaways', 'incidents'];
+  const remindersLoading = reminderNames.some(name => props.dataStatus?.[name]?.loading);
+  const remindersError = reminderNames.map(name => props.dataStatus?.[name]?.error).find(Boolean);
   const totalPrice = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0), [props.activeCart]);
 
   const handleClearCartWithClose = () => {
@@ -353,6 +364,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
   };
 
     const { performanceTrends, recentSalesMap, trendingProductIds } = useMemo(() => {
+      if ((businessSortMode === 'alfabetico' && !performanceProduct) || props.dataStatus?.sales?.loading || props.dataStatus?.sales?.error) {
+        return { performanceTrends: {} as Record<string, 'up' | 'down' | 'stable'>, recentSalesMap: {} as Record<string, number>, trendingProductIds: new Set<string>() };
+      }
       
       // Calculate performance trends
       const now = new Date();
@@ -400,7 +414,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       });
   
       return { performanceTrends: trends, recentSalesMap, trendingProductIds };
-  }, [props.sales, props.inventory]);
+  }, [props.sales, props.inventory, businessSortMode, performanceProduct, props.dataStatus?.sales?.loading, props.dataStatus?.sales?.error]);
 
   const filteredInventory = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
@@ -509,6 +523,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
   
   const CartAndActionsContent = ({ isMobile = false }) => (
     <div className="space-y-3">
+        {remindersLoading && <p role="status" className="text-xs">Sincronizando encargos, novedades y ventas en espera…</p>}
+        {remindersError && <p role="alert" className="text-xs">{remindersError}</p>}
         {/* Quick link to Tag Scanning Audit */}
         {props.canAccessTagScanning && <div className="bg-indigo-100 dark:bg-indigo-900/70 border border-indigo-500/50 text-indigo-700 dark:text-indigo-300 p-2.5 rounded-xl shadow-sm" role="alert">
             <div className="flex items-center justify-between gap-2">
@@ -665,7 +681,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 <span>Registro CEO</span>
                             </button>
                             <button 
-                                onClick={() => { props.onRequestStores?.(); setIsIncidentModalOpen(true); }}
+                                onClick={() => { requestData(['sales', 'customers']); props.onRequestStores?.(); setIsIncidentModalOpen(true); }}
                                 className="bg-orange-50/70 hover:bg-orange-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-orange-650 text-orange-600 dark:text-orange-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-orange-200/50 dark:border-slate-700 text-center"
                                 type="button"
                             >
@@ -673,7 +689,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 <span>Novedades</span>
                             </button>
                             <button 
-                                onClick={() => setIsSalesReportModalOpen(true)} 
+                                onClick={() => { requestData(['sales', 'layaways', 'incidents', 'dailyNotes']); setIsSalesReportModalOpen(true); }}
                                 className="bg-teal-50/70 hover:bg-teal-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-teal-650 text-teal-600 dark:text-teal-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-teal-200/50 dark:border-slate-700 text-center"
                                 type="button"
                             >
@@ -688,7 +704,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Bonos de Regalo</span>
                         <div className="grid grid-cols-2 gap-2">
                             <button 
-                                onClick={() => setIsSellVoucherModalOpen(true)} 
+                                onClick={() => { requestData(['customers']); setIsSellVoucherModalOpen(true); }}
                                 className="bg-purple-50/70 hover:bg-purple-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-purple-650 text-purple-600 dark:text-purple-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-purple-200/50 dark:border-slate-700/50 text-center"
                                 type="button"
                             >
@@ -696,7 +712,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 <span>Vender Bono</span>
                             </button>
                             <button 
-                                onClick={() => setIsCheckVoucherModalOpen(true)} 
+                                onClick={() => { requestData(['giftVouchers', 'sales']); setIsCheckVoucherModalOpen(true); }}
                                 className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-slate-200/50 dark:border-slate-700/80 text-center"
                                 type="button"
                             >
@@ -709,6 +725,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
             )}
         </div>
         <CartPanel
+            onRequestCustomers={() => requestData(['customers'])}
+            onRequestVouchers={() => requestData(['giftVouchers'])}
+            customersStatus={props.dataStatus?.customers}
+            vouchersStatus={props.dataStatus?.giftVouchers}
             cartItems={props.activeCart}
             sellers={props.sellers}
             customers={props.allCustomers}
@@ -834,7 +854,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                   📊 Orden de Negocio (30 días):
                                 </span>
                                 <button
-                                    onClick={() => setBusinessSortMode('inteligente')}
+                                onClick={() => { requestData(['sales']); setBusinessSortMode('inteligente'); }}
                                     className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
                                         businessSortMode === 'inteligente'
                                             ? 'bg-accent text-white ring-2 ring-accent/30'
@@ -845,7 +865,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     🔥 Inteligente
                                 </button>
                                 <button
-                                    onClick={() => setBusinessSortMode('tendencias')}
+                                onClick={() => { requestData(['sales']); setBusinessSortMode('tendencias'); }}
                                     className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
                                         businessSortMode === 'tendencias'
                                             ? 'bg-accent text-white ring-2 ring-accent/30'
@@ -856,7 +876,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     📈 Tendencias
                                 </button>
                                 <button
-                                    onClick={() => setBusinessSortMode('recompra')}
+                                onClick={() => { requestData(['sales']); setBusinessSortMode('recompra'); }}
                                     className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
                                         businessSortMode === 'recompra'
                                             ? 'bg-accent text-white ring-2 ring-accent/30'
@@ -882,13 +902,17 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     </div>
                 </div>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
+                    {props.dataStatus?.purchases?.loading && <p role="status" className="text-xs">Cargando novedades de productos…</p>}
+                    {props.dataStatus?.purchases?.error && <p role="alert" className="text-xs">{props.dataStatus.purchases.error}</p>}
+                    {businessSortMode !== 'alfabetico' && props.dataStatus?.sales?.loading && <p role="status" className="text-xs">Cargando ventas para el orden de negocio…</p>}
+                    {businessSortMode !== 'alfabetico' && props.dataStatus?.sales?.error && <p role="alert" className="text-xs">{props.dataStatus.sales.error}</p>}
                     <ProductGrid 
                         products={filteredInventory} 
                         performanceTrends={performanceTrends}
                         onAddToCart={handleAddToCartWithAnimation} 
                         onEditImage={setEditingProductImage}
                         onEditProduct={setEditingProductDetails}
-                        onShowPerformance={setPerformanceProduct}
+                        onShowPerformance={product => { requestData(['sales', 'purchases']); setPerformanceProduct(product); }}
                         isAdmin={isAdmin}
                         justAddedProductId={justAddedProductId}
                         verifiedProducts={props.verifiedProducts}
@@ -945,7 +969,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
         </div>
       )}
       
+      <Suspense fallback={<PosModalLoading onClose={() => { setIsSalesReportModalOpen(false); setIsIncidentModalOpen(false); setIsSellVoucherModalOpen(false); setIsCheckVoucherModalOpen(false); setEditingProductImage(null); setEditingProductDetails(null); setPerformanceProduct(null); }} />}>
       {isSalesReportModalOpen && (
+          <PosDataGate names={['sales', 'layaways', 'incidents', 'dailyNotes']} status={props.dataStatus} onClose={() => setIsSalesReportModalOpen(false)}>
           <DailySalesReportModal
               isOpen={isSalesReportModalOpen}
               onClose={() => setIsSalesReportModalOpen(false)}
@@ -958,8 +984,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
               saleDate={saleDate}
               isAdmin={isAdmin}
           />
+          </PosDataGate>
       )}
       {isIncidentModalOpen && (
+        <PosDataGate names={['sales', 'customers']} status={props.dataStatus} onClose={() => setIsIncidentModalOpen(false)}>
         <CreateIncidentModal
             isOpen={isIncidentModalOpen}
             onClose={() => setIsIncidentModalOpen(false)}
@@ -971,8 +999,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
             onCreateIncident={props.onCreateIncident}
             customers={props.allCustomers}
         />
+        </PosDataGate>
       )}
       {isSellVoucherModalOpen && (
+        <PosDataGate names={['customers']} status={props.dataStatus} onClose={() => setIsSellVoucherModalOpen(false)}>
         <SellVoucherModal
             isOpen={isSellVoucherModalOpen}
             onClose={() => setIsSellVoucherModalOpen(false)}
@@ -982,14 +1012,17 @@ const PosView: React.FC<PosViewProps> = (props) => {
             onCreateGiftVoucher={props.onCreateGiftVoucher}
             onProcessSale={props.onProcessSale}
         />
+        </PosDataGate>
       )}
       {isCheckVoucherModalOpen && (
+        <PosDataGate names={['giftVouchers', 'sales']} status={props.dataStatus} onClose={() => setIsCheckVoucherModalOpen(false)}>
         <CheckVoucherModal
             isOpen={isCheckVoucherModalOpen}
             onClose={() => setIsCheckVoucherModalOpen(false)}
             giftVouchers={props.giftVouchers}
             sales={props.sales}
         />
+        </PosDataGate>
       )}
       {editingProductImage && (
         <EditProductImageModal 
@@ -1009,6 +1042,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
         />
       )}
       {performanceProduct && (
+        <PosDataGate names={['sales', 'purchases']} status={props.dataStatus} onClose={() => setPerformanceProduct(null)}>
         <ProductPerformanceModal 
             isOpen={!!performanceProduct}
             onClose={() => setPerformanceProduct(null)}
@@ -1018,7 +1052,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
             onUpdateProduct={props.onUpdateProduct}
             isAdmin={isAdmin}
         />
+        </PosDataGate>
       )}
+      </Suspense>
       
       {isCeoNoteModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200] animate-fade-in">

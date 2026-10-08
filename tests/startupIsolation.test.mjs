@@ -237,6 +237,7 @@ test('existing transfer requests stay visible in their source store without load
  const s=await session();try{
   s.records.set('incidents',[{id:'own-transfer',companyId:'A',storeId:'A0',fromStoreId:'A0',toStoreId:'A1',status:'closed'}, {id:'foreign-reference',companyId:'A',storeId:'A0',fromStoreId:'A0',toStoreId:'B0',status:'closed'}, {id:'destination-only',companyId:'A',storeId:'A1',fromStoreId:'A0',toStoreId:'A1',status:'closed'}]);
   await act(async()=>s.login());
+  await act(async()=>s.renderer.root.findByProps({screen:'PosView'}).props.onRequestData(['incidents']));
   assert.deepEqual(s.renderer.root.findByProps({screen:'PosView'}).props.incidents.map(row=>row.id),['own-transfer']);
   assert.ok(s.connections.filter(c=>c.q.name==='stores').every(c=>c.q.id),'no store-directory listener is needed for referenced destinations');
   const refs=s.reads.filter(q=>q.name==='stores'&&!q.id);

@@ -1,11 +1,16 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { CartItem, PaymentMethod, Seller, Customer, Payment, Store, GiftVoucher } from '../types';
 import { TrashIcon, PlusIcon, MinusIcon, PauseIcon, TagIcon, TruckIcon } from './Icons';
-import PaymentModal from './PaymentModal';
+const PaymentModal = lazy(() => import('./PaymentModal'));
+import { PosModalLoading } from './PosDataGate';
 import { formatCOP, toTitleCase } from '../constants';
 
 interface CartPanelProps {
+  onRequestCustomers?: () => void;
+  onRequestVouchers?: () => void;
+  customersStatus?: { loading: boolean; error: string | null };
+  vouchersStatus?: { loading: boolean; error: string | null };
   cartItems: CartItem[];
   sellers: Seller[];
   customers: Customer[];
@@ -25,7 +30,7 @@ interface CartPanelProps {
   onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
 }
 
-const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
+const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher, onRequestCustomers, onRequestVouchers, customersStatus, vouchersStatus }) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isLayawayModalOpen, setIsLayawayModalOpen] = useState(false);
   const [isPreOrder, setIsPreOrder] = useState(false);
@@ -86,10 +91,12 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
   };
 
   const handleProcessSaleClick = () => {
+    onRequestCustomers?.();
     setIsPaymentModalOpen(true);
   };
   
   const handleLayawayClick = (preOrder: boolean) => {
+    onRequestCustomers?.();
     setIsPreOrder(preOrder);
     setIsLayawayModalOpen(true);
   };
@@ -106,6 +113,12 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         }
     }
   };
+  useEffect(() => {
+    if (!customerName && customerPhone.length === 10 && !customersStatus?.loading) {
+      const found = customers.find(customer => customer.phone === customerPhone);
+      if (found) setCustomerName(found.name);
+    }
+  }, [customers, customersStatus?.loading, customerPhone, customerName]);
   
   const handleLayawayConfirm = () => {
     setLayawayError('');
@@ -343,7 +356,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         )}
       </div>
 
-      <PaymentModal
+      {isPaymentModalOpen && <Suspense fallback={<PosModalLoading onClose={() => setIsPaymentModalOpen(false)} />}><PaymentModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         total={totalPrice}
@@ -356,13 +369,18 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         currentStore={currentStore}
         giftVouchers={giftVouchers}
         onUpdateGiftVoucher={onUpdateGiftVoucher}
+        onRequestVouchers={onRequestVouchers}
+        vouchersStatus={vouchersStatus}
+        customersStatus={customersStatus}
         discountPercent={discountPercent}
         discountAmount={discountAmount}
-      />
+      /></Suspense>}
 
       {isLayawayModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border dark:border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-sm">
+                {customersStatus?.loading && <p role="status" className="text-xs">Cargando clientes para autocompletar. Puedes ingresar los datos manualmente.</p>}
+                {customersStatus?.error && <p role="alert" className="text-xs">{customersStatus.error} Puedes ingresar los datos manualmente.</p>}
                 <h3 className="text-xl font-bold text-accent mb-4">
                   {isPreOrder ? 'Crear Abono por Traer (Encargo)' : 'Crear Abono'}
                 </h3>

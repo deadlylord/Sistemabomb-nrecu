@@ -1,0 +1,372 @@
+{
+  "source": "Real React App controller with mocked Firestore and controlled idle scheduling; no Firebase network latency or billed reads measured",
+  "baselineCommit": "93c9df4",
+  "samples": [
+    {
+      "storeCount": 3,
+      "phases": {
+        "beforeLogin": {
+          "liveListeners": 0,
+          "collections": {},
+          "cumulativeQueries": 0,
+          "cumulativeInventoryConnections": 0,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "essential": {
+          "liveListeners": 8,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "afterLogin": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "pos": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "secondStore": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 2,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "revisit": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "global": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 10,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 3
+        }
+      }
+    },
+    {
+      "storeCount": 50,
+      "phases": {
+        "beforeLogin": {
+          "liveListeners": 0,
+          "collections": {},
+          "cumulativeQueries": 0,
+          "cumulativeInventoryConnections": 0,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "essential": {
+          "liveListeners": 8,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "afterLogin": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "pos": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "secondStore": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 2,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "revisit": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "global": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 57,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 50
+        }
+      }
+    },
+    {
+      "storeCount": 1000,
+      "phases": {
+        "beforeLogin": {
+          "liveListeners": 0,
+          "collections": {},
+          "cumulativeQueries": 0,
+          "cumulativeInventoryConnections": 0,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "essential": {
+          "liveListeners": 8,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "afterLogin": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "pos": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "stores": 1,
+            "sellers": 2,
+            "companies": 1,
+            "roles": 1,
+            "categories": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 1,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "secondStore": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 2,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "revisit": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 7,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 0
+        },
+        "global": {
+          "liveListeners": 12,
+          "collections": {
+            "platformDevelopers": 1,
+            "companies": 1,
+            "sellers": 2,
+            "roles": 1,
+            "categories": 1,
+            "stores": 1,
+            "inventory": 1,
+            "incidents": 1,
+            "purchases": 1,
+            "layaways": 1,
+            "heldCarts": 1
+          },
+          "cumulativeQueries": 1007,
+          "cumulativeInventoryConnections": 3,
+          "cumulativeGlobalInventoryQueries": 1000
+        }
+      }
+    }
+  ]
+}

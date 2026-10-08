@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 
 // Entire App controller and real navigation/Developer Center; Firestore is in-memory.
 // Operational screens expose their received props so isolation is checked at the boundary.
-export async function developerSession({browser=false}={}) {
+export async function developerSession({browser=false, realPos=false}={}) {
   const dir = await mkdtemp(join(process.cwd(), 'tests/.developer-session-'));
   const screens = ['LoginView', 'DashboardView', 'PosView', 'InventoryView', 'InventoryTransferView', 'LayawayView', 'SalesView', 'PurchasesView', 'SellersView', 'StoresView', 'StockTakeHistoryView', 'CustomersView', 'SettingsView', 'PayrollView', 'RoleManagerView', 'IncidentsView', 'CeoCenterView', 'SmartAccountantView', 'FinancialReconciliationView', 'GiftVouchersView', 'TagScanningView', 'ReportsView', 'ReceiptModal', 'RecaudoReceiptModal', 'InventoryVerificationModal', 'PendingIncidentsBriefingModal'];
-  const result = await build({bundle:true, write:false, format:'esm', platform:browser?'browser':'node', external:browser?[]:['react'], stdin:{contents:`${browser ? "export {createElement} from 'react'; export {createRoot} from 'react-dom/client';" : ''}export {default as App} from './components/App'; export {default as Header} from './components/Header'; export {default as DeveloperCenter} from './components/DeveloperCenterView'; export {View, DEFAULT_COMPANY_ID} from './types'; export {PLATFORM_OWNER_USER_ID} from './services/developerAccess'; export * from 'firebase/firestore'; export {renderedScreens} from 'screen-state'; export * from './services/storeCache'; export {subscribeStoreRows} from './services/storeSubscriptions';`, resolveDir:process.cwd()}, plugins:[{name:'session-fixtures',setup(b){
+  if(realPos)screens.splice(screens.indexOf('PosView'),1);
+  const result = await build({bundle:true, write:false, format:'esm', platform:browser?'browser':'node', external:browser?[]:['react'], stdin:{contents:`${browser ? "export {createElement} from 'react'; export {createRoot} from 'react-dom/client';" : ''}export {default as App} from './components/App'; export {default as Header} from './components/Header'; export {default as DeveloperCenter} from './components/DeveloperCenterView'; ${realPos ? "export {default as PaymentModal} from './components/PaymentModal'; export {default as CartPanel} from './components/CartPanel';" : ''}export {View, DEFAULT_COMPANY_ID, PaymentMethod} from './types'; export {PLATFORM_OWNER_USER_ID} from './services/developerAccess'; export * from 'firebase/firestore'; export {renderedScreens} from 'screen-state'; export * from './services/storeCache'; export {subscribeStoreRows} from './services/storeSubscriptions';`, resolveDir:process.cwd()}, plugins:[{name:'session-fixtures',setup(b){
     b.onResolve({filter:/^(firebase\/(firestore|auth)|\.\.\/firebase)$/}, a=>({path:a.path,namespace:'fixtures'}));
     b.onLoad({filter:/.*/,namespace:'fixtures'},a=>({contents:a.path==='../firebase' ? 'export const db={}; export const auth={};' : a.path==='firebase/auth' ? 'export const onAuthStateChanged=(_,f)=>{f({uid:"test"});return()=>{}}; export const signInAnonymously=async()=>{};' : `
       export const records=new Map(), connections=[], writes=[], reads=[], control={pause:false};
@@ -25,7 +26,7 @@ export async function developerSession({browser=false}={}) {
       export const addDoc=async(ref,data)=>{writes.push({ref,data});return{id:'generated'}};
       export const setDoc=async()=>{throw Error('unexpected write')}, updateDoc=setDoc, deleteDoc=setDoc;
       export const writeBatch=()=>({update:setDoc,set:setDoc,delete:setDoc,commit:async()=>{}});
-      export const runTransaction=async()=>{throw Error('unexpected transaction')};
+      export const runTransaction=async(_,callback)=>{if(control.transaction)return control.transaction(callback);throw Error('unexpected transaction')};
       export const increment=value=>value, arrayUnion=(...v)=>v, deleteField=()=>{};
     `}));
     b.onResolve({filter:/^screen-state$/},()=>({path:'state',namespace:'screen-state'}));
@@ -40,11 +41,16 @@ export async function developerSession({browser=false}={}) {
   return {...await import(pathToFileURL(path).href), cleanup:()=>rm(dir,{recursive:true,force:true})};
 }
 
-export function browserGlobals() {
+export function browserGlobals({idleQueue} = {}) {
   const previous = Object.fromEntries(['localStorage','window','document','alert'].map(k=>[k,globalThis[k]]));
   const values=new Map();
   globalThis.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,String(v)),removeItem:k=>values.delete(k)};
   globalThis.window={scrollTo(){},addEventListener(){},removeEventListener(){},confirm:()=>true};
+  if (idleQueue) Object.assign(globalThis.window, {
+    requestAnimationFrame:callback=>{callback();return 0}, cancelAnimationFrame(){},
+    requestIdleCallback:callback=>{idleQueue.push(callback);return idleQueue.length},
+    cancelIdleCallback:id=>{idleQueue[id-1]=null},
+  });
   globalThis.document={documentElement:{style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}}},addEventListener(){},removeEventListener(){}};
   globalThis.alert=message=>{throw Error(message)};
   return ()=>Object.assign(globalThis,previous);

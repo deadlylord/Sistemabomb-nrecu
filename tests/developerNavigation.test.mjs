@@ -94,6 +94,7 @@ test('repeated company/store changes isolate snapshots, ignore late A/B/A callba
         const storeId=company+suffix;
         s.renderedScreens.length=0;
         await act(async()=>s.header().props.onSwitchStore(storeId));
+        await act(async()=>s.renderer.root.findByProps({screen:'PosView'}).props.onRequestData(['sales','purchases','layaways','incidents']));
         const props=s.renderer.root.findByProps({screen:'PosView'}).props;
         assert.equal(props.currentStore.id,storeId);
         for(const name of ['inventory','sales','purchases','layaways','incidents']){
