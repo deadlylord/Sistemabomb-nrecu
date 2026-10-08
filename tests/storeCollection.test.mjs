@@ -21,11 +21,14 @@ test('shared store subscription survives navigation and metadata renders, cleans
       plugins: [{ name: 'fake-firestore', setup(builder) {
         builder.onResolve({ filter: /^(firebase\/firestore|\.\.\/firebase)$/ }, args => ({ path: args.path, namespace: 'fake' }));
         builder.onLoad({ filter: /.*/, namespace: 'fake' }, args => ({ contents: args.path === '../firebase' ? 'export const db = {};' : `
+          export const getDoc = async()=>{throw Error('unexpected read')};
+          export const setDoc = async()=>{throw Error('unexpected write')}, updateDoc=setDoc, deleteDoc=setDoc, doc=setDoc, writeBatch=setDoc, runTransaction=setDoc;
           export const collection = (_, name) => ({ name });
           export const where = (field, op, value) => ({ field, op, value });
           export const query = (source, filter) => ({ source, filter });
           export const connections = [];
-          export function onSnapshot(query, apply) {
+          export function onSnapshot(query, options, callback) {
+            const apply = typeof options === 'function' ? options : callback;
             const connection = { query, apply, closed: false };
             connections.push(connection);
             return () => { connection.closed = true; };
@@ -47,8 +50,8 @@ test('shared store subscription survives navigation and metadata renders, cleans
     await act(async () => { renderer.update(React.createElement(Screen)); });
     assert.equal(connections.length, 1);
     assert.equal(connections[0].closed, false);
-    connections[0].apply({ docs: [{ id: 'a', data: () => ({ stock: 3 }) }] });
-    assert.deepEqual(values.at(-1), [{ id: 'a', stock: 3 }]);
+    await act(async () => connections[0].apply({ docs: [{ id: 'a', data: () => ({ stock: 3, storeId: 'Metro' }) }] }));
+    assert.deepEqual(values.at(-1), [{ id: 'a', stock: 3, storeId: 'Metro' }]);
     await act(async () => { renderer.update(React.createElement(Screen, { store: 'Divino' })); });
     assert.equal(connections[0].closed, true);
     assert.equal(connections[1].query.filter.value, 'Divino');
@@ -62,8 +65,8 @@ test('shared store subscription survives navigation and metadata renders, cleans
     const stopRight = subscribeStoreRows('financialRecords', 'Mayla1', 'Carlos:Mayla', rows => right.push(rows));
     assert.equal(connections.length, 4, 'two consumers share one database listener');
     const finance = connections[3];
-    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 10 }) }, { id: 'foreign', data: () => ({ companyId: 'Bombon', amount: 99 }) }] });
-    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 25 }) }] });
+    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', storeId: 'Mayla1', amount: 10 }) }, { id: 'foreign', data: () => ({ companyId: 'Bombon', storeId: 'Mayla1', amount: 99 }) }] });
+    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', storeId: 'Mayla1', amount: 25 }) }] });
     assert.equal(left.at(-1)[0].amount, 25);
     assert.deepEqual(left, right, 'changes reach both consumers without reload');
     assert.equal(left[0].length, 1, 'foreign company row is excluded');

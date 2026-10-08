@@ -1,6 +1,7 @@
 import React from 'react';
 
 export default class AppErrorBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
+  declare readonly props: React.PropsWithChildren;
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) { console.error('Error de aplicación:', error, info); }

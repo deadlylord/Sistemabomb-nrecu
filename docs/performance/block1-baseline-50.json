@@ -1,0 +1,207 @@
+{
+  "storeCount": 50,
+  "beforeLogin": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "sellers": 1
+    },
+    "total": 4,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 0
+  },
+  "afterLogin": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "platformDevelopers": 1,
+      "daily_notes": 1,
+      "sellers": 1,
+      "categories": 1,
+      "inventoryTransfers": 50,
+      "inventory": 50,
+      "sales": 50,
+      "layaways": 50,
+      "incidents": 50,
+      "purchases": 1,
+      "giftVouchers": 1,
+      "dailyNotes": 1,
+      "stockTakes": 1
+    },
+    "total": 261,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 50
+  },
+  "pos": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "platformDevelopers": 1,
+      "daily_notes": 1,
+      "sellers": 1,
+      "categories": 1,
+      "inventoryTransfers": 50,
+      "inventory": 50,
+      "sales": 1,
+      "layaways": 1,
+      "incidents": 1,
+      "purchases": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 114,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 50
+  },
+  "secondStore": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "platformDevelopers": 1,
+      "daily_notes": 1,
+      "sellers": 1,
+      "categories": 1,
+      "inventoryTransfers": 50,
+      "inventory": 50,
+      "incidents": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 114,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 50
+  },
+  "revisit": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "platformDevelopers": 1,
+      "daily_notes": 1,
+      "sellers": 1,
+      "categories": 1,
+      "inventoryTransfers": 50,
+      "inventory": 50,
+      "incidents": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 114,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 50
+  },
+  "global": {
+    "listeners": {
+      "stores": 1,
+      "roles": 1,
+      "companies": 1,
+      "platformDevelopers": 1,
+      "daily_notes": 1,
+      "sellers": 1,
+      "categories": 1,
+      "inventoryTransfers": 50,
+      "inventory": 50,
+      "incidents": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 114,
+    "queries": [
+      {
+        "collection": "companies",
+        "id": "default_company"
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "limit": 1
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 50
+  }
+}

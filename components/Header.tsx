@@ -23,6 +23,7 @@ interface HeaderProps {
   userPermissions: View[];
   onLogout: () => void;
   stores: Store[];
+  onRequestStores?: () => void;
   onSwitchStore: (storeId: string) => void;
   roles: Role[];
   isGlobalMode: boolean;
@@ -50,7 +51,7 @@ interface NavGroup {
 
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
-  currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
+  currentCompany, userPermissions, onLogout, stores, onSwitchStore, onRequestStores, roles, isGlobalMode,
   onToggleGlobalMode, incidents, onOpenBriefing, isDeveloper: isDeveloperProp
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -289,7 +290,7 @@ const Header: React.FC<HeaderProps> = ({
                 aria-label="Cambiar sede"
                 aria-expanded={canSwitchStore && isStoreDropdownOpen}
                 disabled={!canSwitchStore || stores.length === 0}
-                onClick={() => canSwitchStore && setIsStoreDropdownOpen(!isStoreDropdownOpen)}
+                onClick={() => { if (canSwitchStore) { onRequestStores?.(); setIsStoreDropdownOpen(!isStoreDropdownOpen); } }}
                 className="px-1.5 py-1.5 sm:px-3 sm:py-2 rounded-xl flex items-center gap-1.5 sm:gap-3 border-2 shadow-sm active:scale-95 transition-all bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
                 style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
               >
@@ -383,7 +384,7 @@ const Header: React.FC<HeaderProps> = ({
                {theme === 'dark' ? <SunIcon className="w-5 h-5 text-yellow-500" /> : <MoonIcon className="w-5 h-5" />}
              </button>
              
-             {isAdmin && (
+             {(isAdmin || isDeveloper) && (
                 <button 
                   onClick={onToggleGlobalMode}
                   title={isGlobalMode ? "Modo Multisede Activo" : "Activar Modo Multisede"}

@@ -1,24 +1,29 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { MailIcon, LockIcon, EyeIcon } from './Icons';
 import { APP_VERSIONS } from '../constants';
 
 interface LoginViewProps {
-  onLogin: (username: string, password: string) => void;
+  onLogin: (username: string, password: string) => void | Promise<void>;
   isAppReady: boolean;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
+  const submitRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitRef.current || !isAppReady) return;
     if (username && password) {
-      onLogin(username, password);
+      submitRef.current = true; setSubmitting(true);
+      try { await onLogin(username, password); }
+      finally { submitRef.current = false; setSubmitting(false); }
     } else {
       alert('Por favor, ingresa tu usuario y contraseña.');
     }
@@ -50,7 +55,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Usuario"
             required
-            disabled={!isAppReady}
+            disabled={!isAppReady || submitting}
             autoComplete="username"
           />
         </div>
@@ -65,7 +70,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Contraseña"
             required
-            disabled={!isAppReady}
+            disabled={!isAppReady || submitting}
             autoComplete="current-password"
           />
           <button
@@ -80,10 +85,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         
         <button
           type="submit"
-          disabled={!isAppReady}
+          disabled={!isAppReady || submitting}
           className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-all duration-300 hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/40 disabled:bg-slate-500 disabled:cursor-not-allowed"
         >
-          {isAppReady ? 'Ingresar' : 'Cargando...'}
+          {submitting ? 'Verificando…' : isAppReady ? 'Ingresar' : 'Conectando…'}
         </button>
       </form>
       

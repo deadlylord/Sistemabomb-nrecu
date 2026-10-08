@@ -1,0 +1,474 @@
+{
+  "storeCount": 3,
+  "beforeLogin": {
+    "listeners": {},
+    "total": 0,
+    "queries": [],
+    "inventoryConnections": 0
+  },
+  "afterLogin": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "stores": 1,
+      "sellers": 2,
+      "companies": 1,
+      "roles": 1,
+      "daily_notes": 1,
+      "categories": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 1
+  },
+  "pos": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "stores": 1,
+      "sellers": 2,
+      "companies": 1,
+      "roles": 1,
+      "daily_notes": 1,
+      "categories": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 1
+  },
+  "secondStore": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 2
+  },
+  "revisit": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 3
+  },
+  "global": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A0"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A1"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A2"
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 3
+  }
+}

@@ -50,6 +50,7 @@ test('connecting company changes branding and clears store for a company without
 
 test('navigation closes global verification and briefing overlays',async()=>{
   const s=await setup();try{
+    await s.navigate(s.View.DASHBOARD);
     await act(async()=>s.renderer.root.findByProps({screen:'DashboardView'}).props.onOpenVerification());
     assert.equal(s.renderer.root.findByProps({screen:'InventoryVerificationModal'}).props.isOpen,true);
     await s.navigate(s.View.DEVELOPER_CENTER);
@@ -87,6 +88,7 @@ test('repeated company/store changes isolate snapshots, ignore late A/B/A callba
       assert.equal(live().filter(c=>operationalNames.has(c.q.name)).length,0,'company management needs no operational data listeners');
       assert.equal(s.renderer.root.findAllByType('main').length,1);
       await s.navigate(s.View.POS);
+      await act(async()=>s.header().props.onRequestStores());
       const catalogs=s.connections.filter(c=>c.q.name==='inventory').length;
       for(const suffix of ['2','1','2','1']){
         const storeId=company+suffix;
@@ -105,14 +107,16 @@ test('repeated company/store changes isolate snapshots, ignore late A/B/A callba
         assert.equal(new Set(keys).size,keys.length,'one live listener per query');
         assert.ok(live().filter(c=>operationalNames.has(c.q.name)).every(c=>(c.q.filters||[]).every(f=>f.field==='companyId'?f.value===company:!['storeId','fromStoreId','tienda'].includes(f.field)||f.value.startsWith(company))), 'operational queries stay in the selected company');
       }
-      assert.equal(s.connections.filter(c=>c.q.name==='inventory').length,catalogs,'switching stores reuses company inventory listeners');
+      assert.equal(s.connections.filter(c=>c.q.name==='inventory').length,catalogs + 4,'each visited store reconnects to synchronize its cache');
+      assert.equal(live().filter(c=>c.q.name==='inventory').length,1,'only the active store inventory remains subscribed');
       const reads=s.connections.length;
       await act(async()=>{
         for(const c of live().filter(c=>['stores','roles','sellers'].includes(c.q.name)))c.apply(s.snapshot(c.q));
       });
       assert.equal(s.connections.length,reads,'metadata updates do not reread operational collections');
     }
-    assert.equal(directories(),initialDirectories,'connecting companies does not reread global directories');
+    assert.ok(directories()>initialDirectories,'directories reconnect within the selected tenant');
+    assert.equal(live().filter(c=>['stores','roles','sellers','companies'].includes(c.q.name)).length,5,'metadata listeners remain bounded across context changes');
     const expected=s.renderer.root.findByProps({screen:'PosView'}).props.categories;
     await act(async()=>{
       staleCategory.apply({docs:[{id:'late',data:()=>({companyId:'A',name:'outdated'})}]});

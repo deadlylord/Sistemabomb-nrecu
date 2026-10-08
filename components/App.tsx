@@ -1,8 +1,9 @@
-import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
+import { isTenantAdministrator, resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 import { subscribeStoreRows } from '../services/storeSubscriptions';
+import { cacheStoreRows, getCachedStoreRows, clearStoreCache } from '../services/storeCache';
 import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
 import { belongsToCompany, selectCompanyCategories } from '../services/companyCategories';
 import { hasPlatformDeveloperAccess, isPlatformOwner, isPlatformRole, assertCompanyRole, assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
@@ -32,7 +33,8 @@ import {
   arrayUnion,
   runTransaction as nativeRunTransaction,
   orderBy,
-  deleteField
+  deleteField,
+  documentId
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID, DEFAULT_CLIENT_ALLOWED_VIEWS } from '../types';
@@ -43,7 +45,7 @@ import { useStoreCollection } from '../services/useStoreCollection';
 import StockTakeModal from './StockTakeModal';
 import LoginView from './LoginView';
 import ReportsModal from './ReportsView';
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku, normalizeText } from '../constants';
+import { formatCOP, toTitleCase, generateUniqueSku, normalizeText } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
 import { reuploadImageFromUrl, uploadImageAndGetURL } from '../services/storageService';
@@ -160,7 +162,15 @@ const App: React.FC = () => {
   const [developerGrants, setDeveloperGrants] = useState<PlatformDeveloperGrant[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(localStorage.getItem('currentStoreId'));
   const currentStoreIdRef = useRef<string | null>(currentStoreId);
-  const inventoryByStoreRef = useRef<Map<string, Product[]>>(new Map());
+  const identityRef = useRef<{ store?: Store; role?: Role; seller?: Seller }>({});
+  const loginPendingRef = useRef(false);
+  const [legacyCategoryState, setLegacyCategoryState] = useState<{ scope: string; items: Category[]; error?: string }>({ scope: '', items: [] });
+  const [storeDirectoryScope, setStoreDirectoryScope] = useState('');
+  const [storeDirectorySnapshotScope, setStoreDirectorySnapshotScope] = useState('');
+  const [analyticsDemandScope, setAnalyticsDemandScope] = useState('');
+  const [purchaseSearchStoreIds, setPurchaseSearchStoreIds] = useState<string[]>([]);
+  const [inventoryRequestRevision, setInventoryRequestRevision] = useState(0);
+  const [globalInventoryStatus, setGlobalInventoryStatus] = useState<{ scope: string; loading: boolean; error: string | null; updatedAt?: number }>({ scope: '', loading: false, error: null });
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'dark');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
@@ -235,17 +245,17 @@ const App: React.FC = () => {
 
   const selectStore = (id: string | null) => {
     currentStoreIdRef.current = id;
-    setInventory(id ? inventoryByStoreRef.current.get(id) || [] : []);
+    setInventory(id ? getCachedStoreRows('inventory', id, `${currentUser?.id || ''}:${operationalCompanyId}`) || [] : []);
     setCurrentStoreId(id);
     if (id) localStorage.setItem('currentStoreId', id);
     else localStorage.removeItem('currentStoreId');
   };
 
   const handleSwitchStore = (id: string) => {
+    if (currentUser && !isDeveloper && !isAdmin && id !== currentUser.storeId) return;
     if (!currentUser || !stores.some(store => store.id === id && (store.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId)) return;
     if (id === currentStoreIdRef.current) return;
-    // Never leave the previous store's products visible. Administrators already
-    // keep each authorized store inventory in memory, so revisiting a store is instant.
+    // Only an authorized, tenant-scoped session snapshot may be shown while reconnecting.
     selectStore(id);
   };
 
@@ -253,7 +263,7 @@ const App: React.FC = () => {
     if (!isDeveloper || !companies.some(company => company.id === id)) return;
     const companyStores = stores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === id);
     const storeId = companyStores.find(store => store.id === currentStoreIdRef.current)?.id || companyStores[0]?.id || null;
-    if (id !== operationalCompanyId) inventoryByStoreRef.current.clear();
+    if (id !== operationalCompanyId) clearStoreCache();
     setActiveCompanyId(id);
     localStorage.setItem('activeCompanyId', id);
     selectStore(storeId);
@@ -284,7 +294,7 @@ const App: React.FC = () => {
 
   const isAdmin = useMemo(() => {
       if (!currentUser || !roles.length) return false;
-      return getRoleUserType(resolveTenantRole(currentUser, roles, stores)) === 'admin';
+      return isTenantAdministrator(resolveTenantRole(currentUser, roles, stores));
   }, [currentUser, roles, stores]);
 
   useEffect(() => {
@@ -309,7 +319,12 @@ const App: React.FC = () => {
   // Multi-company isolation: every operational view is scoped to exactly one company.
   // Developers can switch the operational context from Developer Center, but only
   // Developer Center itself receives the global companies/stores/users collections.
-  const categories = useMemo(() => selectCompanyCategories(categoryState, operationalCompanyId), [categoryState, operationalCompanyId]);
+  const legacyCategoryScope = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
+  const categories = useMemo(() => {
+    const legacy = legacyCategoryState.scope === legacyCategoryScope ? legacyCategoryState.items : [];
+    const tagged = selectCompanyCategories(categoryState, operationalCompanyId);
+    return [...new Map([...legacy, ...tagged].filter(category => belongsToCompany(category, operationalCompanyId)).map(category => [category.id, category])).values()];
+  }, [categoryState, operationalCompanyId, legacyCategoryState, legacyCategoryScope]);
 
   const visibleStores = useMemo(() => {
     return stores.filter(s => (s.companyId || DEFAULT_COMPANY_ID) === operationalCompanyId);
@@ -323,6 +338,9 @@ const App: React.FC = () => {
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
+  const knownStoreScopeRef = useRef({ scope: dataScope, stores: visibleStores });
+  knownStoreScopeRef.current = { scope: dataScope, stores: visibleStores };
+  const [incidentReferenceError, setIncidentReferenceError] = useState<{ scope: string; message: string }>({ scope: '', message: '' });
   const [settledDataContext, setSettledDataContext] = useState(operationContext);
   const dataContextReady = settledDataContext === operationContext;
   const overlayScope = `${operationContext}:${currentView}`;
@@ -346,12 +364,14 @@ const App: React.FC = () => {
     setSettledDataContext(operationContext);
   }, [currentStoreId, dataScope]);
   useEffect(() => {
-    inventoryByStoreRef.current.clear();
+    clearStoreCache();
+    setPurchaseSearchStoreIds([]);
+    setIsGlobalMode(false);
     setInventory([]); setInventoryTransfers([]); setCeoNotes([]);
     setCeoSales([]); setCeoLayaways([]); setCeoPurchases([]); setCeoExpenses([]);
     setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
-  }, [dataScope, companyStoreKey]);
+  }, [dataScope]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
   const { setDoc, updateDoc, deleteDoc, addDoc, runTransaction } = tenantWriter;
   const doc = ((...args: any[]) => { const ref = (nativeDoc as any)(...args); if (args.length === 1) tenantWriter.registerNew(ref); return ref; }) as typeof nativeDoc;
@@ -445,68 +465,109 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
   
-  useEffect(() => {
-    if (!isAuthReady || isAppReady) return;
-    
-    const loadInitialData = async () => {
-      try {
-        // Ensure default company exists
-        const defaultCompanyDoc = await getDoc(doc(db, 'companies', DEFAULT_COMPANY_ID));
-        if (!defaultCompanyDoc.exists()) {
-          await nativeSetDoc(doc(db, 'companies', DEFAULT_COMPANY_ID), {
-            id: DEFAULT_COMPANY_ID,
-            name: 'Sistema POS Multisede',
-            nit: '900.123.456-1',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            maxStores: 3,
-            phone: '300 000 0000',
-            address: 'Principal'
-          });
-        }
+  // Login never seeds or reads business data while identity is unknown.
+  useEffect(() => { setIsAppReady(isAuthReady); }, [isAuthReady]);
 
-        const sellersQuery = query(collection(db, 'sellers'), limit(1));
-        const snapshot = await getDocs(sellersQuery);
-        if (snapshot.empty) {
-          const batch = nativeWriteBatch(db);
-          INITIAL_STORES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'stores', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_CATEGORIES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'categories', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_ROLES.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'roles', id), data); });
-          INITIAL_SELLERS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'sellers', id), { ...data, companyId: DEFAULT_COMPANY_ID }); });
-          INITIAL_PRODUCTS.forEach(item => { const { id, ...data } = item; batch.set(doc(db, 'inventory', id), data); });
-          await batch.commit();
-        }
-      } catch (error) {
-        console.error("Error initializing database:", error);
-      } finally {
-        setIsAppReady(true);
+  const navigate = (view: View) => {
+    if ([View.DASHBOARD, View.FINANCIAL_RECONCILIATION].includes(view)) setAnalyticsDemandScope(dataScope);
+    setCurrentView(view);
+  };
+  const needsStoreDirectory = storeDirectoryScope === dataScope || isGlobalMode || isReportsModalOpen || (currentView === View.DASHBOARD && analyticsDemandScope === dataScope) || [View.PURCHASES, View.INVENTORY_TRANSFER, View.STORES, View.SELLERS, View.SETTINGS, View.INCIDENTS, View.CEO_CENTER, View.FINANCIAL_RECONCILIATION].includes(currentView);
+  const needsRoleDirectory = [View.ROLE_MANAGER, View.SELLERS].includes(currentView);
+  const needsCompanySellers = isGlobalMode || [View.SELLERS, View.ROLE_MANAGER, View.CEO_CENTER].includes(currentView) || (currentView === View.DASHBOARD && analyticsDemandScope === dataScope);
+  const globalDirectoryVisible = isDeveloper && currentView === View.DEVELOPER_CENTER;
+  const directoryCompanyScope = globalDirectoryVisible ? null : operationalCompanyId;
+  const directoryStoreScope = globalDirectoryVisible || needsStoreDirectory ? null : currentStoreId;
+  const sellerStoreScope = globalDirectoryVisible || needsCompanySellers ? null : currentStoreId;
+  const keepIdentity = <T extends { id: string }>(rows: T[], identity?: T) => identity && !rows.some(row => row.id === identity.id) ? [...rows, identity] : rows;
+
+  // Each directory has its own lifecycle. Switching stores must not reconnect a
+  // company document or an already requested company store directory.
+  useEffect(() => {
+    if (!isAppReady || !isAuthReady || !currentUser) return;
+    let active = true;
+    if (globalDirectoryVisible || needsStoreDirectory) {
+      const source = globalDirectoryVisible ? query(collection(db, 'stores')) : query(collection(db, 'stores'), where('companyId', '==', operationalCompanyId));
+      const stop = attachFirestoreListener(source, rows => {
+        if (!active) return;
+        setStores(keepIdentity(rows as Store[], identityRef.current.store));
+        setStoreDirectorySnapshotScope(globalDirectoryVisible ? '' : dataScope);
+      });
+      return () => { active = false; stop(); };
+    }
+    if (!currentStoreId) return;
+    const stop = onSnapshot(nativeDoc(db, 'stores', currentStoreId), snapshot => {
+      if (!active) return;
+      const store = snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Store : undefined;
+      if (!store || (store.companyId || DEFAULT_COMPANY_ID) !== operationalCompanyId) {
+        if (currentStoreId === currentUser.storeId) handleLogout();
+        else { setStores(rows => rows.filter(row => row.id !== currentStoreId)); setStoreDirectoryScope(dataScope); }
+        return;
       }
-    };
-    loadInitialData();
-  }, [isAuthReady, isAppReady]);
+      if (store.id === currentUser.storeId) identityRef.current.store = store;
+      setStores(keepIdentity([store], identityRef.current.store));
+    });
+    return () => { active = false; stop(); };
+  }, [isAppReady, isAuthReady, currentUser?.id, globalDirectoryVisible, directoryCompanyScope, directoryStoreScope, globalDirectoryVisible ? false : needsStoreDirectory]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady) return;
-    const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'stores')), setStores),
-      attachFirestoreListener(query(collection(db, 'roles')), setRoles),
-      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
+    if (!isAppReady || !isAuthReady || !currentUser) return;
+    if (!globalDirectoryVisible && !needsRoleDirectory) { setRoles(identityRef.current.role ? [identityRef.current.role] : []); return; }
+    const source = globalDirectoryVisible ? query(collection(db, 'roles')) : query(collection(db, 'roles'), where('companyId', '==', operationalCompanyId));
+    return attachFirestoreListener(source, rows => setRoles(keepIdentity(rows as Role[], identityRef.current.role)));
+  }, [isAppReady, isAuthReady, currentUser?.id, globalDirectoryVisible, directoryCompanyScope, globalDirectoryVisible ? false : needsRoleDirectory]);
+
+  useEffect(() => {
+    if (!isAppReady || !isAuthReady || !currentUser) return;
+    const source = globalDirectoryVisible ? query(collection(db, 'sellers'))
+      : needsCompanySellers ? query(collection(db, 'sellers'), where('companyId', '==', operationalCompanyId))
+      : query(collection(db, 'sellers'), where('storeId', '==', currentStoreId));
+    return attachFirestoreListener(source, rows => {
+      const scoped = globalDirectoryVisible ? rows as Seller[] : (rows as Seller[]).filter(seller => (!seller.companyId || seller.companyId === operationalCompanyId) && (needsCompanySellers || seller.storeId === currentStoreId));
+      setSellers(keepIdentity(scoped, identityRef.current.seller));
+    });
+  }, [isAppReady, isAuthReady, currentUser?.id, globalDirectoryVisible, directoryCompanyScope, sellerStoreScope, globalDirectoryVisible ? false : needsCompanySellers]);
+
+  useEffect(() => {
+    if (!isAppReady || !isAuthReady || !currentUser) return;
+    if (globalDirectoryVisible) return attachFirestoreListener(query(collection(db, 'companies')), setCompanies);
+    let active = true;
+    const stop = onSnapshot(nativeDoc(db, 'companies', operationalCompanyId), snapshot => {
+      if (active) setCompanies(snapshot.exists() ? [{ ...snapshot.data(), id: snapshot.id } as Company] : []);
+    });
+    return () => { active = false; stop(); };
+  }, [isAppReady, isAuthReady, currentUser?.id, globalDirectoryVisible, directoryCompanyScope]);
+
+  // A developer's identity and permissions remain attached to their original tenant.
+  useEffect(() => {
+    if (!currentUser || !isAuthReady) return;
+    let active = true;
+    const unsubs = [
+      onSnapshot(nativeDoc(db, 'sellers', currentUser.id), snapshot => {
+        if (!active) return;
+        if (!snapshot.exists()) { handleLogout(); return; }
+        const seller = { ...snapshot.data(), id: snapshot.id } as Seller;
+        identityRef.current.seller = { ...seller, companyId: seller.companyId || currentUser.companyId };
+        setSellers(rows => [...rows.filter(row => row.id !== seller.id), identityRef.current.seller!]);
+        if (seller.isDisabled || seller.storeId !== currentUser.storeId || (seller.companyId || currentUser.companyId) !== currentUser.companyId) { handleLogout(); return; }
+        if (seller.roleId !== currentUser.roleId) setCurrentUser(user => user ? { ...user, roleId: seller.roleId } : user);
+      }),
+      onSnapshot(nativeDoc(db, 'roles', currentUser.roleId), snapshot => {
+        if (!active) return;
+        const role = snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Role : undefined;
+        identityRef.current.role = role;
+        setRoles(rows => [...rows.filter(row => row.id !== currentUser.roleId), ...(role ? [role] : [])]);
+      }),
     ];
-    return () => unsubscribers.forEach(unsub => unsub());
-  }, [isAppReady, isAuthReady]);
-
-  useEffect(() => {
-    if (!isAppReady || !isAuthReady || currentUser) return;
-    const unsubscribe = attachFirestoreListener(query(collection(db, 'sellers')), setSellers);
-    return () => unsubscribe();
-  }, [isAppReady, isAuthReady, currentUser]);
+    return () => { active = false; unsubs.forEach(unsubscribe => unsubscribe()); };
+  }, [isAuthReady, currentUser?.id, currentUser?.roleId]);
 
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     let active = true;
     const rows = new Map<string, CeoDailyNote[]>();
     const queries = operationalCompanyId === DEFAULT_COMPANY_ID
-      ? [...visibleStoreIds].map(id => query(collection(db, 'daily_notes'), where('tienda', '==', id)))
+      ? (currentStoreId ? [currentStoreId] : []).map(id => query(collection(db, 'daily_notes'), where('tienda', '==', id)))
       : [query(collection(db, 'daily_notes'), where('companyId', '==', operationalCompanyId))];
     if (operationalCompanyId === DEFAULT_COMPANY_ID) queries.push(query(collection(db, 'daily_notes'), where('tienda', '==', 'all')));
     const unsubscribers = queries.map((q, index) => onSnapshot(q, snapshot => {
@@ -515,23 +576,12 @@ const App: React.FC = () => {
       setCeoNotes([...new Map([...rows.values()].flat().map(note => [note.id, note])).values()]);
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentStoreId]);
 
-  useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentUser) return;
-    const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'sellers')), setSellers)
-    ];
-    return () => unsubscribers.forEach(unsub => unsub());
-  }, [currentUser?.id, isAppReady, isAuthReady]);
-  
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     const companyId = operationalCompanyId;
-    // The original company also retains its historical untagged categories.
-    const categoryQuery = companyId === DEFAULT_COMPANY_ID
-      ? query(collection(db, 'categories'))
-      : query(collection(db, 'categories'), where('companyId', '==', companyId));
+    const categoryQuery = query(collection(db, 'categories'), where('companyId', '==', companyId));
     let active = true;
     const unsubscribe = onSnapshot(categoryQuery, snapshot => {
       if (!active) return;
@@ -545,8 +595,43 @@ const App: React.FC = () => {
     return () => { active = false; unsubscribe(); };
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
 
+  // Untagged original-company categories cannot be queried by a missing field.
+  // Read only IDs referenced by authorized active-store products, then validate
+  // ownership. Never download every company's category directory for compatibility.
+  const legacyCategoryRefKey = JSON.stringify(operationalCompanyId === DEFAULT_COMPANY_ID
+    ? [...new Set(inventory.filter(row => row.storeId === currentStoreId && (!row.companyId || row.companyId === operationalCompanyId)).map(row => row.categoryId).filter(Boolean))].sort()
+    : []);
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
+    let active = true;
+    setLegacyCategoryState({ scope: legacyCategoryScope, items: [] });
+    const ids: string[] = JSON.parse(legacyCategoryRefKey);
+    if (!currentUser || !isOperationalView || !ids.length) return;
+    const items: Category[] = [];
+    let next = 0;
+    const worker = async () => {
+      while (active && next < ids.length) {
+        const snapshot = await getDoc(nativeDoc(db, 'categories', ids[next++]));
+        if (!active) return;
+        if (!snapshot.exists()) continue;
+        const category = { ...snapshot.data(), id: snapshot.id } as Category;
+        try { assertTenantData('categories', category, { companyId: operationalCompanyId, storeIds: new Set(currentStoreId ? [currentStoreId] : []) }); }
+        catch { continue; }
+        items.push(category);
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker)).then(() => {
+      if (active) setLegacyCategoryState({ scope: legacyCategoryScope, items });
+    }).catch(error => {
+      if (!active) return;
+      active = false;
+      console.error('Error loading referenced categories:', error);
+      setLegacyCategoryState({ scope: legacyCategoryScope, items: [], error: 'No se pudieron cargar las categorías de esta sede.' });
+    });
+    return () => { active = false; };
+  }, [legacyCategoryRefKey, legacyCategoryScope, isOperationalView]);
+
+  useEffect(() => {
+    if (currentView !== View.INVENTORY_TRANSFER || !isAppReady || !isAuthReady || !currentUser) return;
     let active = true;
     const ids = [...visibleStoreIds];
     const rows = new Map<string, InventoryTransfer[]>();
@@ -558,32 +643,9 @@ const App: React.FC = () => {
       }));
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
+  }, [currentView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
 
-  useEffect(() => {
-    if (!isOperationalView || !isAdmin || !currentUser) return;
-
-    let active = true;
-    const storeIds: string[] = JSON.parse(companyStoreKey);
-    const unsubscribers = storeIds.map(storeId => {
-      const inventoryQuery = query(collection(db, 'inventory'), where('storeId', '==', storeId));
-      return onSnapshot(inventoryQuery, snapshot => {
-        if (!active) return;
-        const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
-        inventoryByStoreRef.current.set(storeId, storeInventory);
-
-        // This single session cache serves Dashboard, multisite search and POS.
-        // Switching stores therefore does not reconnect and reread the same catalog.
-        setGlobalInventoryForSearch(storeIds.flatMap(id => inventoryByStoreRef.current.get(id) || []));
-        if (currentStoreIdRef.current === storeId) setInventory(storeInventory);
-      }, error => console.error(`Error loading inventory for store ${storeId}:`, error));
-    });
-
-    return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAdmin, currentUser?.id, companyStoreKey, dataScope]);
-
-
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION);
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || (analyticsDemandScope === dataScope && [View.DASHBOARD, View.FINANCIAL_RECONCILIATION].includes(currentView)));
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
@@ -595,22 +657,99 @@ const App: React.FC = () => {
   useCompanyCollection('purchases', ceoStoreIds, dataScope, liveCeo, setCeoPurchases);
   useCompanyCollection('expenses', ceoStoreIds, dataScope, liveCeo, setCeoExpenses);
 
+  const requestedInventoryStoreKey = JSON.stringify((storeDirectorySnapshotScope !== dataScope ? [] : isGlobalMode || liveAnalytics ? [...visibleStoreIds] : liveCeo ? ceoStoreIds : currentView === View.PURCHASES ? purchaseSearchStoreIds : []).filter(id => visibleStoreIds.has(id)).sort());
   useEffect(() => {
-    if (!isGlobalMode || !isAppReady || !currentUser) {
-        if (globalInventoryForSearch.length > 0 && !isAdmin) setGlobalInventoryForSearch([]);
-        return;
+    const ids: string[] = JSON.parse(requestedInventoryStoreKey);
+    let active = true;
+    setGlobalInventoryForSearch([]);
+    if (!currentUser || !isAppReady || !isOperationalView || !ids.length) return;
+    setGlobalInventoryStatus({ scope: dataScope, loading: true, error: null });
+    const rows = new Map<string, Product[]>();
+    const publish = () => { if (active) setGlobalInventoryForSearch(ids.flatMap(id => rows.get(id) || [])); };
+    for (const id of ids) {
+      const cached = getCachedStoreRows('inventory', id, dataScope);
+      if (cached) rows.set(id, cached);
     }
-    // Multisede inventory is cached by the on-demand loader above. Store inventory
-    // continues real-time in the active operational view, avoiding a second global listener.
-  }, [isGlobalMode, isAppReady, currentUser, isAdmin, globalInventoryForSearch.length]);
-  
+    publish();
+    let next = 0;
+    let offlineResult = false;
+    const worker = async () => {
+      while (active && next < ids.length) {
+        const storeId = ids[next++];
+        const snapshot = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', storeId)));
+        if (!active) return;
+        const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(row => {
+          if (row.storeId !== storeId) return false;
+          try { assertTenantData('inventory', row, { companyId: operationalCompanyId, storeIds: new Set([storeId]) }); return true; } catch { return false; }
+        });
+        rows.set(storeId, items);
+        offlineResult ||= !!snapshot.metadata?.fromCache;
+        if (!snapshot.metadata?.fromCache) cacheStoreRows('inventory', storeId, dataScope, items);
+        publish();
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker)).then(() => {
+      if (active) setGlobalInventoryStatus({ scope: dataScope, loading: false, error: offlineResult ? 'Consulta sin conexión: los inventarios pueden estar desactualizados.' : null, updatedAt: offlineResult ? undefined : Date.now() });
+    }).catch(error => {
+      if (!active) return;
+      active = false; // stop queued requests and ignore in-flight results
+      console.error('Error loading requested inventories:', error);
+      setGlobalInventoryStatus({ scope: dataScope, loading: false, error: 'No se pudo completar la consulta multitienda. Vuelve a activar el modo para reintentar.' });
+    });
+    return () => { active = false; };
+  }, [requestedInventoryStoreKey, dataScope, isAppReady, isOperationalView, inventoryRequestRevision]);
+
   useEffect(() => {
     if (!isOperationalView || !currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
-    return subscribeStoreRows('incidents', currentStoreId, dataScope, rows => setIncidents(rows.filter(row => {
-      try { assertTenantData('incidents', row, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; }
-      catch { return false; }
-    })));
-  }, [isOperationalView, currentUser?.id, currentStoreId, dataScope, companyStoreKey]);
+    let active = true;
+    let generation = 0;
+    const pending = new Map<string, Promise<Store | undefined>>();
+    const loadReference = (id: string) => {
+      const cached = getCachedStoreRows('storeMetadata', id, dataScope)?.[0] as Store | undefined;
+      if (cached) return Promise.resolve(cached);
+      if (pending.has(id)) return pending.get(id)!;
+      // Both ID and tenant constrain the query: malformed foreign references
+      // must not cause another company's store document to be downloaded.
+      const request = getDocs(query(collection(db, 'stores'), where('companyId', '==', operationalCompanyId), where(documentId(), '==', id), limit(1))).then(snapshot => {
+        if (!active || !snapshot.docs.length) return;
+        const store = { ...snapshot.docs[0].data(), id: snapshot.docs[0].id } as Store;
+        if ((store.companyId || DEFAULT_COMPANY_ID) !== operationalCompanyId) return;
+        if (!snapshot.metadata?.fromCache) cacheStoreRows('storeMetadata', id, dataScope, [store]);
+        return store;
+      }).finally(() => pending.delete(id));
+      pending.set(id, request);
+      return request;
+    };
+    const stop = subscribeStoreRows('incidents', currentStoreId, dataScope, rows => {
+      const version = ++generation;
+      const resolve = async () => {
+        const known = knownStoreScopeRef.current.scope === dataScope ? knownStoreScopeRef.current.stores : [];
+        const ids = new Set<string>(known.map((store: Store) => store.id));
+        const missing = [...new Set<string>(rows.flatMap(row => ['fromStoreId', 'toStoreId', 'debtStoreId', 'physicalStoreId'].map(key => row[key]).filter(Boolean)))].filter(id => !ids.has(id));
+        const resolved: Store[] = [];
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
+          while (active && generation === version && next < missing.length) {
+            const store = await loadReference(missing[next++]);
+            if (store) resolved.push(store);
+          }
+        }));
+        if (!active || generation !== version || operationContextRef.current !== contextAtRender) return;
+        resolved.forEach(store => ids.add(store.id));
+        if (resolved.length) setStores(previous => [...new Map([...previous, ...resolved].map(store => [store.id, store])).values()]);
+        setIncidents(rows.filter(row => {
+          try { assertTenantData('incidents', row, { companyId: operationalCompanyId, storeIds: ids }); return true; } catch { return false; }
+        }));
+        setIncidentReferenceError({ scope: operationContext, message: '' });
+      };
+      void resolve().catch(error => {
+        if (!active || generation !== version || operationContextRef.current !== contextAtRender) return;
+        console.error('Error validating incident stores:', error);
+        setIncidentReferenceError({ scope: operationContext, message: 'No se pudieron verificar las sedes de las novedades. Vuelve a abrir el módulo para reintentar.' });
+      });
+    });
+    return () => { active = false; stop(); pending.clear(); };
+  }, [isOperationalView, currentUser?.id, currentStoreId, dataScope]);
 
   const hasDataAccess = !!currentUser && canAccessCurrentView;
   const canLoadStore = isOperationalView && isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
@@ -632,7 +771,7 @@ const App: React.FC = () => {
       .then(snapshot => {
         if (!active) return;
         const items = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
-        inventoryByStoreRef.current.set(currentStoreId, items);
+        cacheStoreRows('inventory', currentStoreId, dataScope, items);
         setInventory(items);
       })
       .catch(error => {
@@ -660,7 +799,12 @@ const App: React.FC = () => {
     });
   }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
-  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
+  const inventorySync = useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
+  // Active-store updates remain live even while a requested multisite snapshot is open.
+  const globalInventoryForView = useMemo(() => [
+    ...globalInventoryForSearch.filter(row => row.storeId !== currentStoreId && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)),
+    ...inventory.filter(row => row.storeId === currentStoreId && visibleStoreIds.has(row.storeId) && (!row.companyId || row.companyId === operationalCompanyId)),
+  ], [globalInventoryForSearch, inventory, currentStoreId, visibleStoreIds, operationalCompanyId]);
   useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
   useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
   useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
@@ -3134,84 +3278,102 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
-    const cleanId = (identifier || '').trim().toLowerCase();
-    const cleanPass = (passwordAttempt || '').trim();
-    const matches = sellers.filter(s =>
-      s && (
-        (s.username && s.username.trim().toLowerCase() === cleanId) ||
-        (s.name && s.name.trim().toLowerCase() === cleanId)
-      )
-    );
-    const seller = matches.find(s => (s.password || '').trim() === cleanPass);
+    if (loginPendingRef.current || !isAuthReady) return;
+    loginPendingRef.current = true;
+    try {
+      const rawId = (identifier || '').trim();
+      const cleanId = rawId.toLowerCase();
+      const cleanPass = (passwordAttempt || '').trim();
+      const candidates = new Map<string, Seller>();
+      // Existing documents have no normalized username index. Query exact variants
+      // without downloading the tenant directories or every user's password.
+      const variants = [...new Set([rawId, cleanId, toTitleCase(rawId)])];
+      const results = await Promise.all(['username', 'name'].flatMap(field => variants.map(value => getDocs(query(collection(db, 'sellers'), where(field, '==', value), limit(20))))));
+      if (results.some(result => result.docs.length >= 20)) throw new Error('Identificador ambiguo. Usa tu nombre de usuario registrado.');
+      results.forEach(result => result.docs.forEach(document => candidates.set(document.id, { ...document.data(), id: document.id } as Seller)));
+      const matches = [...candidates.values()].filter(s => ((s.username || '').trim().toLowerCase() === cleanId || (s.name || '').trim().toLowerCase() === cleanId) && (s.password || '').trim() === cleanPass);
+      if (matches.length > 1) throw new Error('Identificador ambiguo. Contacta al administrador.');
+      const seller = matches[0];
 
-    if (seller) {
-      if (seller.isDisabled) {
-        alert('Este usuario se encuentra desactivado. Contacta al administrador.');
-        return;
-      }
-
-      const sellerStore = stores.find(s => s.id === seller.storeId);
-      const resolvedCompanyId = seller.companyId || sellerStore?.companyId || DEFAULT_COMPANY_ID;
-
-      if (!sellerStore || (sellerStore.companyId || DEFAULT_COMPANY_ID) !== resolvedCompanyId) { alert('La empresa del usuario no coincide con su sede. Contacta al administrador.'); return; }
-      // Compatibility bridge: legacy users continue to work, but every successful
-      // login now repairs/persists the tenant identity needed for the secure-auth migration.
-      if (!seller.companyId || seller.companyId !== resolvedCompanyId) {
-        try {
-          await nativeUpdateDoc(doc(db, 'sellers', seller.id), { companyId: resolvedCompanyId });
-        } catch (error) {
-          console.error('Could not persist seller companyId:', error);
+      if (seller) {
+        if (seller.isDisabled) {
+          alert('Este usuario se encuentra desactivado. Contacta al administrador.');
+          return;
         }
+
+        const storeSnapshot = await getDoc(nativeDoc(db, 'stores', seller.storeId));
+        const sellerStore = storeSnapshot.exists() ? { ...storeSnapshot.data(), id: storeSnapshot.id } as Store : undefined;
+        const resolvedCompanyId = seller.companyId || sellerStore?.companyId || DEFAULT_COMPANY_ID;
+
+        if (!sellerStore || (sellerStore.companyId || DEFAULT_COMPANY_ID) !== resolvedCompanyId) { alert('La empresa del usuario no coincide con su sede. Contacta al administrador.'); return; }
+        const [roleSnapshot, companySnapshot] = await Promise.all([
+          getDoc(nativeDoc(db, 'roles', seller.roleId)), getDoc(nativeDoc(db, 'companies', resolvedCompanyId))
+        ]);
+        const sellerRole = roleSnapshot.exists() ? { ...roleSnapshot.data(), id: roleSnapshot.id } as Role : undefined;
+        const permissions = tenantPermissions({ ...seller, companyId: resolvedCompanyId }, sellerRole ? [sellerRole] : [], [sellerStore!], companySnapshot.exists() ? companySnapshot.data().allowedViews : undefined);
+        if (!isPlatformOwner(seller) && !permissions.length) throw new Error('No tienes un rol válido para esta empresa. Contacta al administrador.');
+        clearStoreCache();
+        identityRef.current = { store: sellerStore, role: sellerRole, seller: { ...seller, companyId: resolvedCompanyId } };
+        setStores([sellerStore!]); setRoles(sellerRole ? [sellerRole] : []); setSellers([seller]);
+        setCompanies(companySnapshot.exists() ? [{ ...companySnapshot.data(), id: companySnapshot.id } as Company] : []);
+        const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
+        setCurrentUser(sessionUser);
+        setActiveCompanyId(resolvedCompanyId);
+        localStorage.setItem('activeCompanyId', resolvedCompanyId);
+        selectStore(seller.storeId);
+
+        setCurrentView(isPlatformOwner(seller) || permissions.includes(View.POS) ? View.POS : (permissions[0] || View.DASHBOARD));
+
+        const newLoginRecord: Omit<LoginRecord, 'id'> = {
+          sellerId: seller.id,
+          sellerName: seller.name,
+          date: new Date().toISOString(),
+          storeId: seller.storeId,
+          companyId: resolvedCompanyId
+        };
+        // Audit logging must not delay the usable POS or hide a failed write.
+        void nativeAddDoc(collection(db, 'loginHistory'), newLoginRecord).catch(error => console.error('No se pudo registrar el acceso:', error));
+      } else {
+        alert('Usuario o contraseña incorrecta. Escribe el usuario o nombre tal como está registrado.');
       }
-
-      const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
-      setCurrentUser(sessionUser);
-      setActiveCompanyId(resolvedCompanyId);
-      localStorage.setItem('activeCompanyId', resolvedCompanyId);
-      selectStore(seller.storeId);
-
-      const sellerRole = roles.find(role => role.id === seller.roleId);
-      if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
-      else setCurrentView(View.DASHBOARD);
-
-      const newLoginRecord: Omit<LoginRecord, 'id'> = {
-        sellerId: seller.id,
-        sellerName: seller.name,
-        date: new Date().toISOString(),
-        storeId: seller.storeId,
-        companyId: resolvedCompanyId
-      };
-      await nativeAddDoc(collection(db, 'loginHistory'), newLoginRecord);
-    } else {
-      alert('Usuario o contraseña incorrecta.');
-    }
+    } catch (error) {
+      console.error('Error al iniciar sesión:', error);
+      alert(error instanceof Error ? error.message : 'No se pudo iniciar sesión. Intenta de nuevo.');
+    } finally { loginPendingRef.current = false; }
   };
   
-  const handleLogout = () => { currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { currentStoreIdRef.current = null; clearStoreCache(); identityRef.current = {}; setStores([]); setRoles([]); setSellers([]); setCompanies([]); setCurrentUser(null); setCurrentStoreId(null); setStoreDirectoryScope(''); setStoreDirectorySnapshotScope(''); setAnalyticsDemandScope(''); setPurchaseSearchStoreIds([]); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? incidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
+      {canLoadStore && (inventorySync.syncing || inventorySync.error) && <div role="status" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{inventorySync.error || 'Sincronizando inventario de la tienda activa…'}</div>}
+      {globalInventoryStatus.scope === dataScope && (isGlobalMode || liveAnalytics || liveCeo || currentView === View.PURCHASES) && (globalInventoryStatus.loading || globalInventoryStatus.error) && <div role="status" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{globalInventoryStatus.error || 'Sincronizando inventarios solicitados…'}</div>}
+      {globalInventoryStatus.scope === dataScope && globalInventoryStatus.updatedAt && !globalInventoryStatus.loading && !globalInventoryStatus.error && (isGlobalMode || liveAnalytics || liveCeo || (currentView === View.PURCHASES && purchaseSearchStoreIds.length > 0)) && <div className="px-4 py-2 text-sm bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        Inventario de otras sedes consultado a las {new Date(globalInventoryStatus.updatedAt).toLocaleTimeString('es-CO')}. <button type="button" className="underline font-semibold" onClick={() => setInventoryRequestRevision(value => value + 1)}>Actualizar consulta</button>
+      </div>}
+      {legacyCategoryState.scope === legacyCategoryScope && legacyCategoryState.error && <div role="alert" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{legacyCategoryState.error}</div>}
+      {incidentReferenceError.scope === operationContext && incidentReferenceError.message && <div role="alert" className="px-4 py-2 text-sm bg-amber-100 text-amber-900">{incidentReferenceError.message}</div>}
+      <Header onRequestStores={() => { if (isDeveloper || isAdmin) setStoreDirectoryScope(dataScope); }} currentView={currentView} setCurrentView={navigate} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => { if (isDeveloper || isAdmin) { setStoreDirectoryScope(dataScope); setIsGlobalMode(!isGlobalMode); } }} incidents={dataContextReady ? incidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <ViewFiltersProvider key={`filters:${dataScope}`}>
       <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
         {!canAccessCurrentView && <div role="status" className="p-6 text-center">Esperando los permisos de acceso. Si continúa, consulta al administrador.</div>}
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary>
 
         <Suspense fallback={<div className="p-6 text-center" role="status">Cargando módulo…</div>}>
-        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
-        {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
+        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={liveAnalytics ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways} allIncidents={liveAnalytics ? allIncidents.filter(i => visibleStoreIds.has(i.storeId)) : incidents} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={navigate} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={liveAnalytics ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales} allInventory={liveAnalytics ? globalInventoryForView : inventory} allStockTakes={stockTakes} />}
+        {currentView === View.POS && <PosView onRequestStores={() => setStoreDirectoryScope(dataScope)} inventory={isGlobalMode ? globalInventoryForView : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={navigate} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
+        {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForView : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={navigate} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView readOnly={recordReadOnly} layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
+        {currentView === View.PURCHASES && <PurchasesView onRequestStoreInventory={setPurchaseSearchStoreIds} purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForView} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={visibleSellers.filter(user => isOwner || user.id !== PLATFORM_OWNER_USER_ID && user.platformRole !== 'developer')} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={false} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} storeId={currentStoreId || ''} sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={visibleRoles} />}
         {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
-        {currentView === View.SETTINGS && <SettingsView key={dataScope} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
+        {currentView === View.SETTINGS && <SettingsView key={dataScope} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForView : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
         {currentView === View.INCIDENTS && <IncidentsView readOnly={recordReadOnly} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} activeStoreId={currentStoreId || ''} incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && canLoadStore && (
@@ -3235,7 +3397,7 @@ const App: React.FC = () => {
             chatMessages={accountingChatScope === `${dataScope}:${currentStoreId}` ? accountingChatHistory : []}
             onUpdateChatMessages={handleUpdateAccountingChat}
             onToggleFinancialRecordAccounting={handleToggleFinancialRecordAccounting}
-            onNavigate={setCurrentView}
+            onNavigate={navigate}
           />
         )}
         {currentView === View.FINANCIAL_RECONCILIATION && (
@@ -3248,7 +3410,7 @@ const App: React.FC = () => {
                 expenses={expenses}
                 incidents={isAdmin ? allIncidents.filter(i => visibleStoreIds.has(i.storeId)) : incidents}
                 currentUser={currentUser!}
-                onNavigate={setCurrentView}
+                onNavigate={navigate}
                 onAddExpense={handleAddExpense}
                 onUpdateStore={handleUpdateStore}
             />
@@ -3280,7 +3442,7 @@ const App: React.FC = () => {
             onSelectStore={setCeoSelectedStoreId}
             sales={ceoSales}
             layaways={ceoLayaways}
-            inventory={isAdmin ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory}
+            inventory={isAdmin ? globalInventoryForView : inventory}
             purchases={ceoPurchases}
             expenses={ceoExpenses}
             stores={visibleStores}
@@ -3288,7 +3450,7 @@ const App: React.FC = () => {
             ceoNotes={ceoNotes}
             currentUser={currentUser}
             onAddCeoNote={handleSaveCeoNote}
-            onNavigate={setCurrentView}
+            onNavigate={navigate}
             categories={categories}
           />
         )}
@@ -3332,7 +3494,7 @@ const App: React.FC = () => {
       </main>
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
-      <ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
+      <ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForView : inventory} stores={visibleStores} categories={categories} />
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {currentUser && showRecaudoReceipt && lastRecaudo && lastRecaudo.storeId === currentStoreId && (!lastRecaudo.companyId || lastRecaudo.companyId === operationalCompanyId) && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (
@@ -3366,7 +3528,7 @@ const App: React.FC = () => {
         }}
         incidents={incidents}
         layaways={layaways}
-        onNavigate={setCurrentView}
+        onNavigate={navigate}
       />
       </React.Fragment>}
     </div>

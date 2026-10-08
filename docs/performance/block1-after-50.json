@@ -1,0 +1,944 @@
+{
+  "storeCount": 50,
+  "beforeLogin": {
+    "listeners": {},
+    "total": 0,
+    "queries": [],
+    "inventoryConnections": 0
+  },
+  "afterLogin": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "stores": 1,
+      "sellers": 2,
+      "companies": 1,
+      "roles": 1,
+      "daily_notes": 1,
+      "categories": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 1
+  },
+  "pos": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "stores": 1,
+      "sellers": 2,
+      "companies": 1,
+      "roles": 1,
+      "daily_notes": 1,
+      "categories": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 1
+  },
+  "secondStore": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 2
+  },
+  "revisit": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      }
+    ],
+    "inventoryConnections": 3
+  },
+  "global": {
+    "listeners": {
+      "platformDevelopers": 1,
+      "companies": 1,
+      "sellers": 2,
+      "roles": 1,
+      "categories": 1,
+      "stores": 1,
+      "daily_notes": 1,
+      "incidents": 1,
+      "inventory": 1,
+      "sales": 1,
+      "purchases": 1,
+      "layaways": 1,
+      "giftVouchers": 1,
+      "customers": 1,
+      "heldCarts": 1
+    },
+    "total": 16,
+    "queries": [
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "username",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "sellers",
+        "filters": [
+          {
+            "field": "name",
+            "op": "==",
+            "value": "Admin"
+          },
+          {
+            "limit": 20
+          }
+        ]
+      },
+      {
+        "collection": "stores",
+        "id": "A0"
+      },
+      {
+        "collection": "roles",
+        "id": "admin"
+      },
+      {
+        "collection": "companies",
+        "id": "A"
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A0"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A1"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A10"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A11"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A12"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A13"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A14"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A15"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A16"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A17"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A18"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A19"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A2"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A20"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A21"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A22"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A23"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A24"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A25"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A26"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A27"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A28"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A29"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A3"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A30"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A31"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A32"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A33"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A34"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A35"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A36"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A37"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A38"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A39"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A4"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A40"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A41"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A42"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A43"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A44"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A45"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A46"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A47"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A48"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A49"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A5"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A6"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A7"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A8"
+          }
+        ]
+      },
+      {
+        "collection": "inventory",
+        "filters": [
+          {
+            "field": "storeId",
+            "op": "==",
+            "value": "A9"
+          }
+        ]
+      }
+    ],
+    "inventoryConnections": 3
+  }
+}

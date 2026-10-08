@@ -14,6 +14,7 @@ import { formatCOP, normalizeText } from '../constants';
 import EditProductModal from './EditProductModal';
 
 interface PosViewProps {
+  onRequestStores?: () => void;
   inventory: Product[];
   categories: Category[];
   sellers: Seller[];
@@ -664,7 +665,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 <span>Registro CEO</span>
                             </button>
                             <button 
-                                onClick={() => setIsIncidentModalOpen(true)} 
+                                onClick={() => { props.onRequestStores?.(); setIsIncidentModalOpen(true); }}
                                 className="bg-orange-50/70 hover:bg-orange-500 hover:text-white dark:bg-slate-800/50 dark:hover:bg-orange-650 text-orange-600 dark:text-orange-400 font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider transition-all border border-orange-200/50 dark:border-slate-700 text-center"
                                 type="button"
                             >

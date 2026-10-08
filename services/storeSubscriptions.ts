@@ -1,29 +1,37 @@
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-
-const subscriptions = new Map<string, { listeners: Set<(rows: any[]) => void>; rows?: any[]; unsubscribe: () => void; active: boolean }>();
-export function subscribeStoreRows(name: string, storeId: string, scope: string, apply: (rows: any[]) => void) {
-  const key = JSON.stringify([name, storeId, scope]);
+import { cacheStoreRows, getCachedStoreRows, storeCacheKey, validateStoreRows } from './storeCache';
+export type StoreSyncState = { syncing: boolean; error: string | null };
+type Consumer = { apply: (rows: any[]) => void; status?: (state: StoreSyncState) => void };
+const subscriptions = new Map<string, { listeners: Set<Consumer>; rows?: any[]; state: StoreSyncState; unsubscribe: () => void; active: boolean }>();
+export function subscribeStoreRows(name: string, storeId: string, scope: string, apply: (rows: any[]) => void, status?: Consumer['status']) {
+  const key = storeCacheKey(name, storeId, scope);
   let entry = subscriptions.get(key);
   if (!entry) {
-    entry = { listeners: new Set(), unsubscribe: () => {}, active: true };
+    entry = { listeners: new Set(), rows: getCachedStoreRows(name, storeId, scope), state: { syncing: true, error: null }, unsubscribe: () => {}, active: true };
     subscriptions.set(key, entry);
     const current = entry;
-    const companyId = scope.slice(scope.indexOf(':') + 1);
-    current.unsubscribe = onSnapshot(query(collection(db, name), where('storeId', '==', storeId)), snapshot => {
+    current.unsubscribe = onSnapshot(query(collection(db, name), where('storeId', '==', storeId)), { includeMetadataChanges: true }, snapshot => {
       if (!current.active) return;
-      current.rows = snapshot.docs.map(document => ({ ...document.data(), id: document.id }))
-        .filter((row: any) => !row.companyId || row.companyId === companyId);
-      current.listeners.forEach(listener => listener(current.rows!));
-    }, error => console.error(`Error loading ${name}:`, error));
+      current.rows = validateStoreRows(name, storeId, scope, snapshot.docs.map(document => ({ ...document.data(), id: document.id })));
+      current.state = { syncing: !!snapshot.metadata?.fromCache, error: null };
+      // A local SDK snapshot does not extend the lifetime of verified server data.
+      if (!current.state.syncing) cacheStoreRows(name, storeId, scope, current.rows);
+      current.listeners.forEach(listener => { listener.apply(current.rows!); listener.status?.(current.state); });
+    }, error => {
+      if (!current.active) return;
+      console.error(`Error loading ${name}:`, error);
+      current.state = { syncing: false, error: 'No se pudo sincronizar. Los datos pueden estar desactualizados.' };
+      current.listeners.forEach(listener => listener.status?.(current.state));
+    });
   }
-  entry.listeners.add(apply);
+  const consumer = { apply, status };
+  entry.listeners.add(consumer);
   if (entry.rows) apply(entry.rows);
+  status?.(entry.state);
   const current = entry;
   return () => {
-    current.listeners.delete(apply);
-    if (!current.listeners.size) {
-      current.active = false; current.unsubscribe(); subscriptions.delete(key);
-    }
+    current.listeners.delete(consumer);
+    if (!current.listeners.size) { current.active = false; current.unsubscribe(); subscriptions.delete(key); }
   };
 }

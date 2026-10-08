@@ -12,6 +12,7 @@ interface PurchasesViewProps {
   purchases: Purchase[];
   inventory: Product[];
   allInventoryForSearch?: Product[];
+  onRequestStoreInventory?: (storeIds: string[]) => void;
   categories: Category[];
   stores: Store[];
   currentStoreId: string;
@@ -46,7 +47,7 @@ const toYYYYMMDD = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
+const PurchasesView: React.FC<PurchasesViewProps> = ({ onRequestStoreInventory, purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
   const [productSearch, setProductSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeStoreIds, setActiveStoreIds] = useState<string[]>([currentStoreId]);
@@ -131,8 +132,11 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   };
 
   const handleToggleActiveStore = (id: string) => {
-      setActiveStoreIds(prev => prev.includes(id) ? (prev.length > 1 ? prev.filter(sid => sid !== id) : prev) : [...prev, id]);
+      const next = activeStoreIds.includes(id) ? (activeStoreIds.length > 1 ? activeStoreIds.filter(sid => sid !== id) : activeStoreIds) : [...activeStoreIds, id];
+      setActiveStoreIds(next);
+      onRequestStoreInventory?.(next.filter(sid => sid !== currentStoreId));
   };
+  useEffect(() => { setActiveStoreIds([currentStoreId]); onRequestStoreInventory?.([]); }, [currentStoreId, onRequestStoreInventory]);
 
   const handleProductSelect = (product: Product, targetStoreId: string | 'ALL') => {
     const prodName = (product.name || '').toLowerCase();
