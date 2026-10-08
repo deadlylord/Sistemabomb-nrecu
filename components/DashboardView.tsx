@@ -1216,25 +1216,25 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const scrollToSection = (id: string) => { const element = document.getElementById(id); if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto min-w-0 space-y-4 sm:space-y-8 overflow-x-clip">
       {/* Top Control Panel */}
-      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg border border-accent/20">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+      <div className="bg-white dark:bg-secondary p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center min-w-0">
+                <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-full sm:w-auto">
                     <button onClick={setToday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Hoy</button>
                     <button onClick={setYesterday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Ayer</button>
                     <button onClick={setLast7Days} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">7 Días</button>
                     <button onClick={setThisMonth} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Mes</button>
                 </div>
-                <div className="flex items-center gap-1 bg-accent/10 p-1 rounded-lg">
+                <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-accent/10 p-1 rounded-xl w-full sm:w-auto">
                     <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><DollarIcon className="w-3 h-3"/> Pagos</button>
                     <button onClick={() => scrollToSection('price-analysis')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><PriceIcon className="w-3 h-3"/> Precios</button>
                     <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={onOpenVerification} className="relative px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={onOpenVerification} className="relative px-3 py-2 text-xs sm:text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
                         <ClipboardListIcon className="w-4 h-4" />
                         <span>Verificar Inventario</span>
                     </button>
@@ -1251,7 +1251,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     )}
                 </div>
             </div>
-            <div className="flex items-center gap-2"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>
+            <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 min-w-0 w-full lg:w-auto rounded-xl bg-gray-50 dark:bg-gray-800/50 p-1.5"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none min-w-0 w-full sm:w-32 text-center"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>
         </div>
       </div>
 
