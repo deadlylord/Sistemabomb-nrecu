@@ -211,7 +211,7 @@ const Header: React.FC<HeaderProps> = ({
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
       >
-        <div className={`p-2.5 rounded-lg transition-colors ${isActive ? 'bg-accent text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+        <div className={`p-2.5 rounded-lg transition-colors ${isActive ? 'bg-accent/10 text-accent' : 'bg-slate-100 dark:bg-slate-800 text-accent'}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-grow min-w-0">
@@ -322,7 +322,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* CENTER: Navigation (Desktop & Mobile) */}
           <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
              {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-1.5 w-full max-w-[300px] sm:max-w-[380px]">
+             <div className="lg:hidden flex items-center justify-center gap-1 w-full max-w-[320px] sm:max-w-[380px]">
                 {filteredGroups.map((group, idx) => {
                   const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
                   const isCurrentActive = currentGroupIndex === idx;
@@ -334,12 +334,12 @@ const Header: React.FC<HeaderProps> = ({
                       onClick={() => handleMobileGroupClick(idx)}
                       className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border active:scale-95
                         ${isActiveGroup 
-                          ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
+                          ? 'bg-accent/10 text-accent border-accent/30 shadow-sm' 
                           : isCurrentActive
                             ? 'bg-accent/5 text-accent border-accent/20'
                             : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
                     >
-                      <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-white' : isCurrentActive ? 'text-accent' : 'text-slate-400'}`} />
+                      <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-accent' : isCurrentActive ? 'text-accent' : 'text-slate-600 dark:text-slate-200'}`} />
                       <span className="text-[9px] font-semibold tracking-tight mt-1">
                         {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : group.id === 'finance' ? 'Finanzas' : 'Admin'}
                       </span>
@@ -477,17 +477,17 @@ const Header: React.FC<HeaderProps> = ({
                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                          }`}
                      >
-                       <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}`}>
+                       <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/15 text-white' : 'bg-transparent text-accent group-hover:bg-accent/10'}`}>
                          <Icon className="w-4 h-4" />
                        </div>
                        {!isDesktopSidebarCollapsed && <div className="flex-grow min-w-0">
                          <p className="text-xs font-semibold leading-none">{item.label}</p>
-                         <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                         <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-accent/80 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
                            {item.description}
                          </p>
                        </div>}
                        {item.view === View.INCIDENTS && pendingCount > 0 && (
-                           <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-white text-accent animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
+                           <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-accent text-white animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
                                {pendingCount}
                            </span>
                        )}
