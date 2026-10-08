@@ -487,13 +487,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady) return;
+    // Before login, only stores are needed to validate a seller's assigned store.
+    // Roles and companies are operational metadata: defer their listeners until login.
     const unsubscribers = [
       attachFirestoreListener(query(collection(db, 'stores')), setStores),
-      attachFirestoreListener(query(collection(db, 'roles')), setRoles),
-      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
     ];
+    if (currentUser) {
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'roles')), setRoles));
+      unsubscribers.push(attachFirestoreListener(query(collection(db, 'companies')), setCompanies));
+    }
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [isAppReady, isAuthReady]);
+  }, [isAppReady, isAuthReady, !!currentUser]);
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || currentUser) return;
@@ -3170,7 +3174,16 @@ const App: React.FC = () => {
       localStorage.setItem('activeCompanyId', resolvedCompanyId);
       selectStore(seller.storeId);
 
-      const sellerRole = roles.find(role => role.id === seller.roleId);
+      // Roles are not subscribed before login; fetch only this seller's role.
+      let sellerRole = roles.find(role => role.id === seller.roleId);
+      if (!sellerRole && seller.roleId) {
+        try {
+          const roleSnapshot = await getDoc(doc(db, 'roles', seller.roleId));
+          if (roleSnapshot.exists()) sellerRole = { ...roleSnapshot.data(), id: roleSnapshot.id } as Role;
+        } catch (error) {
+          console.error('Could not fetch login role:', error);
+        }
+      }
       if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
 
