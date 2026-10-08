@@ -61,14 +61,26 @@
 </script>
 </head>
 <body class="bg-slate-100 text-gray-900 dark:bg-slate-950 dark:text-text-light font-sans transition-colors duration-300">
-  <div id="startup-status" role="status" aria-live="polite" style="display:none;position:fixed;inset:0;z-index:9999;background:#0f172a;color:#e2e8f0;align-items:center;justify-content:center;font:500 14px system-ui,sans-serif;text-align:center;padding:24px">Conectando con Vestika…</div>
+  <style>
+    @keyframes vestika-loader-spin { to { transform: rotate(360deg); } }
+    @keyframes vestika-loader-pulse { 0%,100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1); } }
+    #startup-status { display:none; position:fixed; inset:0; z-index:9999; background:#0f172a; color:#e2e8f0; align-items:center; justify-content:center; font:500 14px system-ui,sans-serif; text-align:center; padding:24px; }
+    .vestika-loading-ring { width:104px; height:104px; border-radius:50%; border:3px solid #334155; border-top-color:#38bdf8; border-right-color:#a855f7; animation:vestika-loader-spin 1.15s linear infinite; position:absolute; inset:0; }
+    .vestika-loading-dots { display:flex; gap:7px; justify-content:center; margin-top:24px; }
+    .vestika-loading-dots i { width:7px; height:7px; border-radius:50%; background:#a855f7; animation:vestika-loader-pulse 1.3s ease-in-out infinite; }
+    .vestika-loading-dots i:first-child { background:#38bdf8; }
+    .vestika-loading-dots i:last-child { background:#ec4899; animation-delay:.4s; }
+    .vestika-loading-dots i:nth-child(2) { animation-delay:.2s; }
+    @media (prefers-reduced-motion: reduce) { .vestika-loading-ring,.vestika-loading-dots i { animation:none; } }
+  </style>
+  <div id="startup-status" role="status" aria-label="Cargando Vestika" aria-live="polite"><div><div style="width:104px;height:104px;position:relative;margin:auto;display:flex;align-items:center;justify-content:center"><div class="vestika-loading-ring"></div><img src="/assets/vestika.png" alt="Vestika" style="width:72px;height:72px;object-fit:contain;border-radius:16px" /></div><div class="vestika-loading-dots"><i></i><i></i><i></i></div></div></div>
   <script src="/startup.js"></script>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const registerServiceWorker = () => {
-        const swUrl = new URL('/sw.js?v=1.1.140-staging', window.location.origin);
+        const swUrl = new URL('/sw.js?v=1.1.141-staging', window.location.origin);
         navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' }).then(registration => {
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
         }, err => {
