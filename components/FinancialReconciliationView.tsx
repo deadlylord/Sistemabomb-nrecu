@@ -900,23 +900,19 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [filteredRecords]);
 
   const recordsWithBalance = useMemo(() => {
-    const sorted = [...filteredRecords].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
-    let runningBalance = initialBalanceValue;
-    
-    // Para mostrar el saldo dinámico, necesitamos calcularlo basado en el historial completo de la cuenta
-    // no solo en los filtrados, o de lo contrario el saldo "salta" visualmente.
-    const accountHistory = records
-        .filter(r => r.accountType === activeTab)
-        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.id.localeCompare(b.id));
-
+    // records is already sorted newest-first. Reverse once for the running balance,
+    // avoiding two date-parsing sorts every time a reconciliation entry is saved.
     const balanceMap = new Map<string, number>();
     let rolling = initialBalanceValue;
-    accountHistory.forEach(r => {
-        if (r.affectsCashBalance !== false) rolling += r.amount;
-        balanceMap.set(r.id, rolling);
-    });
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i];
+      if (record.accountType !== activeTab) continue;
+      if (record.affectsCashBalance !== false) rolling += record.amount;
+      balanceMap.set(record.id, rolling);
+    }
 
-    return filteredRecords.map(r => ({ ...r, saldo: balanceMap.get(r.id) || 0 })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
+    // filteredRecords retains the same newest-first order as records.
+    return filteredRecords.map(record => ({ ...record, saldo: balanceMap.get(record.id) ?? 0 }));
   }, [filteredRecords, records, activeTab, initialBalanceValue]);
 
   // Estadísticas estilo Excel para movimientos seleccionados
