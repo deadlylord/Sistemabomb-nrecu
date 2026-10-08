@@ -2,6 +2,7 @@
  * Seed seguro para Firebase STAGING de Vestika.
  * Requiere variables VITE_FIREBASE_* de staging.
  * --second-store preserva datos existentes y valida stagingadmin sin pedir contraseña.
+ * --developer-user crea una identidad separada con STAGING_DEVELOPER_PASSWORD.
  * El modo inicial sin flags requiere STAGING_SEED_USERNAME / STAGING_SEED_PASSWORD.
  * Usa SDK cliente: respeta las reglas de Firestore y no contiene credenciales ni service accounts.
  */
@@ -9,6 +10,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import { assertStagingConfig, seedSecondStore, SECOND_STORE } from './stagingSecondStore.mjs';
+import { seedStagingDeveloper, DEVELOPER_USERNAME } from './stagingDeveloper.mjs';
 
 const REQUIRED_PROJECT_ID = 'vestika-staging';
 const config = {
@@ -28,13 +30,19 @@ if (config.authDomain !== 'vestika-staging.firebaseapp.com') {
 assertStagingConfig(config);
 
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--second-store') || args.length > 1) throw new Error('Uso: node scripts/seed-staging.mjs [--second-store]');
-if (args.includes('--second-store')) {
+if (args.some(arg => !['--second-store', '--developer-user'].includes(arg)) || args.length > 1) throw new Error('Uso: node scripts/seed-staging.mjs [--second-store | --developer-user]');
+if (args.includes('--developer-user') && (!process.env.STAGING_DEVELOPER_PASSWORD || process.env.STAGING_DEVELOPER_PASSWORD.length < 12)) {
+  throw new Error('Define STAGING_DEVELOPER_PASSWORD con al menos 12 caracteres');
+}
+if (args.length) {
   const app = initializeApp(config);
   try {
     await signInAnonymously(getAuth(app));
-    const created = await seedSecondStore(getFirestore(app), { doc, runTransaction });
-    console.log(`Seed staging: ${SECOND_STORE}, ${created} documentos nuevos; datos existentes intactos.`);
+    const developer = args.includes('--developer-user');
+    const created = developer
+      ? await seedStagingDeveloper(getFirestore(app), { doc, runTransaction }, config, process.env.STAGING_DEVELOPER_PASSWORD)
+      : await seedSecondStore(getFirestore(app), { doc, runTransaction });
+    console.log(`Seed staging: ${developer ? DEVELOPER_USERNAME : SECOND_STORE}, ${created} documentos nuevos; datos existentes intactos.`);
   } finally { await deleteApp(app); }
 } else {
 
