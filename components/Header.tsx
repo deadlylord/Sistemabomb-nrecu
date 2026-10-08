@@ -260,23 +260,8 @@ const Header: React.FC<HeaderProps> = ({
           
           {/* LEFT: Logo & Brand (Desktop) / Sede Selector (Both) */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <div className="hidden lg:flex items-center gap-2">
-              <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20 overflow-hidden">
-                {currentCompany?.logoUrl || currentStore?.logo ? (
-                  <img 
-                    src={currentCompany?.logoUrl || currentStore?.logo || ''} 
-                    alt="Logo" 
-                    className="w-full h-full object-cover" 
-                  />
-                ) : (
-                  <SparklesIcon className="w-6 h-6" />
-                )}
-              </div>
-              <div className="hidden xl:block">
-                <h1 className="text-lg font-semibold tracking-tight leading-none dark:text-white">
-                  <span aria-label="Vestika" style={{ color: '#ffffff' }}><span>Vest</span><span style={{ backgroundImage: 'linear-gradient(110deg, #38bdf8 0%, #a855f7 48%, #ec4899 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextStroke: '0.3px rgba(240, 246, 255, 0.8)', filter: 'drop-shadow(0 0 2px rgba(210, 228, 255, 0.7)) drop-shadow(0 0 5px rgba(216, 192, 245, 0.35))' }}>ik</span><span>a</span></span>
-                </h1>
-              </div>
+            <div className="hidden lg:flex items-center justify-center flex-shrink-0" title="Vestika">
+              <img src="/assets/vestika.png" alt="Vestika" className="h-11 w-11 rounded-xl object-contain drop-shadow-sm" />
             </div>
 
             <div className="flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
