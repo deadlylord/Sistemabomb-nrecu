@@ -50,7 +50,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Usuario"
             required
-            disabled={!isAppReady}
             autoComplete="username"
           />
         </div>
@@ -65,7 +64,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Contraseña"
             required
-            disabled={!isAppReady}
             autoComplete="current-password"
           />
           <button
