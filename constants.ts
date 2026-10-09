@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.147', date: '2026-10-08', description: 'Staging: IA centralizada en CEO Center', isCurrent: true, changes: ['Se retira el panel IA del Resumen del negocio.', 'La pestaña de IA de CEO Center permanece disponible para análisis y consultas.'] },
+  { version: '1.1.148', date: '2026-10-08', description: 'Staging: filtros compactos en historial', isCurrent: true, changes: ['Fechas del historial en una fila compacta.', 'Filtro de vendedores junto a los demás filtros de ventas.', 'Menos espacio desperdiciado en móvil y escritorio.'] },
+  { version: '1.1.147', date: '2026-10-08', description: 'Staging: IA centralizada en CEO Center', isCurrent: false, changes: ['Se retira el panel IA del Resumen del negocio.', 'La pestaña de IA de CEO Center permanece disponible para análisis y consultas.'] },
   { version: '1.1.146', date: '2026-10-08', description: 'Staging: diagnóstico de tiempos de ingreso', isCurrent: false, changes: ['Medición de fases de login en consola.', 'El historial de acceso ya no bloquea la navegación.'] },
   { version: '1.1.145', date: '2026-10-08', description: 'Staging: animación de ingreso multicolor', isCurrent: false, changes: ['Botón de ingreso con logo giratorio y puntos en azul cielo, violeta y rosa, sin texto de verificación.'] },
   { version: '1.1.144', date: '2026-10-08', description: 'Staging: accesos móviles y progreso de ingreso', isCurrent: false, changes: ['Accesos de modo multisede y libro de caja en el menú del perfil móvil según permisos.', 'Animación y bloqueo de pulsaciones repetidas al ingresar.'] },
