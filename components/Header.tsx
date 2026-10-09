@@ -48,6 +48,17 @@ interface NavGroup {
     items: NavItem[];
 }
 
+const ScanNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16M8 9v6m3-6v6m3-6v6m3-6v6"/></svg>;
+const WalletNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="15" rx="2"/><path d="M3 10h18M7 6V4a1 1 0 0 1 1-1h10"/><circle cx="17" cy="15" r="1"/></svg>;
+const GiftNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="9" width="18" height="12" rx="1"/><path d="M12 9v12M3 13h18M12 9C7 9 5 7 7 5s5 0 5 4Zm0 0c5 0 7-2 5-4s-5 0-5 4Z"/></svg>;
+const BoxNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4m-9 4v10"/></svg>;
+const CoinsNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7c0-2 4-3 8-3s8 1 8 3-4 3-8 3-8-1-8-3Zm0 0v5c0 2 4 3 8 3m8-8v5c0 2-4 3-8 3m-8-3v5c0 2 4 3 8 3s8-1 8-3v-5"/></svg>;
+const LandmarkNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-6 9 6H3Zm2 3v7m5-7v7m4-7v7m5-7v7M3 21h18"/></svg>;
+const SlidersNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>;
+const CheckNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 12l2 2 4-4"/></svg>;
+const TeamNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5"/></svg>;
+const ChartNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }: { className?: string }) => <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V4M4 20h16M8 16v-5m5 5V7m5 9v-8"/></svg>;
+
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
   currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
@@ -67,50 +78,34 @@ const Header: React.FC<HeaderProps> = ({
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const groups: NavGroup[] = useMemo(() => [
-    {
-        id: 'ops',
-        label: 'Operaciones de Venta',
-        icon: ShoppingCartIcon,
-        color: 'text-blue-500',
-        items: [
-            { view: View.POS, label: 'Punto de Venta', shortLabel: 'POS', description: 'Facturación rápida', icon: StoreIcon },
-            { view: View.LAYAWAY, label: 'Apartados y Abonos', shortLabel: 'Apartados', description: 'Gestionar pagos', icon: ReceiptIcon },
-            { view: View.INCIDENTS, label: 'Novedades y Cambios', shortLabel: 'Novedades', description: 'Garantías y devoluciones', icon: AlertTriangleIcon },
-            { view: View.GIFT_VOUCHERS, label: 'Bonos de Regalo', shortLabel: 'Bonos', description: 'Administrar bonos', icon: TagIcon },
-            { view: View.CUSTOMERS, label: 'Gestión de Clientes', shortLabel: 'Clientes', description: 'Directorio de clientes', icon: ContactIcon },
-        ]
-    },
-    {
-        id: 'inv',
-        label: 'Control de Inventarios',
-        icon: PackageIcon,
-        color: 'text-orange-500',
-        items: [
-            { view: View.INVENTORY, label: 'Stock de Productos', shortLabel: 'Stock', description: 'Consulta de existencias', icon: InventoryIcon },
-            { view: View.PURCHASES, label: 'Registro de Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
-            { view: View.INVENTORY_TRANSFER, label: 'Traslados Internos', shortLabel: 'Traslados', description: 'Entre sedes', icon: SwapIcon },
-            { view: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', shortLabel: 'Auditorías', description: 'Control físico', icon: ClipboardListIcon },
-            { view: View.TAG_SCANNING, label: 'Prendas sin Etiqueta', shortLabel: 'Etiquetas', description: 'Escanear y detectar prendas sin etiqueta', icon: TagIcon },
-        ]
-    },
-    {
-        id: 'admin',
-        label: 'Administración y Finanzas',
-        icon: DashboardIcon,
-        color: 'text-purple-500',
-        items: [
-            { view: View.DEVELOPER_CENTER, label: 'Developer Center ⚙️', shortLabel: 'Dev Center', description: 'Gestión de empresas y licencias', icon: SettingsIcon },
-            { view: View.CEO_CENTER, label: 'CEO Center 💎', shortLabel: 'CEO Center', description: 'Control unificado de las 3 tiendas', icon: SparklesIcon },
-            { view: View.DASHBOARD, label: 'Resumen de Negocio', shortLabel: 'Dashboard', description: 'Métricas de ventas y rendimiento', icon: DashboardIcon },
-            { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de Caja y Conciliación', shortLabel: 'Libro Caja', description: 'Registro de movimientos diarios', icon: DollarIcon },
-            { view: View.ACCOUNTING, label: 'Contabilidad e Informes', shortLabel: 'Contabilidad', description: 'Informes PyG y Auditoría IA', icon: ChartPieIcon },
-            { view: View.PAYROLL, label: 'Cálculo de Nómina', shortLabel: 'Nómina', description: 'Liquidación de personal', icon: DollarIcon },
-            { view: View.SELLERS, label: 'Gestión de Equipo', shortLabel: 'Vendedores', description: 'Personal y usuarios', icon: UsersIcon },
-            { view: View.STORES, label: 'Sedes y Almacenes', shortLabel: 'Sedes', description: 'Tiendas físicas', icon: BuildingStorefrontIcon },
-            { view: View.ROLE_MANAGER, label: 'Jerarquía y Permisos', shortLabel: 'Seguridad', description: 'Roles y accesos', icon: ShieldCheckIcon },
-            { view: View.SETTINGS, label: 'Configuración General', shortLabel: 'Ajustes', description: 'Opciones del sistema', icon: SettingsIcon },
-        ]
-    }
+    { id: 'ops', label: 'Ventas', icon: ShoppingCartIcon, color: 'text-accent', items: [
+      { view: View.POS, label: 'Punto de venta', shortLabel: 'POS', description: 'Registrar ventas', icon: ScanNavIcon },
+      { view: View.LAYAWAY, label: 'Apartados', shortLabel: 'Apartados', description: 'Abonos y reservas', icon: WalletNavIcon },
+      { view: View.INCIDENTS, label: 'Novedades', shortLabel: 'Novedades', description: 'Cambios y garantías', icon: SwapIcon },
+      { view: View.CUSTOMERS, label: 'Clientes', shortLabel: 'Clientes', description: 'Directorio de clientes', icon: TeamNavIcon },
+      { view: View.GIFT_VOUCHERS, label: 'Bonos', shortLabel: 'Bonos', description: 'Bonos de regalo', icon: GiftNavIcon },
+    ] },
+    { id: 'inv', label: 'Inventario', icon: BoxNavIcon, color: 'text-accent', items: [
+      { view: View.INVENTORY, label: 'Stock', shortLabel: 'Stock', description: 'Existencias y productos', icon: BoxNavIcon },
+      { view: View.PURCHASES, label: 'Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
+      { view: View.INVENTORY_TRANSFER, label: 'Traslados', shortLabel: 'Traslados', description: 'Movimientos entre sedes', icon: SwapIcon },
+      { view: View.STOCK_TAKE_HISTORY, label: 'Conteos', shortLabel: 'Conteos', description: 'Auditorías físicas', icon: CheckNavIcon },
+      { view: View.TAG_SCANNING, label: 'Etiquetas', shortLabel: 'Etiquetas', description: 'Verificación de prendas', icon: TagIcon },
+    ] },
+    { id: 'finance', label: 'Finanzas', icon: ChartNavIcon, color: 'text-accent', items: [
+      { view: View.CEO_CENTER, label: 'CEO Center', shortLabel: 'CEO', description: 'Vista ejecutiva multisede', icon: SparklesIcon },
+      { view: View.DASHBOARD, label: 'Resumen', shortLabel: 'Resumen', description: 'Indicadores y ventas', icon: DashboardIcon },
+      { view: View.FINANCIAL_RECONCILIATION, label: 'Libro de caja', shortLabel: 'Caja', description: 'Caja y conciliación', icon: WalletNavIcon },
+      { view: View.ACCOUNTING, label: 'Contabilidad', shortLabel: 'Informes', description: 'Informes financieros', icon: ChartNavIcon },
+      { view: View.PAYROLL, label: 'Nómina', shortLabel: 'Nómina', description: 'Pagos al equipo', icon: CoinsNavIcon },
+    ] },
+    { id: 'admin', label: 'Administración', icon: SlidersNavIcon, color: 'text-accent', items: [
+      { view: View.SELLERS, label: 'Equipo', shortLabel: 'Equipo', description: 'Personal y usuarios', icon: TeamNavIcon },
+      { view: View.STORES, label: 'Sedes', shortLabel: 'Sedes', description: 'Tiendas y sucursales', icon: BuildingStorefrontIcon },
+      { view: View.ROLE_MANAGER, label: 'Permisos', shortLabel: 'Permisos', description: 'Roles y accesos', icon: ShieldCheckIcon },
+      { view: View.SETTINGS, label: 'Ajustes', shortLabel: 'Ajustes', description: 'Configuración general', icon: SlidersNavIcon },
+      { view: View.DEVELOPER_CENTER, label: 'Developer Center', shortLabel: 'Developer', description: 'Gestión de plataforma', icon: SettingsIcon },
+    ] },
   ], []);
 
   const userRole = roles.find(r => r.id === currentUser.roleId);
@@ -153,7 +148,7 @@ const Header: React.FC<HeaderProps> = ({
     setIsUserDropdownOpen(false);
     setIsMobileMenuOpen(false);
     setPreviewGroupIndex(-1);
-  }, [currentUser.id, currentCompany?.id, currentStore?.id, currentView]);
+  }, [currentUser.id, currentCompany?.id, currentStore?.id]);
 
   useEffect(() => {
     if (isMobileMenuOpen && previewGroupIndex === -1) {
@@ -186,12 +181,9 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   const handleMobileGroupClick = (index: number) => {
-    if (previewGroupIndex === index && isMobileMenuOpen) {
-      setIsMobileMenuOpen(false);
-    } else {
-      setPreviewGroupIndex(index);
-      setIsMobileMenuOpen(true);
-    }
+    // Mantener el panel montado al pasar entre categorías: solo cambia el contenido.
+    setPreviewGroupIndex(index);
+    setIsMobileMenuOpen(true);
   };
 
   const pendingCount = useMemo(() => {
@@ -210,13 +202,13 @@ const Header: React.FC<HeaderProps> = ({
           setCurrentView(item.view);
           setIsMobileMenuOpen(false);
         }}
-        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left
+        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left active:scale-[0.98] border
           ${isActive 
-            ? 'bg-accent/10 text-accent shadow-sm' 
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+            ? 'bg-gradient-to-r from-accent/20 via-accent/10 to-transparent text-accent shadow-md border-accent/30 ring-1 ring-accent/10 translate-x-0.5' 
+            : 'border-transparent text-slate-600 dark:text-slate-400 hover:bg-gradient-to-r hover:from-slate-100 hover:to-transparent dark:hover:from-slate-800 hover:text-slate-900 dark:hover:text-white hover:shadow-sm'
           }`}
       >
-        <div className={`p-2.5 rounded-lg transition-colors ${isActive ? 'bg-accent text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+        <div className={`p-2.5 rounded-lg transition-all duration-200 ${isActive ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 text-accent group-hover:bg-accent/10 group-hover:scale-105'}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-grow min-w-0">
@@ -265,26 +257,11 @@ const Header: React.FC<HeaderProps> = ({
           
           {/* LEFT: Logo & Brand (Desktop) / Sede Selector (Both) */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <div className="hidden lg:flex items-center gap-2">
-              <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-accent/20 overflow-hidden">
-                {currentCompany?.logoUrl || currentStore?.logo ? (
-                  <img 
-                    src={currentCompany?.logoUrl || currentStore?.logo || ''} 
-                    alt="Logo" 
-                    className="w-full h-full object-cover" 
-                  />
-                ) : (
-                  <SparklesIcon className="w-6 h-6" />
-                )}
-              </div>
-              <div className="hidden xl:block">
-                <h1 className="text-lg font-semibold tracking-tight leading-none dark:text-white">
-                  <span aria-label="Vestika" style={{ color: '#ffffff' }}><span>Vest</span><span style={{ backgroundImage: 'linear-gradient(110deg, #38bdf8 0%, #a855f7 48%, #ec4899 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', WebkitTextStroke: '0.3px rgba(240, 246, 255, 0.8)', filter: 'drop-shadow(0 0 2px rgba(210, 228, 255, 0.7)) drop-shadow(0 0 5px rgba(216, 192, 245, 0.35))' }}>ik</span><span>a</span></span>
-                </h1>
-              </div>
+            <div className="flex items-center justify-center flex-shrink-0" title="Vestika">
+              <img src="/assets/vestika.png" alt="Vestika" className="h-8 w-8 lg:h-11 lg:w-11 rounded-xl object-contain drop-shadow-sm" />
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
+            <div className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
               <button 
                 aria-label="Cambiar sede"
                 aria-expanded={canSwitchStore && isStoreDropdownOpen}
@@ -294,14 +271,14 @@ const Header: React.FC<HeaderProps> = ({
                 style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
               >
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
-                <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[130px] sm:max-w-[200px] lg:max-w-none">
                   {currentStore?.name || 'Sin sedes'}
                 </span>
                 {canSwitchStore && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
               </button>
 
               {isStoreDropdownOpen && canSwitchStore && (
-                <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 lg:left-2 lg:translate-x-0 mt-2 w-[min(90vw,320px)] lg:w-56 max-h-[65dvh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
                   <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                   {stores.map(store => (
                     <button
@@ -324,56 +301,8 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* CENTER: Navigation (Desktop & Mobile) */}
-          <div className="flex-grow flex items-center justify-start overflow-x-auto lg:scrollbar-default scrollbar-hide py-1 px-1 sm:px-2 min-w-0" ref={groupMenuRef}>
-             {/* Mobile Navigation (Three Main Buttons) */}
-             <div className="lg:hidden flex items-center justify-center gap-1.5 w-full max-w-[230px] sm:max-w-[280px]">
-                {filteredGroups.map((group, idx) => {
-                  const isActiveGroup = (previewGroupIndex === -1 ? currentGroupIndex : previewGroupIndex) === idx && isMobileMenuOpen;
-                  const isCurrentActive = currentGroupIndex === idx;
-                  const GroupIcon = group.icon;
-                  
-                  return (
-                    <button 
-                      key={group.id}
-                      onClick={() => handleMobileGroupClick(idx)}
-                      className={`flex-1 flex flex-col items-center justify-center h-12 rounded-2xl transition-all duration-300 border-2 active:scale-95
-                        ${isActiveGroup 
-                          ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20' 
-                          : isCurrentActive
-                            ? 'bg-accent/5 text-accent border-accent/20'
-                            : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
-                    >
-                      <GroupIcon className={`w-5 h-5 ${isActiveGroup ? 'text-white' : isCurrentActive ? 'text-accent' : 'text-slate-400'}`} />
-                      <span className="text-[8px] font-black uppercase tracking-tighter mt-1">
-                        {group.id === 'ops' ? 'Ventas' : group.id === 'inv' ? 'Stock' : 'Admin'}
-                      </span>
-                    </button>
-                  );
-                })}
-
-                {/* Dropdown for Mobile Submenus */}
-                {isMobileMenuOpen && displayedGroup && (
-                  <div className="absolute top-[68px] left-2 right-2 w-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[94vw] max-w-sm bg-white dark:bg-slate-900 border-2 border-accent/20 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-in-top p-2 z-[200]">
-                    <div className="flex items-center justify-between px-4 py-3 bg-accent/5 rounded-2xl mb-2">
-                        <div className="flex items-center gap-2">
-                            <displayedGroup.icon className="w-5 h-5 text-accent" />
-                            <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">{displayedGroup.label}</span>
-                        </div>
-                        <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 rounded-full bg-accent/10 text-accent">
-                            <CrossIcon className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-1 gap-1 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
-                       {displayedGroup.items.map(item => (
-                         <NavButton key={item.view} item={item} isMobile />
-                       ))}
-                    </div>
-                  </div>
-                )}
-             </div>
-          </div>
-
+          {/* Navigation groups are in the mobile bottom bar, not the narrow header. */}
+          <div className="hidden lg:flex flex-grow" />
           {/* RIGHT: User Actions & System Info */}
           <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
              <button 
@@ -387,7 +316,7 @@ const Header: React.FC<HeaderProps> = ({
                 <button 
                   onClick={onToggleGlobalMode}
                   title={isGlobalMode ? "Modo Multisede Activo" : "Activar Modo Multisede"}
-                  className={`p-2 rounded-xl transition-all border-2 active:scale-90
+                  className={`hidden lg:inline-flex p-2 rounded-xl transition-all border-2 active:scale-90
                     ${isGlobalMode 
                       ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20' 
                       : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400 hover:text-accent hover:border-accent'}`}
@@ -396,27 +325,21 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
              )}
 
-             {pendingCount > 0 && (
-                <button 
-                  onClick={onOpenBriefing}
-                  className="relative p-2 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-100 dark:border-orange-800 text-orange-600 hover:scale-105 active:scale-95 transition-all"
-                >
-                  <AlertTriangleIcon className="w-5 h-5" />
-                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-[10px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm">
-                    {pendingCount}
-                  </span>
-                </button>
-             )}
-
              <div className="relative" ref={userMenuRef}>
-                <button 
-                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 border-transparent hover:border-accent transition-all active:scale-90"
-                >
-                  <div className="text-accent font-black text-sm">
-                    {currentUser.name.charAt(0)}
-                  </div>
-                </button>
+                <div className="relative">
+                  <button
+                    aria-label={pendingCount > 0 ? `Menú de usuario, ${pendingCount} novedades pendientes` : 'Menú de usuario'}
+                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 transition-all active:scale-90 ${pendingCount > 0 ? 'border-orange-400 shadow-[0_0_0_3px_rgba(251,146,60,0.16)]' : 'border-transparent hover:border-accent'}`}
+                  >
+                    <span className="text-accent font-black text-sm">{currentUser.name.charAt(0)}</span>
+                  </button>
+                  {pendingCount > 0 && (
+                    <span aria-hidden="true" className="pointer-events-none absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 bg-red-600 text-[10px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-pulse">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
+                </div>
 
                 {isUserDropdownOpen && (
                   <div className="absolute top-14 right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in z-[200]">
@@ -425,7 +348,26 @@ const Header: React.FC<HeaderProps> = ({
                         <p className="text-sm font-black text-gray-900 dark:text-white truncate">{currentUser.name}</p>
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
+                    {pendingCount > 0 && (
+                      <button type="button" onClick={() => { setIsUserDropdownOpen(false); onOpenBriefing(); }} className="w-full flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-xs font-bold text-left border-b border-orange-100 dark:border-orange-900">
+                        <AlertTriangleIcon className="w-4 h-4 shrink-0" />
+                        <span>Ver {pendingCount} {pendingCount === 1 ? 'novedad pendiente' : 'novedades pendientes'}</span>
+                      </button>
+                    )}
                     <div className="p-2 space-y-1">
+                      {isAdmin && (
+                        <button type="button" onClick={() => { onToggleGlobalMode(); setIsUserDropdownOpen(false); }} className="lg:hidden flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <BuildingStorefrontIcon className="w-5 h-5 text-accent" />
+                          <span>{isGlobalMode ? 'Desactivar modo multisede' : 'Activar modo multisede'}</span>
+                        </button>
+                      )}
+                      {isAdmin && userPermissions.includes(View.FINANCIAL_RECONCILIATION) && (
+                        <button type="button" onClick={() => { setCurrentView(View.FINANCIAL_RECONCILIATION); setIsUserDropdownOpen(false); }} className="lg:hidden flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <WalletNavIcon className="w-5 h-5 text-accent" />
+                          <span>Libro de caja</span>
+                        </button>
+                      )}
+
                       {isDeveloper && (
                         <button 
                           onClick={() => { setCurrentView(View.DEVELOPER_CENTER); setIsUserDropdownOpen(false); }} 
@@ -452,8 +394,27 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
+      {/* Mobile bottom navigation: tenant permissions are inherited from filteredGroups. */}
+      <nav aria-label="Navegación principal" className="lg:hidden fixed bottom-0 inset-x-0 z-[110] border-t border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+        <div className="flex gap-1 px-2 pt-2 pb-1 overflow-x-auto overscroll-x-contain scrollbar-thin">
+          {filteredGroups.map((group, idx) => {
+            const GroupIcon = group.icon;
+            const active = isMobileMenuOpen ? previewGroupIndex === idx : currentGroupIndex === idx;
+            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`flex-1 min-w-[72px] flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors duration-150 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+              <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full px-0.5">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
+            </button>;
+          })}
+        </div>
+        {isMobileMenuOpen && displayedGroup && (
+          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-accent/20 bg-gradient-to-b from-white via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 shadow-[0_12px_36px_rgba(0,0,0,0.22)] p-3 max-h-[min(65vh,calc(100dvh-180px))] overflow-y-auto overscroll-contain animate-fade-in">
+            <div className="flex justify-between items-center px-2 pb-2 border-b dark:border-slate-700"><strong className="text-sm">{displayedGroup.label}</strong><button type="button" aria-label="Cerrar menú" onClick={() => setIsMobileMenuOpen(false)}><CrossIcon className="w-5 h-5" /></button></div>
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 mt-2">{displayedGroup.items.map(item => <NavButton key={item.view} item={item} isMobile />)}</div>
+          </div>
+        )}
+      </nav>
+
       {/* Responsive Desktop Sidebar */}
-      <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-64 px-3'}`}>
+      <aside className={`hidden lg:flex flex-col fixed left-0 top-16 bottom-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 overflow-y-auto transition-all duration-300 py-3 space-y-4 scrollbar-thin ${isDesktopSidebarCollapsed ? 'w-20 px-2' : 'w-60 px-3'}`}>
         <button onClick={toggleDesktopSidebar} className="sticky top-0 z-10 self-end mb-1 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-accent transition-all" title={isDesktopSidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}>
           {isDesktopSidebarCollapsed ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronLeftIcon className="w-4 h-4" />}
         </button>
@@ -464,7 +425,7 @@ const Header: React.FC<HeaderProps> = ({
               {/* Group Title */}
               <div className="flex items-center gap-2 px-3 py-1 text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 pb-1 mb-2">
                 <GroupIcon className="w-3.5 h-3.5 text-accent opacity-80" />
-                {!isDesktopSidebarCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">{group.label}</span>}
+                {!isDesktopSidebarCollapsed && <span className="text-[10px] font-semibold uppercase tracking-wide">{group.label}</span>}
               </div>
               
               {/* Group Items */}
@@ -478,21 +439,21 @@ const Header: React.FC<HeaderProps> = ({
                        onClick={() => setCurrentView(item.view)}
                        className={`flex items-center ${isDesktopSidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} w-full py-2 rounded-xl transition-all duration-200 group text-left relative
                          ${isActive 
-                           ? 'bg-accent text-white shadow-md shadow-accent/15 font-bold scale-[1.01]' 
+                           ? 'bg-accent text-white shadow-md shadow-accent/15 font-semibold' 
                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                          }`}
                      >
-                       <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}`}>
+                       <div className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-white/15 text-white' : 'bg-transparent text-accent group-hover:bg-accent/10'}`}>
                          <Icon className="w-4 h-4" />
                        </div>
                        {!isDesktopSidebarCollapsed && <div className="flex-grow min-w-0">
-                         <p className="text-xs font-black leading-none">{item.label}</p>
-                         <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>
+                         <p className="text-xs font-semibold leading-none">{item.label}</p>
+                         <p className={`text-[10px] leading-tight mt-0.5 truncate ${isActive ? 'text-accent/80 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
                            {item.description}
                          </p>
                        </div>}
                        {item.view === View.INCIDENTS && pendingCount > 0 && (
-                           <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-white text-accent animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
+                           <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-black ${isActive ? 'bg-accent text-white animate-none' : 'bg-red-500 text-white animate-pulse'}`}>
                                {pendingCount}
                            </span>
                        )}

@@ -1,3 +1,4 @@
+import VestikaLoader from './VestikaLoader';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
@@ -233,7 +234,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [startDate, setStartDate] = useViewFilter('DashboardView:startDate', toYYYYMMDD(today));
   const [endDate, setEndDate] = useViewFilter('DashboardView:endDate', toYYYYMMDD(today));
   const [paymentMethodFilter, setPaymentMethodFilter] = useViewFilter<string[]>('DashboardView:paymentMethodFilter', []);
-  const [isPaymentsReportVisible, setIsPaymentsReportVisible] = useState(true);
   const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(false);
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
   const [isUnitsSoldExpanded, setIsUnitsSoldExpanded] = useState(false);
@@ -466,6 +466,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     const metricsForCurrentStore = useMemo(() => {
         let totalDirectSalesValue = 0;
+        let salesCollected = 0;
         let totalUnitsSold = 0;
         let totalGiftUnits = 0;
         let totalProfit = 0;
@@ -529,6 +530,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     
                     if (p.method !== PaymentMethod.Bono) {
                         totalDirectSalesValue += amount;
+                        salesCollected += amount;
                         uniqueInvoicesInRange.add(t.id);
                         
                         // Profit & COGS (Payment based)
@@ -559,12 +561,19 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             .map(([sellerName, units]) => ({ sellerName, units: Number(units.toFixed(2)) }))
             .sort((a, b) => b.units - a.units);
 
-        const averageTicketSize = uniqueInvoicesInRange.size > 0 ? totalDirectSalesValue / uniqueInvoicesInRange.size : 0;
+        const transactionCount = uniqueInvoicesInRange.size;
+        const averageTicketSize = transactionCount > 0 ? salesCollected / transactionCount : 0;
+        const unitsPerTransaction = transactionCount > 0 ? totalUnitsSold / transactionCount : 0;
+        const grossMarginPercent = salesCollected > 0 ? (salesCollected - totalCogs) / salesCollected * 100 : 0;
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
         const netProfit = totalProfit - totalExpenses;
 
         return { 
-            totalUnitsSold: Math.round(totalUnitsSold), 
+            totalUnitsSold: Math.round(totalUnitsSold),
+            salesCollected,
+            transactionCount,
+            unitsPerTransaction,
+            grossMarginPercent, 
             totalGiftUnits: Math.round(totalGiftUnits),
             totalProfit, 
             averageTicketSize, 
@@ -1216,25 +1225,48 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const scrollToSection = (id: string) => { const element = document.getElementById(id); if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto min-w-0 space-y-4 sm:space-y-8 overflow-x-clip">
+      {/* Mobile compact date controls and shortcuts, directly above bottom navigation. */}
+      <div className="lg:hidden fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[95] bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 shadow-lg px-2 py-1.5 space-y-1">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap pb-0.5">
+          <button onClick={setToday} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-200 text-xs font-bold">Hoy</button>
+
+          <button onClick={setLast7Days} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Semana</button>
+          <button onClick={setThisMonth} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Mes</button>
+          
+          <input aria-label="Fecha desde" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <span className="text-xs text-slate-400">–</span>
+          <input aria-label="Fecha hasta" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <div className="ml-auto flex shrink-0 items-center gap-1 rounded-xl border border-accent/20 bg-accent/10 p-0.5 shadow-sm"><button aria-label="Día anterior" onClick={handlePreviousDay} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"><ChevronLeftIcon className="w-4 h-4" /></button><button aria-label="Día siguiente" onClick={handleNextDay} disabled={isNextDayDisabled} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 disabled:opacity-40"><ChevronRightIcon className="w-4 h-4" /></button></div>
+          
+        </div>
+        <div className="flex items-center justify-between gap-1 overflow-x-auto whitespace-nowrap">
+          <button onClick={() => scrollToSection('payment-report')} className="px-2 py-1 text-[11px] font-semibold text-accent">Pagos</button>
+          <button onClick={() => scrollToSection('price-analysis')} className="px-2 py-1 text-[11px] font-semibold text-accent">Precios</button>
+          <button onClick={() => scrollToSection('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
+          <button onClick={() => scrollToSection('sales-chart')} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
+          <button onClick={onOpenVerification} className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">Inventario</button>
+          {isAdmin && latestStockTakeInconsistency && <button onClick={() => onNavigate(View.STOCK_TAKE_HISTORY)} className="px-1 py-1 text-[11px] font-bold text-red-600">Descuadre</button>}
+        </div>
+      </div>
       {/* Top Control Panel */}
-      <div className="bg-white dark:bg-secondary p-4 rounded-xl shadow-lg border border-accent/20">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+      <div className="hidden lg:block bg-white dark:bg-secondary p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-center lg:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center min-w-0">
+                <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-full sm:w-auto">
                     <button onClick={setToday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Hoy</button>
-                    <button onClick={setYesterday} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Ayer</button>
+
                     <button onClick={setLast7Days} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">7 Días</button>
                     <button onClick={setThisMonth} className="px-3 py-1 text-sm hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300">Mes</button>
                 </div>
-                <div className="flex items-center gap-1 bg-accent/10 p-1 rounded-lg">
+                <div className="grid grid-cols-4 sm:flex items-center gap-1 bg-accent/10 p-1 rounded-xl w-full sm:w-auto">
                     <button onClick={() => scrollToSection('payment-report')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><DollarIcon className="w-3 h-3"/> Pagos</button>
                     <button onClick={() => scrollToSection('price-analysis')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><PriceIcon className="w-3 h-3"/> Precios</button>
                     <button onClick={() => scrollToSection('sales-history')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ReceiptIcon className="w-3 h-3"/> Historial</button>
                     <button onClick={() => scrollToSection('sales-chart')} className="px-3 py-1 text-sm hover:bg-accent/20 rounded-md transition-colors text-accent font-medium flex items-center gap-1"><ChartBarIcon className="w-3 h-3"/> Gráficos</button>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={onOpenVerification} className="relative px-4 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={onOpenVerification} className="relative px-3 py-2 text-xs sm:text-sm bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-md shadow-blue-600/20">
                         <ClipboardListIcon className="w-4 h-4" />
                         <span>Verificar Inventario</span>
                     </button>
@@ -1251,266 +1283,32 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     )}
                 </div>
             </div>
-            <div className="flex items-center gap-2"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>
+            <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 min-w-0 w-full lg:w-auto rounded-xl bg-gray-50 dark:bg-gray-800/50 p-1.5"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none min-w-0 w-full sm:w-32 text-center"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>
         </div>
       </div>
 
-      {/* AI Insights Widget */}
-      <div className="w-full transition-all duration-300 ease-in-out">
-             <div className="bg-white dark:bg-secondary rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden relative">
-                 <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-accent via-purple-500 to-blue-500"></div>
-                 <div onClick={() => setIsAIExpanded(!isAIExpanded)} className="p-2 px-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex justify-between items-center">
-                     <div className="flex items-center gap-2"><SparklesIcon className="w-4 h-4 text-accent" /><h3 className="font-bold text-gray-800 dark:text-text-light text-sm">IA POS <span className="hidden sm:inline text-gray-400 font-normal">- Asistente Inteligente</span></h3></div>
-                     <div className="flex items-center gap-3">{aiInsights && !isAIExpanded && <span className="text-[10px] text-gray-400 animate-fade-in">{aiInsights.period}</span>}<span className="text-[10px] px-2 py-0.5 bg-accent/10 text-accent rounded-full font-bold uppercase tracking-wider">BETA</span><button className="text-gray-400 hover:text-accent transition-colors"><ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isAIExpanded ? 'rotate-180' : ''}`} /></button></div>
-                 </div>
-                 {isAIExpanded && (
-                 <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-                    <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
-                        <button onClick={() => setActiveAITab('insights')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'insights' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}><PackageIcon className="w-3 h-3" /> Inventario</button>
-                        <button onClick={() => setActiveAITab('forecast')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'forecast' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}><ChartBarIcon className="w-3 h-3" /> Proyección</button>
-                        <button onClick={() => setActiveAITab('clients')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'clients' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}><UsersIcon className="w-3 h-3" /> Clientes</button>
-                        <button onClick={() => setActiveAITab('query')} className={`flex-1 min-w-[120px] py-2 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${activeAITab === 'query' ? 'bg-white dark:bg-gray-800 text-accent border-b-2 border-accent' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'}`}><SparklesIcon className="w-3 h-3" /> Consultar</button>
-                    </div>
-                    <div className="p-3 flex flex-col md:flex-row gap-3 min-h-[120px]">
-                    {activeAITab === 'insights' ? (
-                        <>
-                            <div className="md:w-1/2 space-y-2 overflow-y-auto max-h-[180px] pr-1">
-                            {aiInsights ? (
-                                <>
-                                    {aiInsights.highVelocity.length > 0 && (
-                                        <div className="space-y-1">
-                                            <p className="font-black text-orange-600 dark:text-orange-400 text-[10px] uppercase tracking-widest flex items-center gap-1"><SparklesIcon className="w-3 h-3 animate-pulse" /> Movimiento Rápido</p>
-                                            {aiInsights.highVelocity.map((item: any) => (
-                                                <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
-                                                    <span className={`truncate ${item.urgency === 'critical' ? 'font-black text-red-600' : 'font-bold'}`}>{item.name} {item.isSoldOut && '(AGOTADO)'}</span>
-                                                    <span className="text-[10px] font-bold bg-orange-100 dark:bg-orange-900/40 px-1 rounded">{item.unitsPerDay.toFixed(1)} uds/día</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {aiInsights.restock.length > 0 && (
-                                        <div className="space-y-1 mt-2">
-                                            <p className="font-bold text-red-600 dark:text-red-400 text-[10px] uppercase tracking-wide">⚠️ Alertas Stock</p>
-                                            {aiInsights.restock.slice(0, 4).map((item: any) => (
-                                                <button key={item.id} onClick={() => setActiveInsightId(item.id)} className={`w-full text-left p-1.5 rounded border text-xs transition-colors flex justify-between items-center ${activeInsightId === item.id ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
-                                                    <span className="truncate font-medium">{item.name}</span>
-                                                    <span className="text-gray-500 whitespace-nowrap">{item.stock === 0 ? 'SIN STOCK' : `Quedan: ${item.stock}`}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </>
-                            ) : <p className="text-xs text-gray-400">Cargando...</p>}
-                            </div>
-                            <div className="md:w-1/2 bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-100 dark:border-gray-700 flex flex-col justify-center relative min-h-[150px]">
-                                {!activeInsightId ? <div className="text-center text-gray-400 text-xs"><SparklesIcon className="w-8 h-8 mx-auto mb-2 opacity-20" /><p>Selecciona un ítem.</p></div> : (
-                                    (() => {
-                                        const highVelItem = aiInsights?.highVelocity.find(i => i.id === activeInsightId);
-                                        const restockItem = aiInsights?.restock.find(i => i.id === activeInsightId);
-                                        const stagnantItem = aiInsights?.stagnant.find(i => i.id === activeInsightId);
-                                        if (highVelItem) return (
-                                            <div className="animate-fade-in text-sm">
-                                                <h4 className={`font-black mb-1 flex items-center gap-1 ${highVelItem.isSoldOut ? 'text-red-600' : 'text-orange-600'}`}>{highVelItem.isSoldOut ? '🚨 OPORTUNIDAD PERDIDA' : '⚡ ALTA VELOCIDAD'}</h4>
-                                                <p className="text-gray-700 dark:text-gray-300 text-xs leading-tight mb-2">
-                                                    {highVelItem.isSoldOut 
-                                                      ? `Este producto promediaba ${highVelItem.unitsPerDay.toFixed(1)} uds/día. ¡Llévalo de vuelta a stock para no perder más ventas!` 
-                                                      : `Este ítem se mueve a ${highVelItem.unitsPerDay.toFixed(1)} uds/día.`}
-                                                </p>
-                                                <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden mb-3"><div className={`h-full ${highVelItem.isSoldOut ? 'bg-red-500' : 'bg-orange-500'}`} style={{ width: '100%' }}></div></div>
-                                                <button onClick={() => onNavigate(View.PURCHASES)} className="w-full bg-accent text-white text-[10px] font-black uppercase py-1.5 rounded shadow-sm hover:opacity-90">Ir a Compras</button>
-                                            </div>
-                                        );
-                                        if (restockItem) return (
-                                            <div className="animate-fade-in text-sm">
-                                                <h4 className="font-bold text-red-600 dark:text-red-400 mb-1">⚠️ Reposición Necesaria</h4>
-                                                <p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">
-                                                    {restockItem.stock === 0 
-                                                        ? `Has dejado de vender aprox. ${restockItem.lostSalesPotential} unidades desde que se agotó.`
-                                                        : `Se agotará en aprox. ${restockItem.daysLeft} días.`}
-                                                </p>
-                                            </div>
-                                        );
-                                        if (stagnantItem) return <div className="animate-fade-in text-sm"><h4 className="font-bold text-gray-500 mb-1">💤 Capital Estancado</h4><p className="text-gray-700 dark:text-gray-300 mb-2 text-xs">Liquidación sugerida: <span className="text-red-500 font-bold">{formatCOP(stagnantItem.suggestedPrice)}</span> (-{stagnantItem.discount}%)</p></div>;
-                                        return null;
-                                    })()
-                                )}
-                            </div>
-                        </>
-                    ) : activeAITab === 'forecast' ? (
-                        <div className="w-full animate-fade-in">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div className="space-y-3">
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Escenarios de Cierre</h4>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        {forecastAnalysis.incentives.map((tier, idx) => (
-                                            <div key={idx} className={`p-3 rounded-xl border transition-all ${idx === 0 ? 'bg-white dark:bg-gray-800 border-gray-100' : idx === 1 ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-200/50' : 'bg-accent/5 dark:bg-accent/10 border-accent/20 shadow-sm'}`}>
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded ${idx === 0 ? 'bg-gray-100 text-gray-500' : idx === 1 ? 'bg-amber-100 text-amber-600' : 'bg-accent text-white'}`}>
-                                                        META {tier.tier}
-                                                    </span>
-                                                    <span className="text-[10px] font-bold text-gray-400">Objetivo: {tier.units} uds</span>
-                                                </div>
-                                                <div className="flex justify-between items-end">
-                                                    <div>
-                                                        <p className="text-xl font-black text-gray-800 dark:text-white leading-none">{formatCOP(tier.target)}</p>
-                                                        <p className="text-[10px] font-bold text-accent mt-1 flex items-center gap-1">
-                                                            <SparklesIcon className="w-2.5 h-2.5" />
-                                                            Premio: {tier.reward}
-                                                        </p>
-                                                        <div className="mt-2 flex gap-2">
-                                                            <span className="text-[9px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded font-bold">Q1: {Math.round(tier.units / 2)} uds</span>
-                                                            <span className="text-[9px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1.5 py-0.5 rounded font-bold">Q2: {Math.round(tier.units / 2)} uds</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Faltante para Meta</p>
-                                                        <p className={`text-xs font-black ${tier.target <= forecastAnalysis.currentTotal ? 'text-green-500' : 'text-gray-500'}`}>
-                                                            {tier.target <= forecastAnalysis.currentTotal ? 'ALCANZADA ✓' : formatCOP(tier.target - forecastAnalysis.currentTotal)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    
-                                    <div className="bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30 border-l-4 border-l-blue-500">
-                                        <h4 className="text-[10px] font-black text-blue-500 uppercase mb-1 tracking-widest">Estado Actual de Unidades</h4>
-                                        <div className="flex justify-between items-end">
-                                            <p className="text-2xl font-black text-blue-600 leading-none">{forecastAnalysis.currentUnits} <span className="text-xs uppercase font-bold">uds vendidas</span></p>
-                                            <p className="text-[10px] text-gray-400 font-bold">Quincena {new Date().getDate() <= 15 ? '1' : '2'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                                        <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                                            <span>Progreso Temporal del Mes</span>
-                                            <span className="text-accent">{Math.round(forecastAnalysis.monthProgress)}%</span>
-                                        </div>
-                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                                            <div className="bg-accent h-full rounded-full transition-all duration-1000" style={{ width: `${forecastAnalysis.monthProgress}%` }}></div>
-                                        </div>
-                                        <p className="text-[9px] text-gray-400 mt-1 italic text-right">Faltan {forecastAnalysis.daysRemaining} días. Promedio diario ideal: {formatCOP((forecastAnalysis.projectedTotal - forecastAnalysis.currentTotal) / Math.max(forecastAnalysis.daysRemaining, 1))}</p>
-                                    </div>
-                                    
-                                    <div className="bg-gray-100/50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                                        <h4 className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Desglose Quincenal de Unidades Real</h4>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase">Q1 (1-15)</p>
-                                                <p className="text-lg font-black text-gray-700 dark:text-gray-200">{forecastAnalysis.q1Units} <span className="text-[10px]">uds</span></p>
-                                            </div>
-                                            <div className="flex-1 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
-                                                <p className="text-[9px] font-black text-gray-400 uppercase">Q2 (16-Fin)</p>
-                                                <p className="text-lg font-black text-gray-700 dark:text-gray-200">{forecastAnalysis.q2Units} <span className="text-[10px]">uds</span></p>
-                                            </div>
-                                        </div>
-                                    </div>
+      {/* El asistente de IA se consulta desde la pestaña IA de CEO Center. */}
 
-                                    <div className="bg-gradient-to-br from-accent/5 to-transparent p-3 rounded-lg border border-accent/10">
-                                        <h4 className="font-black text-[10px] text-accent uppercase tracking-widest mb-2">Estrategias de Impulso IA</h4>
-                                        <div className="space-y-2 max-h-[120px] overflow-y-auto pr-1 scrollbar-hide">
-                                            {forecastAnalysis.strategies.map((strat, idx) => (
-                                                <div key={idx} className="bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700 flex gap-2 items-start shadow-sm">
-                                                    <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${strat.type === 'marketing' ? 'bg-purple-500' : 'bg-green-500'}`}></div>
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-gray-700 dark:text-gray-200 leading-tight">{strat.title}</p>
-                                                        <p className="text-[9px] text-gray-500 leading-relaxed">{strat.desc}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <button 
-                                        onClick={() => { setActiveAITab('query'); setCustomAIQuery("Dame una proyección estratégica detallada de unidades para la próxima quincena basada en los datos actuales."); }}
-                                        className="w-full py-2 bg-accent text-white text-[10px] font-black uppercase rounded-lg shadow-lg shadow-accent/20 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
-                                    >
-                                        <SparklesIcon className="w-3 h-3" /> Generar Plan de Acción IA
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : activeAITab === 'clients' ? (
-                        <div className="w-full animate-fade-in"><h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-3">Clientes en Riesgo de Fuga</h4><div className="max-h-[200px] overflow-y-auto pr-2">{churnAnalysis.length > 0 ? churnAnalysis.map((client, index) => (<div key={index} className="bg-white dark:bg-gray-800 p-3 mb-2 rounded-lg border-l-4 border-l-red-500 flex justify-between items-center"><div><p className="font-bold text-sm">{client.name}</p><p className="text-xs text-gray-500">{client.phone}</p></div><div className="text-right"><p className="text-xs font-bold text-red-500">{client.daysSince} días</p><p className="text-[10px] text-gray-400">sin volver</p></div></div>)) : <p className="text-xs text-center text-gray-400">Todo bien por ahora.</p>}</div></div>
-                    ) : (
-                        <div className="w-full animate-fade-in flex flex-col gap-4"><div className="flex flex-col gap-2"><label className="text-xs font-black text-gray-500 uppercase tracking-widest">Consulta personalizada multi-tienda</label><div className="flex gap-2"><textarea value={customAIQuery} onChange={e => setCustomAIQuery(e.target.value)} placeholder="Ej: ¿Cuál ha sido el producto más vendido en las 3 tiendas este mes?" rows={2} className="flex-grow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-accent outline-none shadow-inner"/><button onClick={handleCustomAIQuery} disabled={isAiQueryLoading || !customAIQuery.trim()} className="bg-accent text-white px-6 rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center shadow-lg shadow-accent/20">{isAiQueryLoading ? (<div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>) : (<SparklesIcon className="w-5 h-5" />)}</button></div></div><div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 min-h-[120px] max-h-[300px] overflow-y-auto">{aiQueryResult ? (<SimpleMarkdownRenderer content={aiQueryResult} />) : isAiQueryLoading ? (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-400"><SparklesIcon className="w-8 h-8 animate-pulse mb-2 text-accent" /><p className="text-xs font-bold animate-pulse uppercase tracking-widest">La IA está analizando los datos multi-tienda...</p></div>) : (<div className="flex flex-col items-center justify-center h-full py-8 text-gray-300"><SearchIcon className="w-10 h-10 mb-2 opacity-20" /><p className="text-xs italic">Escribe una pregunta para obtener un resumen detallado del periodo filtrado.</p></div>)}</div></div>
-                    )}
-                    </div>
-                 </div>
-                 )}
-             </div>
-      </div>
-      
       {/* Main Reports */}
       <div id="payment-report" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
-        <div onClick={() => setIsPaymentsReportVisible(!isPaymentsReportVisible)} className="cursor-pointer flex justify-between items-center"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold text-accent">Informe de Pagos: {currentStore?.name || 'Tienda Actual'}</h2><button onClick={(e) => { e.stopPropagation(); handleShareCurrentStore(); }} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label={`Compartir resumen`}><ShareIcon className="w-5 h-5" /></button></div><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPaymentsReportVisible ? 'rotate-180' : ''}`} /></div>
-        {isPaymentsReportVisible && (
-            <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-4 mb-6">
-                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group">
-                        <div className="flex justify-between items-start">
-                            <div className="text-left">
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades Vendidas</p>
-                                <p className="text-lg sm:text-2xl font-black">{metricsForCurrentStore.totalUnitsSold}</p>
-                                {metricsForCurrentStore.totalGiftUnits > 0 && (
-                                    <p className="text-[10px] text-accent font-bold mt-1">+{metricsForCurrentStore.totalGiftUnits} obsequios</p>
-                                )}
-                            </div>
-                            <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Utilidad Bruta</p>
-                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.totalProfit)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent shadow-sm">
-                        <div className="text-left text-red-500">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Gastos Op.</p>
-                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.totalExpenses)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-accent/5 dark:bg-accent/10 p-3 sm:p-4 rounded-xl border-2 border-accent shadow-lg shadow-accent/10 scale-[1.02] transform transition-transform">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-accent font-black uppercase tracking-widest mb-1">Utilidad Neta</p>
-                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.netProfit >= 0 ? 'text-accent' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.netProfit)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Costo Ventas (COGS)</p>
-                            <p className="text-lg sm:text-2xl font-black text-orange-500">{formatCOP(metricsForCurrentStore.totalCogs)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
-                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
-                        </div>
-                    </div>
-                    <div 
-                        onClick={() => {
-                            sessionStorage.setItem('scroll_to_section', 'analysis-section');
-                            onNavigate(View.INVENTORY);
-                        }}
-                        className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group"
-                        title="Ver gráfica del inventario"
-                    >
-                        <div className="flex justify-between items-start">
-                            <div className="text-left">
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Valor Inventario</p>
-                                <p className="text-lg sm:text-2xl font-black text-blue-600 dark:text-blue-400">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
-                            </div>
-                            <ChartBarIcon className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                        </div>
-                    </div>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-2xl font-bold text-accent whitespace-nowrap">Resumen del negocio</h2>
+          <button onClick={handleShareCurrentStore} className="shrink-0 p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Compartir resumen"><ShareIcon className="w-5 h-5" /></button>
+        </div>
+        <div className="mt-3 mb-2 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 px-4 py-3 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Ingresos del período</p><p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">{formatCOP(totalPeriodIncome)}</p></div>
+        <div className="mt-4 pt-4 border-t-2 border-accent/30">
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ventas cobradas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.salesCollected)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Excluye recaudos y ajustes de caja</p></div>
+                    <button type="button" onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="min-w-0 text-left rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Unidades vendidas</p><p className="mt-1 text-lg sm:text-xl font-extrabold">{metricsForCurrentStore.totalUnitsSold}</p><p className="mt-1 text-[10px] text-slate-500">Ver desglose por vendedor</p></button>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Número de ventas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.transactionCount}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ticket promedio</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Prendas por venta</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.unitsPerTransaction.toFixed(2)}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Margen bruto estimado</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.grossMarginPercent.toFixed(1)}%</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Según costos asociados a los pagos</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilidad estimada</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.netProfit)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Después de gastos operativos</p></div>
                  </div>
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
-                <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Desglose por Medio de Pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"><div className="bg-green-100 dark:bg-green-900/50 p-3 rounded-md text-left ring-2 ring-green-500/50"><p className="font-bold text-green-800 dark:text-green-300">Ingresos del Periodo</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(totalPeriodIncome)}</p></div><div className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 cursor-pointer ${paymentMethodFilter.includes('Efectivo') ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); togglePaymentMethodFilter('Efectivo'); if (!paymentMethodFilter.includes('Efectivo')) setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.totalSistecreditoCollections > 0 && (<div className="flex justify-between text-purple-600 font-semibold"><span>Recaudos Sistec.:</span><span>+{formatCOP(cashBreakdown.totalSistecreditoCollections)}</span></div>)}{cashBreakdown.totalExchangeSurplusesCash > 0 && (<div className="flex justify-between text-green-600 font-semibold"><span>Excedentes Cambios:</span><span>+{formatCOP(cashBreakdown.totalExchangeSurplusesCash)}</span></div>)}{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => togglePaymentMethodFilter('Recaudo Sistecredito')} className={`bg-purple-100 dark:bg-purple-900/30 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes('Recaudo Sistecredito') ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => togglePaymentMethodFilter(method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes(method) ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p></button>)})}</div>{paymentMethodFilter.length > 0 && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter.join('+')}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter([]); }} className="text-xs text-red-500 hover:underline">Limpiar Filtros</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => { const dayTotal = getDayTotalForFilteredMethods(group.items); if (dayTotal === 0 && paymentMethodFilter.length > 0 && !group.items.some(i => paymentMethodFilter.includes(String(i.paymentMethod)))) return null; return (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Seleccionado: {formatCOP(dayTotal)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.filter(i => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(i.paymentMethod))).map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>); })}</div></div>)}</div>
+                <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Medios de pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3"><div className={`min-w-0 border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 cursor-pointer hover:shadow-md ${paymentMethodFilter.includes('Efectivo') ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); togglePaymentMethodFilter('Efectivo'); if (!paymentMethodFilter.includes('Efectivo')) setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.totalSistecreditoCollections > 0 && (<div className="flex justify-between text-purple-600 font-semibold"><span>Recaudos Sistec.:</span><span>+{formatCOP(cashBreakdown.totalSistecreditoCollections)}</span></div>)}{cashBreakdown.totalExchangeSurplusesCash > 0 && (<div className="flex justify-between text-green-600 font-semibold"><span>Excedentes Cambios:</span><span>+{formatCOP(cashBreakdown.totalExchangeSurplusesCash)}</span></div>)}{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => togglePaymentMethodFilter('Recaudo Sistecredito')} className={`min-w-0 border border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/40 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 hover:shadow-md ${paymentMethodFilter.includes('Recaudo Sistecredito') ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => togglePaymentMethodFilter(method)} className={`min-w-0 border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 hover:shadow-md ${paymentMethodFilter.includes(method) ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p></button>)})}</div>{paymentMethodFilter.length > 0 && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter.join('+')}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter([]); }} className="text-xs text-red-500 hover:underline">Limpiar Filtros</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => { const dayTotal = getDayTotalForFilteredMethods(group.items); if (dayTotal === 0 && paymentMethodFilter.length > 0 && !group.items.some(i => paymentMethodFilter.includes(String(i.paymentMethod)))) return null; return (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Seleccionado: {formatCOP(dayTotal)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.filter(i => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(i.paymentMethod))).map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>); })}</div></div>)}</div>
             </div>
-        )}
       </div>
 
       <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
@@ -1562,8 +1360,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
         {isSalesHistoryVisible && (
           <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 flex-1">
+            <div className="flex flex-col gap-2 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 flex-1 items-start">
                 <div className="relative">
                   <input 
                     type="text" 
@@ -1588,14 +1386,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                   ))}
                 </select>
 
-                {!salesMonthFilter && (
-                  <div className="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-2 items-center bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div><label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Desde</label><input type="date" value={salesHistoryStartDate} onChange={e => setSalesHistoryStartDate(e.target.value)} className="w-full bg-white dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm" /></div>
-                    <span className="hidden sm:block text-gray-400 mt-5">a</span>
-                    <div><label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Hasta</label><input type="date" value={salesHistoryEndDate} onChange={e => setSalesHistoryEndDate(e.target.value)} className="w-full bg-white dark:bg-primary border border-gray-300 dark:border-gray-700 rounded-md p-2 text-sm" /></div>
-                    <button type="button" onClick={() => { setSalesHistoryStartDate(''); setSalesHistoryEndDate(''); }} className="mt-0 sm:mt-5 px-3 py-2 text-xs font-bold rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Usar rango general</button>
-                  </div>
-                )}
 
                 <select 
                   value={salesSellerFilter} 
@@ -1619,6 +1409,17 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                   ))}
                 </select>
               </div>
+              {!salesMonthFilter && (
+                <div className="flex flex-wrap items-end gap-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <label className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 uppercase">Desde
+                    <input aria-label="Historial desde" type="date" value={salesHistoryStartDate} onChange={e => setSalesHistoryStartDate(e.target.value)} className="min-w-0 w-[140px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-100" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 uppercase">Hasta
+                    <input aria-label="Historial hasta" type="date" value={salesHistoryEndDate} onChange={e => setSalesHistoryEndDate(e.target.value)} className="min-w-0 w-[140px] rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-100" />
+                  </label>
+                  <button type="button" onClick={() => { setSalesHistoryStartDate(''); setSalesHistoryEndDate(''); }} className="px-2 py-1.5 text-xs font-semibold text-accent hover:underline">Restablecer</button>
+                </div>
+              )}
 
               <button
                 type="button"
