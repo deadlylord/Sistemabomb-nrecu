@@ -466,6 +466,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
     const metricsForCurrentStore = useMemo(() => {
         let totalDirectSalesValue = 0;
+        let salesCollected = 0;
         let totalUnitsSold = 0;
         let totalGiftUnits = 0;
         let totalProfit = 0;
@@ -529,6 +530,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     
                     if (p.method !== PaymentMethod.Bono) {
                         totalDirectSalesValue += amount;
+                        salesCollected += amount;
                         uniqueInvoicesInRange.add(t.id);
                         
                         // Profit & COGS (Payment based)
@@ -559,12 +561,19 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             .map(([sellerName, units]) => ({ sellerName, units: Number(units.toFixed(2)) }))
             .sort((a, b) => b.units - a.units);
 
-        const averageTicketSize = uniqueInvoicesInRange.size > 0 ? totalDirectSalesValue / uniqueInvoicesInRange.size : 0;
+        const transactionCount = uniqueInvoicesInRange.size;
+        const averageTicketSize = transactionCount > 0 ? salesCollected / transactionCount : 0;
+        const unitsPerTransaction = transactionCount > 0 ? totalUnitsSold / transactionCount : 0;
+        const grossMarginPercent = salesCollected > 0 ? (salesCollected - totalCogs) / salesCollected * 100 : 0;
         const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
         const netProfit = totalProfit - totalExpenses;
 
         return { 
-            totalUnitsSold: Math.round(totalUnitsSold), 
+            totalUnitsSold: Math.round(totalUnitsSold),
+            salesCollected,
+            transactionCount,
+            unitsPerTransaction,
+            grossMarginPercent, 
             totalGiftUnits: Math.round(totalGiftUnits),
             totalProfit, 
             averageTicketSize, 
@@ -1288,59 +1297,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
         <div className="mt-3 mb-2 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 px-4 py-3 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Ingresos del período</p><p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">{formatCOP(totalPeriodIncome)}</p></div>
         <div className="mt-4 pt-4 border-t-2 border-accent/30">
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-4 mb-6">
-                    <div onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group">
-                        <div className="flex justify-between items-start">
-                            <div className="text-left">
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Unidades Vendidas</p>
-                                <p className="text-lg sm:text-2xl font-black">{metricsForCurrentStore.totalUnitsSold}</p>
-                                {metricsForCurrentStore.totalGiftUnits > 0 && (
-                                    <p className="text-[10px] text-accent font-bold mt-1">+{metricsForCurrentStore.totalGiftUnits} obsequios</p>
-                                )}
-                            </div>
-                            <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isUnitsSoldExpanded ? 'rotate-180' : ''}`} />
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Utilidad Bruta</p>
-                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.totalProfit)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-accent/5 dark:bg-accent/10 p-3 sm:p-4 rounded-xl border-2 border-accent shadow-lg shadow-accent/10 scale-[1.02] transform transition-transform">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-accent font-black uppercase tracking-widest mb-1">Utilidad Neta</p>
-                            <p className={`text-lg sm:text-2xl font-black ${metricsForCurrentStore.netProfit >= 0 ? 'text-accent' : 'text-red-500'}`}>{formatCOP(metricsForCurrentStore.netProfit)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Costo Ventas (COGS)</p>
-                            <p className="text-lg sm:text-2xl font-black text-orange-500">{formatCOP(metricsForCurrentStore.totalCogs)}</p>
-                        </div>
-                    </div>
-                    <div className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl border border-transparent">
-                        <div className="text-left">
-                            <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Ticket Prom.</p>
-                            <p className="text-lg sm:text-2xl font-black">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p>
-                        </div>
-                    </div>
-                    <div 
-                        onClick={() => {
-                            sessionStorage.setItem('scroll_to_section', 'analysis-section');
-                            onNavigate(View.INVENTORY);
-                        }}
-                        className="bg-gray-100 dark:bg-gray-800 p-3 sm:p-4 rounded-xl cursor-pointer transition-all hover:bg-gray-200 dark:hover:bg-gray-700 border border-transparent hover:border-accent/30 group"
-                        title="Ver gráfica del inventario"
-                    >
-                        <div className="flex justify-between items-start">
-                            <div className="text-left">
-                                <p className="text-[8px] sm:text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Valor Inventario</p>
-                                <p className="text-lg sm:text-2xl font-black text-blue-600 dark:text-blue-400">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p>
-                            </div>
-                            <ChartBarIcon className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                        </div>
-                    </div>
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ventas cobradas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.salesCollected)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Excluye recaudos y ajustes de caja</p></div>
+                    <button type="button" onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="min-w-0 text-left rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Unidades vendidas</p><p className="mt-1 text-lg sm:text-xl font-extrabold">{metricsForCurrentStore.totalUnitsSold}</p><p className="mt-1 text-[10px] text-slate-500">Ver desglose por vendedor</p></button>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Número de ventas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.transactionCount}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ticket promedio</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Prendas por venta</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.unitsPerTransaction.toFixed(2)}</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Margen bruto estimado</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.grossMarginPercent.toFixed(1)}%</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Según costos asociados a los pagos</p></div>
+                    <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilidad estimada</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.netProfit)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Después de gastos operativos</p></div>
                  </div>
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
                 <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Desglose por Medio de Pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4"><div className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 cursor-pointer ${paymentMethodFilter.includes('Efectivo') ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); togglePaymentMethodFilter('Efectivo'); if (!paymentMethodFilter.includes('Efectivo')) setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{formatCOP(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.totalSistecreditoCollections > 0 && (<div className="flex justify-between text-purple-600 font-semibold"><span>Recaudos Sistec.:</span><span>+{formatCOP(cashBreakdown.totalSistecreditoCollections)}</span></div>)}{cashBreakdown.totalExchangeSurplusesCash > 0 && (<div className="flex justify-between text-green-600 font-semibold"><span>Excedentes Cambios:</span><span>+{formatCOP(cashBreakdown.totalExchangeSurplusesCash)}</span></div>)}{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => togglePaymentMethodFilter('Recaudo Sistecredito')} className={`bg-purple-100 dark:bg-purple-900/30 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes('Recaudo Sistecredito') ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{formatCOP(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => togglePaymentMethodFilter(method)} className={`bg-white dark:bg-gray-900/50 p-3 rounded-md text-left transition-all duration-200 ${paymentMethodFilter.includes(method) ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p></button>)})}</div>{paymentMethodFilter.length > 0 && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter.join('+')}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter([]); }} className="text-xs text-red-500 hover:underline">Limpiar Filtros</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => { const dayTotal = getDayTotalForFilteredMethods(group.items); if (dayTotal === 0 && paymentMethodFilter.length > 0 && !group.items.some(i => paymentMethodFilter.includes(String(i.paymentMethod)))) return null; return (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Seleccionado: {formatCOP(dayTotal)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.filter(i => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(i.paymentMethod))).map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>); })}</div></div>)}</div>
