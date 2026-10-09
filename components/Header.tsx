@@ -148,7 +148,12 @@ const Header: React.FC<HeaderProps> = ({
     setIsUserDropdownOpen(false);
     setIsMobileMenuOpen(false);
     setPreviewGroupIndex(-1);
-  }, [currentUser.id, currentCompany?.id, currentStore?.id, currentView]);
+  }, [currentUser.id, currentCompany?.id, currentStore?.id]);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setPreviewGroupIndex(-1);
+  }, [currentView]);
 
   useEffect(() => {
     if (isMobileMenuOpen && previewGroupIndex === -1) {
@@ -403,7 +408,7 @@ const Header: React.FC<HeaderProps> = ({
           {filteredGroups.map((group, idx) => {
             const GroupIcon = group.icon;
             const active = isMobileMenuOpen ? previewGroupIndex === idx : currentGroupIndex === idx;
-            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`flex-1 min-w-[72px] flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-all duration-200 active:scale-95 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-[0_2px_8px_rgba(0,0,0,0.08)] -translate-y-0.5' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`flex-1 min-w-[72px] flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors duration-150 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
               <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full px-0.5">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
             </button>;
           })}
