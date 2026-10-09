@@ -205,13 +205,13 @@ const Header: React.FC<HeaderProps> = ({
           setCurrentView(item.view);
           setIsMobileMenuOpen(false);
         }}
-        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left
+        className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group text-left active:scale-[0.98] border
           ${isActive 
-            ? 'bg-accent/10 text-accent shadow-sm' 
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+            ? 'bg-gradient-to-r from-accent/20 via-accent/10 to-transparent text-accent shadow-md border-accent/30 ring-1 ring-accent/10 translate-x-0.5' 
+            : 'border-transparent text-slate-600 dark:text-slate-400 hover:bg-gradient-to-r hover:from-slate-100 hover:to-transparent dark:hover:from-slate-800 hover:text-slate-900 dark:hover:text-white hover:shadow-sm'
           }`}
       >
-        <div className={`p-2.5 rounded-lg transition-colors ${isActive ? 'bg-accent/10 text-accent' : 'bg-slate-100 dark:bg-slate-800 text-accent'}`}>
+        <div className={`p-2.5 rounded-lg transition-all duration-200 ${isActive ? 'bg-accent text-white shadow-md shadow-accent/20 scale-105' : 'bg-slate-100 dark:bg-slate-800 text-accent group-hover:bg-accent/10 group-hover:scale-105'}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-grow min-w-0">
@@ -409,7 +409,7 @@ const Header: React.FC<HeaderProps> = ({
           })}
         </div>
         {isMobileMenuOpen && displayedGroup && (
-          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-3 max-h-[65vh] overflow-y-auto">
+          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-accent/20 bg-gradient-to-b from-white via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 shadow-[0_12px_36px_rgba(0,0,0,0.22)] p-3 max-h-[65vh] overflow-y-auto animate-fade-in">
             <div className="flex justify-between items-center px-2 pb-2 border-b dark:border-slate-700"><strong className="text-sm">{displayedGroup.label}</strong><button type="button" aria-label="Cerrar menú" onClick={() => setIsMobileMenuOpen(false)}><CrossIcon className="w-5 h-5" /></button></div>
             <div className="grid gap-1 mt-2">{displayedGroup.items.map(item => <NavButton key={item.view} item={item} isMobile />)}</div>
           </div>
