@@ -1227,7 +1227,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           <span className="text-[10px] text-slate-400">–</span>
           <input aria-label="Fecha hasta" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="min-w-0 flex-1 w-0 rounded-md border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1 text-[11px]" />
         </div>
-        <div className="flex items-center justify-around gap-1">
+        <div className="flex items-center justify-between gap-1 overflow-x-auto whitespace-nowrap">
           <button onClick={setLast7Days} className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">7 días</button>
           <button onClick={setThisMonth} className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">Mes</button>
           <button onClick={() => scrollToSection('payment-report')} className="px-2 py-1 text-[11px] font-semibold text-accent">Pagos</button>
