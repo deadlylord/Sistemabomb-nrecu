@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.156', date: '2026-10-08', description: 'Staging: resumen y navegación Android', isCurrent: true, changes: ['Resumen del negocio y tarjetas de medios de pago uniformes.', 'Navegación Android con acceso horizontal a todas las categorías.', 'Submenú y selector de sedes adaptables a pantalla móvil.'] },
+  { version: '1.1.157', date: '2026-10-08', description: 'Staging: carrito POS móvil visible', isCurrent: true, changes: ['Barra de carrito encima del menú inferior.', 'Carrito desplegado por delante de la navegación.', 'Espacio seguro inferior en Android.'] },
+  { version: '1.1.156', date: '2026-10-08', description: 'Staging: resumen y navegación Android', isCurrent: false, changes: ['Resumen del negocio y tarjetas de medios de pago uniformes.', 'Navegación Android con acceso horizontal a todas las categorías.', 'Submenú y selector de sedes adaptables a pantalla móvil.'] },
   { version: '1.1.155', date: '2026-10-08', description: 'Staging: indicadores comerciales en Informe de Pagos', isCurrent: false, changes: ['Siete indicadores comerciales: ventas cobradas, unidades, transacciones, ticket, prendas por venta, margen y utilidad.', 'Ventas cobradas separadas de recaudos y ajustes.', 'Tarjetas con nueva jerarquía visual.'] },
   { version: '1.1.154', date: '2026-10-08', description: 'Staging: submenú móvil mejorado', isCurrent: false, changes: ['Submenú con sombras, profundidad y degradado suave.', 'Opciones activas más visibles y respuesta táctil al seleccionarlas.'] },
   { version: '1.1.153', date: '2026-10-08', description: 'Staging: navegación e informe mejorados', isCurrent: false, changes: ['Flechas de fechas agrupadas a la derecha.', 'Ingresos del período destacado arriba en Informe de Pagos.', 'Categoría inferior resaltada al seleccionarla, con relieve y transición.'] },
