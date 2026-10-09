@@ -1234,6 +1234,8 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           <button onClick={() => scrollToSection('price-analysis')} className="px-2 py-1 text-[11px] font-semibold text-accent">Precios</button>
           <button onClick={() => scrollToSection('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
           <button onClick={() => scrollToSection('sales-chart')} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
+          <button onClick={onOpenVerification} className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">Inventario</button>
+          {isAdmin && latestStockTakeInconsistency && <button onClick={() => onNavigate(View.STOCK_TAKE_HISTORY)} className="px-1 py-1 text-[11px] font-bold text-red-600">Descuadre</button>}
         </div>
       </div>
       {/* Top Control Panel */}
