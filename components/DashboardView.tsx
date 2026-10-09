@@ -1282,7 +1282,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       {/* Main Reports */}
       <div id="payment-report" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="min-w-0 whitespace-nowrap text-xl sm:text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white">Informe de Pagos</h2>
+          <h2 className="text-2xl font-bold text-accent whitespace-nowrap">Informe de Pagos</h2>
           <button onClick={handleShareCurrentStore} className="shrink-0 p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Compartir resumen"><ShareIcon className="w-5 h-5" /></button>
         </div>
         <div className="mt-4 pt-4 border-t-2 border-accent/30">
