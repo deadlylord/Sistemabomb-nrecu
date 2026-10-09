@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.146', date: '2026-10-08', description: 'Staging: diagnóstico de tiempos de ingreso', isCurrent: true, changes: ['Medición de fases de login en consola.', 'El historial de acceso ya no bloquea la navegación.'] },
+  { version: '1.1.147', date: '2026-10-08', description: 'Staging: IA centralizada en CEO Center', isCurrent: true, changes: ['Se retira el panel IA del Resumen del negocio.', 'La pestaña de IA de CEO Center permanece disponible para análisis y consultas.'] },
+  { version: '1.1.146', date: '2026-10-08', description: 'Staging: diagnóstico de tiempos de ingreso', isCurrent: false, changes: ['Medición de fases de login en consola.', 'El historial de acceso ya no bloquea la navegación.'] },
   { version: '1.1.145', date: '2026-10-08', description: 'Staging: animación de ingreso multicolor', isCurrent: false, changes: ['Botón de ingreso con logo giratorio y puntos en azul cielo, violeta y rosa, sin texto de verificación.'] },
   { version: '1.1.144', date: '2026-10-08', description: 'Staging: accesos móviles y progreso de ingreso', isCurrent: false, changes: ['Accesos de modo multisede y libro de caja en el menú del perfil móvil según permisos.', 'Animación y bloqueo de pulsaciones repetidas al ingresar.'] },
   { version: '1.1.143', date: '2026-10-08', description: 'Staging: primera fase de navegación móvil', isCurrent: false, changes: ['Menú móvil trasladado a barra inferior fija con acceso a módulos según permisos.', 'Cabecera móvil más despejada.', 'Ingresos destacados y tarjetas compactas en el resumen del negocio.'] },
