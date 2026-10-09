@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vestika-staging-v1.1.140-chunk-recovery';
+const CACHE_NAME = 'vestika-staging-v1.1.158-chunk-recovery';
 const urlsToCache = ['/', '/index.html', '/startup.js', '/manifest.json', '/assets/icon.svg', '/assets/maskable_icon.svg', '/icon-192.png', '/icon-512.png'];
 const staticAsset = /^\/assets\/[^?]+\.(?:js|css|svg|png|jpe?g|webp|gif|ico|woff2?|ttf)$/i;
 self.addEventListener('install', event => {
