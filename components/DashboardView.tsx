@@ -1340,7 +1340,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             const current = previousPeriodComparison.current[key];
             const previous = previousPeriodComparison.previous[key];
             const change = previous > 0 ? ((current - previous) / previous) * 100 : null;
-            return <div key={key} className="min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50 dark:bg-slate-800/50"><p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label} · período anterior</p><p className="text-sm font-bold mt-1">{format(previous)}</p><p className={`text-xs font-semibold mt-1 ${change === null ? 'text-slate-500' : change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{change === null ? 'Sin base para porcentaje' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}% frente al período actual`}</p></div>;
+            return <div key={key} className="min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50 dark:bg-slate-800/50"><p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label} · período anterior</p><p className="text-sm font-bold mt-1">{format(previous)}</p><p className={`text-xs font-semibold mt-1 ${change === null ? 'text-slate-500' : change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{change === null ? 'Sin base para porcentaje' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}% respecto al período anterior`}</p></div>;
           })}
         </div>}
         <div className="mt-4 pt-4 border-t-2 border-accent/30">
