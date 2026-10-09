@@ -23,7 +23,15 @@ export default class AppErrorBoundary extends React.Component<React.PropsWithChi
           <summary className="cursor-pointer font-semibold">Ver diagnóstico del error</summary>
           <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{this.state.message}{'\n'}{this.state.component}</pre>
         </details>
-        <button className="rounded-xl bg-indigo-600 px-5 py-3 text-white" onClick={() => this.setState({ failed: false, message: '', component: '' })}>Reintentar pantalla</button>
+        <button className="rounded-xl bg-indigo-600 px-5 py-3 text-white" onClick={() => {
+          const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk|Failed to load module script/i.test(this.state.message);
+          if (isChunkError) {
+            // A deployed release can invalidate a hashed JS chunk referenced by an old tab.
+            window.location.reload();
+          } else {
+            this.setState({ failed: false, message: '', component: '' });
+          }
+        }}>Reintentar pantalla</button>
       </div>
     );
     return this.props.children;
