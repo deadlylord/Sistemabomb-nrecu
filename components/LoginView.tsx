@@ -83,7 +83,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
           disabled={!isAppReady || submitting}
           className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-all duration-300 hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/40 disabled:bg-slate-500 disabled:cursor-not-allowed"
         >
-          {submitting ? <span className="inline-flex items-center gap-2"><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Verificando acceso…</span> : isAppReady ? 'Ingresar' : <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Conectando</span>}
+          {submitting ? <span role="status" aria-label="Ingresando a Vestika" className="inline-flex items-center justify-center gap-3"><span className="relative flex w-7 h-7 items-center justify-center"><span className="absolute inset-0 rounded-full border-[3px] border-white/20 border-t-sky-300 border-r-violet-400 border-b-pink-300 animate-spin" /><img src="/assets/vestika.png" alt="" className="w-4 h-4 rounded object-contain" /></span><span className="flex items-center gap-1.5" aria-hidden="true"><span className="w-2 h-2 rounded-full bg-sky-300 animate-pulse" /><span className="w-2 h-2 rounded-full bg-violet-300 animate-pulse" /><span className="w-2 h-2 rounded-full bg-pink-300 animate-pulse" /></span></span> : isAppReady ? 'Ingresar' : <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Conectando</span>}
         </button>
       </form>
       
