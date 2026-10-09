@@ -69,10 +69,9 @@ interface PriceVariationItem {
 
 type UnifiedSaleTransaction = (Sale & { transactionType: 'sale' }) | (Layaway & { transactionType: 'layaway', layawayStatus: Layaway['status'] });
 
-const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partialTotal: number }[], viewMode: 'daily' | 'monthly' | 'all-months', metric?: 'revenue' | 'units' }> = ({ data, viewMode, metric = 'revenue' }) => {
+const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partialTotal: number }[], viewMode: 'daily' | 'monthly' | 'all-months' }> = ({ data, viewMode }) => {
   const maxValue = useMemo(() => Math.max(...data.map(d => d.total), 0), [data]);
-  const safeMaxValue = maxValue === 0 ? (metric === 'units' ? 10 : 100000) : maxValue * 1.1;
-  const formatValue = (value: number) => metric === 'units' ? Math.round(value).toLocaleString('es-CO') : formatCOP(value);
+  const safeMaxValue = maxValue === 0 ? 100000 : maxValue * 1.1;
 
   const formatCompactCOP = (value: number): string => {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace('.0', '')}M`;
@@ -95,28 +94,28 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
   if (data.length === 0) return <div className="h-96 flex items-center justify-center text-gray-500 dark:text-text-dark">No hay datos de ventas para mostrar en este periodo.</div>;
 
   return (
-    <div className="h-96 w-full min-w-0 pt-10 sm:pt-4 relative">
-      <div className="absolute top-0 right-0 flex flex-wrap justify-end gap-2 sm:gap-4 text-[10px] sm:text-xs">
+    <div className="h-96 w-full pt-4 pr-4 relative">
+      <div className="absolute top-0 right-0 flex gap-4 text-xs">
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-accent rounded-sm"></div><span className="text-gray-600 dark:text-gray-400">Total Mes</span></div>
         <div className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dotted border-gray-500 dark:border-gray-300"></div><span className="text-gray-600 dark:text-gray-400">A la fecha actual</span></div>
       </div>
-      <div className="h-full w-full min-w-0 flex">
-        <div className="h-full flex flex-col justify-between text-[9px] sm:text-xs text-gray-500 dark:text-text-dark pr-1 sm:pr-2 shrink-0">
-          {yAxisLabels.map((label, i) => <div key={i} className={i === yAxisLabels.length - 1 ? "pb-6" : "-translate-y-1/2"}>{metric === 'units' ? Math.round(label) : formatCompactCOP(label)}</div>)}
+      <div className="h-full w-full flex">
+        <div className="h-full flex flex-col justify-between text-xs text-gray-500 dark:text-text-dark pr-2 shrink-0">
+          {yAxisLabels.map((label, i) => <div key={i} className={i === yAxisLabels.length - 1 ? "pb-6" : "-translate-y-1/2"}>{formatCOP(label).replace('$', '').replace(/\s/g, '').replace(',00', '')}</div>)}
         </div>
-        <div className="flex-1 min-w-0 pl-1 sm:pl-4 border-l border-gray-200 dark:border-gray-700">
+        <div className="flex-grow w-full pl-4 border-l border-gray-200 dark:border-gray-700">
           <div className="relative h-full w-full">
             {yAxisLabels.map((_, i) => <div key={i} className="absolute w-full border-t border-gray-200 dark:border-gray-700/50 border-dashed" style={{ bottom: `${(i / (yAxisLabels.length -1)) * 100}%` }}></div>)}
-            <div className="absolute inset-0 flex items-end justify-around gap-0.5 sm:gap-2 px-0.5 sm:px-2 pb-6">
+            <div className="absolute inset-0 flex items-end justify-around gap-2 px-2 pb-6">
                 {data.map((d) => {
                     const barHeight = (d.total / safeMaxValue) * 100;
                     const partialHeight = (d.partialTotal / safeMaxValue) * 100;
                     return (
-                    <div key={d.label} className="relative flex h-full min-w-0 flex-1 flex-col items-center justify-end group">
+                    <div key={d.label} className="relative flex h-full w-full flex-col items-center justify-end group">
                         <div className="absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 whitespace-nowrap shadow-lg">
-                            <p className="font-bold">{formatLabel(d.label)}</p><p>Total: {formatValue(d.total)}</p>{viewMode !== 'daily' && <p className="text-gray-300 text-[10px]">A la fecha: {formatValue(d.partialTotal)}</p>}
+                            <p className="font-bold">{formatLabel(d.label)}</p><p>Total: {formatCOP(d.total)}</p>{viewMode !== 'daily' && <p className="text-gray-300 text-[10px]">A la fecha: {formatCOP(d.partialTotal)}</p>}
                         </div>
-                        <div className="hidden sm:block text-xs font-bold text-gray-700 dark:text-text-dark mb-1 z-20">{d.total > 0 ? formatCompactCOP(d.total) : ''}</div>
+                        <div className="text-xs font-bold text-gray-700 dark:text-text-dark mb-1 z-20">{d.total > 0 ? formatCompactCOP(d.total) : ''}</div>
                         <div className="relative w-full flex items-end h-full">
                             <div className="w-full rounded-t-md bg-accent/70 transition-all duration-300 group-hover:bg-accent absolute bottom-0 left-0" style={{ height: `${barHeight}%` }}></div>
                             {viewMode !== 'daily' && d.partialTotal > 0 && <div className="absolute w-full border-t-2 border-dotted border-gray-600 dark:border-white z-10 pointer-events-none" style={{ bottom: `${partialHeight}%`, height: '0px' }}></div>}
@@ -124,8 +123,8 @@ const SalesHistoryChart: React.FC<{ data: { label: string; total: number; partia
                     </div>
                 )})}
             </div>
-            <div className="absolute inset-0 flex items-end justify-around gap-0.5 sm:gap-2 px-0.5 sm:px-2">
-                {data.map((d) => <div key={d.label} className="min-w-0 flex-1 text-center text-[9px] sm:text-[10px] truncate text-gray-500 dark:text-text-dark">{formatLabel(d.label)}</div>)}
+            <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">
+                {data.map((d) => <div key={d.label} className="w-full text-center text-[10px] text-gray-500 dark:text-text-dark">{formatLabel(d.label)}</div>)}
             </div>
           </div>
         </div>
@@ -253,7 +252,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [priceVariationSellerFilters, setPriceVariationSellerFilters] = useViewFilter<string[]>('DashboardView:priceVariationSellerFilters', []);
   const [priceVariationPaymentMethodFilters, setPriceVariationPaymentMethodFilters] = useViewFilter<string[]>('DashboardView:priceVariationPaymentMethodFilters', []);
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('all-months');
-  const [chartMetric, setChartMetric] = useState<'revenue' | 'units'>('revenue');
+
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
   const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients' | 'query'>('insights');
@@ -953,21 +952,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return <p className={`mt-1 text-[10px] font-semibold ${change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{change >= 0 ? '↗ +' : '↘ '}{change.toFixed(1)}% vs. período anterior</p>;
   };
 
-  const unitsChartData = useMemo(() => {
-    const dataMap = new Map<string, { total: number; partialTotal: number }>();
-    const todayDay = new Date().getDate();
-    sales.filter(s => !s.layawayId).forEach(sale => {
-      const date = new Date(sale.createdAt);
-      const label = chartViewMode === 'daily' ? toYYYYMMDD(date) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const existing = dataMap.get(label) || { total: 0, partialTotal: 0 };
-      const units = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).reduce((sum, item) => sum + (item?.quantity || 0), 0);
-      existing.total += units;
-      if (chartViewMode === 'daily' || date.getDate() <= todayDay) existing.partialTotal += units;
-      dataMap.set(label, existing);
-    });
-    return Array.from(dataMap, ([label, totals]) => ({ label, ...totals })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [sales, chartViewMode]);
-
   const salesChartData = useMemo(() => {
     const dataMap = new Map<string, { total: number; partialTotal: number }>();
     const now = new Date();
@@ -1480,7 +1464,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             </div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); if (transaction.transactionType === 'layaway') { setEditingLayaway(transaction as unknown as Layaway); } else { setEditingSale(transaction as Sale); } }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>{isAdmin && transaction.transactionType === 'sale' && (<button onClick={(e) => { e.stopPropagation(); setSaleToDelete(transaction as Sale); }} className="text-gray-500 hover:text-red-500 p-1.5 rounded-full hover:bg-red-100 transition-colors" title="Eliminar Venta"><TrashIcon className="w-4 h-4" /></button>)}</div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => { const isPromo = (item.discountPrice !== undefined && item.discountPrice === item.price) || (item.basePrice !== undefined && item.basePrice > item.price); return (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}{isPromo && (<span className="ml-2 px-1.5 py-0.5 text-[9px] font-black rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">🏷️ Promoción</span>)}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u{item.basePrice && item.basePrice > item.price && (<span className="line-through text-gray-400 ml-1">{formatCOP(item.basePrice)}</span>)}</p></div></div>); })}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Ventas por Categoría</h3><div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
-        <div id="sales-chart" className="min-w-0 bg-white dark:bg-secondary p-3 sm:p-6 rounded-xl shadow-lg mt-8"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4"><h2 className="text-xl sm:text-2xl font-bold text-accent">Análisis de Ventas</h2><div className="flex flex-wrap gap-2"><button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button><button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button></div></div><div className="flex gap-2 mb-3" role="tablist" aria-label="Indicador del gráfico"><button role="tab" aria-selected={chartMetric === 'revenue'} onClick={() => setChartMetric('revenue')} className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold ${chartMetric === 'revenue' ? 'bg-accent text-white' : 'bg-gray-100 dark:bg-gray-700'}`}>Valor de ventas</button><button role="tab" aria-selected={chartMetric === 'units'} onClick={() => setChartMetric('units')} className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg font-semibold ${chartMetric === 'units' ? 'bg-accent text-white' : 'bg-gray-100 dark:bg-gray-700'}`}>Prendas vendidas</button></div><div className="w-full min-w-0 overflow-hidden"><SalesHistoryChart data={chartMetric === 'revenue' ? salesChartData : unitsChartData} viewMode={chartViewMode} metric={chartMetric} /></div></div>
+        <div id="sales-chart" className="min-w-0 max-w-full overflow-hidden bg-white dark:bg-secondary p-3 sm:p-6 rounded-xl shadow-lg mt-8"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4"><h2 className="text-2xl font-bold text-accent">Análisis de Ventas</h2><div className="flex flex-wrap gap-2"><button onClick={() => setChartViewMode('daily')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'daily' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Diario</button><button onClick={() => setChartViewMode('monthly')} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === 'monthly' ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Mensual</button></div></div><div className="w-full min-w-0 max-w-full overflow-x-auto"><div className="min-w-0"><SalesHistoryChart data={salesChartData} viewMode={chartViewMode} /></div></div></div>
         {editingSale && (<EditSaleModal isOpen={!!editingSale} onClose={() => setEditingSale(null)} sale={editingSale} sellers={sellers} inventory={inventory} onUpdateSale={onUpdateSale} />)}
         {editingLayaway && (<EditLayawayModal isOpen={!!editingLayaway} onClose={() => setEditingLayaway(null)} layaway={editingLayaway} sellers={sellers} inventory={inventory} onUpdateLayaway={onUpdateLayaway || (() => {})} />)}
 
