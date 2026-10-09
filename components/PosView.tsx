@@ -906,7 +906,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
         </div>
       </div>
 
-      {totalItems > 0 && (
+      {(
         <div 
             onClick={() => setIsMobileCartOpen(true)}
             className="lg:hidden fixed bottom-[calc(76px+env(safe-area-inset-bottom))] left-2 right-2 rounded-xl bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-[120] cursor-pointer"
@@ -918,7 +918,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 </div>
                 <div className="flex items-center space-x-3">
                     <span className="font-extrabold text-lg">{formatCOP(totalPrice)}</span>
-                    <span className="font-bold text-base">Ver Carrito →</span>
+                    <span className="font-bold text-base">{totalItems > 0 ? "Ver Carrito →" : "Abrir carrito →"}</span>
                 </div>
             </div>
         </div>
