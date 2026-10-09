@@ -3094,6 +3094,9 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
+    const loginStartedAt = performance.now();
+    const loginTimings: Record<string, number> = {};
+    const markLoginStage = (stage: string) => { loginTimings[stage] = Math.round(performance.now() - loginStartedAt); };
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanPass = (passwordAttempt || '').trim();
     // Fetch seller records only after the user submits credentials, not at startup.
@@ -3102,6 +3105,7 @@ const App: React.FC = () => {
     try {
       const snapshot = await getDocs(collection(db, 'sellers'));
       loginSellers = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Seller));
+      markLoginStage('consultaVendedores');
     } catch (error) {
       console.error('Could not load login identities:', error);
       alert('No se pudieron verificar los usuarios. Intenta nuevamente.');
@@ -3114,6 +3118,7 @@ const App: React.FC = () => {
       )
     );
     const seller = matches.find(s => (s.password || '').trim() === cleanPass);
+    markLoginStage('validacionCredenciales');
 
     if (seller) {
       if (seller.isDisabled) {
@@ -3143,6 +3148,7 @@ const App: React.FC = () => {
         }
       }
 
+      markLoginStage('resolucionEmpresa');
       const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
       setCurrentUser(sessionUser);
       setActiveCompanyId(resolvedCompanyId);
@@ -3162,6 +3168,7 @@ const App: React.FC = () => {
       if (sellerRole && (sellerRole.name || '').toLowerCase() === 'vendedor') setCurrentView(View.POS);
       else setCurrentView(View.DASHBOARD);
 
+      markLoginStage('resolucionRol');
       const newLoginRecord: Omit<LoginRecord, 'id'> = {
         sellerId: seller.id,
         sellerName: seller.name,
@@ -3169,7 +3176,11 @@ const App: React.FC = () => {
         storeId: seller.storeId,
         companyId: resolvedCompanyId
       };
-      await nativeAddDoc(collection(db, 'loginHistory'), newLoginRecord);
+      void nativeAddDoc(collection(db, 'loginHistory'), newLoginRecord).catch(error => {
+        console.error('Could not record login history:', error);
+      });
+      markLoginStage('sesionLista');
+      console.info('[Vestika] Tiempos de ingreso (ms):', loginTimings);
     } else {
       alert('Usuario o contraseña incorrecta.');
     }
