@@ -328,27 +328,21 @@ const Header: React.FC<HeaderProps> = ({
                 </button>
              )}
 
-             {pendingCount > 0 && (
-                <button 
-                  onClick={onOpenBriefing}
-                  className="relative p-2 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-100 dark:border-orange-800 text-orange-600 hover:scale-105 active:scale-95 transition-all"
-                >
-                  <AlertTriangleIcon className="w-5 h-5" />
-                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-[10px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm">
-                    {pendingCount}
-                  </span>
-                </button>
-             )}
-
              <div className="relative" ref={userMenuRef}>
-                <button 
-                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 border-transparent hover:border-accent transition-all active:scale-90"
-                >
-                  <div className="text-accent font-black text-sm">
-                    {currentUser.name.charAt(0)}
-                  </div>
-                </button>
+                <div className="relative">
+                  <button
+                    aria-label={pendingCount > 0 ? `Menú de usuario, ${pendingCount} novedades pendientes` : 'Menú de usuario'}
+                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border-2 transition-all active:scale-90 ${pendingCount > 0 ? 'border-orange-400 shadow-[0_0_0_3px_rgba(251,146,60,0.16)]' : 'border-transparent hover:border-accent'}`}
+                  >
+                    <span className="text-accent font-black text-sm">{currentUser.name.charAt(0)}</span>
+                  </button>
+                  {pendingCount > 0 && (
+                    <span aria-hidden="true" className="pointer-events-none absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 bg-red-600 text-[10px] font-black text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-pulse">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
+                </div>
 
                 {isUserDropdownOpen && (
                   <div className="absolute top-14 right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in z-[200]">
@@ -357,6 +351,12 @@ const Header: React.FC<HeaderProps> = ({
                         <p className="text-sm font-black text-gray-900 dark:text-white truncate">{currentUser.name}</p>
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
+                    {pendingCount > 0 && (
+                      <button type="button" onClick={() => { setIsUserDropdownOpen(false); onOpenBriefing(); }} className="w-full flex items-center gap-2 px-4 py-3 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-xs font-bold text-left border-b border-orange-100 dark:border-orange-900">
+                        <AlertTriangleIcon className="w-4 h-4 shrink-0" />
+                        <span>Ver {pendingCount} {pendingCount === 1 ? 'novedad pendiente' : 'novedades pendientes'}</span>
+                      </button>
+                    )}
                     <div className="p-2 space-y-1">
                       {isAdmin && (
                         <button type="button" onClick={() => { onToggleGlobalMode(); setIsUserDropdownOpen(false); }} className="lg:hidden flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
