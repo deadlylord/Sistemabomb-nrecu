@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.158', date: '2026-10-08', description: 'Staging: recuperación de módulos y carrito móvil', isCurrent: true, changes: ['Reintento de importación dinámica mediante recarga de aplicación.', 'Caché de PWA actualizada.', 'Carrito móvil disponible vacío y menú sin efecto de salto.'] },
+  { version: '1.1.159', date: '2026-10-08', description: 'Staging: carrito y herramientas separados', isCurrent: true, changes: ['Botones móviles independientes para carrito y herramientas POS.', 'Paneles separados con transición suave sin solapamiento.'] },
+  { version: '1.1.158', date: '2026-10-08', description: 'Staging: recuperación de módulos y carrito móvil', isCurrent: false, changes: ['Reintento de importación dinámica mediante recarga de aplicación.', 'Caché de PWA actualizada.', 'Carrito móvil disponible vacío y menú sin efecto de salto.'] },
   { version: '1.1.157', date: '2026-10-08', description: 'Staging: carrito POS móvil visible', isCurrent: false, changes: ['Barra de carrito encima del menú inferior.', 'Carrito desplegado por delante de la navegación.', 'Espacio seguro inferior en Android.'] },
   { version: '1.1.156', date: '2026-10-08', description: 'Staging: resumen y navegación Android', isCurrent: false, changes: ['Resumen del negocio y tarjetas de medios de pago uniformes.', 'Navegación Android con acceso horizontal a todas las categorías.', 'Submenú y selector de sedes adaptables a pantalla móvil.'] },
   { version: '1.1.155', date: '2026-10-08', description: 'Staging: indicadores comerciales en Informe de Pagos', isCurrent: false, changes: ['Siete indicadores comerciales: ventas cobradas, unidades, transacciones, ticket, prendas por venta, margen y utilidad.', 'Ventas cobradas separadas de recaudos y ajustes.', 'Tarjetas con nueva jerarquía visual.'] },
