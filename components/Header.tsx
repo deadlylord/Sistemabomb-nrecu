@@ -402,8 +402,8 @@ const Header: React.FC<HeaderProps> = ({
         <div className="grid grid-cols-4 gap-1 px-2 pt-2 pb-1">
           {filteredGroups.map((group, idx) => {
             const GroupIcon = group.icon;
-            const active = currentGroupIndex === idx;
-            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`min-w-0 flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors ${active ? 'text-accent bg-accent/10' : 'text-slate-600 dark:text-slate-300'}`}>
+            const active = isMobileMenuOpen ? previewGroupIndex === idx : currentGroupIndex === idx;
+            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`min-w-0 flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-all duration-200 active:scale-95 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-[0_2px_8px_rgba(0,0,0,0.08)] -translate-y-0.5' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
               <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
             </button>;
           })}
