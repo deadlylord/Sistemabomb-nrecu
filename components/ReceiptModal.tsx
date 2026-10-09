@@ -235,7 +235,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, store, company, onClo
                 <p className="text-lg font-bold">Total: {formatCOP(sale.totalAmount)}</p>
             </div>
             <div className="text-center mt-4 text-xs text-gray-800 dark:text-text-dark">
-                <p>{store.footerText}</p>
+                <p className="whitespace-pre-wrap break-words" style={{ overflowWrap: 'anywhere' }}>{store.footerText}</p>
             </div>
         </div>
         
