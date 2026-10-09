@@ -1220,16 +1220,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     <div className="max-w-7xl mx-auto min-w-0 space-y-4 sm:space-y-8 overflow-x-clip">
       {/* Mobile compact date controls and shortcuts, directly above bottom navigation. */}
       <div className="lg:hidden fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[95] bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 shadow-lg px-2 py-1.5 space-y-1">
-        <div className="flex items-center gap-1 min-w-0">
-          <button onClick={setToday} className="shrink-0 px-2 py-1 rounded-md bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-200 text-[11px] font-bold">Hoy</button>
-          <button onClick={setYesterday} className="shrink-0 px-2 py-1 rounded-md bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-200 text-[11px] font-bold">Ayer</button>
-          <input aria-label="Fecha desde" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="min-w-0 flex-1 w-0 rounded-md border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1 text-[11px]" />
-          <span className="text-[10px] text-slate-400">–</span>
-          <input aria-label="Fecha hasta" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="min-w-0 flex-1 w-0 rounded-md border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1 text-[11px]" />
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap pb-0.5">
+          <button onClick={setToday} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-200 text-xs font-bold">Hoy</button>
+          <button onClick={setYesterday} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-200 text-xs font-bold">Ayer</button>
+          <button onClick={setLast7Days} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Semana</button>
+          <button onClick={setThisMonth} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Mes</button>
+          <button aria-label="Día anterior" onClick={handlePreviousDay} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"><ChevronLeftIcon className="w-4 h-4" /></button>
+          <input aria-label="Fecha desde" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <span className="text-xs text-slate-400">–</span>
+          <input aria-label="Fecha hasta" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <button aria-label="Día siguiente" onClick={handleNextDay} disabled={isNextDayDisabled} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 disabled:opacity-40"><ChevronRightIcon className="w-4 h-4" /></button>
         </div>
         <div className="flex items-center justify-between gap-1 overflow-x-auto whitespace-nowrap">
-          <button onClick={setLast7Days} className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">7 días</button>
-          <button onClick={setThisMonth} className="px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">Mes</button>
           <button onClick={() => scrollToSection('payment-report')} className="px-2 py-1 text-[11px] font-semibold text-accent">Pagos</button>
           <button onClick={() => scrollToSection('price-analysis')} className="px-2 py-1 text-[11px] font-semibold text-accent">Precios</button>
           <button onClick={() => scrollToSection('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
