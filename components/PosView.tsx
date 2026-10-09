@@ -909,7 +909,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       {totalItems > 0 && (
         <div 
             onClick={() => setIsMobileCartOpen(true)}
-            className="lg:hidden fixed bottom-0 left-0 right-0 bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-40 cursor-pointer"
+            className="lg:hidden fixed bottom-[calc(76px+env(safe-area-inset-bottom))] left-2 right-2 rounded-xl bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-[120] cursor-pointer"
         >
             <div className="container mx-auto flex justify-between items-center text-white">
                 <div className="flex items-center space-x-2">
@@ -925,7 +925,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       )}
 
       {isMobileCartOpen && (
-        <div className="lg:hidden fixed inset-0 bg-white dark:bg-slate-950 z-[100] flex flex-col animate-slide-up">
+        <div className="lg:hidden fixed inset-0 bg-white dark:bg-slate-950 z-[150] flex flex-col animate-slide-up">
             <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-[110] shadow-sm">
                 <h2 className="text-xl font-bold text-accent">Tu Carrito</h2>
                 <button 
@@ -936,7 +936,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     <CrossIcon className="w-7 h-7" />
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-24">
+            <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-[calc(24px+env(safe-area-inset-bottom))]">
                 <div className="p-4">
                     {CartAndActionsContent({ isMobile: true })}
                 </div>
