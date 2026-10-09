@@ -260,11 +260,11 @@ const Header: React.FC<HeaderProps> = ({
           
           {/* LEFT: Logo & Brand (Desktop) / Sede Selector (Both) */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <div className="hidden lg:flex items-center justify-center flex-shrink-0" title="Vestika">
-              <img src="/assets/vestika.png" alt="Vestika" className="h-11 w-11 rounded-xl object-contain drop-shadow-sm" />
+            <div className="flex items-center justify-center flex-shrink-0" title="Vestika">
+              <img src="/assets/vestika.png" alt="Vestika" className="h-8 w-8 lg:h-11 lg:w-11 rounded-xl object-contain drop-shadow-sm" />
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
+            <div className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 flex items-center gap-1 sm:gap-4" ref={storeMenuRef}>
               <button 
                 aria-label="Cambiar sede"
                 aria-expanded={canSwitchStore && isStoreDropdownOpen}
@@ -274,7 +274,7 @@ const Header: React.FC<HeaderProps> = ({
                 style={{ borderColor: isStoreDropdownOpen ? 'var(--color-accent)' : undefined }}
               >
                 <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shadow-inner flex-shrink-0" style={{ backgroundColor: currentStore?.accentColor || 'var(--color-accent)' }}></div>
-                <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[60px] sm:max-w-none">
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-tighter sm:tracking-widest text-slate-700 dark:text-slate-200 truncate max-w-[130px] sm:max-w-[200px] lg:max-w-none">
                   {currentStore?.name || 'Sin sedes'}
                 </span>
                 {canSwitchStore && <ChevronDownIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400" />}
