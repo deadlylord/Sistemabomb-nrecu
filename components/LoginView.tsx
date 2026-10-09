@@ -12,13 +12,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (username && password) {
-      onLogin(username, password);
+      setSubmitting(true);
+      Promise.resolve(onLogin(username, password)).catch(() => { alert('No se pudo completar el ingreso.'); }).finally(() => setSubmitting(false));
     } else {
       alert('Por favor, ingresa tu usuario y contraseña.');
     }
@@ -50,7 +52,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Usuario"
             required
-            disabled={!isAppReady}
             autoComplete="username"
           />
         </div>
@@ -65,7 +66,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
             className="w-full bg-slate-200/50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl p-4 pl-12 text-slate-800 dark:text-text-light placeholder-slate-400 dark:placeholder-text-dark focus:ring-2 focus:ring-accent focus:border-accent outline-none transition"
             placeholder="Contraseña"
             required
-            disabled={!isAppReady}
             autoComplete="current-password"
           />
           <button
@@ -80,10 +80,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         
         <button
           type="submit"
-          disabled={!isAppReady}
+          disabled={!isAppReady || submitting}
           className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-all duration-300 hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/40 disabled:bg-slate-500 disabled:cursor-not-allowed"
         >
-          {isAppReady ? 'Ingresar' : 'Cargando...'}
+          {submitting ? <span role="status" aria-label="Ingresando a Vestika" className="inline-flex items-center justify-center gap-3"><span className="relative flex w-7 h-7 items-center justify-center"><span className="absolute inset-0 rounded-full border-[3px] border-white/20 border-t-sky-300 border-r-violet-400 border-b-pink-300 animate-spin" /><img src="/assets/vestika.png" alt="" className="w-4 h-4 rounded object-contain" /></span><span className="flex items-center gap-1.5" aria-hidden="true"><span className="w-2 h-2 rounded-full bg-sky-300 animate-pulse" /><span className="w-2 h-2 rounded-full bg-violet-300 animate-pulse" /><span className="w-2 h-2 rounded-full bg-pink-300 animate-pulse" /></span></span> : isAppReady ? 'Ingresar' : <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Conectando</span>}
         </button>
       </form>
       
