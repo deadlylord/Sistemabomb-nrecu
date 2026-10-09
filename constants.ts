@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.150', date: '2026-10-08', description: 'Staging: selector de fechas móvil en una fila', isCurrent: true, changes: ['Hoy, Ayer, Semana, Mes, flechas y fechas en una sola línea.', 'Controles más grandes con desplazamiento horizontal.', 'Accesos directos conservados en segunda fila.'] },
+  { version: '1.1.151', date: '2026-10-08', description: 'Staging: informe de pagos simplificado', isCurrent: true, changes: ['Se retira el botón Ayer de los filtros.', 'Se oculta la tarjeta de gastos operacionales.', 'Informe de Pagos en una sola línea, sin nombre de tienda ni colapsar.'] },
+  { version: '1.1.150', date: '2026-10-08', description: 'Staging: selector de fechas móvil en una fila', isCurrent: false, changes: ['Hoy, Ayer, Semana, Mes, flechas y fechas en una sola línea.', 'Controles más grandes con desplazamiento horizontal.', 'Accesos directos conservados en segunda fila.'] },
   { version: '1.1.149', date: '2026-10-08', description: 'Staging: cabecera y accesos móviles compactos', isCurrent: false, changes: ['Logo Vestika a la izquierda y tienda centrada en la cabecera móvil.', 'Hoy, Ayer y fechas en una línea sobre la navegación inferior.', 'Accesos directos compactos encima del menú móvil.'] },
   { version: '1.1.148', date: '2026-10-08', description: 'Staging: filtros compactos en historial', isCurrent: false, changes: ['Fechas del historial en una fila compacta.', 'Filtro de vendedores junto a los demás filtros de ventas.', 'Menos espacio desperdiciado en móvil y escritorio.'] },
   { version: '1.1.147', date: '2026-10-08', description: 'Staging: IA centralizada en CEO Center', isCurrent: false, changes: ['Se retira el panel IA del Resumen del negocio.', 'La pestaña de IA de CEO Center permanece disponible para análisis y consultas.'] },
