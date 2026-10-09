@@ -12,13 +12,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (username && password) {
-      onLogin(username, password);
+      setSubmitting(true);
+      Promise.resolve(onLogin(username, password)).catch(() => { alert('No se pudo completar el ingreso.'); }).finally(() => setSubmitting(false));
     } else {
       alert('Por favor, ingresa tu usuario y contraseña.');
     }
@@ -78,10 +80,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         
         <button
           type="submit"
-          disabled={!isAppReady}
+          disabled={!isAppReady || submitting}
           className="w-full bg-accent text-white font-bold py-4 px-4 rounded-xl transition-all duration-300 hover:bg-accent-hover hover:shadow-lg hover:shadow-accent/40 disabled:bg-slate-500 disabled:cursor-not-allowed"
         >
-          {isAppReady ? 'Ingresar' : <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Conectando</span>}
+          {submitting ? <span className="inline-flex items-center gap-2"><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Verificando acceso…</span> : isAppReady ? 'Ingresar' : <span className="inline-flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Conectando</span>}
         </button>
       </form>
       
