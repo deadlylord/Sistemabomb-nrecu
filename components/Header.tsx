@@ -319,7 +319,7 @@ const Header: React.FC<HeaderProps> = ({
                 <button 
                   onClick={onToggleGlobalMode}
                   title={isGlobalMode ? "Modo Multisede Activo" : "Activar Modo Multisede"}
-                  className={`p-2 rounded-xl transition-all border-2 active:scale-90
+                  className={`hidden lg:inline-flex p-2 rounded-xl transition-all border-2 active:scale-90
                     ${isGlobalMode 
                       ? 'bg-yellow-400 border-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20' 
                       : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400 hover:text-accent hover:border-accent'}`}
@@ -358,6 +358,19 @@ const Header: React.FC<HeaderProps> = ({
                         <p className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">Sede: {currentStore?.name}</p>
                     </div>
                     <div className="p-2 space-y-1">
+                      {isAdmin && (
+                        <button type="button" onClick={() => { onToggleGlobalMode(); setIsUserDropdownOpen(false); }} className="lg:hidden flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <BuildingStorefrontIcon className="w-5 h-5 text-accent" />
+                          <span>{isGlobalMode ? 'Desactivar modo multisede' : 'Activar modo multisede'}</span>
+                        </button>
+                      )}
+                      {isAdmin && userPermissions.includes(View.FINANCIAL_RECONCILIATION) && (
+                        <button type="button" onClick={() => { setCurrentView(View.FINANCIAL_RECONCILIATION); setIsUserDropdownOpen(false); }} className="lg:hidden flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <WalletNavIcon className="w-5 h-5 text-accent" />
+                          <span>Libro de caja</span>
+                        </button>
+                      )}
+
                       {isDeveloper && (
                         <button 
                           onClick={() => { setCurrentView(View.DEVELOPER_CENTER); setIsUserDropdownOpen(false); }} 
