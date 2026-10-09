@@ -1,33 +1,54 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
-import { getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from "firebase/firestore";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 
-// Your web app's Firebase configuration
+const appEnv = import.meta.env.VITE_APP_ENV || "staging";
+const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true";
+
 const firebaseConfig = {
-  apiKey: "AIzaSyCsEfJKMRzfOirlzpzPag8hwIyDzEwXicU",
-  authDomain: "factura2-6e811.firebaseapp.com",
-  databaseURL: "https://factura2-6e811-default-rtdb.firebaseio.com",
-  projectId: "factura2-6e811",
-  storageBucket: "factura2-6e811.firebasestorage.app",
-  messagingSenderId: "1038601908493",
-  appId: "1:1038601908493:web:bfcaf3c4312aae287fc044",
-  measurementId: "G-1RBDBWCRDW"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+const missingConfig = Object.entries(firebaseConfig)
+  .filter(([key, value]) => key !== "databaseURL" && key !== "measurementId" && !value)
+  .map(([key]) => key);
 
-// Initialize Firebase
+if (missingConfig.length) {
+  throw new Error(`Firebase configuration is incomplete for ${appEnv}: ${missingConfig.join(", ")}`);
+}
+
+const productionProjectId = import.meta.env.VITE_FIREBASE_PRODUCTION_PROJECT_ID;
+if (appEnv !== "production" && !useEmulators && (firebaseConfig.projectId === "factura2-6e811" || (productionProjectId && firebaseConfig.projectId === productionProjectId))) {
+  throw new Error(
+    `Safety guard: ${appEnv} is configured to use the production Firebase project. Use the emulator or a dedicated staging project.`
+  );
+}
+
+if (appEnv === "production" && useEmulators) {
+  throw new Error("Safety guard: production cannot run with Firebase emulators enabled.");
+}
+
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with persistence.
-// This is the recommended way for v9+ and avoids the deprecated enableIndexedDbPersistence.
-// It might throw an error in environments where IndexedDB is not available.
 let db;
 try {
   db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });
-  console.log("Firestore persistence enabled successfully.");
 } catch (error) {
   console.error("Could not initialize Firestore with persistence, falling back to default.", error);
   db = getFirestore(app);
@@ -35,4 +56,12 @@ try {
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);
+
+if (useEmulators) {
+  const host = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || "127.0.0.1";
+  connectFirestoreEmulator(db, host, Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT || 8080));
+  connectAuthEmulator(auth, `http://${host}:${import.meta.env.VITE_AUTH_EMULATOR_PORT || "9099"}`, { disableWarnings: true });
+  connectStorageEmulator(storage, host, Number(import.meta.env.VITE_STORAGE_EMULATOR_PORT || 9199));
+}
+
 export { db };
