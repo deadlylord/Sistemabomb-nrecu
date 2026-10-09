@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.144', date: '2026-10-08', description: 'Staging: accesos móviles y progreso de ingreso', isCurrent: true, changes: ['Accesos de modo multisede y libro de caja en el menú del perfil móvil según permisos.', 'Animación y bloqueo de pulsaciones repetidas al ingresar.'] },
+  { version: '1.1.145', date: '2026-10-08', description: 'Staging: animación de ingreso multicolor', isCurrent: true, changes: ['Botón de ingreso con logo giratorio y puntos en azul cielo, violeta y rosa, sin texto de verificación.'] },
+  { version: '1.1.144', date: '2026-10-08', description: 'Staging: accesos móviles y progreso de ingreso', isCurrent: false, changes: ['Accesos de modo multisede y libro de caja en el menú del perfil móvil según permisos.', 'Animación y bloqueo de pulsaciones repetidas al ingresar.'] },
   { version: '1.1.143', date: '2026-10-08', description: 'Staging: primera fase de navegación móvil', isCurrent: false, changes: ['Menú móvil trasladado a barra inferior fija con acceso a módulos según permisos.', 'Cabecera móvil más despejada.', 'Ingresos destacados y tarjetas compactas en el resumen del negocio.'] },
   { version: '1.1.142', date: '2026-10-08', description: 'Staging: animación de carga unificada', isCurrent: false, changes: ['Nueva animación Vestika para módulos y cambios de contexto.', 'Carga inicial y asistente del resumen con indicador visual consistente.', 'Estado de conexión del login con indicador animado.'] },
   { version: '1.1.141', date: '2026-10-08', description: 'Staging: animación de carga y logo en escritorio', isCurrent: false, changes: ['Carga animada con el logo Vestika y los tonos de su identidad.', 'La cabecera de escritorio muestra solo el logo, sin repetir el nombre.', 'Se mantienen los modos claro y oscuro.'] },
