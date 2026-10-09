@@ -75,6 +75,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const [justAddedProductId, setJustAddedProductId] = useState<string | null>(null);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [mobilePosPanel, setMobilePosPanel] = useState<'cart' | 'tools' | null>(null);
   const [customerInfo, setCustomerInfo] = useState<{name: string, phone: string} | null>(null);
   
   const [isCeoNoteModalOpen, setIsCeoNoteModalOpen] = useState(false);
@@ -506,8 +507,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
   const inactiveButtonClasses = "bg-white dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/80 hover:text-slate-800 dark:hover:text-slate-200";
   
-  const CartAndActionsContent = ({ isMobile = false }) => (
+  const CartAndActionsContent = ({ isMobile = false, section = "all" }: { isMobile?: boolean; section?: "all" | "cart" | "tools" }) => (
     <div className="space-y-3">
+        {section !== "cart" && <>
         {/* Quick link to Tag Scanning Audit */}
         {props.canAccessTagScanning && <div className="bg-indigo-100 dark:bg-indigo-900/70 border border-indigo-500/50 text-indigo-700 dark:text-indigo-300 p-2.5 rounded-xl shadow-sm" role="alert">
             <div className="flex items-center justify-between gap-2">
@@ -707,7 +709,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 </div>
             )}
         </div>
-        <CartPanel
+        </>}
+        {section !== "tools" && <CartPanel
             cartItems={props.activeCart}
             sellers={props.sellers}
             customers={props.allCustomers}
@@ -725,7 +728,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
             currentStore={props.currentStore}
             giftVouchers={props.giftVouchers}
             onUpdateGiftVoucher={props.onUpdateGiftVoucher}
-        />
+        />}
     </div>
   );
 
@@ -906,44 +909,25 @@ const PosView: React.FC<PosViewProps> = (props) => {
         </div>
       </div>
 
-      {(
-        <div 
-            onClick={() => setIsMobileCartOpen(true)}
-            className="lg:hidden fixed bottom-[calc(76px+env(safe-area-inset-bottom))] left-2 right-2 rounded-xl bg-accent p-3 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.3)] z-[120] cursor-pointer"
-        >
-            <div className="container mx-auto flex justify-between items-center text-white">
-                <div className="flex items-center space-x-2">
-                    <ShoppingCartIcon className="w-6 h-6" />
-                    <span className="font-bold text-base">{totalItems} {totalItems === 1 ? 'producto' : 'productos'}</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                    <span className="font-extrabold text-lg">{formatCOP(totalPrice)}</span>
-                    <span className="font-bold text-base">{totalItems > 0 ? "Ver Carrito →" : "Abrir carrito →"}</span>
-                </div>
-            </div>
-        </div>
-      )}
+      <div className="lg:hidden fixed bottom-[calc(76px+env(safe-area-inset-bottom))] left-2 right-2 z-[120] grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => { setMobilePosPanel('tools'); setIsControlPanelCollapsed(false); }} className="min-w-0 flex items-center justify-center gap-2 rounded-xl border border-accent/25 bg-white dark:bg-slate-800 px-3 py-3 text-accent font-bold shadow-lg active:scale-[0.98] transition-transform">
+          <span>⚙️</span><span>Herramientas</span>
+        </button>
+        <button type="button" onClick={() => { setMobilePosPanel('cart'); setIsMobileCartOpen(true); }} className="min-w-0 flex items-center justify-center gap-2 rounded-xl bg-accent px-3 py-3 text-white font-bold shadow-lg active:scale-[0.98] transition-transform">
+          <ShoppingCartIcon className="w-5 h-5" /><span>Carrito ({totalItems})</span>
+        </button>
+      </div>
 
-      {isMobileCartOpen && (
-        <div className="lg:hidden fixed inset-0 bg-white dark:bg-slate-950 z-[150] flex flex-col animate-slide-up">
-            <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-[110] shadow-sm">
-                <h2 className="text-xl font-bold text-accent">Tu Carrito</h2>
-                <button 
-                    onClick={() => setIsMobileCartOpen(false)}
-                    className="p-3 -m-2 rounded-full bg-slate-100 dark:bg-slate-800 text-accent hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-all border border-slate-200 dark:border-slate-700"
-                    aria-label="Cerrar carrito"
-                >
-                    <CrossIcon className="w-7 h-7" />
-                </button>
-            </div>
-            <div className="flex-grow overflow-y-auto bg-slate-50 dark:bg-slate-950 pb-[calc(24px+env(safe-area-inset-bottom))]">
-                <div className="p-4">
-                    {CartAndActionsContent({ isMobile: true })}
-                </div>
-            </div>
+      <div className={`lg:hidden fixed inset-0 z-[150] flex flex-col bg-white dark:bg-slate-950 transition-[opacity,transform,visibility] duration-300 ease-out ${mobilePosPanel ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-6 invisible pointer-events-none'}`} aria-hidden={!mobilePosPanel}>
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <h2 className="text-lg font-bold text-accent">{mobilePosPanel === 'tools' ? 'Herramientas POS' : 'Tu carrito'}</h2>
+          <button type="button" onClick={() => { setMobilePosPanel(null); setIsMobileCartOpen(false); }} className="rounded-xl bg-slate-100 dark:bg-slate-800 p-2.5 text-accent" aria-label="Cerrar panel"><CrossIcon className="w-6 h-6" /></button>
         </div>
-      )}
-      
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-slate-50 dark:bg-slate-950 px-3 py-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+          {mobilePosPanel === 'tools' ? CartAndActionsContent({ isMobile: true, section: 'tools' }) : mobilePosPanel === 'cart' ? CartAndActionsContent({ isMobile: true, section: 'cart' }) : null}
+        </div>
+      </div>
+
       {isSalesReportModalOpen && (
           <DailySalesReportModal
               isOpen={isSalesReportModalOpen}
