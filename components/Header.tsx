@@ -281,7 +281,7 @@ const Header: React.FC<HeaderProps> = ({
               </button>
 
               {isStoreDropdownOpen && canSwitchStore && (
-                <div className="absolute top-14 left-2 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 lg:left-2 lg:translate-x-0 mt-2 w-[min(90vw,320px)] lg:w-56 max-h-[65dvh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-fade-in p-1.5 z-[200]">
                   <p className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 mb-1">Cambiar Sede</p>
                   {stores.map(store => (
                     <button
@@ -399,19 +399,19 @@ const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile bottom navigation: tenant permissions are inherited from filteredGroups. */}
       <nav aria-label="Navegación principal" className="lg:hidden fixed bottom-0 inset-x-0 z-[110] border-t border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-4 gap-1 px-2 pt-2 pb-1">
+        <div className="flex gap-1 px-2 pt-2 pb-1 overflow-x-auto overscroll-x-contain scrollbar-thin">
           {filteredGroups.map((group, idx) => {
             const GroupIcon = group.icon;
             const active = isMobileMenuOpen ? previewGroupIndex === idx : currentGroupIndex === idx;
-            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`min-w-0 flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-all duration-200 active:scale-95 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-[0_2px_8px_rgba(0,0,0,0.08)] -translate-y-0.5' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-              <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
+            return <button key={group.id} type="button" aria-expanded={isMobileMenuOpen && previewGroupIndex === idx} onClick={() => handleMobileGroupClick(idx)} className={`flex-1 min-w-[72px] flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-all duration-200 active:scale-95 ${active ? 'text-accent bg-gradient-to-b from-accent/20 to-accent/5 ring-1 ring-accent/25 shadow-[0_2px_8px_rgba(0,0,0,0.08)] -translate-y-0.5' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+              <GroupIcon className="w-6 h-6" /><span className="truncate max-w-full px-0.5">{group.id === 'inv' ? 'Inventario' : group.id === 'admin' ? 'Admin' : group.label}</span>
             </button>;
           })}
         </div>
         {isMobileMenuOpen && displayedGroup && (
-          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-accent/20 bg-gradient-to-b from-white via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 shadow-[0_12px_36px_rgba(0,0,0,0.22)] p-3 max-h-[65vh] overflow-y-auto animate-fade-in">
+          <div ref={groupMenuRef} className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-accent/20 bg-gradient-to-b from-white via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 shadow-[0_12px_36px_rgba(0,0,0,0.22)] p-3 max-h-[min(65vh,calc(100dvh-180px))] overflow-y-auto overscroll-contain animate-fade-in">
             <div className="flex justify-between items-center px-2 pb-2 border-b dark:border-slate-700"><strong className="text-sm">{displayedGroup.label}</strong><button type="button" aria-label="Cerrar menú" onClick={() => setIsMobileMenuOpen(false)}><CrossIcon className="w-5 h-5" /></button></div>
-            <div className="grid gap-1 mt-2">{displayedGroup.items.map(item => <NavButton key={item.view} item={item} isMobile />)}</div>
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2 mt-2">{displayedGroup.items.map(item => <NavButton key={item.view} item={item} isMobile />)}</div>
           </div>
         )}
       </nav>
