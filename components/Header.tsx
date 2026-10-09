@@ -151,11 +151,6 @@ const Header: React.FC<HeaderProps> = ({
   }, [currentUser.id, currentCompany?.id, currentStore?.id]);
 
   useEffect(() => {
-    setIsMobileMenuOpen(false);
-    setPreviewGroupIndex(-1);
-  }, [currentView]);
-
-  useEffect(() => {
     if (isMobileMenuOpen && previewGroupIndex === -1) {
         setPreviewGroupIndex(currentGroupIndex === -1 ? 0 : currentGroupIndex);
     }
@@ -186,12 +181,9 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   const handleMobileGroupClick = (index: number) => {
-    if (previewGroupIndex === index && isMobileMenuOpen) {
-      setIsMobileMenuOpen(false);
-    } else {
-      setPreviewGroupIndex(index);
-      setIsMobileMenuOpen(true);
-    }
+    // Mantener el panel montado al pasar entre categorías: solo cambia el contenido.
+    setPreviewGroupIndex(index);
+    setIsMobileMenuOpen(true);
   };
 
   const pendingCount = useMemo(() => {
