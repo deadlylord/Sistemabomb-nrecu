@@ -1360,6 +1360,61 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const incident = incidents.find(i => i.id === incidentId);
     if (!incident) return;
+    // Procesamiento único: leer el estado real antes de modificar stock.
+    if (incident.type === IncidentType.DAMAGED || incident.type === IncidentType.PRODUCT_EXCHANGE) {
+      try {
+        await runTransaction(db, async transaction => {
+          const incidentRef = doc(db, 'incidents', incidentId);
+          const current = await transaction.get(incidentRef);
+          if (!current.exists()) return;
+          const latest = current.data() as Incident;
+          if (!visibleStoreIds.includes(latest.storeId)) throw new Error('Novedad fuera de las sedes autorizadas.');
+          const damage = latest.type === IncidentType.DAMAGED;
+          const expected = damage ? IncidentStatus.DAÑADO_REPORTADO : IncidentStatus.CAMBIO_SOLICITADO;
+          if (latest.status !== expected) return;
+          const status = damage ? IncidentStatus.EN_ARREGLO_CAMBIO : IncidentStatus.CAMBIO_PROCESADO;
+          const changes = damage
+            ? [{ productId: latest.productId, productName: latest.productName || 'Producto', quantity: -1, type: ProductChangeType.DAMAGED }]
+            : [
+                ...(latest.returnedItems || []).map(item => ({ productId: item.productId, productName: item.productName, quantity: Number(item.quantity), type: ProductChangeType.EXCHANGE_IN })),
+                ...(latest.takenItems || []).map(item => ({ productId: item.productId, productName: item.productName, quantity: -Number(item.quantity), type: ProductChangeType.EXCHANGE_OUT }))
+              ];
+          if (changes.some(change => !change.productId || !Number.isFinite(change.quantity) || change.quantity === 0)) throw new Error('Novedad con productos o cantidades inválidas.');
+          const refs = [...new Set(changes.map(change => change.productId as string))].map(id => ({ id, ref: doc(db, 'inventory', id) }));
+          const snapshots = await Promise.all(refs.map(async item => ({ id: item.id, snapshot: await transaction.get(item.ref), ref: item.ref })));
+          for (const item of snapshots) {
+            if (!item.snapshot.exists() || item.snapshot.data()?.storeId !== latest.storeId) throw new Error('Producto del cambio no encontrado en su sede.');
+          }
+          const timestamp = new Date().toISOString();
+          for (const item of snapshots) {
+            const related = changes.filter(change => change.productId === item.id);
+            const delta = related.reduce((sum, change) => sum + change.quantity, 0);
+            const before = Number(item.snapshot.data()?.stock || 0);
+            if (delta) transaction.update(item.ref, { stock: before + delta });
+            let running = before;
+            for (const change of related) {
+              const logRef = doc(collection(db, 'productHistory'));
+              transaction.set(logRef, {
+                id: logRef.id, productId: item.id, productName: change.productName,
+                storeId: latest.storeId, changedBy: currentUser.name, timestamp,
+                changeType: change.type, incidentId, stockBefore: running,
+                stockAfter: running + change.quantity, quantityChange: change.quantity,
+                details: `Novedad ${incidentId}. Stock: ${running} → ${running + change.quantity} (${change.quantity > 0 ? '+' : ''}${change.quantity})`
+              });
+              running += change.quantity;
+            }
+          }
+          transaction.update(incidentRef, {
+            status, resolutionDate: timestamp,
+            history: [...(latest.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad aprobada y procesada' }]
+          });
+        });
+      } catch (error: any) {
+        console.error('Error aprobando novedad con inventario:', error);
+        alert(`No se pudo procesar la novedad: ${error.message}`);
+      }
+      return;
+    }
     const batch = writeBatch(db);
     const incidentRef = doc(db, 'incidents', incidentId);
     let newStatus: IncidentStatus;
