@@ -862,22 +862,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [activeStore, activeTab]);
 
   const filteredRecords = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00').getTime() : null;
+    const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59').getTime() : null;
     return records.filter(r => {
-        const matchesAccount = r.accountType === activeTab;
-        const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) || (r.subCategory && r.subCategory.toLowerCase().includes(searchTerm.toLowerCase()));
-        
-        // Filtro de rango de fechas
-        const rDate = new Date(r.date);
-        const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00') : null;
-        const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59') : null;
-        const matchesDate = (!start || rDate >= start) && (!end || rDate <= end);
-
-        // Filtro de tipo (Ingreso / Egreso)
-        let matchesType = true;
-        if (financeTypeFilter === 'income') matchesType = r.amount > 0;
-        else if (financeTypeFilter === 'expense') matchesType = r.amount < 0;
-
-        return matchesAccount && matchesSearch && matchesDate && matchesType;
+        if (r.accountType !== activeTab) return false;
+        if (financeTypeFilter === 'income' && r.amount <= 0) return false;
+        if (financeTypeFilter === 'expense' && r.amount >= 0) return false;
+        if (search && !(r.description || '').toLowerCase().includes(search) &&
+            !(r.subCategory || '').toLowerCase().includes(search)) return false;
+        if (start === null && end === null) return true;
+        const date = new Date(r.date).getTime();
+        return (start === null || date >= start) && (end === null || date <= end);
     });
   }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter]);
 
@@ -1428,26 +1424,67 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       }
   };
 
-  const handleDeleteRecord = (record: FinancialRecord) => { setRecordToDelete(record); };
+  // Cada eliminación se controla por ID: una confirmación lenta no bloquea las demás.
+  // Diagnóstico local: no genera consultas ni escrituras adicionales.
+  const deletionMetricsRef = useRef<Map<string, { startedAt: number; commitAt?: number }>>(new Map());
+  useEffect(() => {
+      for (const [id, metric] of deletionMetricsRef.current) {
+          if (rawAllRecords.some(record => record.id === id)) continue;
+          if (metric.commitAt !== undefined) {
+              console.info('[Conciliación][diagnóstico] Registro ausente tras sincronización', {
+                  id, totalMs: Math.round(performance.now() - metric.startedAt),
+                  afterCommitMs: Math.round(performance.now() - metric.commitAt),
+                  loadedRecords: rawAllRecords.length, storeRecords: records.length
+              });
+              deletionMetricsRef.current.delete(id);
+          }
+      }
+  }, [rawAllRecords, records.length]);
+  const pendingDeletionIdsRef = useRef<Set<string>>(new Set());
+  const handleDeleteRecord = (record: FinancialRecord) => {
+      if (!pendingDeletionIdsRef.current.has(record.id)) setRecordToDelete(record);
+  };
 
   const confirmDelete = async () => {
-      if (recordToDelete) {
+      if (!recordToDelete || pendingDeletionIdsRef.current.has(recordToDelete.id)) return;
+      const target = recordToDelete;
+      pendingDeletionIdsRef.current.add(target.id);
+      const startedAt = performance.now();
+      const loadedRecords = rawAllRecords.length;
+      const storeRecords = records.length;
+      deletionMetricsRef.current.set(target.id, { startedAt });
+      console.info('[Conciliación][diagnóstico] Inicio eliminación', { loadedRecords, storeRecords, visibleRecords: filteredRecords.length });
+      setRecordToDelete(null);
+      setAllRecords(previous => previous.filter(record => record.id !== target.id));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+          console.info('[Conciliación][diagnóstico] Interfaz actualizada', { id: target.id, elapsedMs: Math.round(performance.now() - startedAt), loadedRecords, storeRecords });
+      }));
+      try {
           const batch = writeBatch(db);
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
           batch.set(historyRef, {
               id: historyRef.id,
-              recordId: recordToDelete.id,
+              recordId: target.id,
               action: 'delete',
               timestamp: new Date().toISOString(),
               changedBy: currentUser.name,
-              previousState: recordToDelete,
-              storeId: recordToDelete.storeId || activeStoreId,
-              accountType: recordToDelete.accountType
+              previousState: target,
+              storeId: target.storeId || activeStoreId,
+              accountType: target.accountType
           });
-
-          batch.delete(doc(db, 'financialRecords', recordToDelete.id));
+          batch.delete(doc(db, 'financialRecords', target.id));
           await batch.commit();
-          setRecordToDelete(null);
+          const commitAt = performance.now();
+          const metric = deletionMetricsRef.current.get(target.id);
+          if (metric) metric.commitAt = commitAt;
+          console.info('[Conciliación][diagnóstico] Firebase confirmó eliminación', { id: target.id, durationMs: Math.round(commitAt - startedAt), loadedRecords, storeRecords });
+      } catch (error) {
+          deletionMetricsRef.current.delete(target.id);
+          console.error('[Conciliación][diagnóstico] Error al eliminar registro', { elapsedMs: Math.round(performance.now() - startedAt), error });
+          setAllRecords(previous => previous.some(record => record.id === target.id) ? previous : [...previous, target]);
+          alert('No se pudo eliminar el registro. Se restauró en pantalla. Comprueba la conexión e inténtalo nuevamente.');
+      } finally {
+          pendingDeletionIdsRef.current.delete(target.id);
       }
   };
 

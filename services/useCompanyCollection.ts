@@ -10,6 +10,7 @@ export function useCompanyCollection<T extends { id: string }>(name: string, sto
     if (!enabled) return;
     let active = true;
     const rows = new Map<string, T[]>();
+    let lastMerged: T[] = [];
     const ids: string[] = JSON.parse(storeKey);
     const companyScope = { companyId: scope.slice(scope.indexOf(':') + 1), storeIds: new Set(ids) };
     const unsubscribers = ids.map(id => subscribeStoreRows(name, id, scope, items => {
@@ -18,7 +19,11 @@ export function useCompanyCollection<T extends { id: string }>(name: string, sto
         try { assertTenantData(name, item, companyScope); return true; }
         catch { return false; }
       }) as T[]);
-      setter(ids.flatMap(store => rows.get(store) || []));
+      // Evitar actualizaciones si el snapshot no cambió (p. ej. reconexiones/caché).
+      const merged = ids.flatMap(store => rows.get(store) || []);
+      if (merged.length === lastMerged.length && merged.every((item, index) => item === lastMerged[index])) return;
+      lastMerged = merged;
+      setter(merged);
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [name, storeKey, scope, enabled, setter]);
