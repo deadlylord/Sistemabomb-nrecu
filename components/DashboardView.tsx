@@ -1,5 +1,6 @@
 import VestikaLoader from './VestikaLoader';
 import CategorySalesChart from './CategorySalesChart';
+import { previousPeriod } from '../services/previousPeriod';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
@@ -567,7 +568,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const averageTicketSize = transactionCount > 0 ? salesCollected / transactionCount : 0;
         const unitsPerTransaction = transactionCount > 0 ? totalUnitsSold / transactionCount : 0;
         const grossMarginPercent = salesCollected > 0 ? (salesCollected - totalCogs) / salesCollected * 100 : 0;
-        const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
+        const totalInventoryValue = inventory.reduce((sum, p) => sum + ((Number(p.cost) || 0) * (Number(p.stock) || 0)), 0);
         const netProfit = totalProfit - totalExpenses;
 
         return { 
@@ -717,15 +718,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
   // Mismo rango de días inmediatamente anterior; solo usa datos ya cargados.
   const previousPeriodIncome = useMemo(() => {
-    if (!startDate || !endDate) return null;
-    const from = new Date(startDate + 'T00:00:00');
-    const through = new Date(endDate + 'T00:00:00');
-    if (Number.isNaN(from.getTime()) || Number.isNaN(through.getTime()) || through < from) return null;
-    const days = Math.round((through.getTime() - from.getTime()) / 86400000) + 1;
-    const previousEnd = new Date(from);
-    previousEnd.setMilliseconds(-1);
-    const previousStart = new Date(from);
-    previousStart.setDate(previousStart.getDate() - days);
+    const range = previousPeriod(startDate, endDate);
+    if (!range) return null;
+    const { start: previousStart, end: previousEnd } = range;
     const inPrevious = (date: string) => {
       const time = new Date(date).getTime();
       return time >= previousStart.getTime() && time <= previousEnd.getTime();
@@ -1337,13 +1332,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
         <div className="mt-3 mb-2 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-slate-900 border border-emerald-200 dark:border-emerald-800 px-4 py-3 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Ingresos del período</p><p className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">{formatCOP(totalPeriodIncome)}</p></div>{previousPeriodIncome && <div className="min-w-0 text-left sm:text-right"><p className="text-[11px] text-slate-600 dark:text-slate-300">Período anterior: {formatCOP(previousPeriodIncome.total)}</p><p className={`text-sm font-extrabold ${totalPeriodIncome >= previousPeriodIncome.total ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-400'}`}>{previousPeriodIncome.total === 0 ? (totalPeriodIncome === 0 ? 'Sin variación' : 'Sin base comparable') : `${totalPeriodIncome >= previousPeriodIncome.total ? '▲ +' : '▼ '}${(((totalPeriodIncome - previousPeriodIncome.total) / previousPeriodIncome.total) * 100).toFixed(1)}%`}</p><p className="text-[10px] text-slate-500 dark:text-slate-400">{previousPeriodIncome.start} – {previousPeriodIncome.end}</p></div>}</div></div>
         <div className="mt-4 pt-4 border-t-2 border-accent/30">
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-3 mb-6">
+                 <div className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-8 gap-2 sm:gap-3 mb-6">
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ventas cobradas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.salesCollected)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Excluye recaudos y ajustes de caja</p></div>
                     <button type="button" onClick={() => setIsUnitsSoldExpanded(!isUnitsSoldExpanded)} className="min-w-0 text-left rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Unidades vendidas</p><p className="mt-1 text-lg sm:text-xl font-extrabold">{metricsForCurrentStore.totalUnitsSold}</p><p className="mt-1 text-[10px] text-slate-500">Ver desglose por vendedor</p></button>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Número de ventas</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.transactionCount}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ticket promedio</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Prendas por venta</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.unitsPerTransaction.toFixed(2)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Margen bruto estimado</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.grossMarginPercent.toFixed(1)}%</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Según costos asociados a los pagos</p></div>
+                    <div className="min-w-0 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Valor del inventario</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight break-words">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Actual · a costo</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilidad estimada</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.netProfit)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Después de gastos operativos</p></div>
                  </div>
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
