@@ -521,7 +521,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             
             const totalTransactionAmount = Math.max(t.totalAmount, 1);
             const totalTransactionCost = saleItems.reduce((sum, item) => sum + ((item?.cost || 0) * (item?.quantity || 0)), 0);
-            const rawTransactionProfit = saleItems.reduce((sum, item) => sum + (((item.price || 0) - (item.cost || 0)) * (item.quantity || 0)), 0);
+            const rawTransactionProfit = saleItems.reduce((sum, item) => sum + (((item.price || 0) - (item.cost || 0)) * (item.quantity || 0)), 0) - ('discountAmount' in t ? (Number(t.discountAmount) || 0) : 0);
 
             payments.forEach(p => {
                 if (isWithinRange(p.date)) {
