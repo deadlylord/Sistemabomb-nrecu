@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bombon-pos-cache-v1.1.142-local-styles';
+const CACHE_NAME = 'bombon-pos-cache-v1.1.143-local-styles';
 const urlsToCache = ['/', '/index.html', '/startup.js', '/manifest.json', '/assets/icon.svg', '/assets/maskable_icon.svg', '/icon-192.png', '/icon-512.png'];
 const staticAsset = /^\/assets\/[^?]+\.(?:js|css|svg|png|jpe?g|webp|gif|ico|woff2?|ttf)$/i;
 self.addEventListener('install', event => {
@@ -11,8 +11,10 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const request = event.request;
     const url = new URL(request.url);
+    const siteHost = new URL(self.location.origin).hostname.split('--').pop();
+    const trustedDeployAsset = url.protocol === 'https:' && /^[a-f0-9]{24}$/i.test(url.hostname.split('--')[0]) && url.hostname === `${url.hostname.split('--')[0]}--${siteHost}` && staticAsset.test(url.pathname);
     // Business/API responses must never enter a shared application-shell cache.
-    if (request.method !== 'GET' || url.origin !== self.location.origin || request.headers.has('Authorization') || request.cache === 'no-store' || request.cache === 'no-cache') return;
+    if (request.method !== 'GET' || (url.origin !== self.location.origin && !trustedDeployAsset) || request.headers.has('Authorization') || request.cache === 'no-store' || request.cache === 'no-cache') return;
     if (!urlsToCache.includes(url.pathname) && !staticAsset.test(url.pathname)) return;
     event.respondWith((async () => {
         const cache = await caches.open(CACHE_NAME);
