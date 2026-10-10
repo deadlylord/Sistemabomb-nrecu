@@ -1429,6 +1429,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   // Cada eliminación se controla por ID: una confirmación lenta no bloquea las demás.
+  // Diagnóstico local: no genera consultas ni escrituras adicionales.
+  const deletionMetricsRef = useRef<Map<string, { startedAt: number; commitAt?: number }>>(new Map());
+  useEffect(() => {
+      for (const [id, metric] of deletionMetricsRef.current) {
+          if (rawAllRecords.some(record => record.id === id)) continue;
+          if (metric.commitAt !== undefined) {
+              console.info('[Conciliación][diagnóstico] Registro ausente tras sincronización', {
+                  id, totalMs: Math.round(performance.now() - metric.startedAt),
+                  afterCommitMs: Math.round(performance.now() - metric.commitAt),
+                  loadedRecords: rawAllRecords.length, storeRecords: records.length
+              });
+              deletionMetricsRef.current.delete(id);
+          }
+      }
+  }, [rawAllRecords, records.length]);
   const pendingDeletionIdsRef = useRef<Set<string>>(new Set());
   const handleDeleteRecord = (record: FinancialRecord) => {
       if (!pendingDeletionIdsRef.current.has(record.id)) setRecordToDelete(record);
@@ -1439,8 +1454,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const target = recordToDelete;
       pendingDeletionIdsRef.current.add(target.id);
       const startedAt = performance.now();
+      const loadedRecords = rawAllRecords.length;
+      const storeRecords = records.length;
+      deletionMetricsRef.current.set(target.id, { startedAt });
+      console.info('[Conciliación][diagnóstico] Inicio eliminación', { loadedRecords, storeRecords, visibleRecords: filteredRecords.length });
       setRecordToDelete(null);
       setAllRecords(previous => previous.filter(record => record.id !== target.id));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+          console.info('[Conciliación][diagnóstico] Interfaz actualizada', { id: target.id, elapsedMs: Math.round(performance.now() - startedAt), loadedRecords, storeRecords });
+      }));
       try {
           const batch = writeBatch(db);
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
@@ -1456,9 +1478,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           });
           batch.delete(doc(db, 'financialRecords', target.id));
           await batch.commit();
-          console.info('[Conciliación] Eliminación confirmada', { durationMs: Math.round(performance.now() - startedAt) });
+          const commitAt = performance.now();
+          const metric = deletionMetricsRef.current.get(target.id);
+          if (metric) metric.commitAt = commitAt;
+          console.info('[Conciliación][diagnóstico] Firebase confirmó eliminación', { id: target.id, durationMs: Math.round(commitAt - startedAt), loadedRecords, storeRecords });
       } catch (error) {
-          console.error('[Conciliación] Error al eliminar registro', error);
+          deletionMetricsRef.current.delete(target.id);
+          console.error('[Conciliación][diagnóstico] Error al eliminar registro', { elapsedMs: Math.round(performance.now() - startedAt), error });
           setAllRecords(previous => previous.some(record => record.id === target.id) ? previous : [...previous, target]);
           alert('No se pudo eliminar el registro. Se restauró en pantalla. Comprueba la conexión e inténtalo nuevamente.');
       } finally {
