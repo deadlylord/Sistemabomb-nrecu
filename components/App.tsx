@@ -3183,7 +3183,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? incidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <ViewFiltersProvider key={`filters:${dataScope}`}>
-      <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
+      <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-[calc(var(--vestika-sidebar-width,15rem)+1.25rem)] transition-[padding-left] duration-300 overflow-x-hidden">
         {!canAccessCurrentView && <div role="status" className="p-6 text-center">Esperando los permisos de acceso. Si continúa, consulta al administrador.</div>}
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary key={`${dataScope}:${currentStoreId}:${currentView}`}>
 

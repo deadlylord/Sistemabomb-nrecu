@@ -68,6 +68,11 @@ const Header: React.FC<HeaderProps> = ({
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('sidebarCollapsed') === 'true');
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--vestika-sidebar-width', isDesktopSidebarCollapsed ? '5rem' : '15rem');
+    return () => document.documentElement.style.removeProperty('--vestika-sidebar-width');
+  }, [isDesktopSidebarCollapsed]);
   const [previewGroupIndex, setPreviewGroupIndex] = useState<number>(-1);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
