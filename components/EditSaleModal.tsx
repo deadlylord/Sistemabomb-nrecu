@@ -86,7 +86,12 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
     }
   };
 
-  const totalAmount = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
+  const discountPercent = sale.discountPercent || 0;
+  const discountAmount = discountPercent > 0
+    ? Math.round(subtotal * discountPercent / 100)
+    : (sale.discountAmount || 0);
+  const totalAmount = subtotal - discountAmount + (sale.paymentSurchargeAmount || 0);
   const paidAmount = useMemo(() => payments.reduce((sum, p) => sum + p.amount, 0), [payments]);
   const remainingAmount = totalAmount - paidAmount;
   
@@ -192,6 +197,11 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       items: items.map(item => ({...item})), // ensure items are plain objects
       payments: payments,
       totalAmount: totalAmount,
+      discountPercent,
+      discountAmount,
+      paymentSurchargeAmount: sale.paymentSurchargeAmount || 0,
+      companyId: sale.companyId,
+      paymentMethod: payments[0]?.method || sale.paymentMethod,
       createdAt: new Date(createdAt).toISOString(),
     };
     onUpdateSale(updatedSale, sale);
@@ -354,6 +364,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
                       </div>
                   </div>
                   <div className="mt-3 bg-gray-100 dark:bg-gray-800/80 p-3.5 rounded-xl space-y-2 border border-gray-200 dark:border-gray-700 text-sm sm:text-base">
+                      {discountAmount > 0 && <div className="flex justify-between text-rose-500 font-semibold"><span>Descuento ({discountPercent}%):</span><span>-{formatCOP(discountAmount)}</span></div>}
                       <div className="flex justify-between font-bold"><span>Nuevo Total Venta:</span> <span className="text-accent">{formatCOP(totalAmount)}</span></div>
                       <div className="flex justify-between"><span>Total Pagado:</span> <span className="font-bold">{formatCOP(paidAmount)}</span></div>
                       <div className={`flex justify-between font-bold ${remainingAmount > 0 ? 'text-red-500' : 'text-green-500'}`}>
