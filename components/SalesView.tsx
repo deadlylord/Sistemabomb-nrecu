@@ -177,7 +177,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
       }
     }
 
-    return rawProfit - totalCommission;
+    return rawProfit - (sale.discountAmount || 0) - totalCommission;
   };
   
   const renderPaymentMethods = (sale: Sale) => {
@@ -433,6 +433,7 @@ const SalesView: React.FC<SalesViewProps> = ({ sales, sellers, inventory, catego
                                                         <span className="font-bold">{sale.paymentMethod}</span>
                                                     </div>
                                                 ) : null}
+                                                {(sale.discountAmount || 0) > 0 && <div className="flex justify-between text-rose-500"><span>Descuento ({sale.discountPercent || 0}%):</span><span>-{formatCOP(sale.discountAmount || 0)}</span></div>}
                                                 <div className="flex justify-between font-bold pt-2 border-t border-dashed">
                                                     <span>Total Pagado:</span>
                                                     <span>{formatCOP(paymentsArray.length > 0 ? paymentsArray.reduce((sum,p) => sum + p.amount, 0) : sale.totalAmount)}</span>
