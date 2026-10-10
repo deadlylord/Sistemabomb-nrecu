@@ -1428,18 +1428,21 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       }
   };
 
-  const deleteInFlightRef = useRef(false);
-  const [isDeletingRecord, setIsDeletingRecord] = useState(false);
-  const handleDeleteRecord = (record: FinancialRecord) => { if (!deleteInFlightRef.current) setRecordToDelete(record); };
+  // Cada eliminación se controla por ID: una confirmación lenta no bloquea las demás.
+  const pendingDeletionIdsRef = useRef<Set<string>>(new Set());
+  const handleDeleteRecord = (record: FinancialRecord) => {
+      if (!pendingDeletionIdsRef.current.has(record.id)) setRecordToDelete(record);
+  };
 
   const confirmDelete = async () => {
-      if (!recordToDelete || deleteInFlightRef.current) return;
-      deleteInFlightRef.current = true;
-      setIsDeletingRecord(true);
+      if (!recordToDelete || pendingDeletionIdsRef.current.has(recordToDelete.id)) return;
       const target = recordToDelete;
+      pendingDeletionIdsRef.current.add(target.id);
       const startedAt = performance.now();
-      const batch = writeBatch(db);
+      setRecordToDelete(null);
+      setAllRecords(previous => previous.filter(record => record.id !== target.id));
       try {
+          const batch = writeBatch(db);
           const historyRef = doc(collection(db, 'financialRecordsHistory'));
           batch.set(historyRef, {
               id: historyRef.id,
@@ -1452,9 +1455,6 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               accountType: target.accountType
           });
           batch.delete(doc(db, 'financialRecords', target.id));
-          // La tabla y los saldos se actualizan antes de esperar la respuesta de red.
-          setAllRecords(previous => previous.filter(record => record.id !== target.id));
-          setRecordToDelete(null);
           await batch.commit();
           console.info('[Conciliación] Eliminación confirmada', { durationMs: Math.round(performance.now() - startedAt) });
       } catch (error) {
@@ -1462,8 +1462,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           setAllRecords(previous => previous.some(record => record.id === target.id) ? previous : [...previous, target]);
           alert('No se pudo eliminar el registro. Se restauró en pantalla. Comprueba la conexión e inténtalo nuevamente.');
       } finally {
-          deleteInFlightRef.current = false;
-          setIsDeletingRecord(false);
+          pendingDeletionIdsRef.current.delete(target.id);
       }
   };
 
@@ -3462,8 +3461,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         </div>
                         <p className="text-[10px] text-gray-400 italic">Esta acción no se puede deshacer y afectará los saldos de conciliación.</p>
                         <div className="flex gap-2 pt-2">
-                            <button disabled={isDeletingRecord} onClick={() => setRecordToDelete(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
-                            <button disabled={isDeletingRecord} onClick={confirmDelete} className="flex-1 bg-red-500 text-white font-black p-3 rounded-xl shadow-lg hover:bg-red-600 transition-colors uppercase text-[10px]">ELIMINAR AHORA</button>
+                            <button onClick={() => setRecordToDelete(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
+                            <button onClick={confirmDelete} className="flex-1 bg-red-500 text-white font-black p-3 rounded-xl shadow-lg hover:bg-red-600 transition-colors uppercase text-[10px]">ELIMINAR AHORA</button>
                         </div>
                     </div>
                 </div>
