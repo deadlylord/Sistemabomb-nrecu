@@ -1385,6 +1385,8 @@ const App: React.FC = () => {
           for (const item of snapshots) {
             if (!item.snapshot.exists() || item.snapshot.data()?.storeId !== latest.storeId) throw new Error('Producto del cambio no encontrado en su sede.');
           }
+          const saleRef = !damage && latest.originalSaleId ? doc(db, 'sales', latest.originalSaleId) : null;
+          const saleSnapshot = saleRef ? await transaction.get(saleRef) : null;
           const timestamp = new Date().toISOString();
           for (const item of snapshots) {
             const related = changes.filter(change => change.productId === item.id);
@@ -1408,6 +1410,29 @@ const App: React.FC = () => {
             status, resolutionDate: timestamp,
             history: [...(latest.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad aprobada y procesada' }]
           });
+          if (saleRef && saleSnapshot?.exists()) {
+            const sale = saleSnapshot.data() as Sale;
+            const updatedItems = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).map(item => ({ ...item })) as CartItem[];
+            for (const ret of latest.returnedItems || []) {
+              const index = updatedItems.findIndex(item => item.id === ret.productId);
+              if (index >= 0) {
+                updatedItems[index].quantity -= ret.quantity;
+                if (updatedItems[index].quantity <= 0) updatedItems.splice(index, 1);
+              }
+            }
+            for (const taken of latest.takenItems || []) {
+              const index = updatedItems.findIndex(item => item.id === taken.productId);
+              if (index >= 0) updatedItems[index].quantity += taken.quantity;
+              else updatedItems.push({
+                id: taken.productId, name: taken.productName, sku: taken.sku || '',
+                categoryId: taken.categoryId || '', price: taken.price, cost: taken.cost,
+                quantity: taken.quantity, storeId: sale.storeId, description: 'Artículo por cambio', imageUrl: ''
+              } as CartItem);
+            }
+            const subtotal = updatedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const discount = sale.discountPercent ? Math.round(subtotal * sale.discountPercent / 100) : (sale.discountAmount || 0);
+            transaction.update(saleRef, { items: updatedItems, totalAmount: subtotal - discount + (sale.paymentSurchargeAmount || 0), discountAmount: discount });
+          }
         });
       } catch (error: any) {
         console.error('Error aprobando novedad con inventario:', error);
