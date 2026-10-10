@@ -652,6 +652,12 @@ export interface Incident {
   storeId: string;
   productId?: string;
   productName?: string;
+  damagedReceipt?: {
+    productId: string;
+    productName: string;
+    receivedBy: string;
+    receivedAt: string;
+  };
   customerName?: string;
   customerPhone?: string;
   adjustmentType?: 'income' | 'expense';

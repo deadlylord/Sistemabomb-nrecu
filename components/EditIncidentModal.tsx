@@ -75,6 +75,7 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
         <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md text-sm space-y-1">
             <p><strong>Tipo:</strong> {incident.type}</p>
             {incident.productName && <p><strong>Producto:</strong> {incident.productName}</p>}
+            {incident.damagedReceipt && <p><strong>Prenda recibida:</strong> {incident.damagedReceipt.productName}</p>}
             {incident.customerName && <p><strong>Cliente:</strong> {incident.customerName} ({incident.customerPhone})</p>}
             {incident.adjustmentAmount && !isEditableAmount && <p><strong>Monto:</strong> {formatCOP(incident.adjustmentAmount)} ({incident.adjustmentType})</p>}
             {incident.originalSaleInvoiceNumber && <p><strong>Factura Original:</strong> #{incident.originalSaleInvoiceNumber}</p>}
@@ -99,7 +100,7 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
                   value={status}
                   onChange={e => setStatus(e.target.value as IncidentStatus)}
                   className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
-                  disabled={incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && incident.status === IncidentStatus.TRASLADO_COMPLETADO}
+                  disabled={!!incident.damagedReceipt || (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && incident.status === IncidentStatus.TRASLADO_COMPLETADO)}
                 >
                   {Object.values(IncidentStatus)
                     .filter(s => !(incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST && s === IncidentStatus.TRASLADO_COMPLETADO) || incident.status === IncidentStatus.TRASLADO_COMPLETADO)

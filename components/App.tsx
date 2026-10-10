@@ -1,3 +1,4 @@
+import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
@@ -1490,31 +1491,45 @@ const App: React.FC = () => {
     } catch (error: any) { console.error("Error approving incident:", error); alert(`Error al aprobar: ${error.message}`); }
   };
 
-  const handleResolveIncident = async (incidentId: string) => {
+  const handleResolveIncident = async (incidentId: string, receivedProductId?: string) => {
     const incident = incidents.find(i => i.id === incidentId);
-    if (!incident || !currentUser) return;
+    if (!incident || !currentUser) throw new Error('No se encontró la novedad o la sesión cambió.');
+    if (incident.type === IncidentType.DAMAGED) {
+      if (recordReadOnly || !currentStoreId || operationContextRef.current !== contextAtRender) throw new Error('No puedes recibir prendas en esta sesión o la sede cambió.');
+      const receivingContext = operationContextRef.current;
+      const receivingStore = currentStoreId;
+      const receivingCompany = operationalCompanyId;
+      const receivingUser = currentUser.name;
+      const targetId = receivedProductId || incident.productId;
+      if (!targetId) throw new Error('Selecciona la prenda recibida.');
+      const receiptRef = doc(db, 'incidents', incidentId);
+      const targetRef = doc(db, 'inventory', targetId);
+      const logRef = doc(collection(db, 'productHistory'));
+      await runTransaction(db, async transaction => {
+        if (operationContextRef.current !== receivingContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+        const receiptSnapshot = await transaction.get(receiptRef);
+        const productSnapshot = await transaction.get(targetRef);
+        if (!receiptSnapshot.exists() || !productSnapshot.exists()) throw new Error('La novedad o la prenda ya no existen.');
+        const savedIncident = { ...receiptSnapshot.data(), id: incidentId } as Incident;
+        const receivedProduct = { ...productSnapshot.data(), id: targetId } as Product;
+        const plan = planDamagedReceipt(savedIncident, receivedProduct, receivingCompany, receivingStore, isAdmin || isDeveloper, receivingUser, new Date().toISOString());
+        if (!plan) return;
+        if (operationContextRef.current !== receivingContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+        transaction.update(targetRef, { stock: increment(1) });
+        transaction.update(receiptRef, plan.update);
+        transaction.set(logRef, {
+          id: logRef.id, productId: targetId, productName: receivedProduct.name,
+          companyId: receivingCompany, storeId: receivingStore, changedBy: receivingUser,
+          timestamp: plan.update.resolutionDate, changeType: ProductChangeType.DAMAGED_RETURNED,
+          details: `${plan.notes} Novedad: ${incidentId}.`
+        });
+      });
+      return;
+    }
     const batch = writeBatch(db);
     const incidentRef = doc(db, 'incidents', incidentId);
     let newStatus: IncidentStatus | null = null;
     if (incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE) newStatus = IncidentStatus.WARRANTY_RETURNED;
-    else if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO) {
-        newStatus = IncidentStatus.DEVUELTO_Y_RESUELTO;
-        if (incident.productId) {
-            batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
-            const repairLogRef = doc(collection(db, 'productHistory'));
-            const repairLog: ProductHistoryLog = {
-                id: repairLogRef.id,
-                productId: incident.productId,
-                productName: incident.productName || 'Producto',
-                storeId: incident.storeId,
-                changedBy: currentUser.name,
-                timestamp: new Date().toISOString(),
-                changeType: ProductChangeType.DAMAGED_RETURNED,
-                details: `Prenda dañada retornada de arreglo. Stock restaurado: +1.`
-            };
-            batch.set(repairLogRef, repairLog);
-        }
-    }
     if (newStatus) { 
         const updatedHistory = [
             ...(incident.history || []),
@@ -1538,6 +1553,10 @@ const App: React.FC = () => {
     if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
     const existingIncident = incidents.find(i => i.id === incident.id);
     if (!existingIncident || existingIncident.storeId !== incident.storeId) throw new Error('La novedad no pertenece a esta sede.');
+    if (existingIncident.damagedReceipt) {
+      if (incident.status !== existingIncident.status || incident.productId !== existingIncident.productId) throw new Error('La recepción ya está registrada. No se puede modificar su estado ni la prenda enviada desde la edición general.');
+      incident.damagedReceipt = existingIncident.damagedReceipt;
+    }
     const batch = writeBatch(db);
 
     if (existingIncident && existingIncident.status !== incident.status) {
