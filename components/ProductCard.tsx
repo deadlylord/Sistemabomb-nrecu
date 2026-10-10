@@ -6,6 +6,7 @@ import { formatCOP } from '../constants';
 
 interface ProductCardProps {
   product: Product;
+  preOrderSelection?: boolean;
   performanceTrend?: 'up' | 'down' | 'stable';
   onAddToCart: (product: Product) => void;
   onEditImage: (product: Product) => void;
@@ -22,6 +23,7 @@ interface ProductCardProps {
 
 const ProductCard: React.FC<ProductCardProps> = ({ 
   product, 
+  preOrderSelection = false,
   performanceTrend, 
   onAddToCart, 
   onEditImage, 
@@ -36,6 +38,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
   recentSalesQty
 }) => {
 
+  const canSelect = !product.isDisabled && (preOrderSelection || product.stock > 0);
+
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent adding to cart if an admin button, the checkbox, or link was clicked
     if (
@@ -45,13 +49,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
     ) {
       return;
     }
-    if (product.stock > 0) { // Also prevent adding if out of stock
+    if (canSelect) {
         onAddToCart(product);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.key === 'Enter' || e.key === ' ') && product.stock > 0) {
+    if ((e.key === 'Enter' || e.key === ' ') && canSelect) {
       handleCardClick(e as any);
     }
   }
@@ -65,10 +69,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
     <div
       onClick={handleCardClick}
       onKeyPress={handleKeyPress}
-      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${product.stock > 0 ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
-      aria-label={`${product.stock > 0 ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
+      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${canSelect ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
+      aria-label={`${canSelect ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
       role="button"
-      tabIndex={product.stock > 0 ? 0 : -1}
+      tabIndex={canSelect ? 0 : -1}
     >
       {/* Image */}
       <div className="relative flex-grow overflow-hidden">
@@ -183,7 +187,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <div className="flex justify-between items-baseline mt-1">
           <p className="text-xs text-slate-500 dark:text-text-dark truncate">{product.supplier || 'Sin proveedor'}</p>
           <div className="flex items-baseline gap-2">
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${product.stock > 0 ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${canSelect ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
                 Stock: {product.stock}
             </span>
             <div className="flex flex-col items-end">
@@ -204,7 +208,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
       {product.stock <= 0 && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-xl pointer-events-none">
-          <span className="text-white font-bold text-lg drop-shadow-md">AGOTADO</span>
+          <span className="text-white font-bold text-lg drop-shadow-md">{preOrderSelection ? 'POR TRAER' : 'AGOTADO'}</span>
         </div>
       )}
     </div>
