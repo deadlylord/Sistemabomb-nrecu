@@ -1491,46 +1491,43 @@ const App: React.FC = () => {
   };
 
   const handleResolveIncident = async (incidentId: string) => {
-    const incident = incidents.find(i => i.id === incidentId);
-    if (!incident || !currentUser) return;
-    const batch = writeBatch(db);
+    if (!currentUser) return;
+    if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
     const incidentRef = doc(db, 'incidents', incidentId);
-    let newStatus: IncidentStatus | null = null;
-    if (incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE) newStatus = IncidentStatus.WARRANTY_RETURNED;
-    else if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO) {
-        newStatus = IncidentStatus.DEVUELTO_Y_RESUELTO;
-        if (incident.productId) {
-            batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
-            const repairLogRef = doc(collection(db, 'productHistory'));
-            const repairLog: ProductHistoryLog = {
-                id: repairLogRef.id,
-                productId: incident.productId,
-                productName: incident.productName || 'Producto',
-                storeId: incident.storeId,
-                changedBy: currentUser.name,
-                timestamp: new Date().toISOString(),
-                changeType: ProductChangeType.DAMAGED_RETURNED,
-                details: `Prenda dañada retornada de arreglo. Stock restaurado: +1.`
-            };
-            batch.set(repairLogRef, repairLog);
+    try {
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(incidentRef);
+        if (!snapshot.exists()) return;
+        const incident = snapshot.data() as Incident;
+        if (!visibleStoreIds.includes(incident.storeId)) throw new Error('La novedad no pertenece a una sede autorizada.');
+        const isDamage = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO;
+        const isWarranty = incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE;
+        if (!isDamage && !isWarranty) return; // Ya resuelta: no sumar stock otra vez.
+        const productRef = isDamage && incident.productId ? doc(db, 'inventory', incident.productId) : null;
+        const productSnapshot = productRef ? await transaction.get(productRef) : null;
+        if (productRef && (!productSnapshot?.exists() || productSnapshot.data()?.storeId !== incident.storeId)) throw new Error('Producto no encontrado en la sede de la novedad.');
+        const timestamp = new Date().toISOString();
+        const status = isDamage ? IncidentStatus.DEVUELTO_Y_RESUELTO : IncidentStatus.WARRANTY_RETURNED;
+        if (productRef && productSnapshot) {
+          const before = Number(productSnapshot.data()?.stock || 0);
+          transaction.update(productRef, { stock: before + 1 });
+          const logRef = doc(collection(db, 'productHistory'));
+          transaction.set(logRef, {
+            id: logRef.id, productId: incident.productId, productName: incident.productName || 'Producto',
+            storeId: incident.storeId, changedBy: currentUser.name, timestamp,
+            changeType: ProductChangeType.DAMAGED_RETURNED,
+            incidentId, stockBefore: before, stockAfter: before + 1, quantityChange: 1,
+            details: `Prenda dañada retornada de arreglo. Stock: ${before} → ${before + 1} (+1). Novedad: ${incidentId}`
+          });
         }
-    }
-    if (newStatus) { 
-        const updatedHistory = [
-            ...(incident.history || []),
-            {
-                status: newStatus,
-                changedBy: currentUser.name,
-                timestamp: new Date().toISOString(),
-                notes: 'Novedad resuelta/finalizada'
-            }
-        ];
-        batch.update(incidentRef, { 
-            status: newStatus, 
-            resolutionDate: new Date().toISOString(),
-            history: updatedHistory
-        }); 
-        await batch.commit(); 
+        transaction.update(incidentRef, {
+          status, resolutionDate: timestamp,
+          history: [...(incident.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad resuelta/finalizada' }]
+        });
+      });
+    } catch (error: any) {
+      console.error('Error resolviendo novedad:', error);
+      alert(`No se pudo marcar el regreso: ${error.message}`);
     }
   };
 
