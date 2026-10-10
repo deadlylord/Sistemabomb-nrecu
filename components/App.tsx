@@ -1761,33 +1761,35 @@ const App: React.FC = () => {
       }
     }
 
-    // 2. Si es una novedad de prenda dañada que estaba en arreglo
-    if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO && incident.productId) {
-      if (window.confirm('¿Eliminar novedad de prenda dañada? Se restaurará +1 unidad al inventario.')) {
-        try {
-          const batch = writeBatch(db);
-          batch.update(doc(db, 'inventory', incident.productId), { stock: increment(1) });
+    // 2. Eliminación segura: devolver stock únicamente si el estado real aún está en arreglo.
+    if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO) {
+      if (!window.confirm('¿Eliminar novedad de prenda dañada? Se restaurará +1 unidad al inventario.')) return;
+      try {
+        await runTransaction(db, async transaction => {
+          const incidentRef = doc(db, 'incidents', incidentId);
+          const snapshot = await transaction.get(incidentRef);
+          if (!snapshot.exists()) return;
+          const latest = snapshot.data() as Incident;
+          if (latest.status !== IncidentStatus.EN_ARREGLO_CAMBIO || latest.type !== IncidentType.DAMAGED) throw new Error('La novedad cambió de estado. Actualiza la pantalla.');
+          if (!latest.productId || !visibleStoreIds.includes(latest.storeId)) throw new Error('Novedad o producto no autorizado.');
+          const productRef = doc(db, 'inventory', latest.productId);
+          const product = await transaction.get(productRef);
+          if (!product.exists() || product.data()?.storeId !== latest.storeId) throw new Error('Producto no encontrado en la sede.');
+          const before = Number(product.data()?.stock || 0);
           const logRef = doc(collection(db, 'productHistory'));
-          const log: ProductHistoryLog = {
-            id: logRef.id,
-            productId: incident.productId,
-            productName: incident.productName || 'Producto',
-            storeId: incident.storeId,
-            changedBy: currentUser.name,
-            timestamp: new Date().toISOString(),
-            changeType: ProductChangeType.DAMAGED_RETURNED,
-            details: `Novedad de prenda dañada eliminada. Stock restaurado: +1`
-          };
-          batch.set(logRef, log);
-          batch.delete(doc(db, 'incidents', incidentId));
-          await batch.commit();
-          alert('Novedad eliminada y stock restaurado.');
-          return;
-        } catch (error: any) {
-          console.error("Error al eliminar novedad de daño:", error);
-          alert(`Error al eliminar novedad: ${error.message}`);
-          return;
-        }
+          transaction.update(productRef, { stock: before + 1 });
+          transaction.set(logRef, {
+            id: logRef.id, productId: latest.productId, productName: latest.productName || 'Producto',
+            storeId: latest.storeId, changedBy: currentUser.name, timestamp: new Date().toISOString(),
+            changeType: ProductChangeType.DAMAGED_RETURNED, incidentId,
+            stockBefore: before, stockAfter: before + 1, quantityChange: 1,
+            details: `Novedad eliminada. Stock: ${before} → ${before + 1} (+1)`
+          });
+          transaction.delete(incidentRef);
+        });
+      } catch (error: any) {
+        console.error('Error al eliminar novedad dañada:', error);
+        alert(`Error al eliminar: ${error.message}`);
       }
       return;
     }
