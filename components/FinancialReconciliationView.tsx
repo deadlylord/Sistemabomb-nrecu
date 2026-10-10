@@ -862,22 +862,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [activeStore, activeTab]);
 
   const filteredRecords = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00').getTime() : null;
+    const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59').getTime() : null;
     return records.filter(r => {
-        const matchesAccount = r.accountType === activeTab;
-        const matchesSearch = r.description.toLowerCase().includes(searchTerm.toLowerCase()) || (r.subCategory && r.subCategory.toLowerCase().includes(searchTerm.toLowerCase()));
-        
-        // Filtro de rango de fechas
-        const rDate = new Date(r.date);
-        const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00') : null;
-        const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59') : null;
-        const matchesDate = (!start || rDate >= start) && (!end || rDate <= end);
-
-        // Filtro de tipo (Ingreso / Egreso)
-        let matchesType = true;
-        if (financeTypeFilter === 'income') matchesType = r.amount > 0;
-        else if (financeTypeFilter === 'expense') matchesType = r.amount < 0;
-
-        return matchesAccount && matchesSearch && matchesDate && matchesType;
+        if (r.accountType !== activeTab) return false;
+        if (financeTypeFilter === 'income' && r.amount <= 0) return false;
+        if (financeTypeFilter === 'expense' && r.amount >= 0) return false;
+        if (search && !(r.description || '').toLowerCase().includes(search) &&
+            !(r.subCategory || '').toLowerCase().includes(search)) return false;
+        if (start === null && end === null) return true;
+        const date = new Date(r.date).getTime();
+        return (start === null || date >= start) && (end === null || date <= end);
     });
   }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter]);
 
