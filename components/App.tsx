@@ -1531,52 +1531,39 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateIncident = async (incident: Incident) => { 
+  const handleUpdateIncident = async (incident: Incident) => {
     if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
-    const existingIncident = incidents.find(i => i.id === incident.id);
-    if (!existingIncident || existingIncident.storeId !== incident.storeId) throw new Error('La novedad no pertenece a esta sede.');
-    const batch = writeBatch(db);
-
-    if (existingIncident && existingIncident.status !== incident.status) {
-        incident.history = [
-            ...(incident.history || []),
-            {
-                status: incident.status,
-                changedBy: currentUser?.name || 'Sistema',
-                timestamp: new Date().toISOString(),
-                notes: 'Estado actualizado manualmente por administrador'
-            }
-        ];
-
-        // Ajustar inventario si es una prenda dañada y cambia el estado
-        if (incident.type === IncidentType.DAMAGED && incident.productId) {
-            const oldStatusImpact = existingIncident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
-            const newStatusImpact = incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
-            const stockChange = newStatusImpact - oldStatusImpact;
-
-            if (stockChange !== 0) {
-                batch.update(doc(db, 'inventory', incident.productId), { stock: increment(stockChange) });
-                
-                const logRef = doc(collection(db, 'productHistory'));
-                const log: ProductHistoryLog = {
-                    id: logRef.id,
-                    productId: incident.productId,
-                    productName: incident.productName || 'Producto',
-                    storeId: incident.storeId,
-                    changedBy: currentUser?.name || 'Sistema',
-                    timestamp: new Date().toISOString(),
-                    changeType: stockChange > 0 ? ProductChangeType.DAMAGED_RETURNED : ProductChangeType.DAMAGED,
-                    details: `Estado de novedad modificado manualmente de ${existingIncident.status} a ${incident.status}. Ajuste de stock: ${stockChange > 0 ? '+' : ''}${stockChange}.`
-                };
-                batch.set(logRef, log);
-            }
-        }
-    }
-    batch.set(doc(db, 'incidents', incident.id), cleanObject(incident), { merge: true }); 
-    await batch.commit();
-
-    // Shared subscriptions deliver the committed change in its original scope.
-
+    const incidentRef = doc(db, 'incidents', incident.id);
+    await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(incidentRef);
+      if (!snapshot.exists()) throw new Error('La novedad ya no existe.');
+      const previous = snapshot.data() as Incident;
+      if (previous.storeId !== incident.storeId || !visibleStoreIds.includes(previous.storeId)) throw new Error('La novedad no pertenece a esta sede.');
+      const oldImpact = previous.type === IncidentType.DAMAGED && previous.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+      const newImpact = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+      if (previous.type === IncidentType.DAMAGED && incident.productId !== previous.productId) throw new Error('No se puede cambiar el producto de una novedad dañada; crea una nueva novedad.');
+      const stockChange = newImpact - oldImpact;
+      const productRef = stockChange && previous.productId ? doc(db, 'inventory', previous.productId) : null;
+      const productSnapshot = productRef ? await transaction.get(productRef) : null;
+      if (productRef && (!productSnapshot?.exists() || productSnapshot.data()?.storeId !== previous.storeId)) throw new Error('Producto no encontrado en esta sede.');
+      const timestamp = new Date().toISOString();
+      if (productRef && productSnapshot) {
+        const before = Number(productSnapshot.data()?.stock || 0);
+        transaction.update(productRef, { stock: before + stockChange });
+        const logRef = doc(collection(db, 'productHistory'));
+        transaction.set(logRef, {
+          id: logRef.id, productId: previous.productId, productName: previous.productName || 'Producto',
+          storeId: previous.storeId, changedBy: currentUser?.name || 'Sistema', timestamp,
+          changeType: stockChange > 0 ? ProductChangeType.DAMAGED_RETURNED : ProductChangeType.DAMAGED,
+          incidentId: incident.id, stockBefore: before, stockAfter: before + stockChange, quantityChange: stockChange,
+          details: `Estado modificado de ${previous.status} a ${incident.status}. Stock: ${before} → ${before + stockChange}`
+        });
+      }
+      const history = previous.status !== incident.status
+        ? [...(previous.history || []), { status: incident.status, changedBy: currentUser?.name || 'Sistema', timestamp, notes: 'Estado actualizado manualmente por administrador' }]
+        : previous.history || [];
+      transaction.set(incidentRef, cleanObject({ ...incident, history, companyId: previous.companyId, storeId: previous.storeId }), { merge: true });
+    });
   };
 
   const handleDeleteIncident = async (incidentId: string) => {
