@@ -6,13 +6,12 @@ import { deployAssetBase } from '../services/deployAssets.ts';
 
 const deployUrl = 'https://0123456789abcdef01234567--vestikapos.netlify.app';
 
-test('only Netlify previews and branch deploys pin assets to an immutable deploy', () => {
-  for (const context of ['branch-deploy', 'deploy-preview']) {
-    assert.equal(deployAssetBase({ NETLIFY: 'true', CONTEXT: context, DEPLOY_URL: deployUrl }), deployUrl + '/');
+test('assets stay on the application origin in every deployment context', () => {
+  for (const context of ['branch-deploy', 'deploy-preview', 'production']) {
+    assert.equal(deployAssetBase({ NETLIFY: 'true', CONTEXT: context, DEPLOY_URL: deployUrl }), '/');
   }
-  assert.equal(deployAssetBase({ NETLIFY: 'true', CONTEXT: 'production', DEPLOY_URL: deployUrl }), '/');
   assert.equal(deployAssetBase({}), '/');
-  assert.throws(() => deployAssetBase({ NETLIFY: 'true', CONTEXT: 'branch-deploy', DEPLOY_URL: 'https://staging--vestikapos.netlify.app' }));
+  assert.equal(deployAssetBase({ NETLIFY: 'true', CONTEXT: 'branch-deploy', DEPLOY_URL: 'https://staging--vestikapos.netlify.app' }), '/');
 });
 
 test('worker caches pinned modules and serves them offline without intercepting other sites or business APIs', async () => {
