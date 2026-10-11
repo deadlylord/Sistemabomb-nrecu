@@ -10,7 +10,7 @@ const bundled = await build({ stdin: { contents: "export { assertCartAvailabilit
 const { assertCartAvailability } = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
 const product = { id: 'p', name: 'Blusa', sku: 'BLUSA-1', stock: 0, price: 30000, companyId: 'company', storeId: 'store', categoryId: 'zero-category' };
 const cart = [{ ...product, quantity: 2 }];
-test('zero-stock catalog garments allow an encargo, never a sale or reservation', () => {
+test('stockless garments are allowed only in abono por traer; normal abono and sale still require stock', () => {
   assert.doesNotThrow(() => assertCartAvailability(cart, [product], 'company', 'store', false));
   assert.throws(() => assertCartAvailability(cart, [product], 'company', 'store', true), /Stock insuficiente/);
   assert.throws(() => assertCartAvailability([...cart, ...cart], [{...product, stock: 3}], 'company', 'store', true), /Stock insuficiente/);
@@ -80,7 +80,10 @@ test('empty cart starts encargo selection; zero-stock card can only be selected 
     const savePending=new Promise((_,reject)=>{rejectSave=reject});
     await act(async()=>renderer.update(React.createElement(Cart,{cartItems:cart,sellers:[{id:'s',name:'Vendedor'}],customers:[],preOrderSelection:true,hasStockShortage:true,nextInvoiceNumber:1,onCreateLayaway:()=>savePending})));
     const sale=renderer.root.findAllByType('button').find(n=>n.children.join('')==='Procesar Venta');assert.equal(sale.props.disabled,true);
-    const createButton=renderer.root.findAllByType('button').find(n=>n.findAllByType('span').some(span=>span.children.join('')==='Crear encargo por traer'));
+    const normalLayaway=renderer.root.findAllByType('button').find(n=>n.findAllByType('span').some(span=>span.children.join('')==='Crear Abono'));
+    assert.equal(normalLayaway.props.disabled,true,'normal Abono must not accept a zero-stock cart');
+    const createButton=renderer.root.findAllByType('button').find(n=>n.findAllByType('span').some(span=>span.children.join('')==='Crear Abono por traer'));
+    assert.notEqual(createButton.props.disabled,true,'Abono por traer is a separate enabled path');
     await act(async()=>createButton.props.onClick());
     for(const [id,value] of [['customerPhone','3001234567'],['customerName','Cliente'],['invoiceNumber','1'],['layawaySeller','Vendedor'],['initialAmount','10000']]) {
       await act(async()=>renderer.root.findByProps({id}).props.onChange({target:{value}}));

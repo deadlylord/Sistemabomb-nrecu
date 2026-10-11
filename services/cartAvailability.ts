@@ -15,7 +15,7 @@ export function assertCartAvailability(items: CartItem[], products: Product[], c
       throw new Error('La prenda no está disponible en el catálogo de esta sede.');
     }
     if (requireStock && (!Number.isFinite(Number(product.stock)) || Number(product.stock) < quantity)) {
-      throw new Error(`Stock insuficiente para ${product.name}. Usa «Por traer» para un encargo o registra la llegada antes de marcarlo recibido.`);
+      throw new Error(`Stock insuficiente para ${product.name}. Usa «Abono por traer» o registra la llegada antes de marcarlo recibido.`);
     }
   }
 }

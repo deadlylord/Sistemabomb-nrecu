@@ -212,6 +212,8 @@ export interface ProductHistoryLog {
   timestamp: string;
   changeType: ProductChangeType;
   details: string;
+  /** Signed inventory movement: positive adds units, negative removes them. */
+  stockDelta?: number;
 }
 
 export interface LabelConfig {

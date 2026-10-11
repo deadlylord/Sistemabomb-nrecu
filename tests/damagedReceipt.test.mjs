@@ -52,7 +52,7 @@ test('actual reception handler commits stock, receipt and audit together and rep
   ]);
   let id = 0, commits = 0;
   const scope = {
-    incidents: [incident], currentUser: { name: 'Admin' }, currentStoreId: 'store', visibleStoreIds: new Set(['store']),
+    incidents: [incident], currentUser: { name: 'Admin' }, currentStoreId: 'store',
     recordReadOnly: false, operationContextRef: { current: 'scope' }, contextAtRender: 'scope',
     operationalCompanyId: 'company', isAdmin: true, isDeveloper: false,
     planDamagedReceipt, IncidentType, IncidentStatus, ProductChangeType: { DAMAGED_RETURNED: 'Devolución' },
@@ -86,4 +86,41 @@ test('actual reception handler commits stock, receipt and audit together and rep
   assert.equal(commits, 1);
   scope.operationContextRef.current = 'other-store';
   await assert.rejects(handler('incident', 'new'), /sede cambió/);
+});
+
+test('approving the same damaged incident twice only removes one unit and writes one audit log', async () => {
+  const source = await readFile('components/App.tsx', 'utf8');
+  const section = source.slice(source.indexOf('  const handleApproveIncident ='), source.indexOf('  const handleResolveIncident ='));
+  const { code } = await transform(section, { loader: 'ts' });
+  const rows = new Map([
+    ['incidents/incident', { ...incident, status: IncidentStatus.DAÑADO_REPORTADO }],
+    ['inventory/old', { ...product, id: 'old', storeId: 'store', stock: 1 }],
+  ]);
+  let id = 0, logCount = 0;
+  const scope = {
+    operationContextRef: { current: 'scope' }, contextAtRender: 'scope', currentUser: { name: 'Admin' },
+    incidents: [{ ...incident, status: IncidentStatus.DAÑADO_REPORTADO }], currentStoreId: 'store', operationalCompanyId: 'company',
+    IncidentType, IncidentStatus, ProductChangeType: { DAMAGED: 'Baja por Daño' }, db: {},
+    doc: (...args) => args.length === 1 ? { path: `productHistory/log${++id}`, id: `log${id}` } : { path: `${args[1]}/${args[2]}`, id: args[2] },
+    collection: (_, name) => name, increment: value => ({ increment: value }), alert: message => { throw new Error(message); },
+    runTransaction: async (_, callback) => {
+      const writes = [];
+      await callback({
+        get: async ref => ({ exists: () => rows.has(ref.path), data: () => structuredClone(rows.get(ref.path)) }),
+        update: (ref, data) => writes.push(['update', ref.path, data]),
+        set: (ref, data) => writes.push(['set', ref.path, data]),
+      });
+      for (const [op, path, data] of writes) {
+        const previous = rows.get(path) || {};
+        rows.set(path, { ...previous, ...data, ...(data.stock?.increment !== undefined ? { stock: previous.stock + data.stock.increment } : {}) });
+        if (op === 'set' && path.startsWith('productHistory/')) logCount++;
+      }
+    },
+  };
+  const handler = new Function('scope', `with (scope) { ${code}; return handleApproveIncident; }`)(scope);
+  await handler('incident');
+  await handler('incident');
+  assert.equal(rows.get('inventory/old').stock, 0);
+  assert.equal(rows.get('incidents/incident').status, IncidentStatus.EN_ARREGLO_CAMBIO);
+  assert.equal(logCount, 1);
 });
