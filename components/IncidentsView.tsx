@@ -1,3 +1,6 @@
+import ReceiveDamagedModal from './ReceiveDamagedModal';
+import { isPlatformOwner } from '../services/developerAccess';
+import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import React, { useState, useMemo } from 'react';
@@ -23,7 +26,7 @@ interface IncidentsViewProps {
   customers: Customer[];
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
   onApproveIncident: (incidentId: string) => void;
-  onResolveIncident: (incidentId: string) => void;
+  onResolveIncident: (incidentId: string, receivedProductId?: string) => Promise<void>;
   onUpdateIncident: (incident: Incident) => void;
   onDeleteIncident: (incidentId: string) => void;
 }
@@ -44,11 +47,11 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   const [historyIncident, setHistoryIncident] = useState<Incident | null>(null);
+  const [receivingIncident, setReceivingIncident] = useState<Incident | null>(null);
   const [filter, setFilter] = useViewFilter<IncidentStatus | 'ALL'>('IncidentsView:filter', 'ALL');
   const [searchTerm, setSearchTerm] = useViewFilter('IncidentsView:searchTerm', '');
 
-  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);
+  const isAdmin = !readOnly && (isPlatformOwner(currentUser) || isTenantAdministrator(resolveTenantRole(currentUser, roles, stores)));
 
   const filteredIncidents = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
@@ -59,6 +62,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
         
         const matchesSearch = normalizedSearch ? 
             normalizeText(i.description).includes(normalizedSearch) ||
+            normalizeText(i.damagedReceipt?.productName || '').includes(normalizedSearch) ||
             (i.productName && normalizeText(i.productName).includes(normalizedSearch)) ||
             (i.customerName && normalizeText(i.customerName).includes(normalizedSearch)) ||
             (i.customerPhone && i.customerPhone.includes(normalizedSearch)) ||
@@ -125,7 +129,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
       // FIX: Removed incorrect property access and implemented logic using the correct data structure.
       switch(incident.type) {
           case IncidentType.DAMAGED:
-              return <p className="font-bold">{incident.productName || 'Producto no especificado'}</p>;
+              return <div><p className="font-bold">{incident.productName || 'Producto no especificado'}</p>{incident.damagedReceipt && <p className="text-xs text-emerald-600 dark:text-emerald-400">Recibida: {incident.damagedReceipt.productName}</p>}</div>;
           case IncidentType.WARRANTY:
                return (
                   <div>
@@ -273,7 +277,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
                             </button>
                         )}
                         {canBeResolved && (
-                            <button style={readOnly ? { display: 'none' } : undefined} onClick={() => !readOnly && onResolveIncident(incident.id)} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Marcar como Resuelto"}>
+                            <button style={readOnly ? { display: 'none' } : undefined} onClick={() => { if (readOnly) return; if (incident.type === IncidentType.DAMAGED) setReceivingIncident(incident); else onResolveIncident(incident.id).catch(error => alert(error.message)); }} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Recibir prenda"}>
                               <SwapIcon />
                             </button>
                         )}
@@ -300,6 +304,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
           </div>
         </div>
       </div>
+      {receivingIncident && !readOnly && <ReceiveDamagedModal incident={receivingIncident} inventory={inventory} canReplace={isAdmin} onReceive={onResolveIncident} onClose={() => setReceivingIncident(null)} />}
       {isCreateModalOpen && (
         <CreateIncidentModal
             isOpen={isCreateModalOpen}

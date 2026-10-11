@@ -5,6 +5,7 @@ import ProductCard from './ProductCard';
 
 interface ProductGridProps {
   products: Product[];
+  preOrderSelection?: boolean;
   performanceTrends?: Record<string, 'up' | 'down' | 'stable'>;
   onAddToCart: (product: Product) => void;
   onEditImage: (product: Product) => void;
@@ -20,6 +21,7 @@ interface ProductGridProps {
 
 const ProductGrid: React.FC<ProductGridProps> = ({ 
   products, 
+  preOrderSelection = false,
   performanceTrends, 
   onAddToCart, 
   onEditImage, 
@@ -38,6 +40,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({
         <ProductCard 
             key={product.id} 
             product={product} 
+            preOrderSelection={preOrderSelection}
             performanceTrend={performanceTrends?.[product.id]}
             onAddToCart={onAddToCart} 
             onEditImage={onEditImage} 

@@ -7,6 +7,9 @@ import { formatCOP, toTitleCase } from '../constants';
 
 interface CartPanelProps {
   cartItems: CartItem[];
+  preOrderSelection: boolean;
+  onStartPreOrder: () => void;
+  hasStockShortage: boolean;
   sellers: Seller[];
   customers: Customer[];
   onUpdateQuantity: (productId: string, newQuantity: number) => void;
@@ -15,7 +18,7 @@ interface CartPanelProps {
   onClearCart: () => void;
   onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string;  paymentSurchargeAmount?: number; }, saleDate: Date) => void;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
-  onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
+  onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => Promise<void>;
   saleDate: Date;
   nextInvoiceNumber: number;
   isCartPulsing: boolean;
@@ -25,9 +28,10 @@ interface CartPanelProps {
   onUpdateGiftVoucher: (voucherId: string, updates: Partial<GiftVoucher>) => Promise<void>;
 }
 
-const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
+const CartPanel: React.FC<CartPanelProps> = ({ cartItems, preOrderSelection, onStartPreOrder, hasStockShortage, sellers, customers, onUpdateQuantity, onUpdateCartItemPrice, onRemoveFromCart, onClearCart, onProcessSale, onHoldSale, onCreateLayaway, saleDate, nextInvoiceNumber, isCartPulsing, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher }) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isLayawayModalOpen, setIsLayawayModalOpen] = useState(false);
+  const [isSavingLayaway, setIsSavingLayaway] = useState(false);
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -107,7 +111,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
     }
   };
   
-  const handleLayawayConfirm = () => {
+  const handleLayawayConfirm = async () => {
+    if (isSavingLayaway) return;
     setLayawayError('');
     const amount = parseFloat(initialAmount);
     if (customerPhone.trim().length !== 10) {
@@ -116,15 +121,22 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
     }
     const finalName = toTitleCase(customerName.trim());
     if (finalName && customerPhone.trim() && invoiceNumber.trim() && layawaySeller && paymentMethod && amount > 0) {
-      onCreateLayaway(finalName, customerPhone, invoiceNumber, layawaySeller, { amount, method: paymentMethod }, saleDate, isPreOrder, layawayDescription);
-      setIsLayawayModalOpen(false);
-      setCustomerName('');
-      setCustomerPhone('');
-      setInvoiceNumber('');
-      setLayawaySeller('');
-      setInitialAmount('');
-      setPaymentMethod('');
-      setLayawayDescription('');
+      setIsSavingLayaway(true);
+      try {
+        await onCreateLayaway(finalName, customerPhone, invoiceNumber, layawaySeller, { amount, method: paymentMethod }, saleDate, isPreOrder, layawayDescription);
+        setIsLayawayModalOpen(false);
+        setCustomerName('');
+        setCustomerPhone('');
+        setInvoiceNumber('');
+        setLayawaySeller('');
+        setInitialAmount('');
+        setPaymentMethod('');
+        setLayawayDescription('');
+      } catch (error) {
+        setLayawayError(error instanceof Error ? error.message : 'No se pudo guardar el encargo. Intenta nuevamente.');
+      } finally {
+        setIsSavingLayaway(false);
+      }
     } else {
       setLayawayError("Por favor, completa todos los campos, incluyendo un abono inicial mayor a cero.");
     }
@@ -165,7 +177,10 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
         </div>
 
         {cartItems.length === 0 ? (
-          <p className="text-slate-500 dark:text-slate-400 text-center py-8">Tu carrito está vacío.</p>
+          <div className="text-center py-6 space-y-3">
+            <p className="text-slate-500 dark:text-slate-400">{preOrderSelection ? 'Selecciona las prendas del encargo en el catálogo.' : 'Tu carrito está vacío.'}</p>
+            <button type="button" onClick={onStartPreOrder} className="w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-yellow-600">Por traer: seleccionar prendas</button>
+          </div>
         ) : (
           <>
             <div className="space-y-3">
@@ -319,22 +334,24 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
               <div className="space-y-2">
                 <button
                   onClick={handleProcessSaleClick}
-                  className="w-full bg-accent text-white font-bold py-3 px-4 rounded-lg transition-transform duration-300 hover:scale-105 hover:bg-accent-hover shadow-lg shadow-accent/20"
+                  disabled={preOrderSelection || hasStockShortage}
+                  className="w-full bg-accent text-white font-bold py-3 px-4 rounded-lg transition-transform duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 hover:bg-accent-hover shadow-lg shadow-accent/20"
                 >
                   Procesar Venta
                 </button>
+                {(preOrderSelection || hasStockShortage) && <p className="text-xs text-yellow-700 dark:text-yellow-300">{preOrderSelection ? 'Estás preparando un encargo. Confirma con «Crear encargo por traer».' : 'Hay prendas sin stock suficiente. Usa «Por traer» para crear el encargo.'}</p>}
                 <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => onHoldSale()} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <PauseIcon />
                         <span>En Espera</span>
                     </button>
-                    <button onClick={() => handleLayawayClick(false)} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                    <button disabled={preOrderSelection || hasStockShortage} onClick={() => handleLayawayClick(false)} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <TagIcon />
                         <span>Crear Abono</span>
                     </button>
-                    <button onClick={() => handleLayawayClick(true)} className="col-span-2 w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-yellow-600 transition-colors">
+                    <button onClick={() => preOrderSelection ? handleLayawayClick(true) : onStartPreOrder()} className="col-span-2 w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-yellow-600 transition-colors">
                         <TruckIcon />
-                        <span>Abono por Traer (Encargo)</span>
+                        <span>{preOrderSelection ? 'Crear encargo por traer' : 'Por traer: seleccionar prendas'}</span>
                     </button>
                 </div>
               </div>
@@ -362,7 +379,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
 
       {isLayawayModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border dark:border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <div className="bg-white dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border dark:border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-sm max-h-[90dvh] overflow-y-auto">
                 <h3 className="text-xl font-bold text-accent mb-4">
                   {isPreOrder ? 'Crear Abono por Traer (Encargo)' : 'Crear Abono'}
                 </h3>
@@ -490,8 +507,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, sellers, customers, on
                   </div>
                 </div>
                 <div className="mt-6 flex justify-end space-x-3">
-                    <button type="button" onClick={() => setIsLayawayModalOpen(false)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancelar</button>
-                    <button onClick={handleLayawayConfirm} className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">Confirmar</button>
+                    <button type="button" disabled={isSavingLayaway} onClick={() => setIsLayawayModalOpen(false)} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancelar</button>
+                    <button disabled={isSavingLayaway} onClick={handleLayawayConfirm} className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">{isSavingLayaway ? 'Guardando...' : 'Confirmar'}</button>
                 </div>
             </div>
         </div>

@@ -23,7 +23,7 @@ test('each repeated barcode and Enter adds exactly once, without auto-adding a p
     const {default:Pos,ViewFiltersProvider}=await import(pathToFileURL(path).href);
     const added=[];const input=new Input();
     const product=(id,sku)=>({id,sku,name:id,stock:10,price:20,storeId:'m1',categoryId:'c1',createdAt:new Date().toISOString()});
-    const props={inventory:[product('short','SKU-1'),product('long','SKU-12')],categories:[],sellers:[],stores:[],sales:[],purchases:[],layaways:[],allCustomers:[],activeCart:[],heldCarts:[],dailyNotes:[],incidents:[],roles:[],giftVouchers:[],ceoNotes:[],verifiedProducts:new Set(),currentUser:{id:'s',roleId:'seller'},currentStore:{id:'m1'},onAddToCart:p=>added.push(p.id),onClearVerifications:()=>{}};
+    const props={inventory:[product('short','SKU-1'),product('long','SKU-12'),{...product('zero','ZERO-1'),stock:0,categoryId:'zero-category'}],categories:[{id:'zero-category',name:'Sin existencias'}],sellers:[],stores:[],sales:[],purchases:[],layaways:[],allCustomers:[],activeCart:[],heldCarts:[],dailyNotes:[],incidents:[],roles:[],giftVouchers:[],ceoNotes:[],verifiedProducts:new Set(),currentUser:{id:'s',roleId:'seller'},currentStore:{id:'m1'},onAddToCart:p=>added.push(p.id),onClearVerifications:()=>{}};
     const screen=(store,scope='s:mayla')=>React.createElement(ViewFiltersProvider,{key:scope},React.createElement(Pos,{...props,key:store,currentStore:{id:store}}));
     await act(async()=>{renderer=create(screen('m1'),{createNodeMock:node=>node.type==='input'?input:null});});
     const search=()=>renderer.root.findAllByType('input').find(n=>typeof n.props.onKeyDown==='function');
@@ -47,6 +47,16 @@ test('each repeated barcode and Enter adds exactly once, without auto-adding a p
     assert.equal(search().props.value,'chaqueta');
     await act(async()=>renderer.update(screen('m1','other:company')));
     assert.equal(search().props.value,'','new user/company starts with an empty search');
+    assert.equal(renderer.root.findAllByType('button').some(n=>n.children.join('')==='Sin existencias'),false);
+    const preOrderButton=renderer.root.findAllByType('button').find(n=>n.props['aria-pressed']===false);
+    await act(async()=>preOrderButton.props.onClick());
+    assert.equal(renderer.root.findAllByType('button').some(n=>n.children.join('')==='Sin existencias'),true);
+    const grid=renderer.root.findAll(n=>Array.isArray(n.props.products))[0];
+    assert.equal(grid.props.preOrderSelection,true);
+    assert.ok(grid.props.products.some(p=>p.id==='zero'));
+    input.value='ZERO-1';await act(async()=>search().props.onChange({target:input}));
+    await act(async()=>search().props.onKeyDown(enter()));assert.equal(added.at(-1),'zero');
+
   } finally {
     if(renderer)await act(async()=>renderer.unmount());
     for(const key of keys)if(previous[key]===undefined)delete globalThis[key];else globalThis[key]=previous[key];

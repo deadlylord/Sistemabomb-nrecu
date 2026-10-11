@@ -1,3 +1,5 @@
+import { assertCartAvailability } from '../services/cartAvailability';
+import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
@@ -811,6 +813,16 @@ const App: React.FC = () => {
 
   const handleClearCart = () => setActiveCart([]);
 
+  const validateTransactionCart = async (transaction: any, items: CartItem[], storeId: string, requireStock: boolean, allowVouchers = false) => {
+    const products: Product[] = [];
+    for (const id of new Set(items.map(item => item.id))) {
+      if (allowVouchers && id.startsWith('voucher-')) continue;
+      const snapshot = await transaction.get(doc(db, 'inventory', id));
+      if (snapshot.exists()) products.push({ ...snapshot.data(), id } as Product);
+    }
+    assertCartAvailability(items, products, operationalCompanyId, storeId, requireStock, allowVouchers);
+  };
+
   const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => {
     if (!currentStore || !currentStoreId || !currentUser) return;
     const startedContext = operationContextRef.current;
@@ -848,6 +860,7 @@ const App: React.FC = () => {
 
             const saleRef = doc(collection(db, 'sales'));
             const itemsToProcess = saleData.items || activeCart;
+            await validateTransactionCart(transaction, itemsToProcess, currentStoreId, true, true);
             const subtotal = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
             const discountPercent = saleData.discountPercent || 0;
             const discountAmount = saleData.discountAmount || (discountPercent > 0 ? Math.round(subtotal * (discountPercent / 100)) : 0);
@@ -944,7 +957,7 @@ const App: React.FC = () => {
 
     } catch (e) {
         console.error("Transaction failed: ", e);
-        alert("Error procesando la venta. Por favor, intente nuevamente.");
+        alert(e instanceof Error ? e.message : "Error procesando la venta. Por favor, intente nuevamente.");
     }
   };
 
@@ -975,7 +988,7 @@ const App: React.FC = () => {
   };
 
   const handleCreateLayaway = async (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => {
-    if (!currentStoreId) return;
+    if (!currentStoreId) throw new Error("Selecciona una sede para crear el encargo.");
     const startedContext = operationContextRef.current;
 
     try {
@@ -998,6 +1011,7 @@ const App: React.FC = () => {
                 shouldIncrementStoreCounter = true;
             }
 
+            await validateTransactionCart(transaction, activeCart, currentStoreId, !isPreOrder);
             const layawayRef = doc(collection(db, 'layaways'));
             const totalAmount = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
             const payment: Payment = { amount: initialPayment.amount, method: initialPayment.method, date: saleDate.toISOString(), seller: seller };
@@ -1049,7 +1063,7 @@ const App: React.FC = () => {
         if (operationContextRef.current === startedContext) handleClearCart();
     } catch (e) {
         console.error("Layaway transaction failed:", e);
-        alert("Error al crear abono. Intente nuevamente.");
+        throw e instanceof Error ? e : new Error("Error al crear abono. Intente nuevamente.");
     }
   };
 
@@ -1063,10 +1077,9 @@ const App: React.FC = () => {
     const newPaidAmount = layaway.paidAmount + amount;
     const updateData: any = { payments: arrayUnion(newPayment), paidAmount: increment(amount) };
     
-    // Si el abono se salda por completo y estaba como pre-orden, descontamos inventario y registramos log de encargo recibido
-    const isPreOrderCompleting = layaway.status === 'pre-order' && newPaidAmount >= layaway.totalAmount;
+    // El pago no confirma la llegada de un encargo ni descuenta sus existencias.
 
-    if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && (layaway.status === 'active' || layaway.status === 'pre-order')) {
+    if (newPaidAmount >= layaway.totalAmount && layaway.totalAmount > 0 && layaway.status === 'active') {
       updateData.status = 'completed';
       const fullPaymentsList = [...layaway.payments, newPayment];
       completedTransactionReceipt = {
@@ -1084,37 +1097,7 @@ const App: React.FC = () => {
       };
     }
 
-    if (isPreOrderCompleting) {
-      await runTransaction(db, async (transaction) => {
-        const docSnap = await transaction.get(layawayRef);
-        if (!docSnap.exists()) return;
-        const currentData = docSnap.data() as Layaway;
-        if (currentData.status === 'pre-order') {
-          currentData.items.forEach(item => {
-            if (item && item.id) {
-              const productRef = doc(db, 'inventory', item.id);
-              transaction.update(productRef, { stock: increment(-item.quantity) });
-
-              const logRef = doc(collection(db, 'productHistory'));
-              const log: ProductHistoryLog = {
-                id: logRef.id,
-                productId: item.id,
-                productName: item.name,
-                storeId: layaway.storeId,
-                changedBy: seller,
-                timestamp: new Date().toISOString(),
-                changeType: ProductChangeType.PRE_ORDER_FULFILLED,
-                details: `Encargo #${layaway.invoiceNumber} entregado/completado por abono final. Cantidad: -${item.quantity}.`
-              };
-              transaction.set(logRef, log);
-            }
-          });
-        }
-        transaction.update(layawayRef, updateData);
-      });
-    } else {
-      await updateDoc(layawayRef, updateData);
-    }
+    await updateDoc(layawayRef, updateData);
     if (completedTransactionReceipt && operationContextRef.current === startedContext) {
       setSaleForReceipt(completedTransactionReceipt);
       setShowReceiptModal(true);
@@ -1131,6 +1114,7 @@ const App: React.FC = () => {
               const layawayData = { id: layawayDoc.id, ...layawayDoc.data() } as Layaway;
               // Validación atómica: si ya no es 'pre-order' (por ejemplo, por doble clic o ejecución paralela), cancelamos la operación
               if (layawayData.status !== 'pre-order') return;
+              await validateTransactionCart(transaction, layawayData.items, layawayData.storeId, true);
 
               layawayData.items.forEach(item => {
                   if (item && item.id) {
@@ -1152,11 +1136,11 @@ const App: React.FC = () => {
                   }
               });
 
-              transaction.update(layawayRef, { status: 'active' });
+              transaction.update(layawayRef, { status: layawayData.totalAmount > 0 && layawayData.paidAmount >= layawayData.totalAmount ? 'completed' : 'active' });
           });
       } catch (error) {
           console.error("Error al marcar encargo como recibido:", error);
-          alert("Error al procesar el encargo. Intente nuevamente.");
+          alert(error instanceof Error ? error.message : "Error al procesar el encargo. Intente nuevamente.");
       }
   };
 
@@ -1368,7 +1352,7 @@ const App: React.FC = () => {
           const current = await transaction.get(incidentRef);
           if (!current.exists()) return;
           const latest = current.data() as Incident;
-          if (!visibleStoreIds.includes(latest.storeId)) throw new Error('Novedad fuera de las sedes autorizadas.');
+          if (!visibleStoreIds.has(latest.storeId)) throw new Error('Novedad fuera de las sedes autorizadas.');
           const damage = latest.type === IncidentType.DAMAGED;
           const expected = damage ? IncidentStatus.DAÑADO_REPORTADO : IncidentStatus.CAMBIO_SOLICITADO;
           if (latest.status !== expected) return;
@@ -1412,7 +1396,8 @@ const App: React.FC = () => {
           });
           if (saleRef && saleSnapshot?.exists()) {
             const sale = saleSnapshot.data() as Sale;
-            const updatedItems = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})).map(item => ({ ...item })) as CartItem[];
+            const saleItems = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as CartItem[]);
+            const updatedItems = saleItems.map(item => ({ ...item }));
             for (const ret of latest.returnedItems || []) {
               const index = updatedItems.findIndex(item => item.id === ret.productId);
               if (index >= 0) {
@@ -1570,7 +1555,7 @@ const App: React.FC = () => {
     } catch (error: any) { console.error("Error approving incident:", error); alert(`Error al aprobar: ${error.message}`); }
   };
 
-  const handleResolveIncident = async (incidentId: string) => {
+  const handleResolveIncident = async (incidentId: string, receivedProductId?: string) => {
     if (!currentUser) return;
     if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
     const incidentRef = doc(db, 'incidents', incidentId);
@@ -1579,35 +1564,51 @@ const App: React.FC = () => {
         const snapshot = await transaction.get(incidentRef);
         if (!snapshot.exists()) return;
         const incident = snapshot.data() as Incident;
-        if (!visibleStoreIds.includes(incident.storeId)) throw new Error('La novedad no pertenece a una sede autorizada.');
+        if (!visibleStoreIds.has(incident.storeId)) throw new Error('La novedad no pertenece a una sede autorizada.');
         const isDamage = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO;
         const isWarranty = incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE;
         if (!isDamage && !isWarranty) return; // Ya resuelta: no sumar stock otra vez.
-        const productRef = isDamage && incident.productId ? doc(db, 'inventory', incident.productId) : null;
+        const targetProductId = isDamage ? receivedProductId || incident.productId : undefined;
+        if (isDamage && !targetProductId) throw new Error('Selecciona la prenda recibida.');
+        const productRef = isDamage && targetProductId ? doc(db, 'inventory', targetProductId) : null;
         const productSnapshot = productRef ? await transaction.get(productRef) : null;
         if (productRef && (!productSnapshot?.exists() || productSnapshot.data()?.storeId !== incident.storeId)) throw new Error('Producto no encontrado en la sede de la novedad.');
         const timestamp = new Date().toISOString();
         const status = isDamage ? IncidentStatus.DEVUELTO_Y_RESUELTO : IncidentStatus.WARRANTY_RETURNED;
+        const receiptPlan = isDamage && productRef && productSnapshot
+          ? planDamagedReceipt(
+              { ...incident, id: incidentId },
+              { ...productSnapshot.data(), id: targetProductId } as Product,
+              operationalCompanyId,
+              incident.storeId,
+              isAdmin || isDeveloper,
+              currentUser.name,
+              timestamp
+            )
+          : null;
+        if (isDamage && !receiptPlan) return;
         if (productRef && productSnapshot) {
           const before = Number(productSnapshot.data()?.stock || 0);
           transaction.update(productRef, { stock: before + 1 });
           const logRef = doc(collection(db, 'productHistory'));
           transaction.set(logRef, {
-            id: logRef.id, productId: incident.productId, productName: incident.productName || 'Producto',
+            id: logRef.id, productId: targetProductId, productName: productSnapshot.data()?.name || incident.productName || 'Producto',
             storeId: incident.storeId, changedBy: currentUser.name, timestamp,
             changeType: ProductChangeType.DAMAGED_RETURNED,
             incidentId, stockBefore: before, stockAfter: before + 1, quantityChange: 1,
-            details: `Prenda dañada retornada de arreglo. Stock: ${before} → ${before + 1} (+1). Novedad: ${incidentId}`
+            details: `${receiptPlan?.notes || 'Prenda dañada retornada de arreglo.'} Stock: ${before} → ${before + 1} (+1). Novedad: ${incidentId}`
           });
         }
         transaction.update(incidentRef, {
-          status, resolutionDate: timestamp,
-          history: [...(incident.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad resuelta/finalizada' }]
+          ...(receiptPlan?.update || {
+            status, resolutionDate: timestamp,
+            history: [...(incident.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad resuelta/finalizada' }]
+          })
         });
       });
     } catch (error: any) {
       console.error('Error resolviendo novedad:', error);
-      alert(`No se pudo marcar el regreso: ${error.message}`);
+      throw error;
     }
   };
 
@@ -1618,7 +1619,11 @@ const App: React.FC = () => {
       const snapshot = await transaction.get(incidentRef);
       if (!snapshot.exists()) throw new Error('La novedad ya no existe.');
       const previous = snapshot.data() as Incident;
-      if (previous.storeId !== incident.storeId || !visibleStoreIds.includes(previous.storeId)) throw new Error('La novedad no pertenece a esta sede.');
+      if (previous.storeId !== incident.storeId || !visibleStoreIds.has(previous.storeId)) throw new Error('La novedad no pertenece a esta sede.');
+      if (previous.damagedReceipt) {
+        if (incident.status !== previous.status || incident.productId !== previous.productId) throw new Error('La recepción ya está registrada. No se puede modificar su estado ni la prenda enviada.');
+        incident.damagedReceipt = previous.damagedReceipt;
+      }
       const oldImpact = previous.type === IncidentType.DAMAGED && previous.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
       const newImpact = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
       if (previous.type === IncidentType.DAMAGED && incident.productId !== previous.productId) throw new Error('No se puede cambiar el producto de una novedad dañada; crea una nueva novedad.');
@@ -1771,7 +1776,7 @@ const App: React.FC = () => {
           if (!snapshot.exists()) return;
           const latest = snapshot.data() as Incident;
           if (latest.status !== IncidentStatus.EN_ARREGLO_CAMBIO || latest.type !== IncidentType.DAMAGED) throw new Error('La novedad cambió de estado. Actualiza la pantalla.');
-          if (!latest.productId || !visibleStoreIds.includes(latest.storeId)) throw new Error('Novedad o producto no autorizado.');
+          if (!latest.productId || !visibleStoreIds.has(latest.storeId)) throw new Error('Novedad o producto no autorizado.');
           const productRef = doc(db, 'inventory', latest.productId);
           const product = await transaction.get(productRef);
           if (!product.exists() || product.data()?.storeId !== latest.storeId) throw new Error('Producto no encontrado en la sede.');
@@ -3249,7 +3254,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? incidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <ViewFiltersProvider key={`filters:${dataScope}`}>
-      <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-72 overflow-x-hidden">
+      <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-[calc(var(--vestika-sidebar-width,15rem)+1.25rem)] transition-[padding-left] duration-300 overflow-x-hidden">
         {!canAccessCurrentView && <div role="status" className="p-6 text-center">Esperando los permisos de acceso. Si continúa, consulta al administrador.</div>}
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary key={`${dataScope}:${currentStoreId}:${currentView}`}>
 

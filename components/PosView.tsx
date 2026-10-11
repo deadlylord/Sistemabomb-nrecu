@@ -32,7 +32,7 @@ interface PosViewProps {
   onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, saleDate: Date) => void;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
   onResumeSale: (heldCartId: string) => void;
-  onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => void;
+  onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => Promise<void>;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => void;
   dailyNotes: DailyNote[];
   onAddDailyNote: (content: string, seller: string) => void;
@@ -61,6 +61,23 @@ interface PosViewProps {
 }
 
 const PosView: React.FC<PosViewProps> = (props) => {
+  const [preOrderSelection, setPreOrderSelection] = useState(false);
+  const previousCartSize = useRef(props.activeCart.length);
+  useEffect(() => {
+    if (previousCartSize.current > 0 && props.activeCart.length === 0) setPreOrderSelection(false);
+    previousCartSize.current = props.activeCart.length;
+  }, [props.activeCart.length]);
+  useEffect(() => { setPreOrderSelection(false); }, [props.currentStore?.id]);
+
+  const startPreOrderSelection = () => {
+    setPreOrderSelection(true);
+    setSelectedCategoryId(null);
+    setSearchTerm('');
+    setIsMobileCartOpen(false);
+    setMobilePosPanel(null);
+    searchInputRef.current?.focus();
+  };
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
   const [searchTerm, setSearchTerm] = useViewFilter('PosView:searchTerm', '');
@@ -166,7 +183,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
         const buffer = barcodeBufferRef.current;
         if (buffer.length > 2) {
           const product = props.inventory.find(p => p.sku === buffer);
-          if (product && product.stock > 0 && !product.isDisabled) {
+          if (product && (preOrderSelection || product.stock > 0) && !product.isDisabled) {
             handleAddToCartWithAnimation(product);
             barcodeBufferRef.current = '';
             e.preventDefault();
@@ -201,7 +218,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       window.removeEventListener('keydown', handleKeyDown);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [props.inventory]);
+  }, [props.inventory, preOrderSelection]);
 
   useEffect(() => {
     return () => {
@@ -213,6 +230,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
   const isAdmin = useMemo(() => props.currentUser.roleId === adminRole?.id, [props.currentUser, adminRole]);
   
   const handleClearTransaction = () => {
+    setPreOrderSelection(false);
     props.onClearCart();
     setCustomerInfo(null);
   };
@@ -229,10 +247,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleCreateLayawayTransaction = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, selectedDate: Date, isPreOrder: boolean, description?: string) => {
+  const handleCreateLayawayTransaction = async (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, selectedDate: Date, isPreOrder: boolean, description?: string) => {
     const now = new Date();
     const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
-    props.onCreateLayaway(customerName, customerPhone, invoiceNumber, seller, initialPayment, finalDate, isPreOrder, description);
+    await props.onCreateLayaway(customerName, customerPhone, invoiceNumber, seller, initialPayment, finalDate, isPreOrder, description);
     setCustomerInfo(null);
   };
 
@@ -252,8 +270,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
       return recentProductIds.map(id => 
           props.inventory.find(p => p.id === id)
-      ).filter((p): p is Product => !!p && p.stock > 0 && !p.isDisabled);
-  }, [props.purchases, props.inventory]);
+      ).filter((p): p is Product => !!p && (preOrderSelection || p.stock > 0) && !p.isDisabled);
+  }, [props.purchases, props.inventory, preOrderSelection]);
 
   const categoriesWithStock = useMemo(() => {
       const NOVEDADES_CATEGORY_ID = 'novedades';
@@ -262,18 +280,18 @@ const PosView: React.FC<PosViewProps> = (props) => {
       const descuentosCategory: Category = { id: DESCUENTOS_CATEGORY_ID, name: '🏷️ Descuentos %' };
   
       const stockedCategoryIds = new Set(
-          props.inventory.filter(p => p.stock > 0 && !p.isDisabled).map(p => p.categoryId)
+          props.inventory.filter(p => (preOrderSelection || p.stock > 0) && !p.isDisabled).map(p => p.categoryId)
       );
       const regularCategories = props.categories.filter(cat => stockedCategoryIds.has(cat.id));
       
-      const hasDiscounts = props.inventory.some(p => p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled);
+      const hasDiscounts = props.inventory.some(p => p.discountPrice !== undefined && p.discountPrice !== p.price && (preOrderSelection || p.stock > 0) && !p.isDisabled);
       
       const extraCategories: Category[] = [];
       if (newArrivalsInventory.length > 0) extraCategories.push(novedadesCategory);
       if (hasDiscounts) extraCategories.push(descuentosCategory);
 
       return [...extraCategories, ...regularCategories];
-    }, [props.inventory, props.categories, newArrivalsInventory]);
+    }, [props.inventory, props.categories, newArrivalsInventory, preOrderSelection]);
 
   const totalItems = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.quantity, 0), [props.activeCart]);
   const totalPrice = useMemo(() => props.activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0), [props.activeCart]);
@@ -298,8 +316,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsMobileCartOpen(true); 
   };
 
-  const handleCreateLayawayWithClose = (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, currentSaleDate: Date, isPreOrder: boolean, description?: string) => {
-      handleCreateLayawayTransaction(customerName, customerPhone, invoiceNumber, seller, initialPayment, currentSaleDate, isPreOrder, description);
+  const handleCreateLayawayWithClose = async (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, currentSaleDate: Date, isPreOrder: boolean, description?: string) => {
+      await handleCreateLayawayTransaction(customerName, customerPhone, invoiceNumber, seller, initialPayment, currentSaleDate, isPreOrder, description);
       setIsMobileCartOpen(false);
   };
 
@@ -421,7 +439,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
           });
       } else if (selectedCategoryId === DESCUENTOS_CATEGORY_ID) {
           result = props.inventory.filter(p => {
-              const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && p.stock > 0 && !p.isDisabled;
+              const matchesDiscount = p.discountPrice !== undefined && p.discountPrice !== p.price && (preOrderSelection || p.stock > 0) && !p.isDisabled;
               const normalizedSku = normalizeText(p.sku);
               const isExactSkuMatch = p.sku && normalizedSku === normalizedSearch;
               
@@ -501,7 +519,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       });
 
       return sortedResult;
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, recentSalesMap, businessSortMode]);
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, recentSalesMap, businessSortMode, preOrderSelection]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
@@ -712,6 +730,9 @@ const PosView: React.FC<PosViewProps> = (props) => {
         </>}
         {section !== "tools" && <CartPanel
             cartItems={props.activeCart}
+            preOrderSelection={preOrderSelection}
+            onStartPreOrder={startPreOrderSelection}
+            hasStockShortage={props.activeCart.some(item => !item.id.startsWith('voucher-') && item.quantity > (props.inventory.find(p => p.id === item.id)?.stock ?? 0))}
             sellers={props.sellers}
             customers={props.allCustomers}
             onUpdateQuantity={props.onUpdateCartQuantity}
@@ -738,6 +759,13 @@ const PosView: React.FC<PosViewProps> = (props) => {
         <div className="lg:col-span-8 xl:col-span-9 h-[calc(100vh-68px)] sticky top-[60px] pb-24 lg:pb-0" id="product-grid-container">
             <div className="bg-white/80 dark:bg-slate-900/75 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-lg flex flex-col h-full">
                 <div className="flex-shrink-0">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-sm text-slate-600 dark:text-slate-300">{preOrderSelection ? 'Por traer: selecciona prendas, incluso con stock 0.' : 'Selecciona prendas para la venta.'}</p>
+                        <button type="button" onClick={startPreOrderSelection} aria-pressed={preOrderSelection} className="shrink-0 flex items-center gap-2 rounded-lg bg-yellow-500 px-3 py-2 text-sm font-bold text-white hover:bg-yellow-600">
+                            <TruckIcon className="w-4 h-4" /> Por traer
+                        </button>
+                        {preOrderSelection && <button type="button" onClick={() => setPreOrderSelection(false)} className="text-sm text-accent underline shrink-0">Volver a venta</button>}
+                    </div>
                     <div className="space-y-3 mb-3">
                         <div className="relative w-full">
                             <input 
@@ -776,12 +804,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                             // 3. Buscar si hay una sola coincidencia exacta en los resultados visibles y está en stock
                                             if (!product && filteredInventory.length === 1) {
                                                 const candidate = filteredInventory[0];
-                                                if (candidate.stock > 0 && !candidate.isDisabled) {
+                                                if ((preOrderSelection || candidate.stock > 0) && !candidate.isDisabled) {
                                                     product = candidate;
                                                 }
                                             }
                                             
-                                            if (product && product.stock > 0 && !product.isDisabled) {
+                                            if (product && (preOrderSelection || product.stock > 0) && !product.isDisabled) {
                                                 handleAddToCartWithAnimation(product);
                                             } else {
                                                 // Si no coincide o no hay stock, limpiar el buscador para permitir intentar una nueva búsqueda/escaneo
@@ -885,6 +913,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                 </div>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
                     <ProductGrid 
+                        preOrderSelection={preOrderSelection}
                         products={filteredInventory} 
                         performanceTrends={performanceTrends}
                         onAddToCart={handleAddToCartWithAnimation} 
