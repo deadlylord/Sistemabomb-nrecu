@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Sale, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
 import { formatCOP, toTitleCase, normalizeText } from '../constants';
 import { TrashIcon, PlusIcon, MinusIcon, SearchIcon, CrossIcon } from './Icons';
@@ -210,9 +211,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
   
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl w-full max-w-4xl h-[94vh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-2 sm:p-4">
+      <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl w-full max-w-4xl h-[calc(100dvh-1rem)] sm:h-auto max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0 bg-white dark:bg-secondary">
           <h2 className="text-lg sm:text-2xl font-bold text-accent">Editar Venta #{sale.invoiceNumber}</h2>
@@ -228,7 +229,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Main Scrollable Body */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0 overscroll-contain">
             {/* Top Section: Sale Details */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Datos de la Venta</h3>
@@ -379,13 +380,14 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
           </div>
           
           {/* Sticky Footer */}
-          <div className="px-4 sm:px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 shrink-0 bg-white dark:bg-secondary z-10">
+          <div className="px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-end gap-3 shrink-0 bg-white dark:bg-secondary z-10">
             <button type="button" onClick={onClose} className="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
             <button type="submit" className="px-7 py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">Guardar Cambios</button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
