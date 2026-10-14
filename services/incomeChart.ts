@@ -16,16 +16,20 @@ export function bogotaDateKey(date: string | Date): string {
 }
 
 // Input is the same dated payment ledger used by Ingresos del período.
-export function buildIncomeChart(payments: IncomeChartPayment[], mode: 'daily' | 'monthly' | 'all-months'): IncomeChartPoint[] {
+export function buildIncomeChart(payments: IncomeChartPayment[], mode: 'daily' | 'monthly' | 'all-months', asOf = new Date()): IncomeChartPoint[] {
   const totals = new Map<string, number>();
+  const partialTotals = new Map<string, number>();
+  const cutoffDay = Number(bogotaDateKey(asOf).slice(-2));
   for (const payment of payments) {
     if (!isPeriodIncome(payment.paymentMethod)) continue;
     const day = bogotaDateKey(payment.date);
     if (!day) continue;
     const key = mode === 'daily' ? day : day.slice(0, 7);
-    totals.set(key, (totals.get(key) || 0) + (Number(payment.amount) || 0));
+    const amount = Number(payment.amount) || 0;
+    totals.set(key, (totals.get(key) || 0) + amount);
+    if (mode === 'daily' || Number(day.slice(-2)) <= cutoffDay) partialTotals.set(key, (partialTotals.get(key) || 0) + amount);
   }
-  return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, total]) => ({ label, total, partialTotal: total }));
+  return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, total]) => ({ label, total, partialTotal: partialTotals.get(label) || 0 }));
 }
 
 // Always show January through December, including months with no recorded payments.
