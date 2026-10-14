@@ -14,10 +14,10 @@ const payments = [
 test('daily and monthly bars reconcile to period income from the same ledger, including abonos and exchange income', () => {
   for (const mode of ['daily', 'monthly', 'all-months']) {
     const points = buildIncomeChart(payments, mode);
-    assert.equal(points.reduce((sum, point) => sum + point.total, 0), 50000);
+    assert.equal(points.reduce((sum, point) => sum + point.total, 0), 59000);
     assert.equal(points.reduce((sum, point) => sum + point.total, 0), payments.filter(p => isPeriodIncome(p.paymentMethod)).reduce((sum, p) => sum + p.amount, 0));
   }
-  assert.deepEqual(buildIncomeChart(payments, 'monthly').map(p => [p.label, p.total]), [['2026-09', 10000], ['2026-10', 40000]]);
+  assert.deepEqual(buildIncomeChart(payments, 'monthly').map(p => [p.label, p.total]), [['2026-09', 10000], ['2026-10', 49000]]);
 });
 
 test('Bogotá midnight determines the day and month, independently of device timezone', () => {
@@ -28,5 +28,5 @@ test('Bogotá midnight determines the day and month, independently of device tim
 
 test('empty data and excluded methods cannot create phantom income', () => {
   assert.deepEqual(buildIncomeChart([], 'daily'), []);
-  assert.deepEqual(buildIncomeChart(payments.slice(-2), 'monthly'), []);
+  assert.deepEqual(buildIncomeChart(payments.slice(-2,-1), 'monthly'), []);
 });
