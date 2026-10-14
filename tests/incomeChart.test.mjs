@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildIncomeChart, bogotaDateKey, isPeriodIncome, completeChartYear } from '../services/incomeChart.ts';
+import { buildIncomeChart, bogotaDateKey, isPeriodIncome, completeChartYear, estimateMonthClose } from '../services/incomeChart.ts';
 
 const payments = [
   { date: '2026-10-01T04:30:00Z', amount: 10000, paymentMethod: 'Efectivo' },
@@ -58,4 +58,17 @@ test('same-day comparison includes all available days in shorter months', () => 
   const points=buildIncomeChart([{date:'2026-02-28T18:00:00Z',amount:123456,paymentMethod:'Efectivo'}],'monthly',new Date('2026-03-31T18:00:00Z'));
   assert.equal(points[0].total,123456);
   assert.equal(points[0].partialTotal,123456);
+});
+
+test('month close estimate uses actual cash through the comparable day and correct month length', () => {
+  const today=new Date('2026-10-14T21:00:00Z');
+  assert.equal(estimateMonthClose({label:'2026-10',total:999999,partialTotal:140000},today),310000);
+  assert.equal(estimateMonthClose({label:'2026-09',total:999999,partialTotal:140000},today),300000);
+  assert.equal(estimateMonthClose({label:'2026-11',total:0,partialTotal:0},today),null);
+  assert.equal(estimateMonthClose({label:'2026-10',total:0,partialTotal:0},today),0);
+});
+
+test('estimate handles short months and leap years without overstating comparable days', () => {
+  assert.equal(estimateMonthClose({label:'2026-02',total:280000,partialTotal:280000},new Date('2026-03-31T18:00:00Z')),280000);
+  assert.equal(estimateMonthClose({label:'2024-02',total:290000,partialTotal:140000},new Date('2026-10-14T18:00:00Z')),290000);
 });
