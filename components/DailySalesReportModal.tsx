@@ -1,3 +1,4 @@
+import { sumCashCollections } from '../services/cashCollections';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sale, Seller, PaymentMethod, DailyNote, Layaway, Incident, IncidentType, IncidentStatus } from '../types';
@@ -14,6 +15,7 @@ interface DailySalesReportModalProps {
   incidents: Incident[];
   onAddDailyNote: (content: string, seller: string) => void;
   saleDate: Date;
+  storeId: string;
   isAdmin: boolean;
 }
 
@@ -25,7 +27,7 @@ const toYYYYMMDD = (date: Date) => {
 };
 
 
-const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, onClose, sales, layaways, sellers, dailyNotes, incidents, onAddDailyNote, saleDate, isAdmin }) => {
+const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, onClose, sales, layaways, sellers, dailyNotes, incidents, onAddDailyNote, saleDate, isAdmin, storeId }) => {
   const [newNote, setNewNote] = useState('');
   const [noteSeller, setNoteSeller] = useState('');
   const [reportDate, setReportDate] = useState(saleDate);
@@ -80,7 +82,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
 
     const todaysRecaudos = incidents.filter(i =>
         isWithinDay(i.createdAt) &&
-        i.type === IncidentType.RECAUDO &&
+        i.storeId === storeId && i.type === IncidentType.RECAUDO &&
         i.status !== IncidentStatus.PENDIENTE_APROBACION
     );
 
@@ -177,6 +179,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
         .reduce((sum, item) => sum + (item?.quantity || 0), 0);
         
     const grandTotals = {
+        totalCashCollections: sumCashCollections(incidents, storeId, isWithinDay),
         totalCashSales: grandTotalCashSales,
         totalCashLayaways: grandTotalCashLayaways,
         totalUnitsSold: grandTotalUnitsSold,
@@ -185,7 +188,7 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
     };
 
     return { activeSellers, grandTotals, todaysCashAdjustments, todaysRecaudos, todaysExchangeSurpluses };
-  }, [sales, layaways, sellers, incidents, isWithinDay]);
+  }, [sales, layaways, sellers, incidents, isWithinDay, storeId]);
 
   const todaysSoldItems = useMemo(() => {
     const directSales = sales.filter(sale => isWithinDay(sale.createdAt) && !sale.layawayId);
@@ -297,11 +300,13 @@ const DailySalesReportModal: React.FC<DailySalesReportModalProps> = ({ isOpen, o
                         </div>
                     </div>
                      <div className="text-center mt-4 pt-2 border-t border-gray-300 dark:border-gray-600 space-y-1">
+                        <p className="text-sm text-purple-600 dark:text-purple-300">Recaudos en efectivo: +{formatCOP(reportData.grandTotals.totalCashCollections)}</p>
                         <p className="text-sm text-green-500">Ingresos Extra (Caja): +{formatCOP(reportData.grandTotals.incomeAdjustments)}</p>
                         <p className="text-sm text-red-500">Gastos/Salidas (Caja): -{formatCOP(reportData.grandTotals.expenseAdjustments)}</p>
                         <p className="text-accent text-xl">Total Neto en Caja: {formatCOP(
                             reportData.grandTotals.totalCashSales +
                             reportData.grandTotals.totalCashLayaways +
+                            reportData.grandTotals.totalCashCollections +
                             reportData.grandTotals.incomeAdjustments -
                             reportData.grandTotals.expenseAdjustments
                         )}</p>
