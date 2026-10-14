@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.151', date: '2026-10-14', description: 'Gráfico de ingresos y vista móvil', isCurrent: true, changes: ['El gráfico de ingresos usa los mismos pagos y fechas del total del período; conserva la vista de ventas históricas.', 'Barras adaptadas al celular con desplazamiento, detalle al tocar y espacio para los controles inferiores.'] },
+  { version: '1.1.152', date: '2026-10-14', description: 'Abonos recibidos y recaudos en caja', isCurrent: true, changes: ['Ingresos y gráfico incluyen los recaudos recibidos una sola vez, separados de la utilidad.', 'El reporte diario suma recaudos en efectivo a la caja esperada y conserva compatibilidad con recaudos antiguos sin medio de pago.'] },
+  { version: '1.1.151', date: '2026-10-14', description: 'Gráfico de ingresos y vista móvil', isCurrent: false, changes: ['El gráfico de ingresos usa los mismos pagos y fechas del total del período; conserva la vista de ventas históricas.', 'Barras adaptadas al celular con desplazamiento, detalle al tocar y espacio para los controles inferiores.'] },
   { version: '1.1.150', date: '2026-10-12', description: 'Guardar ventas editadas en móvil', isCurrent: false, changes: ['La edición de ventas se muestra sobre el menú y mantiene sus botones visibles con altura dinámica y espacio seguro en Android.'] },
   { version: '1.1.149', date: '2026-10-10', description: 'Restauración de Firebase de pruebas', isCurrent: false, changes: ['Staging recupera la configuración de Firebase por entorno y bloquea el proyecto de producción.'] },
   { version: '1.1.148', date: '2026-10-10', description: 'Corrección de apertura de staging', isCurrent: false, changes: ['Los módulos y el manifiesto se cargan desde la misma dirección de la aplicación para evitar bloqueos CORS.'] },
