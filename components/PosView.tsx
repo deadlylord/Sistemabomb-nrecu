@@ -962,6 +962,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
       {isSalesReportModalOpen && (
           <DailySalesReportModal
+              storeId={props.currentStore?.id || ''}
               isOpen={isSalesReportModalOpen}
               onClose={() => setIsSalesReportModalOpen(false)}
               sales={props.sales}
