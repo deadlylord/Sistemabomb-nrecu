@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildIncomeChart, bogotaDateKey, isPeriodIncome } from '../services/incomeChart.ts';
+import { buildIncomeChart, bogotaDateKey, isPeriodIncome, completeChartYear } from '../services/incomeChart.ts';
 
 const payments = [
   { date: '2026-10-01T04:30:00Z', amount: 10000, paymentMethod: 'Efectivo' },
@@ -29,4 +29,13 @@ test('Bogotá midnight determines the day and month, independently of device tim
 test('empty data and excluded methods cannot create phantom income', () => {
   assert.deepEqual(buildIncomeChart([], 'daily'), []);
   assert.deepEqual(buildIncomeChart(payments.slice(-2,-1), 'monthly'), []);
+});
+
+test('year chart fills empty months, excludes other years and keeps complete peso amounts', () => {
+  const points=completeChartYear([{label:'2026-02',total:1234567,partialTotal:234567},{label:'2025-02',total:900,partialTotal:900}],2026);
+  assert.equal(points.length,12);
+  assert.equal(points[1].total,1234567);
+  assert.equal(points[1].partialTotal,234567);
+  assert.equal(points[0].total,0);
+  assert.equal(points[11].label,'2026-12');
 });
