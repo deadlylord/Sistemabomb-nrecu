@@ -39,3 +39,23 @@ test('year chart fills empty months, excludes other years and keeps complete pes
   assert.equal(points[0].total,0);
   assert.equal(points[11].label,'2026-12');
 });
+
+test('monthly comparison counts only paid money through the same Bogotá day in every month', () => {
+  const rows = [
+    {date:'2026-09-01T18:00:00Z',amount:10000,paymentMethod:'Efectivo'},
+    {date:'2026-09-14T23:00:00Z',amount:20000,paymentMethod:'Efectivo'},
+    {date:'2026-09-15T04:59:59Z',amount:5000,paymentMethod:'QR'},
+    {date:'2026-09-15T05:00:00Z',amount:90000,paymentMethod:'Efectivo'},
+    {date:'2026-10-14T18:00:00Z',amount:40000,paymentMethod:'Recaudo Sistecredito'},
+    {date:'2026-10-14T18:00:00Z',amount:50000,paymentMethod:'Bono de Regalo'},
+  ];
+  const points=buildIncomeChart(rows,'monthly',new Date('2026-10-14T21:00:00Z'));
+  assert.deepEqual(points,[{label:'2026-09',total:125000,partialTotal:35000},{label:'2026-10',total:40000,partialTotal:40000}]);
+  assert.equal(completeChartYear(points,2026)[8].partialTotal,35000);
+});
+
+test('same-day comparison includes all available days in shorter months', () => {
+  const points=buildIncomeChart([{date:'2026-02-28T18:00:00Z',amount:123456,paymentMethod:'Efectivo'}],'monthly',new Date('2026-03-31T18:00:00Z'));
+  assert.equal(points[0].total,123456);
+  assert.equal(points[0].partialTotal,123456);
+});
