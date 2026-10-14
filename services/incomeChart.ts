@@ -2,7 +2,7 @@ export interface IncomeChartPayment { date: string; amount: number; paymentMetho
 export interface IncomeChartPoint { label: string; total: number; partialTotal: number }
 
 export function isPeriodIncome(paymentMethod: string): boolean {
-  return paymentMethod !== 'Bono de Regalo' && paymentMethod !== 'Recaudo Sistecredito';
+  return paymentMethod !== 'Bono de Regalo';
 }
 
 const bogotaFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' });
