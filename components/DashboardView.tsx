@@ -1,3 +1,4 @@
+import { sumCashCollections } from '../services/cashCollections';
 import SalesHistoryChart from './SalesHistoryChart';
 import { buildIncomeChart, isPeriodIncome, bogotaDateKey } from '../services/incomeChart';
 import VestikaLoader from './VestikaLoader';
@@ -449,7 +450,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         });
 
         // 2. Ingresos y Utilidad: Basado en PAGOS (como el reporte diario)
-        const allTransactionsForRevenue = [...sales, ...layaways.filter(l => l.status !== 'cancelled')];
+        const allTransactionsForRevenue = [...sales.filter(s => !s.layawayId), ...layaways.filter(l => l.status !== 'cancelled')];
         const uniqueInvoicesInRange = new Set<string>();
 
         allTransactionsForRevenue.filter(t => !currentStore?.id || t.storeId === currentStore.id).forEach(t => {
@@ -486,7 +487,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             });
         });
 
-        // Sumar Novedades de Caja (Recaudos e Ingresos)
+        // Cash movements are shown as received money; external collections are not profit.
         const revenueAdjustments = allIncidents.filter(i => 
             (!currentStore?.id || i.storeId === currentStore.id) && 
             isWithinRange(i.createdAt) &&
@@ -496,7 +497,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
         revenueAdjustments.forEach(adj => {
             totalDirectSalesValue += (adj.adjustmentAmount || 0);
-            totalProfit += (adj.adjustmentAmount || 0); // Todo lo de recaudo es utilidad neta
+            if (adj.type !== IncidentType.RECAUDO) totalProfit += (adj.adjustmentAmount || 0); // External collections enter cash but are not store profit.
         });
 
         const sortedUnitsBySeller = Object.entries(unitsBySeller)
@@ -526,11 +527,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
             totalCogs, 
             netProfit 
         };
-    }, [sales, layaways, inventory, expenses, isWithinRange]);
+    }, [sales, layaways, inventory, expenses, allIncidents, currentStore?.id, isWithinRange]);
   
   const cashBreakdown = useMemo(() => {
     const cashLikeMethods = [PaymentMethod.Efectivo];
-    const currentStoreId = inventory[0]?.storeId;
+    const currentStoreId = currentStore?.id;
     if (!currentStoreId) return null;
     const salesCash = sales.filter(sale => !sale.layawayId).flatMap(sale => (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[]).filter(p => p && isWithinRange(p.date) && cashLikeMethods.includes(p.method)).reduce((sum, p) => sum + p.amount, 0);
     const layawaysCash = layaways.flatMap(l => (Array.isArray(l.payments) ? l.payments : Object.values(l.payments || {})) as Payment[]).filter(p => p && isWithinRange(p.date) && cashLikeMethods.includes(p.method)).reduce((sum, p) => sum + p.amount, 0);
@@ -542,10 +543,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     // Los recaudos Sistecredito representan dinero que entra físicamente a caja.
     // Se muestran aparte para control, pero también deben formar parte del efectivo neto,
     // igual que en Conciliación Financiera.
-    const sistecreditoCollections = allIncidents.filter(i => i.storeId === currentStoreId && isWithinRange(i.createdAt) && i.type === IncidentType.RECAUDO && (i.adjustmentAmount || 0) > 0 && i.status !== IncidentStatus.PENDIENTE_APROBACION);
-    const totalSistecreditoCollections = sistecreditoCollections.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0);
+    const totalSistecreditoCollections = sumCashCollections(allIncidents, currentStoreId, isWithinRange);
     return { salesCash, layawaysCash, totalExchangeSurplusesCash, totalSistecreditoCollections, incomeAdjustments: cashIncidents.filter(i => i.adjustmentType === 'income'), expenseAdjustments: cashIncidents.filter(i => i.adjustmentType === 'expense'), exchangeSurpluses: exchangeSurplusesCashList, netTotal: salesCash + layawaysCash + totalExchangeSurplusesCash + totalSistecreditoCollections + totalIncomeAdjustments - totalExpenseAdjustments };
-  }, [sales, layaways, allIncidents, inventory, isWithinRange]);
+  }, [sales, layaways, allIncidents, currentStore?.id, isWithinRange]);
 
   const detailedReportData = useMemo(() => {
     const totalsByMethod: { [key: string]: number } = {};
@@ -639,7 +639,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     allPayments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const filteredTransactions = paymentMethodFilter.length > 0 ? allPayments.filter(p => paymentMethodFilter.includes(String(p.paymentMethod))) : allPayments;
     const groupedTransactions: { [date: string]: { total: number; items: UnifiedTransaction[] } } = {};
-    filteredTransactions.forEach(t => { const dateKey = new Date(t.date).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' }); if (!groupedTransactions[dateKey]) groupedTransactions[dateKey] = { total: 0, items: [] }; if (t.paymentMethod !== PaymentMethod.Bono && t.paymentMethod !== 'Recaudo Sistecredito') groupedTransactions[dateKey].total += t.amount; groupedTransactions[dateKey].items.push(t); });
+    filteredTransactions.forEach(t => { const dateKey = new Date(t.date).toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' }); if (!groupedTransactions[dateKey]) groupedTransactions[dateKey] = { total: 0, items: [] }; if (isPeriodIncome(t.paymentMethod)) groupedTransactions[dateKey].total += t.amount; groupedTransactions[dateKey].items.push(t); });
     
     // Sort grouped transactions by date for the detailed report
     const sortedGroups = Object.entries(groupedTransactions).sort((a, b) => {
@@ -674,18 +674,18 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       const payments = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[];
       for (const payment of payments) if (payment && payment.method !== PaymentMethod.Bono && inPrevious(payment.date)) total += Number(payment.amount) || 0;
     }
-    const storeId = inventory[0]?.storeId;
+    const storeId = currentStore?.id;
     for (const incident of allIncidents) {
       if (incident.storeId !== storeId || !inPrevious(incident.createdAt) || incident.status === IncidentStatus.PENDIENTE_APROBACION) continue;
-      if (incident.type === IncidentType.RECAUDO) continue;
       if (incident.type === IncidentType.CASH_ADJUSTMENT && (incident.description || '').includes('Excedente pagado')) continue;
       const valid = (incident.type === IncidentType.PRODUCT_EXCHANGE && !!incident.paymentMethod)
+        || incident.type === IncidentType.RECAUDO
         || incident.type === IncidentType.ADDITIONAL_INCOME
         || (incident.type === IncidentType.CASH_ADJUSTMENT && incident.adjustmentType === 'income');
-      if (valid && incident.paymentMethod && (incident.adjustmentAmount || 0) > 0) total += Number(incident.adjustmentAmount) || 0;
+      if (valid && (incident.type === IncidentType.RECAUDO || (incident.paymentMethod && isPeriodIncome(incident.paymentMethod))) && (incident.adjustmentAmount || 0) > 0) total += Number(incident.adjustmentAmount) || 0;
     }
     return { total, start: previousStart.toLocaleDateString('es-CO'), end: previousEnd.toLocaleDateString('es-CO') };
-  }, [startDate, endDate, sales, layaways, allIncidents, inventory]);
+  }, [startDate, endDate, sales, layaways, allIncidents, currentStore?.id]);
 
   const togglePaymentMethodFilter = (method: string) => {
     setPaymentMethodFilter(prev => 
@@ -696,7 +696,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const getDayTotalForFilteredMethods = (items: UnifiedTransaction[]) => {
       return items
         .filter(t => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(t.paymentMethod)))
-        .filter(t => t.paymentMethod !== PaymentMethod.Bono && t.paymentMethod !== 'Recaudo Sistecredito')
+        .filter(t => isPeriodIncome(t.paymentMethod))
         .reduce((sum, item) => sum + item.amount, 0);
   };
 
@@ -1153,9 +1153,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const dailyIncomeText = [...detailedReportData.sortedGroups]
         .reverse() 
         .map(([date, group]) => {
-            // Calculamos el neto diario directo (sin contar recaudos externos si se prefiere separar)
+            // Dinero recibido por día, incluidos recaudos, sin bonos usados como pago.
             const dailyNet = group.items
-                .filter(i => i.type !== 'Recaudo Sistecredito')
+                .filter(i => isPeriodIncome(i.paymentMethod))
                 .reduce((sum, item) => sum + item.amount, 0);
             return ` • *${date}:* ${formatCOP(dailyNet)}`;
         })
@@ -1416,11 +1416,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
             <h2 className="text-xl sm:text-2xl font-bold text-accent">{chartMetric === 'income' ? 'Ingresos del período' : 'Ventas históricas'}</h2>
             <div className="flex flex-wrap gap-2">
-              {(['income', 'sales'] as const).map(metric => <button type="button" key={metric} aria-pressed={chartMetric === metric} onClick={() => setChartMetric(metric)} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartMetric === metric ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{metric === 'income' ? 'Ingresos' : 'Ventas'}</button>)}
+              {(['income', 'sales'] as const).map(metric => <button type="button" key={metric} aria-pressed={chartMetric === metric} onClick={() => setChartMetric(metric)} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartMetric === metric ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{metric === 'income' ? 'Dinero recibido' : 'Valor de prendas'}</button>)}
               {(['daily', 'monthly'] as const).map(mode => <button type="button" key={mode} aria-pressed={chartViewMode === mode} onClick={() => setChartViewMode(mode)} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === mode ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{mode === 'daily' ? 'Diario' : 'Mensual'}</button>)}
             </div>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${startDate} al ${endDate} · Pagos recibidos, ingresos y excedentes de cambios. Excluye bonos usados como pago y recaudos Sistecrédito. Mismo total que la casilla de ingresos; sin aplicar filtros por medio de pago.` : 'Histórico cargado de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.'}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${startDate} al ${endDate} · Pagos recibidos, recaudos, ingresos y excedentes de cambios. Excluye bonos usados como pago. Mismo total que la casilla de ingresos; sin aplicar filtros por medio de pago.` : 'Histórico cargado de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.'}</p>
           {chartMetric === 'income' && <p className="mb-3 font-bold text-accent">Total: {formatCOP(totalPeriodIncome)}</p>}
           <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? 'Ingresos del período' : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartMetric === 'sales' && chartViewMode !== 'daily'} />
         </section>
