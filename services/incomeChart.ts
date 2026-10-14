@@ -40,3 +40,15 @@ export function completeChartYear(points: IncomeChartPoint[], year: number): Inc
     return byMonth.get(label) || { label, total: 0, partialTotal: 0 };
   });
 }
+
+// Comparable projection: accumulated through the same calendar day / elapsed days
+// times the actual number of days in that month. Future months have no baseline.
+export function estimateMonthClose(point: IncomeChartPoint, asOf = new Date()): number | null {
+  const today = bogotaDateKey(asOf);
+  if (!/^\d{4}-\d{2}$/.test(point.label) || !today || point.label > today.slice(0, 7)) return null;
+  const [year, month] = point.label.split('-').map(Number);
+  if (month < 1 || month > 12) return null;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const elapsedDays = Math.min(Number(today.slice(-2)), daysInMonth);
+  return Math.round(point.partialTotal / elapsedDays * daysInMonth);
+}
