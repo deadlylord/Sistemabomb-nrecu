@@ -27,3 +27,12 @@ export function buildIncomeChart(payments: IncomeChartPayment[], mode: 'daily' |
   }
   return [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, total]) => ({ label, total, partialTotal: total }));
 }
+
+// Always show January through December, including months with no recorded payments.
+export function completeChartYear(points: IncomeChartPoint[], year: number): IncomeChartPoint[] {
+  const byMonth = new Map(points.map(point => [point.label, point]));
+  return Array.from({ length: 12 }, (_, index) => {
+    const label = `${year}-${String(index + 1).padStart(2, '0')}`;
+    return byMonth.get(label) || { label, total: 0, partialTotal: 0 };
+  });
+}
