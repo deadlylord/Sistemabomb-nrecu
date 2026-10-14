@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatCOP } from '../constants';
-import { bogotaDateKey, type IncomeChartPoint } from '../services/incomeChart';
+import { bogotaDateKey, estimateMonthClose, type IncomeChartPoint } from '../services/incomeChart';
 
 const SalesHistoryChart: React.FC<{
   seriesLabel?: string; data: IncomeChartPoint[]; viewMode: 'daily' | 'monthly' | 'all-months'; showPartial?: boolean;
@@ -36,7 +36,9 @@ const SalesHistoryChart: React.FC<{
               </div>}
             </div>
             <span className="block pt-2 text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatLabel(point.label)}</span>
-            {showPartial && <span className="block mt-1 text-[10px] font-semibold text-accent whitespace-nowrap">Al día {Number(bogotaDateKey(new Date()).slice(-2))}:<br />{formatCOP(point.partialTotal)}</span>}
+            {showPartial && <span className="block mt-1 text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap" title={`Estimación con el ritmo acumulado hasta el día ${Number(bogotaDateKey(new Date()).slice(-2))} y los días de cada mes`}>
+              Estimado cierre:<br /><strong className="text-accent">{estimateMonthClose(point) === null ? 'Sin base aún' : formatCOP(estimateMonthClose(point)!)}</strong>
+            </span>}
           </button>)}
         </div>
       </div>
