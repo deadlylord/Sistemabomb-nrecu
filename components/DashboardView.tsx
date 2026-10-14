@@ -1,6 +1,6 @@
 import { sumCashCollections } from '../services/cashCollections';
 import SalesHistoryChart from './SalesHistoryChart';
-import { buildIncomeChart, isPeriodIncome, bogotaDateKey } from '../services/incomeChart';
+import { buildIncomeChart, isPeriodIncome, bogotaDateKey, completeChartYear } from '../services/incomeChart';
 import VestikaLoader from './VestikaLoader';
 import CategorySalesChart from './CategorySalesChart';
 import { previousPeriod } from '../services/previousPeriod';
@@ -193,6 +193,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [priceVariationSellerFilters, setPriceVariationSellerFilters] = useViewFilter<string[]>('DashboardView:priceVariationSellerFilters', []);
   const [priceVariationPaymentMethodFilters, setPriceVariationPaymentMethodFilters] = useViewFilter<string[]>('DashboardView:priceVariationPaymentMethodFilters', []);
+  const [chartYear, setChartYear] = useState(() => Number(bogotaDateKey(new Date()).slice(0, 4)));
   const [chartMetric, setChartMetric] = useState<'income' | 'sales'>('income');
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('monthly');
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
@@ -547,16 +548,14 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     return { salesCash, layawaysCash, totalExchangeSurplusesCash, totalSistecreditoCollections, incomeAdjustments: cashIncidents.filter(i => i.adjustmentType === 'income'), expenseAdjustments: cashIncidents.filter(i => i.adjustmentType === 'expense'), exchangeSurpluses: exchangeSurplusesCashList, netTotal: salesCash + layawaysCash + totalExchangeSurplusesCash + totalSistecreditoCollections + totalIncomeAdjustments - totalExpenseAdjustments };
   }, [sales, layaways, allIncidents, currentStore?.id, isWithinRange]);
 
-  const detailedReportData = useMemo(() => {
-    const totalsByMethod: { [key: string]: number } = {};
-    const commissionsByMethod: { [key: string]: number } = {};
+  const loadedPaymentLedger = useMemo(() => {
     const allPayments: UnifiedTransaction[] = [];
     const currentStoreId = currentStore?.id;
     sales.forEach(sale => {
       const paymentsArray: Payment[] = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {})) as Payment[];
       if (!sale.layawayId && paymentsArray) {
         paymentsArray.forEach((payment, index) => {
-          if (payment && isWithinRange(payment.date)) {
+          if (payment) {
             const items = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {})) as CartItem[];
             const isVoucherSale = items.length > 0 && items.some(i => i && i.id && i.id.startsWith('voucher-'));
             const typeLabel: UnifiedTransaction['type'] = isVoucherSale ? 'Venta de Bono' : 'Venta';
@@ -575,9 +574,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         });
       }
     });
-    layaways.forEach(layaway => { const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; paymentsArray.forEach((payment, index) => { if (payment && isWithinRange(payment.date)) { allPayments.push({ id: `${layaway.id}-${index}`, date: payment.date, type: 'Abono', invoiceNumber: layaway.invoiceNumber, details: index === 0 ? `Abono inicial para #${layaway.invoiceNumber}` : `Pago a abono #${layaway.invoiceNumber}`, customer: layaway.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number(payment.amount) }); } }); });
+    layaways.forEach(layaway => { const paymentsArray: Payment[] = (Array.isArray(layaway.payments) ? layaway.payments : Object.values(layaway.payments || {})) as Payment[]; paymentsArray.forEach((payment, index) => { if (payment) { allPayments.push({ id: `${layaway.id}-${index}`, date: payment.date, type: 'Abono', invoiceNumber: layaway.invoiceNumber, details: index === 0 ? `Abono inicial para #${layaway.invoiceNumber}` : `Pago a abono #${layaway.invoiceNumber}`, customer: layaway.customerName, seller: payment.seller, paymentMethod: payment.method, amount: Number(payment.amount) }); } }); });
     allIncidents.forEach(incident => {
-      if (incident.storeId === currentStoreId && isWithinRange(incident.createdAt)) {
+      if (incident.storeId === currentStoreId) {
         if (incident.status === IncidentStatus.PENDIENTE_APROBACION) return;
 
         if (incident.type === IncidentType.PRODUCT_EXCHANGE) {
@@ -624,6 +623,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       }
     });
     
+    return allPayments;
+  }, [sales, layaways, allIncidents, currentStore?.id]);
+
+  const detailedReportData = useMemo(() => {
+    const totalsByMethod: { [key: string]: number } = {};
+    const commissionsByMethod: { [key: string]: number } = {};
+    const allPayments = loadedPaymentLedger.filter(payment => isWithinRange(payment.date));
     allPayments.forEach((p: UnifiedTransaction) => { 
         const methodKey = String(p.paymentMethod);
         const amountValue: number = Number(p.amount) || 0;
@@ -650,7 +656,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
 
     return { totalsByMethod, commissionsByMethod, allPayments, filteredTransactions, sortedGroups };
-  }, [sales, layaways, allIncidents, currentStore?.id, isWithinRange, paymentMethodFilter]);
+  }, [loadedPaymentLedger, isWithinRange, paymentMethodFilter]);
 
   const totalPeriodIncome = useMemo(() => Object.entries(detailedReportData.totalsByMethod).reduce((sum, [method, total]) => isPeriodIncome(method) ? sum + (total as number) : sum, 0), [detailedReportData.totalsByMethod]);
   const totalRecaudos = useMemo(() => (detailedReportData.totalsByMethod['Recaudo Sistecredito'] as number) || 0, [detailedReportData.totalsByMethod]);
@@ -898,7 +904,10 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   }, [sales, layaways]);
 
   const salesChartData = useMemo(() => {
-    if (chartMetric === 'income') return buildIncomeChart(detailedReportData.allPayments, chartViewMode);
+    if (chartMetric === 'income') {
+      if (chartViewMode === 'daily') return buildIncomeChart(detailedReportData.allPayments, 'daily');
+      return completeChartYear(buildIncomeChart(loadedPaymentLedger, 'monthly'), chartYear);
+    }
     const dataMap = new Map<string, { total: number; partialTotal: number }>();
     const currentDay = Number(bogotaDateKey(new Date()).slice(-2));
     const allTransactions: (Sale | Layaway)[] = [...sales.filter(s => !s.layawayId), ...layaways.filter(l => l.status === 'active' || l.status === 'completed')];
@@ -912,8 +921,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         if (chartViewMode !== 'daily') { if (Number(dateKey.slice(-2)) <= currentDay) { existing.partialTotal += t.totalAmount; } } else { existing.partialTotal = existing.total; }
         dataMap.set(label, existing);
     });
-    return Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments]);
+    const points = Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
+    return chartViewMode === 'daily' ? points : completeChartYear(points, chartYear);
+  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments, loadedPaymentLedger, chartYear]);
 
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -1414,15 +1424,16 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div className="flex items-center gap-2 mb-4"><h3 className="text-xl font-bold text-accent">Ventas por Categoría</h3><button type="button" onClick={() => setIsCategoryChartVisible(value => !value)} aria-expanded={isCategoryChartVisible} aria-controls="category-sales-chart" aria-label={isCategoryChartVisible ? 'Ocultar gráfico circular de categorías' : 'Mostrar gráfico circular de categorías'} title="Gráfico circular" className={`shrink-0 p-2 rounded-lg text-accent hover:bg-accent/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${isCategoryChartVisible ? 'bg-accent/10' : ''}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5" aria-hidden="true"><path d="M11 3a9 9 0 1 0 10 10H11V3Z" /><path d="M15 3.5V9h5.5A9 9 0 0 0 15 3.5Z" /></svg></button></div>{isCategoryChartVisible && <div id="category-sales-chart"><CategorySalesChart scopeKey={`${companyId}:${currentStore?.id}`} data={categoryReport} /></div>}<div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
         <section id="sales-chart" className="min-w-0 max-w-full bg-white dark:bg-secondary p-3 sm:p-6 rounded-xl shadow-lg mt-8 scroll-mt-20">
           <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
-            <h2 className="text-xl sm:text-2xl font-bold text-accent">{chartMetric === 'income' ? 'Ingresos del período' : 'Ventas históricas'}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-accent">{chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Ingresos del año') : 'Ventas históricas'}</h2>
             <div className="flex flex-wrap gap-2">
               {(['income', 'sales'] as const).map(metric => <button type="button" key={metric} aria-pressed={chartMetric === metric} onClick={() => setChartMetric(metric)} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartMetric === metric ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{metric === 'income' ? 'Dinero recibido' : 'Valor de prendas'}</button>)}
               {(['daily', 'monthly'] as const).map(mode => <button type="button" key={mode} aria-pressed={chartViewMode === mode} onClick={() => setChartViewMode(mode)} className={`px-3 py-1 text-sm rounded-full font-semibold ${chartViewMode === mode ? 'bg-accent text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{mode === 'daily' ? 'Diario' : 'Mensual'}</button>)}
+              {chartViewMode !== 'daily' && <label className="flex items-center gap-1 text-sm">Año <input type="number" aria-label="Año del gráfico" min="2000" max="2100" value={chartYear} onChange={event => { const year = Number(event.target.value); if (year >= 2000 && year <= 2100) setChartYear(year); }} className="w-20 rounded-lg bg-gray-100 dark:bg-gray-800 px-2 py-1" /></label>}
             </div>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${startDate} al ${endDate} · Pagos recibidos, recaudos, ingresos y excedentes de cambios. Excluye bonos usados como pago. Mismo total que la casilla de ingresos; sin aplicar filtros por medio de pago.` : 'Histórico cargado de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.'}</p>
-          {chartMetric === 'income' && <p className="mb-3 font-bold text-accent">Total: {formatCOP(totalPeriodIncome)}</p>}
-          <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? 'Ingresos del período' : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartMetric === 'sales' && chartViewMode !== 'daily'} />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${chartViewMode === 'daily' ? `${startDate} al ${endDate}` : `Enero a diciembre de ${chartYear} · Meses completos, independientes del filtro de fechas`} · Pagos recibidos, recaudos, ingresos y excedentes de cambios. Excluye bonos usados como pago. Sin aplicar filtros por medio de pago.` : `${chartViewMode === 'daily' ? 'Histórico cargado' : `Enero a diciembre de ${chartYear}`} de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.`}</p>
+          {chartMetric === 'income' && <p className="mb-3 font-bold text-accent">{chartViewMode === 'daily' ? 'Total del período' : `Total ${chartYear}`}: {formatCOP(salesChartData.reduce((sum, point) => sum + point.total, 0))}</p>}
+          <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${chartYear}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Dinero recibido por mes') : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartMetric === 'sales' && chartViewMode !== 'daily'} />
         </section>
         {editingSale && (<EditSaleModal isOpen={!!editingSale} onClose={() => setEditingSale(null)} sale={editingSale} sellers={sellers} inventory={inventory} onUpdateSale={onUpdateSale} />)}
         {editingLayaway && (<EditLayawayModal isOpen={!!editingLayaway} onClose={() => setEditingLayaway(null)} layaway={editingLayaway} sellers={sellers} inventory={inventory} onUpdateLayaway={onUpdateLayaway || (() => {})} />)}
