@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.155', date: '2026-10-14', description: 'Valor visible sobre la línea comparativa', isCurrent: true, changes: ['Cada línea mensual del acumulado a la fecha muestra el valor completo en pesos junto al marcador.'] },
+  { version: '1.1.156', date: '2026-10-14', description: 'Estimado de cierre mensual', isCurrent: true, changes: ['Debajo de cada mes se muestra una proyección de cierre según el acumulado comparable y los días de ese mes, en lugar de repetir el valor de la línea.'] },
+  { version: '1.1.155', date: '2026-10-14', description: 'Valor visible sobre la línea comparativa', isCurrent: false, changes: ['Cada línea mensual del acumulado a la fecha muestra el valor completo en pesos junto al marcador.'] },
   { version: '1.1.154', date: '2026-10-14', description: 'Comparativo mensual a la misma fecha', isCurrent: false, changes: ['Se restaura la línea y el valor acumulado hasta el mismo día en cada mes del gráfico de ingresos.', 'Mensual continúa como vista inicial y conserva los totales completos de enero a diciembre.'] },
   { version: '1.1.153', date: '2026-10-14', description: 'Gráfico mensual de todo el año', isCurrent: false, changes: ['Mensual muestra enero a diciembre del año elegido con meses completos, sin limitarse al rango de fechas.', 'Los valores se muestran completos en pesos; la vista diaria conserva las fechas seleccionadas.'] },
   { version: '1.1.152', date: '2026-10-14', description: 'Abonos recibidos y recaudos en caja', isCurrent: false, changes: ['Ingresos y gráfico incluyen los recaudos recibidos una sola vez, separados de la utilidad.', 'El reporte diario suma recaudos en efectivo a la caja esperada y conserva compatibilidad con recaudos antiguos sin medio de pago.'] },
