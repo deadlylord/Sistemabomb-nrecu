@@ -57,7 +57,8 @@ export const generateUniqueSku = (name: string, existingSkus: Set<string>): stri
 };
 
 export const APP_VERSIONS: VersionLog[] = [
-  { version: '1.1.150', date: '2026-10-12', description: 'Guardar ventas editadas en móvil', isCurrent: true, changes: ['La edición de ventas se muestra sobre el menú y mantiene sus botones visibles con altura dinámica y espacio seguro en Android.'] },
+  { version: '1.1.151', date: '2026-10-14', description: 'Gráfico de ingresos y vista móvil', isCurrent: true, changes: ['El gráfico de ingresos usa los mismos pagos y fechas del total del período; conserva la vista de ventas históricas.', 'Barras adaptadas al celular con desplazamiento, detalle al tocar y espacio para los controles inferiores.'] },
+  { version: '1.1.150', date: '2026-10-12', description: 'Guardar ventas editadas en móvil', isCurrent: false, changes: ['La edición de ventas se muestra sobre el menú y mantiene sus botones visibles con altura dinámica y espacio seguro en Android.'] },
   { version: '1.1.149', date: '2026-10-10', description: 'Restauración de Firebase de pruebas', isCurrent: false, changes: ['Staging recupera la configuración de Firebase por entorno y bloquea el proyecto de producción.'] },
   { version: '1.1.148', date: '2026-10-10', description: 'Corrección de apertura de staging', isCurrent: false, changes: ['Los módulos y el manifiesto se cargan desde la misma dirección de la aplicación para evitar bloqueos CORS.'] },
   { version: '1.1.147', date: '2026-10-10', description: 'Staging: abono por traer e historial de stock', isCurrent: false, changes: ['Se separan Abono y Abono por traer; este último permite prendas con stock cero y descuenta inventario al recibirlas.', 'El historial registra movimientos numéricos y ventas editadas por producto; los registros antiguos sin cantidad dejan el saldo como desconocido.', 'La aprobación, edición y eliminación de novedades dañadas aplican el cambio de stock dentro de transacciones.'] },
