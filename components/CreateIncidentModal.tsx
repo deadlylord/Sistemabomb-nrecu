@@ -256,7 +256,7 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
         const recaudoAmount = parseFloat(adjustmentAmount);
         if (customerPhone.trim().length !== 10) { alert('El número de celular debe tener 10 dígitos.'); return; }
         if (!customerPhone || !customerName || isNaN(recaudoAmount) || recaudoAmount <= 0) { alert('Completa todos los campos para el recaudo.'); return; }
-        data = { ...data, customerPhone, customerName, adjustmentAmount: recaudoAmount, adjustmentType: 'income' };
+        data = { ...data, customerPhone, customerName, adjustmentAmount: recaudoAmount, paymentMethod: PaymentMethod.Efectivo, adjustmentType: 'income' };
         break;
     }
     
