@@ -30,10 +30,13 @@ const SalesHistoryChart: React.FC<{
             <div className="relative h-[clamp(8rem,calc(100dvh-24rem),20rem)] border-b border-gray-300 dark:border-gray-600">
               {[.25, .5, .75, 1].map(ratio => <div key={ratio} className="absolute w-full border-t border-dashed border-gray-200 dark:border-gray-700" style={{ bottom: `${ratio * 100}%` }} />)}
               <div className="absolute inset-x-0 bottom-0 rounded-t bg-accent/70 hover:bg-accent" style={{ height: `${Math.max(0, point.total / max * 100)}%` }} />
-              <span className="absolute inset-x-0 whitespace-nowrap text-[10px] font-bold text-gray-700 dark:text-gray-200" style={{ bottom: `${Math.max(0, point.total / max * 100)}%` }}>{fullAmount(point.total)}</span>
-              {showPartial && point.partialTotal > 0 && <div className="absolute inset-x-0 border-t-2 border-dotted border-gray-700 dark:border-white" style={{ bottom: `${point.partialTotal / max * 100}%` }} />}
+              {(!showPartial || point.total !== point.partialTotal) && <span className="absolute inset-x-0 whitespace-nowrap text-[10px] font-bold text-gray-700 dark:text-gray-200" style={{ bottom: `${Math.max(0, point.total / max * 100)}%` }}>{fullAmount(point.total)}</span>}
+              {showPartial && <div className="absolute inset-x-0 z-10 border-t-2 border-dotted border-gray-700 dark:border-white" style={{ bottom: `${point.partialTotal / max * 100}%` }}>
+                <span className={`absolute right-0 rounded bg-white/95 dark:bg-slate-900/95 px-1 text-[10px] font-bold text-accent whitespace-nowrap ${point.partialTotal > 0 ? 'translate-y-0.5' : '-translate-y-full'}`} title={`Acumulado hasta el día ${Number(bogotaDateKey(new Date()).slice(-2))}`}>{fullAmount(point.partialTotal)}</span>
+              </div>}
             </div>
             <span className="block pt-2 text-[10px] text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatLabel(point.label)}</span>
+            {showPartial && <span className="block mt-1 text-[10px] font-semibold text-accent whitespace-nowrap">Al día {Number(bogotaDateKey(new Date()).slice(-2))}:<br />{formatCOP(point.partialTotal)}</span>}
           </button>)}
         </div>
       </div>
