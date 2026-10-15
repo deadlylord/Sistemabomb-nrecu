@@ -1,5 +1,6 @@
+import { saleEditTotals, adjustedSalePayment, validateSaleEdit } from '../services/saleEditTotals';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Sale, Seller, Product, PaymentMethod, CartItem, Payment } from '../types';
 import { formatCOP, toTitleCase, normalizeText } from '../constants';
@@ -11,7 +12,7 @@ interface EditSaleModalProps {
   sale: Sale;
   sellers: Seller[];
   inventory: Product[];
-  onUpdateSale: (updatedSale: Sale, originalSale: Sale) => void;
+  onUpdateSale: (updatedSale: Sale, originalSale: Sale) => void | Promise<void>;
 }
 
 // FIX: Changed to a named export to resolve module loading error in parent component.
@@ -29,6 +30,13 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [editingPrice, setEditingPrice] = useState<{id: string, value: string} | null>(null);
   const [amountInput, setAmountInput] = useState('');
+  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
+  const [discountValue, setDiscountValue] = useState('0');
+  const [surchargeInput, setSurchargeInput] = useState('0');
+  const [autoBalancePayment, setAutoBalancePayment] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (sale) {
@@ -45,19 +53,26 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       setItems(itemsArray.map(item => ({ ...item })));
 
       const paymentsArray = (Array.isArray(sale.payments) ? sale.payments : Object.values(sale.payments || {}) as any[]).filter(Boolean) as Payment[];
-      setPayments(paymentsArray.map(p => ({ ...p })));
-      
+      const initialPayments = paymentsArray.length ? paymentsArray : sale.paymentMethod ? [{ amount: sale.totalAmount, method: sale.paymentMethod, date: sale.createdAt, seller: sale.seller }] : [];
+      setPayments(initialPayments.map(p => ({ ...p, amount: Number(p.amount) || 0, date: p.date || sale.createdAt, seller: p.seller || sale.seller })));
+      setAutoBalancePayment(initialPayments.length === 1 && initialPayments[0].method !== PaymentMethod.Bono && !sale.layawayId);
+      setDiscountMode(sale.discountPercent ? 'percent' : 'amount');
+      setDiscountValue(String(sale.discountPercent || sale.discountAmount || 0));
+      setSurchargeInput(String(sale.paymentSurchargeAmount || 0));
+      setEditingPrice(null);
+      setSaveError('');
+
       const saleDate = new Date(sale.createdAt);
       // Adjust for local timezone offset before formatting for the input
       saleDate.setMinutes(saleDate.getMinutes() - saleDate.getTimezoneOffset());
       setCreatedAt(saleDate.toISOString().slice(0, 16));
     }
   }, [sale]);
-  
+
   const suggestedProducts = useMemo(() => {
     if (!productSearch) return [];
     const normalizedSearch = normalizeText(productSearch);
-    return inventory.filter(p => 
+    return inventory.filter(p =>
       !p.isDisabled &&
       normalizeText(p.name).includes(normalizedSearch) &&
       !items.some(item => item.id === p.id) // Exclude items already in cart
@@ -87,15 +102,15 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
     }
   };
 
-  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
-  const discountPercent = sale.discountPercent || 0;
-  const discountAmount = discountPercent > 0
-    ? Math.round(subtotal * discountPercent / 100)
-    : (sale.discountAmount || 0);
-  const totalAmount = subtotal - discountAmount + (sale.paymentSurchargeAmount || 0);
-  const paidAmount = useMemo(() => payments.reduce((sum, p) => sum + p.amount, 0), [payments]);
-  const remainingAmount = totalAmount - paidAmount;
-  
+  const calculationItems = useMemo(() => items.map(item => editingPrice?.id === item.id && editingPrice.value !== ''
+    ? { ...item, price: Number(editingPrice.value) } : item), [items, editingPrice]);
+  const surchargeAmount = Number(surchargeInput || 0);
+  const { subtotal, discountPercent, discountAmount, totalAmount } = saleEditTotals(calculationItems, discountMode, Number(discountValue || 0), surchargeAmount);
+  const effectivePayments = autoBalancePayment && payments.length === 1
+    ? [adjustedSalePayment(payments[0], totalAmount, surchargeAmount)] : payments;
+  const paidAmount = effectivePayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const remainingAmount = Math.round((totalAmount - paidAmount) * 100) / 100;
+
   useEffect(() => {
     if (remainingAmount > 0) {
       setAmountInput(remainingAmount.toFixed(0));
@@ -130,13 +145,13 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       ));
     }
   };
-  
+
   const handleAddItem = (product: Product) => {
     setItems(prev => [...prev, { ...product, quantity: 1 }]);
     setProductSearch('');
     setShowSuggestions(false);
   };
-  
+
   const handleRemoveItem = (productId: string) => {
      setItems(prev => prev.filter(item => item.id !== productId));
   };
@@ -152,11 +167,11 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
         setEditingPrice(null);
     }
   };
-  
+
   const handleAddPayment = (method: PaymentMethod) => {
     const amount = parseFloat(amountInput);
     if (isNaN(amount) || amount <= 0) return;
-    
+
     const newPayment: Payment = {
         amount,
         method,
@@ -164,15 +179,19 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
         seller: formData.seller
     };
 
-    setPayments(prev => [...prev, newPayment]);
+    setPayments([...effectivePayments, newPayment]);
+    setAutoBalancePayment(false);
   };
 
   const handleRemovePayment = (indexToRemove: number) => {
-    setPayments(prev => prev.filter((_, index) => index !== indexToRemove));
+    setPayments(effectivePayments.filter((_, index) => index !== indexToRemove));
+    setAutoBalancePayment(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingRef.current) return;
+    setSaveError('');
     if (formData.customerPhone.trim() && formData.customerPhone.trim().length !== 10) {
         alert('El número de celular debe tener 10 dígitos o dejarse vacío.');
         return;
@@ -181,13 +200,19 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       alert("Por favor, selecciona un vendedor.");
       return;
     }
-    
-    if (Math.abs(remainingAmount) > 0.01) {
-        alert(`El total pagado (${formatCOP(paidAmount)}) no coincide con el nuevo total de la venta (${formatCOP(totalAmount)}). Por favor, ajusta los pagos.`);
-        return;
+
+    try {
+      if (editingPrice && (editingPrice.value.trim() === '' || !Number.isFinite(Number(editingPrice.value)))) throw new Error('Escribe un precio válido para el producto.');
+      if (!createdAt || !Number.isFinite(new Date(createdAt).getTime())) throw new Error('Revisa la fecha de la venta.');
+      if (discountMode === 'percent' && (Number(discountValue) < 0 || Number(discountValue) > 100)) throw new Error('El descuento debe estar entre 0 y 100%.');
+      validateSaleEdit(calculationItems, effectivePayments, totalAmount, discountAmount, surchargeAmount);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Revisa los datos de la venta.');
+      return;
     }
 
     const updatedSale: Sale = {
+      ...sale,
       id: sale.id,
       invoiceNumber: sale.invoiceNumber,
       storeId: sale.storeId,
@@ -195,20 +220,32 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       customerName: formData.customerName,
       customerPhone: formData.customerPhone,
       seller: formData.seller,
-      items: items.map(item => ({...item})), // ensure items are plain objects
-      payments: payments,
+      items: calculationItems.map(item => ({...item})), // ensure items are plain objects
+      payments: effectivePayments.map(payment => ({ ...payment,
+        date: !payment.date || payment.date === sale.createdAt ? new Date(createdAt).toISOString() : payment.date,
+        seller: !payment.seller || payment.seller === sale.seller ? formData.seller : payment.seller
+      })),
       totalAmount: totalAmount,
       discountPercent,
       discountAmount,
-      paymentSurchargeAmount: sale.paymentSurchargeAmount || 0,
+      paymentSurchargeAmount: surchargeAmount,
       companyId: sale.companyId,
-      paymentMethod: payments[0]?.method || sale.paymentMethod,
+      paymentMethod: effectivePayments[0]?.method || sale.paymentMethod,
       createdAt: new Date(createdAt).toISOString(),
     };
-    onUpdateSale(updatedSale, sale);
-    onClose();
+    savingRef.current = true;
+    setIsSaving(true);
+    try {
+      await onUpdateSale(updatedSale, sale);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar la venta. Tus cambios se conservan para reintentar.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   };
-  
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -217,9 +254,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
         {/* Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0 bg-white dark:bg-secondary">
           <h2 className="text-lg sm:text-2xl font-bold text-accent">Editar Venta #{sale.invoiceNumber}</h2>
-          <button 
-            type="button" 
-            onClick={onClose} 
+          <button
+            type="button"
+            onClick={() => { if (!savingRef.current) onClose(); }}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg transition-colors"
             title="Cerrar"
           >
@@ -228,6 +265,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <fieldset disabled={isSaving} className="contents">
           {/* Main Scrollable Body */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 min-h-0 overscroll-contain">
             {/* Top Section: Sale Details */}
@@ -266,7 +304,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
             {/* Combined Middle Section: Items and Payments */}
             <div className="flex flex-col lg:flex-row gap-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-              
+
               {/* Left side: Items */}
               <div className="lg:w-3/5 flex flex-col space-y-3">
                 <div className="flex items-center justify-between">
@@ -285,7 +323,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
                              {editingPrice?.id === item.id ? (
                                 <input
                                     type="number"
-                                    step="1000"
+                                    min="0"
+                                    step="0.01"
+                                    aria-label={`Precio unitario de ${item.name}`}
                                     value={editingPrice.value}
                                     onChange={(e) => setEditingPrice({ id: item.id, value: e.target.value })}
                                     onBlur={() => handlePriceChange(item.id)}
@@ -301,9 +341,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
                           </div>
                           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-200 dark:border-gray-700">
                             <div className="flex items-center space-x-2 bg-white dark:bg-gray-700/60 p-1 rounded-lg">
-                              <button type="button" onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="p-1 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"><MinusIcon className="w-4 h-4" /></button>
+                              <button type="button" aria-label={`Restar una unidad de ${item.name}`} onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="p-1 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"><MinusIcon className="w-4 h-4" /></button>
                               <span className="w-8 text-center font-bold text-sm">{item.quantity}</span>
-                              <button type="button" onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="p-1 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"><PlusIcon className="w-4 h-4" /></button>
+                              <button type="button" aria-label={`Sumar una unidad de ${item.name}`} onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="p-1 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"><PlusIcon className="w-4 h-4" /></button>
                             </div>
                             <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar ítem"><TrashIcon className="w-5 h-5" /></button>
                           </div>
@@ -343,11 +383,19 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
               <div className="lg:w-2/5 flex flex-col lg:border-l lg:border-gray-200 lg:dark:border-gray-700 lg:pl-6 space-y-3">
                 <h3 className="text-base sm:text-lg font-bold">Registro de Pagos</h3>
                 <div className="space-y-3">
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {payments.map((p, index) => (
+                  {payments.length === 1 && payments[0].method !== PaymentMethod.Bono && !sale.layawayId && <label className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input type="checkbox" checked={autoBalancePayment} onChange={event => { setPayments(effectivePayments.map(p => ({...p}))); setAutoBalancePayment(event.target.checked); }} />
+                    Ajustar el único pago al nuevo total de la venta
+                  </label>}
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {effectivePayments.map((p, index) => (
                           <div key={index} className="flex items-center justify-between gap-2 bg-gray-100 dark:bg-gray-800 p-2.5 rounded-lg border border-gray-200/50 dark:border-gray-700/50">
                               <div className="flex-1">
-                                  <p className="font-bold text-sm">{p.method}: <span className="text-accent">{formatCOP(p.amount)}</span></p>
+                                  <select aria-label={`Medio del pago ${index + 1}`} value={p.method} onChange={event => { setPayments(effectivePayments.map((payment, i) => i === index ? {...payment, method: event.target.value as PaymentMethod} : payment)); setAutoBalancePayment(false); }} className="w-full bg-white dark:bg-gray-700 rounded p-1 text-sm">
+                                    {Object.values(PaymentMethod).map(method => <option key={method} value={method}>{method}</option>)}
+                                  </select>
+                                  <input type="number" min="0" step="0.01" aria-label={`Importe del pago ${index + 1}`} value={p.amount} onChange={event => { setPayments(effectivePayments.map((payment, i) => i === index ? adjustedSalePayment(payment, Number(event.target.value)) : payment)); setAutoBalancePayment(false); }} className="w-full mt-1 bg-white dark:bg-gray-700 text-accent font-bold rounded p-1" />
+                                  {!autoBalancePayment && Math.abs(remainingAmount) > .01 && p.amount + remainingAmount >= 0 && <button type="button" onClick={() => setPayments(effectivePayments.map((payment, i) => i === index ? adjustedSalePayment(payment, payment.amount + remainingAmount) : payment))} className="text-xs text-accent underline mt-1">Aplicar diferencia a este pago</button>}
                                   <p className="text-xs text-gray-400">Por: {p.seller || 'N/A'}</p>
                               </div>
                               <button type="button" onClick={() => handleRemovePayment(index)} className="p-1 text-gray-400 hover:text-red-500 transition-colors"><TrashIcon className="w-4 h-4" /></button>
@@ -365,11 +413,21 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
                       </div>
                   </div>
                   <div className="mt-3 bg-gray-100 dark:bg-gray-800/80 p-3.5 rounded-xl space-y-2 border border-gray-200 dark:border-gray-700 text-sm sm:text-base">
-                      {discountAmount > 0 && <div className="flex justify-between text-rose-500 font-semibold"><span>Descuento ({discountPercent}%):</span><span>-{formatCOP(discountAmount)}</span></div>}
+                      <div className="flex justify-between"><span>Subtotal:</span><span>{formatCOP(subtotal)}</span></div>
+                      <label className="block text-xs">Descuento
+                        <div className="flex gap-2 mt-1">
+                          <select aria-label="Tipo de descuento" value={discountMode} onChange={event => { setDiscountMode(event.target.value as 'percent' | 'amount'); setDiscountValue('0'); }} className="rounded bg-white dark:bg-gray-700 p-1"><option value="percent">%</option><option value="amount">$</option></select>
+                          <input aria-label="Descuento de la venta" type="number" min="0" step="0.01" max={discountMode === 'percent' ? 100 : subtotal} value={discountValue} onChange={event => setDiscountValue(event.target.value)} className="min-w-0 w-full rounded bg-white dark:bg-gray-700 p-1" />
+                        </div>
+                      </label>
+                      <label className="block text-xs">Recargo total ($)
+                        <input aria-label="Recargo de la venta" type="number" min="0" step="0.01" value={surchargeInput} onChange={event => setSurchargeInput(event.target.value)} className="mt-1 w-full rounded bg-white dark:bg-gray-700 p-1" />
+                      </label>
+                      {discountAmount > 0 && <div className="flex justify-between text-rose-500 font-semibold"><span>Descuento{discountMode === 'percent' ? ` (${discountPercent}%)` : ''}:</span><span>-{formatCOP(discountAmount)}</span></div>}
                       <div className="flex justify-between font-bold"><span>Nuevo Total Venta:</span> <span className="text-accent">{formatCOP(totalAmount)}</span></div>
                       <div className="flex justify-between"><span>Total Pagado:</span> <span className="font-bold">{formatCOP(paidAmount)}</span></div>
                       <div className={`flex justify-between font-bold ${remainingAmount > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                          <span>{remainingAmount > 0 ? 'Faltante:' : 'Cambio:'}</span> 
+                          <span>{remainingAmount > 0 ? 'Faltante por corregir:' : remainingAmount < 0 ? 'Excedente por corregir:' : 'Saldo:'}</span>
                           <span>{formatCOP(Math.abs(remainingAmount))}</span>
                       </div>
                   </div>
@@ -378,12 +436,14 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
             </div>
           </div>
-          
+
+          {saveError && <p role="alert" className="px-4 py-2 text-sm text-red-600">{saveError}</p>}
           {/* Sticky Footer */}
           <div className="px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-end gap-3 shrink-0 bg-white dark:bg-secondary z-10">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
-            <button type="submit" className="px-7 py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">Guardar Cambios</button>
+            <button type="button" onClick={() => { if (!savingRef.current) onClose(); }} className="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+            <button type="submit" className="px-7 py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>,
