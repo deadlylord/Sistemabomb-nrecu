@@ -1,3 +1,5 @@
+import { verifiedIdentityEnabled } from '../services/identityConfig';
+import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
 import { assertCartAvailability } from '../services/cartAvailability';
 import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
@@ -437,6 +439,11 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
+      if (verifiedIdentityEnabled) {
+        setIsAuthReady(true);
+        if (!user) setCurrentUser(null);
+        return;
+      }
       if (user) setIsAuthReady(true);
       else {
         signInAnonymously(auth).catch(error => {
@@ -456,12 +463,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'stores')), setStores),
-      attachFirestoreListener(query(collection(db, 'roles')), setRoles),
-      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'stores'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'stores')), setStores),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'roles'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'roles')), setRoles),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'companies'), where('__name__', '==', currentUser.companyId)) : query(collection(db, 'companies')), setCompanies),
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [isAppReady, isAuthReady, !!currentUser]);
+  }, [isAppReady, isAuthReady, currentUser?.id, currentUser?.companyId, isDeveloper]);
 
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
@@ -482,7 +489,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'sellers')), setSellers)
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'sellers'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
   }, [currentUser?.id, isAppReady, isAuthReady]);
@@ -3005,6 +3012,7 @@ const App: React.FC = () => {
     await batch.commit();
   };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'create', name, password, roleId, storeId, username, companyId: operationalCompanyId }); return; }
     const userCompanyId = operationalCompanyId;
     if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
     const assignedRole = roles.find(role => role.id === roleId);
@@ -3025,6 +3033,7 @@ const App: React.FC = () => {
     await setDoc(newRef, cleanObject(newSellerData));
   };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'update', id, name, password, roleId, storeId, username }); return; }
     await assertCanManageUser(id);
     const assignedRole = roles.find(role => role.id === roleId);
     assertCompanyRole(assignedRole);
@@ -3042,10 +3051,11 @@ const App: React.FC = () => {
     if (username !== undefined) data.username = username;
     await updateDoc(doc(db, 'sellers', id), cleanObject(data));
   };
-  const handleDeleteSeller = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
-  const handleToggleSellerStatus = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
-  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
+  const handleDeleteSeller = async (id: string) => { if (verifiedIdentityEnabled) { if(window.confirm('¿Eliminar vendedor?')) await manageVerifiedUser({ action: 'delete', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
+  const handleToggleSellerStatus = async (id: string) => { if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'toggle', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
+  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { if (verifiedIdentityEnabled) { await manageVerifiedRole({ action: 'create', name, userType, permissions: [], companyId: operationalCompanyId }); return; } assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
   const handleUpdateRole = async (updatedRole: Role) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedRole({ action: 'update', id: updatedRole.id, name: updatedRole.name, userType: getRoleUserType(updatedRole), permissions: updatedRole.permissions }); return; }
     const original = roles.find(role => role.id === updatedRole.id);
     assertTenantData('roles', original, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
     assertTenantData('roles', updatedRole, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
@@ -3199,6 +3209,20 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
+    if (verifiedIdentityEnabled) {
+      try {
+        const result = await loginVerified(identifier, passwordAttempt);
+        setStores([result.store]); setRoles([result.role]); setCompanies([result.company]); setSellers([result.user]);
+        setCurrentUser(result.user); setActiveCompanyId(result.user.companyId!);
+        localStorage.setItem('activeCompanyId', result.user.companyId!);
+        selectStore(result.user.storeId);
+        setCurrentView(getRoleUserType(result.role) === 'seller' ? View.POS : View.DASHBOARD);
+        nativeAddDoc(collection(db, 'loginHistory'), { sellerId: result.user.id, sellerName: result.user.name, storeId: result.user.storeId, companyId: result.user.companyId, date: new Date().toISOString() }).catch(() => console.warn('No se pudo registrar el historial de ingreso.'));
+      } catch (error: any) {
+        alert(error?.code === 'functions/resource-exhausted' ? 'Demasiados intentos. Espera unos minutos.' : error?.code === 'functions/unauthenticated' ? 'Usuario o contraseña incorrecta.' : 'No se pudo verificar el acceso. Intenta nuevamente.');
+      }
+      return;
+    }
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanPass = (passwordAttempt || '').trim();
     // Fetch seller records only after the user submits credentials, not at startup.
@@ -3280,7 +3304,12 @@ const App: React.FC = () => {
     }
   };
   
-  const handleLogout = () => { currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { if (verifiedIdentityEnabled) logoutVerified(currentUser?.id).catch(() => console.warn('No se pudo cerrar la sesión.')).finally(() => window.location.reload()); setRoles([]); setStores([]); setSellers([]); setCompanies([]); currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+
+  useEffect(() => {
+    if (!verifiedIdentityEnabled || !currentUser) return;
+    return watchVerifiedIdentity(currentUser, handleLogout);
+  }, [currentUser?.id, currentUser?.authVersion]);
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 

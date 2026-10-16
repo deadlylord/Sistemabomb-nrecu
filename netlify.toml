@@ -19,6 +19,7 @@
 
 # Keep the verified projection off until server identity and rules are ready.
 [context.staging.environment]
+  VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "false"

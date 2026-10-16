@@ -57,11 +57,11 @@ export async function authenticateIdentity(input, dependencies) {
   const platformOwner = index.sellerId === OWNER_ID;
   const grant = platformOwner ? null : await dependencies.read('platformDevelopers', index.sellerId);
   const platformDeveloper = platformOwner || !!(grant && grant.userId === index.sellerId && grant.role === 'developer' && grant.active === true && grant.grantedBy === OWNER_ID);
-  const claims = { identityVersion: 1, sellerId: index.sellerId, companyId, storeId: seller.storeId, roleId: seller.roleId, platformOwner, platformDeveloper };
+  const claims = { identityVersion: 1, authVersion: seller.authVersion || 0, sellerId: index.sellerId, companyId, storeId: seller.storeId, roleId: seller.roleId, platformOwner, platformDeveloper };
   const uid = `vestika:${createHash('sha256').update(index.sellerId).digest('hex')}`;
   const customToken = await dependencies.createCustomToken(uid, claims);
   // Whitelist rather than returning the seller document (which currently has a password).
-  return { customToken, user: { id: index.sellerId, name: seller.name || '', username: seller.username || '', companyId, storeId: seller.storeId, roleId: seller.roleId }, claims };
+  return { customToken, user: { id: index.sellerId, name: seller.name || '', username: seller.username || '', companyId, storeId: seller.storeId, roleId: seller.roleId, authVersion: seller.authVersion || 0 }, claims };
 }
 export function nextAttempt(state, now, limit) {
   const current = state && Number.isFinite(state.windowStart) && now >= state.windowStart && now - state.windowStart < 600000 ? state : { windowStart: now, count: 0 };

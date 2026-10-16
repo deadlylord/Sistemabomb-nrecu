@@ -1,3 +1,4 @@
+import { verifiedIdentityEnabled } from '../services/identityConfig';
 
 
 import { isPlatformRole } from '../services/developerAccess';
@@ -38,7 +39,7 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
       setUsername(seller.username || '');
       setRoleId(seller.roleId || '');
       setStoreId(seller.storeId || '');
-      setPassword(seller.password || '');
+      setPassword(verifiedIdentityEnabled ? '' : seller.password || '');
       setShowPassword(false);
     } else {
       setName('');
@@ -56,7 +57,7 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim() && roleId !== '' && storeId !== '') {
-      if (!password.trim()) {
+      if (!password.trim() && (!seller || !verifiedIdentityEnabled)) {
         alert("La contraseña es obligatoria.");
         return;
       }
@@ -104,9 +105,9 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label htmlFor="password" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Contraseña</label>
+              <label htmlFor="password" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{seller && verifiedIdentityEnabled ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
               <span className="text-[10px] text-accent font-semibold">
-                {seller ? 'Puedes ver y editar la clave' : 'Clave de acceso'}
+                {seller ? verifiedIdentityEnabled ? 'Déjala vacía para conservarla' : 'Puedes ver y editar la clave' : 'Clave de acceso'}
               </span>
             </div>
             <div className="relative">
@@ -116,8 +117,8 @@ const SellerModal: React.FC<SellerModalProps> = ({ isOpen, onClose, onSave, sell
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 pr-10 focus:ring-2 focus:ring-accent focus:border-accent outline-none font-mono font-bold text-sm"
-                placeholder="Ingresa la contraseña"
-                required
+                placeholder={seller && verifiedIdentityEnabled ? 'Nueva contraseña' : 'Ingresa la contraseña'}
+                required={!seller || !verifiedIdentityEnabled}
               />
               <button
                 type="button"

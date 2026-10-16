@@ -36,3 +36,4 @@ export const vestikaLogin = onCall({ region: 'us-central1', enforceAppCheck: tru
 // Independent of the optional identity service; source ownership is resolved
 // from stores on the server. Client rules must deny writes to this projection.
 export { financialLedgerChanged } from './financialTrigger.mjs';
+export { vestikaStagingLogin, vestikaStagingUsers, vestikaStagingRoles } from './stagingIdentity.mjs';

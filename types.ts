@@ -325,6 +325,7 @@ export interface Seller {
   isDeveloper?: boolean;
   platformRole?: 'developer' | null; // Display/protection metadata; authorization uses platformDevelopers.
   isDisabled?: boolean;
+  authVersion?: number;
 }
 
 export interface Product {

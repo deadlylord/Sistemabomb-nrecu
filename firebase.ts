@@ -2,6 +2,8 @@ import { initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import {
   connectFirestoreEmulator,
+  clearIndexedDbPersistence,
+  memoryLocalCache,
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
@@ -47,11 +49,15 @@ const app = initializeApp(firebaseConfig);
 let db;
 try {
   db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    localCache: import.meta.env.VITE_VERIFIED_IDENTITY === 'true' ? memoryLocalCache() : persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });
 } catch (error) {
   console.error("Could not initialize Firestore with persistence, falling back to default.", error);
   db = getFirestore(app);
+}
+
+if (import.meta.env.VITE_VERIFIED_IDENTITY === 'true') {
+  clearIndexedDbPersistence(db).catch(() => console.warn('Cierra otras pestañas antiguas de staging para limpiar su caché anterior.'));
 }
 
 export const auth = getAuth(app);
