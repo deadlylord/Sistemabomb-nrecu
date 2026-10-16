@@ -28,12 +28,10 @@ export function payrollLogins(records: LoginRecord[], scope: PayrollScope, selle
   });
 }
 
-export function payrollShiftUnits(transactions: (Sale | Layaway)[], scope: PayrollScope, sellerName: string, date: string, startTime: string, endTime: string) {
-  if (!startTime || !endTime || startTime >= endTime) return 0;
+export function payrollDayUnits(transactions: (Sale | Layaway)[], scope: PayrollScope, sellerName: string, date: string) {
   return transactions.reduce((units, transaction) => {
-    const time = payrollTime(transaction.createdAt);
     if (!inPayrollScope(transaction, scope) || transaction.seller !== sellerName ||
-        payrollDate(transaction.createdAt) !== date || time < startTime || time >= endTime ||
+        payrollDate(transaction.createdAt) !== date ||
         (transaction as Sale).layawayId || ['cancelled', 'pre-order'].includes((transaction as Layaway).status)) return units;
     const items = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})) as CartItem[];
     return units + items.reduce((sum, item) => {
