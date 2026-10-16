@@ -1,0 +1,193 @@
+// STAGING PROTOTYPE. Identity is issued by the staging server, never by POS
+// form fields. sellers contains public profile fields only; password hashes,
+// login aliases, attempt counters and projection state are server-private.
+// Authoritative ownership is companyId plus the actual stores document.
+// Existing operational records may omit companyId; reads resolve their store.
+// New/updated records must include companyId and cannot change ownership.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'custom'
+        && request.auth.token.identityVersion == 1;
+    }
+    function profile() { return get(/databases/$(database)/documents/sellers/$(request.auth.token.sellerId)).data; }
+    function role() { return get(/databases/$(database)/documents/roles/$(request.auth.token.roleId)).data; }
+    function company() { return get(/databases/$(database)/documents/companies/$(request.auth.token.companyId)).data; }
+    function live() { return signed() && liveSigned(); }
+    function liveSigned() {
+      let user = profile();
+      let actualRole = role();
+      let actualCompany = company();
+      let actualStore = get(/databases/$(database)/documents/stores/$(request.auth.token.storeId)).data;
+      return user.get('isDisabled', false) == false
+        && user.companyId == request.auth.token.companyId && user.storeId == request.auth.token.storeId
+        && user.roleId == request.auth.token.roleId && user.get('authVersion', 0) == request.auth.token.authVersion
+        && actualRole.companyId == request.auth.token.companyId && actualRole.get('isDisabled', false) == false
+        && actualCompany.get('isDisabled', false) == false && !(actualCompany.get('status', 'active') in ['suspended', 'inactive'])
+        && actualStore.get('companyId', 'default_company') == request.auth.token.companyId
+        && actualStore.get('isDisabled', false) == false && actualStore.get('status', 'active') != 'inactive';
+    }
+    function owner() { return request.auth.token.sellerId == '-OYqLOlA2gyy_TrUtzf2'; }
+    function developer() {
+      return request.auth.token.platformDeveloper == true && (owner() || (
+        get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.active == true
+        && get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.role == 'developer'
+        && get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.grantedBy == '-OYqLOlA2gyy_TrUtzf2'));
+    }
+    function administrator() { return (role().get('userType', 'seller') == 'admin' || role().name in ['Administrator', 'Administrador', 'Admin'] || role().permissions.hasAny(['role_manager','ceo_center'])); }
+    function storeCompany(id) { return get(/databases/$(database)/documents/stores/$(id)).data.get('companyId', 'default_company'); }
+    function scoped(data) {
+      return (developer() || data.get('companyId', '') == request.auth.token.companyId
+        || data.get('storeId', '') != '' && storeCompany(data.storeId) == request.auth.token.companyId
+        || data.get('fromStoreId', '') != '' && storeCompany(data.fromStoreId) == request.auth.token.companyId
+        || data.get('tienda', '') != '' && data.tienda != 'all' && storeCompany(data.tienda) == request.auth.token.companyId);
+    }
+    function hasAny(permissions) { return developer() || role().permissions.hasAny(permissions); }
+    function validId(value) { return value is string && value.size() > 0 && value.size() <= 128 && !value.matches('.*[/].*'); }
+    function optionalString(data, field, max) { return !(field in data) || data[field] is string && data[field].size() <= max; }
+    function optionalStore(data, field) { return !(field in data) || data[field] == null || data[field] == '' || validId(data[field]) && storeCompany(data[field]) == data.companyId; }
+    function validScope(data) {
+      return data is map && validId(data.companyId)
+        && (developer() || data.companyId == request.auth.token.companyId)
+        && optionalStore(data, 'storeId') && optionalStore(data, 'fromStoreId') && optionalStore(data, 'toStoreId')
+        && optionalStore(data, 'debtStoreId') && optionalStore(data, 'physicalStoreId')
+        && optionalString(data, 'description', 10000) && optionalString(data, 'name', 200)
+        && optionalString(data, 'registeredBy', 200) && optionalString(data, 'date', 80);
+    }
+    function sameOwner(before, after) {
+      return before.get('companyId', after.companyId) == after.companyId
+        && before.get('storeId', '') == after.get('storeId', '')
+        && before.get('fromStoreId', '') == after.get('fromStoreId', '')
+        && before.get('toStoreId', '') == after.get('toStoreId', '');
+    }
+    function storeVisible(data, name) {
+      return scoped(data) && (administrator() || developer() || name in ['incidents', 'layaways']
+        || data.get('storeId', '') == request.auth.token.storeId
+        || data.get('tienda', '') == request.auth.token.storeId);
+    }
+    function operational(name) {
+      return name in ['inventory', 'sales', 'purchases', 'heldCarts', 'layaways', 'incidents', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'expenses', 'expenseCategories', 'giftVouchers', 'loans', 'payrollHistory', 'loginHistory', 'accountingChatHistory', 'dailyNotes', 'daily_notes', 'customers', 'inventoryTransfers'];
+    }
+    function moduleAccess(name) {
+      return developer() || name in ['incidents', 'layaways', 'loginHistory']
+        || name in ['inventory', 'sales', 'heldCarts', 'customers', 'giftVouchers', 'productHistory'] && hasAny(['pos', 'inventory', 'dashboard', 'accounting', 'ceo_center', 'purchases', 'stock_take_history', 'tag_scanning', 'customers', 'gift_vouchers', 'financial_reconciliation', 'payroll'])
+        || name == 'inventoryTransfers' && administrator()
+        || name in ['purchases'] && hasAny(['purchases', 'dashboard', 'accounting', 'ceo_center'])
+        || name in ['stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions'] && hasAny(['stock_take_history', 'inventory', 'tag_scanning'])
+        || name in ['expenses', 'expenseCategories', 'loans', 'accountingChatHistory'] && hasAny(['financial_reconciliation', 'accounting', 'dashboard', 'ceo_center'])
+        || name == 'payrollHistory' && hasAny(['payroll'])
+        || name in ['dailyNotes', 'daily_notes'] && hasAny(['dashboard', 'ceo_center', 'financial_reconciliation']);
+    }
+    function validFinancial(data) {
+      return validScope(data) && validId(data.storeId)
+        && data.keys().hasOnly(['id','companyId','date','storeId','accountType','amount','type','description','category','subCategory','registeredBy','relatedRecordId','isConfirmed','debtStoreId','affectsCashBalance','excludeFromAccounting'])
+        && data.amount is number && data.amount >= -1000000000000 && data.amount <= 1000000000000
+        && data.accountType in ['cash', 'qr', 'addi', 'sistecredito']
+        && data.type in ['income_sales','income_manual','expense','transfer','adjustment']
+        && data.date is string && data.date.size() >= 10 && data.date.size() <= 80
+        && data.description is string && data.description.size() <= 10000
+        && data.registeredBy is string && data.registeredBy.size() <= 200
+        && optionalString(data,'id',128) && optionalString(data,'category',200) && optionalString(data,'subCategory',200)
+        && optionalString(data,'relatedRecordId',128)
+        && (!('isConfirmed' in data) || data.isConfirmed is bool)
+        && (!('affectsCashBalance' in data) || data.affectsCashBalance is bool)
+        && (!('excludeFromAccounting' in data) || data.excludeFromAccounting is bool);
+    }
+    function financialPair(id, data) {
+      return !('relatedRecordId' in data) || data.relatedRecordId == '' || validPair(id,data);
+    }
+    function validPair(id,data) {
+      let mate = getAfter(/databases/$(database)/documents/financialRecords/$(data.relatedRecordId)).data;
+      return validId(data.relatedRecordId) && data.relatedRecordId != id
+        && mate.relatedRecordId == id && mate.companyId == data.companyId
+        && mate.storeId == data.debtStoreId && mate.debtStoreId == data.storeId
+        && mate.date == data.date && mate.accountType == data.accountType
+        && (mate.amount == data.amount || mate.amount == -data.amount);
+    }
+    function validOperational(name, id, data) {
+      return name == 'financialRecords'
+        ? validFinancial(data) && financialPair(id,data)
+        : validScope(data)
+          && (name != 'financialRecordsHistory' ||
+            (data.get('previousState',null) == null || validScope(data.previousState))
+            && (data.get('newState',null) == null || validScope(data.newState))
+            && (data.get('relatedPreviousState',null) == null || validScope(data.relatedPreviousState))
+            && (data.get('relatedNewState',null) == null || validScope(data.relatedNewState)))
+          && (name != 'loginHistory' || data.sellerId == request.auth.token.sellerId);
+    }
+    function validAuditState(state, companyId) {
+      return state == null || state.get('companyId',companyId) == companyId
+        && storeCompany(state.storeId) == companyId && (!('debtStoreId' in state) || state.debtStoreId == null || state.debtStoreId == '' || storeCompany(state.debtStoreId) == companyId);
+    }
+    function validAudit(data) {
+      return validScope(data) && validId(data.recordId)
+        && data.action in ['create','update','delete','restore']
+        && validAuditState(data.get('previousState',null),data.companyId)
+        && validAuditState(data.get('newState',null),data.companyId)
+        && validAuditState(data.get('relatedPreviousState',null),data.companyId)
+        && validAuditState(data.get('relatedNewState',null),data.companyId);
+    }
+    match /financialRecords/{id} {
+      allow get: if live() && hasAny(['financial_reconciliation','accounting','dashboard','ceo_center']) && (resource == null || storeVisible(resource.data,'financialRecords'));
+      allow list: if live() && hasAny(['financial_reconciliation','accounting','dashboard','ceo_center']) && storeVisible(resource.data,'financialRecords');
+      allow create: if live() && hasAny(['financial_reconciliation','accounting']) && (administrator() || request.resource.data.storeId == request.auth.token.storeId) && validFinancial(request.resource.data) && financialPair(id,request.resource.data);
+      allow update: if live() && hasAny(['financial_reconciliation','accounting']) && scoped(resource.data) && (administrator() || resource.data.storeId == request.auth.token.storeId) && sameOwner(resource.data,request.resource.data) && validFinancial(request.resource.data) && financialPair(id,request.resource.data);
+      allow delete: if live() && hasAny(['financial_reconciliation','accounting']) && storeVisible(resource.data,'financialRecords') && (!('relatedRecordId' in resource.data) || !existsAfter(/databases/$(database)/documents/financialRecords/$(resource.data.relatedRecordId)));
+    }
+    match /financialRecordsHistory/{id} {
+      allow get: if live() && hasAny(['financial_reconciliation','accounting']) && (resource == null || storeVisible(resource.data,'financialRecordsHistory'));
+      allow list: if live() && hasAny(['financial_reconciliation','accounting']) && storeVisible(resource.data,'financialRecordsHistory');
+      allow create: if live() && hasAny(['financial_reconciliation','accounting']) && (administrator() || request.resource.data.storeId == request.auth.token.storeId) && validAudit(request.resource.data);
+      allow update, delete: if false;
+    }
+    match /companies/{id} {
+      allow read: if live() && (id == request.auth.token.companyId || developer());
+      allow write: if false;
+    }
+    match /stores/{id} {
+      allow get: if live() && (resource == null || scoped(resource.data));
+      allow list: if live() && scoped(resource.data);
+      allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id);
+      allow update: if live() && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data)
+        && (hasAny(['stores','settings']) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nextInvoiceNumber']) && request.resource.data.nextInvoiceNumber is int && request.resource.data.nextInvoiceNumber == resource.data.nextInvoiceNumber + 1);
+      allow delete: if false;
+    }
+    match /roles/{id} {
+      allow get: if signed() && (id == request.auth.token.roleId || live() && (resource == null || scoped(resource.data)));
+      allow list: if live() && scoped(resource.data);
+      // Authority changes are server-owned during this staged rollout.
+      allow write: if false;
+    }
+    match /sellers/{id} {
+      allow get: if signed() && (id == request.auth.token.sellerId || live() && (resource == null || scoped(resource.data))) && (resource == null || !('password' in resource.data));
+      allow list: if live() && scoped(resource.data);
+      allow write: if false;
+    }
+    match /platformDevelopers/{id} {
+      allow get: if signed() && (id == request.auth.token.sellerId || live() && owner() || resource == null);
+      allow list: if live() && owner();
+      allow write: if false;
+    }
+    match /categories/{id} {
+      allow get: if live() && (resource == null || scoped(resource.data));
+      allow list: if live() && scoped(resource.data);
+      allow create: if live() && hasAny(['inventory','settings']) && validScope(request.resource.data) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+      allow update: if live() && hasAny(['inventory','settings']) && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+      allow delete: if live() && hasAny(['inventory','settings']) && scoped(resource.data);
+    }
+    match /financialLedgerCompanies/{companyId}/stores/{storeId}/{detail=**} {
+      allow read: if live() && (developer() || companyId == request.auth.token.companyId && storeCompany(storeId) == companyId && (administrator() || storeId == request.auth.token.storeId)) && hasAny(['financial_reconciliation','accounting']);
+      allow write: if false;
+    }
+    match /{name}/{id} {
+      allow get: if operational(name) && live() && moduleAccess(name) && (resource == null || storeVisible(resource.data,name));
+      allow list: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name);
+      allow create: if operational(name) && live() && moduleAccess(name) && validOperational(name,id,request.resource.data) && storeVisible(request.resource.data,name);
+      allow update: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name) && validOperational(name,id,request.resource.data) && sameOwner(resource.data,request.resource.data);
+      allow delete: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name)
+        && (name != 'financialRecords' || !('relatedRecordId' in resource.data) || !existsAfter(/databases/$(database)/documents/financialRecords/$(resource.data.relatedRecordId)));
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
