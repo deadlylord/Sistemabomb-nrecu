@@ -1,5 +1,5 @@
 import { useViewFilter } from '../services/viewFilters';
-import { inPayrollScope, payrollDate, payrollTime, payrollLogins, payrollShiftUnits } from '../services/payrollScope';
+import { inPayrollScope, payrollDate, payrollTime, payrollLogins, payrollDayUnits } from '../services/payrollScope';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Seller, Sale, LoginRecord, PayrollRecord, Layaway, Store } from '../types';
@@ -165,7 +165,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
 
   useEffect(() => {
     const name = isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '';
-    setLoginDays(days => days.map(day => ({ ...day, unitsSold: payrollShiftUnits([...sales, ...layaways], scope, name, day.date, day.startTime, day.endTime) })));
+    setLoginDays(days => days.map(day => ({ ...day, unitsSold: payrollDayUnits([...sales, ...layaways], scope, name, day.date) })));
   }, [sales, layaways, selectedSeller, manualName, isManualName, companyId, currentStore?.id]);
 
   const getStandardSchedule = (dateStr: string) => {
@@ -232,8 +232,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
     for (const transaction of [...sales, ...layaways]) {
       const date = payrollDate(transaction.createdAt);
       if (!date || date < startDate || date > endDate || !inPayrollScope(transaction, scope) || transaction.seller !== currentName) continue;
-      const sched = getStandardSchedule(date);
-      const units = payrollShiftUnits([transaction], scope, currentName, date, sched.start, sched.end);
+      const units = payrollDayUnits([transaction], scope, currentName, date);
       if (units > 0) salesAndLayawaysByDay.set(date, (salesAndLayawaysByDay.get(date) || 0) + units);
     }
 
@@ -275,7 +274,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
     setLoginDays(prev => prev.map(day => {
       if (day.date !== date) return day;
       const updated = { ...day, [field]: value };
-      return { ...updated, unitsSold: payrollShiftUnits([...sales, ...layaways], scope, currentName, date, updated.startTime, updated.endTime) };
+      return { ...updated, unitsSold: payrollDayUnits([...sales, ...layaways], scope, currentName, date) };
     }));
   };
   
@@ -290,7 +289,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
     const sched = getStandardSchedule(extraDate);
     const newDay = {
         date: extraDate,
-        unitsSold: 0,
+        unitsSold: payrollDayUnits([...sales, ...layaways], scope, isManualName ? manualName.trim() : sellers.find(seller => seller.id === selectedSeller)?.name || '', extraDate),
         logins: [],
         startTime: sched.start,
         endTime: sched.end,
@@ -322,7 +321,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
         if (!Number.isFinite(base) || base < 0) { alert('Ingresa un sueldo básico válido.'); return; }
         
         const dailyBreakdown = checkedDays.map(({ date, startTime, endTime }) => {
-            const unitsSold = payrollShiftUnits([...sales, ...layaways], scope, currentName, date, startTime, endTime);
+            const unitsSold = payrollDayUnits([...sales, ...layaways], scope, currentName, date);
             const commissionableUnits = Math.max(0, unitsSold - COMMISSION_FLOOR);
             const commissionEarned = commissionableUnits * COMMISSION_PER_UNIT;
             const sched = getStandardSchedule(date);
@@ -499,7 +498,7 @@ const PayrollView: React.FC<PayrollViewProps> = ({ companyId, sellers, sales, la
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Nómina y Comisiones</h2>
-        <p className="text-sm text-gray-500 mb-4">Tienda: {currentStore?.name || 'Sin seleccionar'}. Los cálculos usan únicamente esta sede y los horarios elegidos.</p>
+        <p className="text-sm text-gray-500 mb-4">Tienda: {currentStore?.name || 'Sin seleccionar'}. Las ventas se cuentan por día completo en esta sede. Los horarios se usan para calcular las horas trabajadas.</p>
         <p className="text-xs text-gray-500 mb-4">Revisa Entrada y Salida para jornadas parciales. Los inicios de sesión no registran la hora de salida.</p>
         
         <div className="flex bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl shadow-inner mb-6 overflow-x-auto scrollbar-hide">

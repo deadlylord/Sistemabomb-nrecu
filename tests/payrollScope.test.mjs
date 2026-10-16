@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import React from 'react';
 import { create, act } from 'react-test-renderer';
-import { inPayrollScope, payrollDate, payrollLogins, payrollShiftUnits } from '../services/payrollScope.ts';
+import { inPayrollScope, payrollDate, payrollLogins, payrollDayUnits } from '../services/payrollScope.ts';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const scope = { storeId: 'metro', companyId: 'bombon' };
 const transaction = (id, time, quantity, extras = {}) => ({ id, storeId: 'metro', companyId: 'bombon', seller: 'Carlos', createdAt: `2026-09-30T${time}:00-05:00`, items: [{ price: 10000, quantity }], ...extras });
@@ -21,20 +21,18 @@ test('payroll scope isolates company and store, preserves legacy records by stor
   assert.equal(payrollDate('bad-date'), '');
 });
 
-test('logins use seller identity, period and store; commissions exclude other shifts and settled/cancelled layaways', () => {
+test('logins retain scope; daily units include the entire Colombia day and exclude gifts and duplicate layaways', () => {
   const login = { sellerId: 'carlos', sellerName: 'Carlos', date: '2026-09-30T09:00:00-05:00', ...scope };
   assert.equal(payrollLogins([login, {...login, storeId: 'divino'}, {...login, companyId: 'mayla'}, {...login, sellerId: 'other-carlos'}, {...login, date: '2026-09-29T09:00:00-05:00'}], scope, 'carlos', 'Carlos', '2026-09-30', '2026-09-30').length, 1);
-  const all = [...sales, transaction('active-layaway', '12:00', 1, { status: 'active' }), transaction('cancelled', '12:00', 30, { status: 'cancelled' }), transaction('pre-order', '12:00', 30, { status: 'pre-order' })];
-  assert.equal(payrollShiftUnits(all, scope, 'Carlos', '2026-09-30', '10:30', '14:00'), 3);
-  assert.equal(payrollShiftUnits(all, scope, 'Carlos', '2026-09-30', '14:01', '20:30'), 5);
-  assert.equal(payrollShiftUnits(all, scope, 'Carlos', '2026-09-29', '10:30', '20:30'), 0);
-  assert.equal(payrollShiftUnits(all, scope, 'Carlos', '2026-09-30', '20:30', '10:30'), 0);
-  const boundary = [transaction('shift-boundary', '14:00', 4)];
-  assert.equal(payrollShiftUnits(boundary, scope, 'Carlos', '2026-09-30', '10:30', '14:00'), 0);
-  assert.equal(payrollShiftUnits(boundary, scope, 'Carlos', '2026-09-30', '14:00', '20:30'), 4, 'adjacent shifts must not share a sale at their boundary');
+  const all = [...sales, transaction('active-layaway', '12:00', 1, { status: 'active' }), transaction('cancelled', '12:00', 30, { status: 'cancelled' }), transaction('pre-order', '12:00', 30, { status: 'pre-order' }),
+    transaction('midnight', '00:00', 2), transaction('closing', '20:30', 3), transaction('late', '23:59', 4),
+    transaction('next-day', '00:00', 100, {createdAt: '2026-10-01T05:00:00Z'})];
+  assert.equal(payrollDayUnits(all, scope, 'Carlos', '2026-09-30'), 17);
+  assert.equal(payrollDayUnits(all, scope, 'Carlos', '2026-09-29'), 0);
+  assert.equal(payrollDayUnits(all, scope, 'Carlos', '2026-10-01'), 100);
 });
 
-test('payroll UI excludes foreign payments, recalculates shift commission and saves explicit company/store', async () => {
+test('payroll UI excludes foreign payments, counts full-day commission despite shortened hours and saves explicit company/store', async () => {
   const dir = await mkdtemp(fileURLToPath(new URL('./.payroll-', import.meta.url)));
   const oldStorage = globalThis.localStorage, oldWindow = globalThis.window, oldAlert = globalThis.alert;
   const storage = new Map();
@@ -58,7 +56,7 @@ test('payroll UI excludes foreign payments, recalculates shift commission and sa
     await act(async () => { button('GENERAR PRE-NÓMINA').props.onClick(); });
     await act(async () => { await button('REGISTRAR PAGO EN SISTEMA').props.onClick(); });
     assert.equal(saved.storeId, 'metro'); assert.equal(saved.companyId, 'bombon');
-    assert.equal(saved.totalUnitsSold, 2); assert.equal(saved.commissionAmount, 2000);
+    assert.equal(saved.totalUnitsSold, 7); assert.equal(saved.commissionAmount, 7000);
     assert.equal(saved.loginAccesses.length, 1);
     assert.ok(storage.has('payrollBaseSalary:bombon:metro'));
     await act(async () => { renderer.unmount(); });
