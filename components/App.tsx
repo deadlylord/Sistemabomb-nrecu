@@ -545,7 +545,7 @@ const App: React.FC = () => {
   }, [isOperationalView, isAdmin, currentUser?.id, companyStoreKey, dataScope]);
 
 
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION);
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD);
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
@@ -3336,10 +3336,10 @@ const App: React.FC = () => {
                 stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales} 
-                layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways} 
+                sales={sales}
+                layaways={layaways}
                 expenses={expenses}
-                incidents={isAdmin ? allIncidents.filter(i => visibleStoreIds.has(i.storeId)) : incidents}
+                incidents={incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}

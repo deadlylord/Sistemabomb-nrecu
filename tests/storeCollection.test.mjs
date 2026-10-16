@@ -36,6 +36,7 @@ test('shared store subscription survives navigation and metadata renders, cleans
     const modulePath = join(temp, 'hook.mjs');
     await writeFile(modulePath, bundle.outputFiles[0].text);
     const { useStoreCollection, subscribeStoreRows, connections } = await import(pathToFileURL(modulePath).href);
+    const snapshot = docs => ({ docs, docChanges: () => docs.map(doc => ({ type: 'modified', doc })) });
     const values = [];
     const setter = value => values.push(value);
     function Screen({ store = 'Metro', scope = 'Paula:Bombon', enabled = true }) {
@@ -47,7 +48,7 @@ test('shared store subscription survives navigation and metadata renders, cleans
     await act(async () => { renderer.update(React.createElement(Screen)); });
     assert.equal(connections.length, 1);
     assert.equal(connections[0].closed, false);
-    connections[0].apply({ docs: [{ id: 'a', data: () => ({ stock: 3 }) }] });
+    connections[0].apply(snapshot([{ id: 'a', data: () => ({ stock: 3 }) }]));
     assert.deepEqual(values.at(-1), [{ id: 'a', stock: 3 }]);
     await act(async () => { renderer.update(React.createElement(Screen, { store: 'Divino' })); });
     assert.equal(connections[0].closed, true);
@@ -62,8 +63,8 @@ test('shared store subscription survives navigation and metadata renders, cleans
     const stopRight = subscribeStoreRows('financialRecords', 'Mayla1', 'Carlos:Mayla', rows => right.push(rows));
     assert.equal(connections.length, 4, 'two consumers share one database listener');
     const finance = connections[3];
-    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 10 }) }, { id: 'foreign', data: () => ({ companyId: 'Bombon', amount: 99 }) }] });
-    finance.apply({ docs: [{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 25 }) }] });
+    finance.apply(snapshot([{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 10 }) }, { id: 'foreign', data: () => ({ companyId: 'Bombon', amount: 99 }) }]));
+    finance.apply(snapshot([{ id: 'own', data: () => ({ companyId: 'Mayla', amount: 25 }) }]));
     assert.equal(left.at(-1)[0].amount, 25);
     assert.deepEqual(left, right, 'changes reach both consumers without reload');
     assert.equal(left[0].length, 1, 'foreign company row is excluded');
