@@ -145,10 +145,10 @@ test('financial batches share reads for mirrors/history and rejected audit preve
  await assert.rejects(bad.commit());assert.equal(writes.length,0);assert.equal(records.get('financialRecords/own').amount,20);
  reads.length=0;const good=writer.writeBatch();
  for(const id of ['a','b','ha','hb'])writer.registerNew(ref((id.startsWith('h')?'financialRecordsHistory/':'financialRecords/')+id));
- good.set(ref('financialRecords/a'),{storeId:'mayla-1',relatedRecordId:'b'});good.set(ref('financialRecords/b'),{storeId:'mayla-2',relatedRecordId:'a'});
+ good.set(ref('financialRecords/a'),{id:'a',storeId:'mayla-1',debtStoreId:'mayla-2',relatedRecordId:'b',amount:-20,date:'2026-10-01T12:00:00-05:00',accountType:'cash'});good.set(ref('financialRecords/b'),{id:'b',storeId:'mayla-2',debtStoreId:'mayla-1',relatedRecordId:'a',amount:20,date:'2026-10-01T12:00:00-05:00',accountType:'cash'});
  good.set(ref('financialRecordsHistory/ha'),{storeId:'mayla-1',recordId:'a',newState:{storeId:'mayla-1',relatedRecordId:'b'}});
  good.set(ref('financialRecordsHistory/hb'),{storeId:'mayla-2',recordId:'b',newState:{storeId:'mayla-2',relatedRecordId:'a'}});
- await good.commit();assert.equal(reads.length,0);assert.equal(records.get('financialRecordsHistory/hb').companyId,'mayla');
+ await good.commit();assert.equal(new Set(reads).size,reads.length, 'each financial reference is read at most once');assert.equal(reads.length,3);assert.equal(records.get('financialRecordsHistory/hb').companyId,'mayla');
 }));
 
 
@@ -266,4 +266,41 @@ test('incident links respect source store, allow own-company transfers and reuse
  reads.length=0;
  await writer.setDoc(ref('incidents/exchange'),{storeId:'mayla-1',returnedItems:[{productId:'own'}],takenItems:[{productId:'own'}]});
  assert.equal(reads.filter(path=>path==='inventory/own').length,1);
+}));
+
+const financialPair = (sameSign = false) => {
+ const main = { id:'a', companyId:'mayla', storeId:'mayla-1', debtStoreId:'mayla-2', relatedRecordId:'b', amount:-50, date:'2026-10-01T20:45:00-05:00', accountType:'cash', type:'expense', subCategory:'Cruce Sedes', description:'Cruce Otra: Pago', registeredBy:'Carlos', affectsCashBalance:true };
+ const mirror = { ...main, id:'b', storeId:'mayla-2', debtStoreId:'mayla-1', relatedRecordId:'a', amount:sameSign ? -50 : 50, description:'Cruce Principal: Pago', affectsCashBalance:false, subCategory:sameSign ? 'Servicios' : 'Cruce Sedes' };
+ return [main,mirror];
+};
+test('financial edit changes both linked stores atomically, preserves cash semantics and audits both versions',()=>withWriter(async({createTenantWriter,records,reads})=>{
+ const writer=createTenantWriter({},scope);const [main,mirror]=financialPair();records.set('financialRecords/a',main);records.set('financialRecords/b',mirror);
+ const b=writer.writeBatch();b.set(ref('financialRecords/a'),{...main,amount:-80,date:'2026-09-30T23:59:00-05:00',accountType:'qr',description:'Cruce Otra: Factura'},{merge:true});
+ b.set(ref('financialRecordsHistory/edit'),{recordId:'a',action:'update',storeId:main.storeId,previousState:main,newState:{...main,amount:-80}});await b.commit();
+ const other=records.get('financialRecords/b');assert.equal(other.amount,80);assert.equal(other.accountType,'qr');assert.equal(other.date,'2026-09-30T23:59:00-05:00');assert.equal(other.affectsCashBalance,false);assert.equal(other.description,'Cruce Principal: Factura');
+ assert.deepEqual(records.get('financialRecordsHistory/edit').relatedPreviousState,mirror);
+ assert.equal([...records.values()].filter(r=>r.action==='update').length,2);
+ assert.equal(reads.length,new Set(reads).size);
+}));
+test('financial edits keep same-sign expense pairs and reject stale screens or broken/foreign links before any writes',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ const writer=createTenantWriter({},scope);const [main,mirror]=financialPair(true);records.set('financialRecords/a',main);records.set('financialRecords/b',mirror);
+ await writer.updateDoc(ref('financialRecords/a'),{amount:-90});assert.equal(records.get('financialRecords/b').amount,-90);
+ writes.length=0;
+ const stale=writer.writeBatch();stale.set(ref('financialRecords/a'),{...main,amount:-70});stale.set(ref('financialRecordsHistory/stale'),{recordId:'a',action:'update',storeId:main.storeId,previousState:main,newState:{...main,amount:-70}});
+ await assert.rejects(stale.commit(),/otra ventana/);assert.equal(writes.length,0);
+ records.set('financialRecords/b',{...mirror,relatedRecordId:'unrelated'});await assert.rejects(writer.deleteDoc(ref('financialRecords/a')),/vínculo/);assert.equal(writes.length,0);
+ records.set('financialRecords/b',{...mirror,companyId:'foreign'});await assert.rejects(writer.deleteDoc(ref('financialRecords/a')));assert.equal(writes.length,0);
+}));
+test('deleting and restoring a pair uses the exact saved mirror including its cash flag and category',()=>withWriter(async({createTenantWriter,records})=>{
+ const writer=createTenantWriter({},scope);const [main,mirror]=financialPair(true);records.set('financialRecords/a',main);records.set('financialRecords/b',mirror);
+ const del=writer.writeBatch();del.delete(ref('financialRecords/a'));del.set(ref('financialRecordsHistory/deleted'),{recordId:'a',action:'delete',storeId:main.storeId,previousState:main});await del.commit();
+ assert.equal(records.has('financialRecords/a'),false);assert.equal(records.has('financialRecords/b'),false);
+ const log=records.get('financialRecordsHistory/deleted');
+ const restore=writer.writeBatch();restore.set(ref('financialRecords/a'),main);restore.set(ref('financialRecordsHistory/restored'),{recordId:'a',action:'restore',storeId:main.storeId,newState:main,relatedPreviousState:log.relatedPreviousState});await restore.commit();
+ assert.deepEqual(records.get('financialRecords/b'),mirror);
+}));
+test('a repeated financial draft uses its audit receipt and cannot replay a changed batch',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ const writer=createTenantWriter({},scope);const [main,mirror]=financialPair();
+ const make=(amount=main.amount)=>{const b=writer.writeBatch();b.set(ref('financialRecords/a'),{...main,amount});b.set(ref('financialRecords/b'),{...mirror,amount:-amount});b.set(ref('financialRecordsHistory/receipt-a'),{recordId:'a',action:'create',storeId:main.storeId,newState:{...main,amount}});b.set(ref('financialRecordsHistory/receipt-b'),{recordId:'b',action:'create',storeId:mirror.storeId,newState:{...mirror,amount:-amount}});return b};
+ await make().commit();writes.length=0;await make().commit();assert.equal(writes.length,0);await assert.rejects(make(-100).commit(),/ya fue registrado/);assert.equal(writes.length,0);assert.equal(records.get('financialRecords/a').amount,-50);
 }));

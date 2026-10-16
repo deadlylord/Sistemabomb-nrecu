@@ -1,3 +1,4 @@
+import { prepareFinancialOperations, sameFinancialVersion } from './financialMutations';
 import { assertCompanyRole, isPlatformRole } from './developerAccess';
 import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from 'firebase/firestore';
 import type { Firestore, DocumentReference, WriteBatch } from 'firebase/firestore';
@@ -22,7 +23,7 @@ export function assertTenantData(collectionName: string, data: any, scope: Tenan
     if (data[key] && !scope.storeIds.has(data[key])) throw new Error('La operación referencia una sede de otra empresa.');
   }
   if (collectionName === 'financialRecordsHistory') {
-    for (const state of [data.previousState, data.newState]) {
+    for (const state of [data.previousState, data.newState, data.relatedPreviousState, data.relatedNewState]) {
       if (state) assertTenantData('financialRecords', state, scope);
     }
   }
@@ -120,6 +121,43 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
     else if (op.options) target.set(op.ref, op.data, op.options);
     else target.set(op.ref, op.data);
   };
+  const hasFinancialChanges = (operations: Operation[]) => operations.some(op => collectionName(op.ref) === 'financialRecords');
+  const commitFinancial = async (operations: Operation[]) => {
+    const startedAt = performance.now();
+    let reads = 0, attempts = 0;
+    await runTransaction(db, async transaction => {
+      attempts++;
+      const cache = new Map<string, Promise<any>>();
+      const read = (ref: DocumentReference) => {
+        if (!cache.has(ref.path)) { reads++; cache.set(ref.path, transaction.get(ref)); }
+        return cache.get(ref.path)!;
+      };
+      // A stable audit ID is the receipt for a batch. Retrying the same draft
+      // after a lost acknowledgement must not apply that batch twice.
+      const receipt = operations.find(op => op.kind === 'set' && collectionName(op.ref) === 'financialRecordsHistory' && op.data?.recordId);
+      if (receipt) {
+        const saved = await read(receipt.ref);
+        if (saved.exists()) {
+          assertTenantData('financialRecordsHistory', saved.data(), scope);
+          for (const audit of operations.filter(op => op.kind === 'set' && collectionName(op.ref) === 'financialRecordsHistory')) {
+            const existing = await read(audit.ref);
+            if (!existing.exists() || existing.data().recordId !== audit.data.recordId || existing.data().action !== audit.data.action ||
+              !sameFinancialVersion(existing.data().newState, audit.data.newState)) throw new Error('Este lote ya fue registrado con otros datos. Revisa el libro y crea un movimiento nuevo.');
+          }
+          return;
+        }
+      }
+      // Independent point reads share one in-flight promise per path. A long
+      // manual batch must not wait for a network round trip for each row.
+      await Promise.all(operations.filter(op => collectionName(op.ref) === 'financialRecords' ||
+        collectionName(op.ref) === 'financialRecordsHistory' && !generated.has(op.ref.path)).map(op => read(op.ref)));
+      const prepared = await prepareFinancialOperations(db, operations, scope, read, assertTenantData);
+      await validate(prepared, read);
+      for (const op of prepared) apply(transaction, op);
+    });
+    operations.forEach(op => generated.delete(op.ref.path));
+    console.info('[Conciliación] Guardado confirmado', { totalMs: Math.round(performance.now() - startedAt), attempts, reads, movements: operations.filter(op => collectionName(op.ref) === 'financialRecords').length });
+  };
   const makeQueue = (operations: Operation[], get?: any) => {
     const queue: any = { get,
       set(ref: DocumentReference, data: any, options?: any) { operations.push({ kind: 'set', ref, data, options }); return queue; },
@@ -130,17 +168,17 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
   return {
     registerNew(ref: DocumentReference) { generated.add(ref.path); },
     async setDoc(ref: DocumentReference, data: any, options?: any) {
-      const operations: Operation[] = [{ kind: 'set', ref, data, options }]; await validate(operations, getDoc);
+      const operations: Operation[] = [{ kind: 'set', ref, data, options }]; if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc);
       const result = options ? await setDoc(ref, operations[0].data, options) : await setDoc(ref, operations[0].data); generated.delete(ref.path); return result;
     },
     async updateDoc(ref: DocumentReference, data: any) {
-      const operations: Operation[] = [{ kind: 'update', ref, data }]; await validate(operations, getDoc); return updateDoc(ref, operations[0].data);
+      const operations: Operation[] = [{ kind: 'update', ref, data }]; if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc); return updateDoc(ref, operations[0].data);
     },
-    async deleteDoc(ref: DocumentReference) { await validate([{ kind: 'delete', ref }], getDoc); return deleteDoc(ref); },
-    async addDoc(collection: any, data: any) { const ref = doc(collection); generated.add(ref.path); const operations: Operation[] = [{ kind: 'set', ref, data }]; await validate(operations, getDoc); await setDoc(ref, operations[0].data); generated.delete(ref.path); return ref; },
+    async deleteDoc(ref: DocumentReference) { if (collectionName(ref) === 'financialRecords') return commitFinancial([{ kind: 'delete', ref }]); await validate([{ kind: 'delete', ref }], getDoc); return deleteDoc(ref); },
+    async addDoc(collection: any, data: any) { const ref = doc(collection); generated.add(ref.path); const operations: Operation[] = [{ kind: 'set', ref, data }]; if (hasFinancialChanges(operations)) await commitFinancial(operations); else { await validate(operations, getDoc); await setDoc(ref, operations[0].data); } generated.delete(ref.path); return ref; },
     writeBatch() {
       const operations: Operation[] = []; const queue = makeQueue(operations);
-      queue.commit = async () => { await validate(operations, getDoc); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await batch.commit(); operations.forEach(op => generated.delete(op.ref.path)); return result; };
+      queue.commit = async () => { if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await batch.commit(); operations.forEach(op => generated.delete(op.ref.path)); return result; };
       return queue as WriteBatch;
     },
     async runTransaction<T>(_: Firestore, callback: (transaction: any) => Promise<T>) {
@@ -158,8 +196,9 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
           return snapshot;
         });
         const result = await callback(queue);
-        await validate(operations, read);
-        for (const op of operations) apply(transaction, op);
+        const prepared = hasFinancialChanges(operations) ? await prepareFinancialOperations(db, operations, scope, read, assertTenantData) : operations;
+        await validate(prepared, read);
+        for (const op of prepared) apply(transaction, op);
         committedPaths = operations.map(op => op.ref.path);
         return result;
       });

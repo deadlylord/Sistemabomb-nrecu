@@ -1,3 +1,5 @@
+import { useFinancialDraft } from '../services/useFinancialDraft';
+import { useFinancialLedger, LEDGER_PAGE_SIZE } from '../services/useFinancialLedger';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { createTenantWriter } from '../services/tenantWrites';
@@ -66,6 +68,8 @@ interface ManualEntry {
 }
 
 interface PaymentSummaryData {
+    operationId: string;
+    date: string;
     targetStoreId: string;
     targetStoreName: string;
     amount: number;
@@ -146,7 +150,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [showSettledBalances, setShowSettledBalances] = useState<boolean>(false);
   const [expandedDebtStoreId, setExpandedDebtStoreId] = useState<string | null>(null);
   const [expandedSystemLoadId, setExpandedSystemLoadId] = useState<string | null>(null); 
-  const [paymentSummary, setPaymentSummary] = useState<PaymentSummaryData | null>(null);
+  const [paymentSummary, setPaymentSummary] = useFinancialDraft<PaymentSummaryData | null>(`financialPayment:${currentUser.id}:${companyId}:${activeStoreId}`, null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const [isEditingNames, setIsEditingNames] = useState(false);
@@ -185,17 +189,25 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, []);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [manualEntries, setManualEntries] = useState<ManualEntry[]>([]);
+  const [manualEntries, setManualEntries] = useFinancialDraft<ManualEntry[]>(`financialDraft:${currentUser.id}:${companyId}:${activeStoreId}`, []);
   
   const [editingRecord, setEditingRecord] = useState<(FinancialRecord & { amountString?: string, timeString?: string, dateString?: string }) | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<FinancialRecord | null>(null);
   const [isSavingReconciliation, setIsSavingReconciliation] = useState(false);
   const saveInFlightRef = useRef(false);
+  const [saveStatus, setSaveStatus] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; message: string }>({ state: 'idle', message: '' });
+  useEffect(() => {
+    if (saveStatus.state !== 'saving') return;
+    const timer = setTimeout(() => setSaveStatus(status => status.state === 'saving' ? { ...status, message: navigator.onLine ? 'Esperando confirmación. No repitas el movimiento.' : 'Sin conexión. Esperando confirmación del movimiento.' } : status), 5000);
+    return () => clearTimeout(timer);
+  }, [saveStatus.state]);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  useCompanyCollection('financialRecords', stores.map(store => store.id), `${currentUser.id}:${companyId}`, true, setAllRecords);
-  useCompanyCollection('financialRecordsHistory', stores.map(store => store.id), `${currentUser.id}:${companyId}`, showHistoryModal, setHistoryLogs);
+  const ledger = useFinancialLedger({ companyId, storeId: activeStoreId, storeIds: stores.map(store => store.id), scopeKey: `${currentUser.id}:${companyId}`,
+    accountType: activeTab, month: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`, showGlobal: showGlobalSummary,
+    search: searchTerm, rangeStart: ledgerStartDate, rangeEnd: ledgerEndDate, setRows: setAllRecords });
+  useCompanyCollection('financialRecordsHistory', [activeStoreId].filter(id => scope.storeIds.has(id)), `${currentUser.id}:${companyId}`, showHistoryModal, setHistoryLogs, stores.map(store => store.id));
 
 
 
@@ -240,6 +252,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const categoryStats = useMemo(() => {
+      if (ledger.indexed) {
+        const categories: any[] = Object.values(ledger.month?.categories || {});
+        return {
+          expenses: categories.filter(c => c.expense > 0).map(c => ({ name: c.name, value: c.expense, accounts: c.expenseAccounts })).sort((a, b) => b.value - a.value),
+          incomes: categories.filter(c => c.income > 0).map(c => ({ name: c.name, value: c.income, accounts: c.incomeAccounts })).sort((a, b) => b.value - a.value)
+        };
+      }
       const expenseStats: Record<string, { total: number, accounts: Record<string, number> }> = {};
       const incomeStats: Record<string, { total: number, accounts: Record<string, number> }> = {};
       const startOfMonth = new Date(selectedYear, selectedMonth, 1);
@@ -277,11 +296,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           expenses: transform(expenseStats),
           incomes: transform(incomeStats)
       };
-  }, [records, selectedMonth, selectedYear]);
+  }, [records, selectedMonth, selectedYear, ledger.indexed, ledger.month]);
 
   const allInterStoreBalances = useMemo(() => {
       const balances: Record<string, { total: number, cash: number, qr: number, storeId: string, history: FinancialRecord[] }> = {};
-      records.forEach(r => {
+      (ledger.indexed ? ledger.peerRows : records).forEach(r => {
           const otherStoreId = r.debtStoreId;
           if (otherStoreId) {
               if (!balances[otherStoreId]) balances[otherStoreId] = { total: 0, cash: 0, qr: 0, storeId: otherStoreId, history: [] };
@@ -298,9 +317,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               else if (r.accountType === 'qr' || r.accountType === 'addi') b.qr += netImpact;
           }
       });
+      if (ledger.indexed) {
+        for (const [id, peer] of Object.entries(ledger.summary?.peers || {})) {
+          if (!scope.storeIds.has(id)) continue;
+          balances[id] = { total: (peer as any).total, cash: (peer as any).cash, qr: (peer as any).qr, storeId: id, history: balances[id]?.history || [] };
+        }
+      }
       return Object.entries(balances).map(([otherStoreId, stats]) => {
           const sortedHistory = stats.history.sort((a: any, b: any) => new Date(a.date || '').getTime() - new Date(b.date || '').getTime() || a.id.localeCompare(b.id));
-          let runningBalance = 0;
+          let runningBalance = ledger.indexed ? stats.total - sortedHistory.reduce((sum, r) => sum + ((r as any).netImpact || 0), 0) : 0;
           const historyWithBalance = sortedHistory.map(r => {
               runningBalance += (r as any).netImpact || 0;
               return { ...r, runningBalance };
@@ -313,7 +338,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               history: historyWithBalance.sort((a: any, b: any) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime() || b.id.localeCompare(a.id))
           };
       });
-  }, [records, filteredStores]);
+  }, [records, filteredStores, ledger.indexed, ledger.summary, ledger.peerRows]);
 
   const interStoreBalances = useMemo(() => {
       return allInterStoreBalances.filter(s => Math.abs(s.total) > 0.1);
@@ -325,7 +350,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     return `"${str.replace(/"/g, '""')}"`;
   };
 
-  const handleExportSingleStoreExcel = (targetStoreBalance: {
+  const peerHistory = (rows: FinancialRecord[], total: number) => {
+    let running = total;
+    return rows.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id)).map(record => {
+      const category = (record.subCategory || '').toLowerCase();
+      const impact = category.startsWith('cruce') || category.includes('préstamo') ? -record.amount : record.amount;
+      const result = { ...record, netImpact: impact, runningBalance: running };
+      running -= impact;
+      return result;
+    });
+  };
+  const handleExportSingleStoreExcel = async (targetStoreBalance: {
     otherStoreName: string;
     storeId: string;
     total: number;
@@ -335,7 +370,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }) => {
     const activeStoreName = activeStore?.name || 'Local Actual';
     const otherStoreName = targetStoreBalance.otherStoreName;
-    const history = targetStoreBalance.history || [];
+    let history = targetStoreBalance.history || [];
+    if (ledger.indexed) {
+      try { history = peerHistory(await ledger.readPeer(targetStoreBalance.storeId), targetStoreBalance.total); }
+      catch { setSaveStatus({ state: 'error', message: 'No se pudo completar la exportación del cruce.' }); return; }
+    }
 
     if (history.length === 0) {
       alert(`No hay registros de intercambio con la sede ${otherStoreName}.`);
@@ -419,9 +458,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }
   };
 
-  const handleExportAllInterStoreExcel = () => {
+  const handleExportAllInterStoreExcel = async () => {
     const activeStoreName = activeStore?.name || 'Local Actual';
-    const balances = allInterStoreBalances.length > 0 ? allInterStoreBalances : interStoreBalances;
+    let balances = allInterStoreBalances.length > 0 ? allInterStoreBalances : interStoreBalances;
+    if (ledger.indexed) {
+      try { const rows = await ledger.readAllPeers(); balances = balances.map(balance => ({ ...balance, history: peerHistory(rows.filter(r => r.debtStoreId === balance.storeId), balance.total) })); }
+      catch { setSaveStatus({ state: 'error', message: 'No se pudo completar la exportación de intercambios.' }); return; }
+    }
     const totalRecords = balances.reduce((acc, b) => acc + (b.history?.length || 0), 0);
 
     if (totalRecords === 0) {
@@ -514,8 +557,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [interStoreBalances]);
 
   const globalStoreSummaries = useMemo(() => {
+    if (!showGlobalSummary) return [];
     return filteredStores.map(store => {
       const storeRecords = allRecords.filter(r => r.storeId === store.id);
+      const compact = ledger.globals[store.id] || (store.id === activeStoreId ? ledger.summary : null);
+      if (compact?.ready) {
+        const cashBalance = (store.initialBalances?.cash || 0) + (compact.accounts.cash || 0);
+        const qrBalance = (store.initialBalances?.qr || 0) + (store.initialBalances?.addi || 0) + (compact.accounts.qr || 0) + (compact.accounts.addi || 0);
+        const storeBalances = Object.entries(compact.peers).filter(([id]) => scope.storeIds.has(id)).map(([id, peer]) => ({ storeId: id, storeName: stores.find(s => s.id === id)?.name || 'Sede', balance: (peer as any).total }));
+        const totalToCollect = storeBalances.reduce((sum, p) => sum + Math.max(0, p.balance), 0);
+        const totalDebts = storeBalances.reduce((sum, p) => sum + Math.max(0, -p.balance), 0);
+        return { storeId: store.id, storeName: store.name, cashBalance, qrBalance, totalToCollect, totalDebts, storeBalances, netBalance: cashBalance + qrBalance + totalToCollect - totalDebts };
+      }
       
       const cashBalance = (store.initialBalances?.cash || 0) + 
         storeRecords.filter(r => r.accountType === 'cash' && r.affectsCashBalance !== false)
@@ -563,7 +616,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         netBalance: cashBalance + qrBalance + totalToCollect - totalDebts
       };
     });
-  }, [filteredStores, allRecords]);
+  }, [filteredStores, allRecords, ledger.globals, ledger.summary, activeStoreId, showGlobalSummary]);
 
   const dailySystemTotals = useMemo(() => {
     const totalsMap = new Map<string, DailySystemTotal>();
@@ -865,7 +918,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     const search = searchTerm.toLowerCase();
     const start = ledgerStartDate ? new Date(ledgerStartDate + 'T00:00:00').getTime() : null;
     const end = ledgerEndDate ? new Date(ledgerEndDate + 'T23:59:59').getTime() : null;
-    return records.filter(r => {
+    return (ledger.indexed ? ledger.accountRows : records).filter(r => {
         if (r.accountType !== activeTab) return false;
         if (financeTypeFilter === 'income' && r.amount <= 0) return false;
         if (financeTypeFilter === 'expense' && r.amount >= 0) return false;
@@ -875,15 +928,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         const date = new Date(r.date).getTime();
         return (start === null || date >= start) && (end === null || date <= end);
     });
-  }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter]);
+  }, [records, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter, ledger.indexed, ledger.accountRows]);
 
   const currentBalance = useMemo(() => {
+      if (ledger.indexed) return initialBalanceValue + (ledger.summary?.accounts[activeTab] || 0);
       // El saldo real se calcula siempre sobre TODOS los registros de la cuenta para ser consistente
       const recordsSum = records
         .filter(r => r.accountType === activeTab && r.affectsCashBalance !== false)
         .reduce((sum, r) => sum + r.amount, 0);
       return initialBalanceValue + recordsSum;
-  }, [records, activeTab, initialBalanceValue]);
+  }, [records, activeTab, initialBalanceValue, ledger.indexed, ledger.summary]);
 
   // Totales visibles (para el pie de tabla)
   const visibleTotals = useMemo(() => {
@@ -896,6 +950,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [filteredRecords]);
 
   const recordsWithBalance = useMemo(() => {
+    if (ledger.indexed) {
+      let rolling = currentBalance - (ledger.accountNewerTotal || 0);
+      const balances = new Map<string, number>();
+      for (const record of ledger.accountRows) {
+        balances.set(record.id, rolling);
+        if (record.affectsCashBalance !== false) rolling -= record.amount;
+      }
+      return filteredRecords.filter(record => balances.has(record.id)).map(record => ({ ...record, saldo: balances.get(record.id)! }));
+    }
     // records is already sorted newest-first. Reverse once for the running balance,
     // avoiding two date-parsing sorts every time a reconciliation entry is saved.
     const balanceMap = new Map<string, number>();
@@ -909,7 +972,16 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
     // filteredRecords retains the same newest-first order as records.
     return filteredRecords.map(record => ({ ...record, saldo: balanceMap.get(record.id) ?? 0 }));
-  }, [filteredRecords, records, activeTab, initialBalanceValue]);
+  }, [filteredRecords, records, activeTab, initialBalanceValue, ledger.indexed, ledger.accountRows, ledger.accountNewerTotal, currentBalance]);
+
+  const [ledgerPage, setLedgerPage] = useState(0);
+  useEffect(() => { setLedgerPage(0); }, [activeStoreId, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter, ledger.indexed, ledger.accountRows]);
+  const maxLedgerPage = Math.max(0, Math.ceil(recordsWithBalance.length / LEDGER_PAGE_SIZE) - 1);
+  const pageIndex = Math.min(ledgerPage, maxLedgerPage);
+  const displayedRecords = recordsWithBalance.slice(pageIndex * LEDGER_PAGE_SIZE, (pageIndex + 1) * LEDGER_PAGE_SIZE);
+  useEffect(() => {
+    if (ledger.indexed && expandedDebtStoreId) ledger.readPeer(expandedDebtStoreId).catch(() => setSaveStatus({ state: 'error', message: 'No se pudo cargar el historial del cruce.' }));
+  }, [activeStoreId, expandedDebtStoreId, ledger.indexed, ledger.summary?.revision]);
 
   // Estadísticas estilo Excel para movimientos seleccionados
   const selectedStats = useMemo(() => {
@@ -979,8 +1051,22 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     }
   };
 
-  const handleExportAccountExcel = (customRecords?: any[], customFilenamePrefix?: string) => {
-    const listToExport = selectAnalyticsRows<any>('financialRecords', customRecords || recordsWithBalance, { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) });
+  const handleExportAccountExcel = async (customRecords?: any[], customFilenamePrefix?: string) => {
+    let exportRows = customRecords || recordsWithBalance;
+    if (ledger.indexed && !customRecords) {
+      try {
+        const result = await ledger.readAccount();
+        let rolling = currentBalance - result.newerTotal;
+        exportRows = result.rows.map(record => { const row = { ...record, saldo: rolling }; if (record.affectsCashBalance !== false) rolling -= record.amount; return row; }).filter(r => {
+          const date = getLocalDateString(r.date);
+          const search = searchTerm.toLowerCase();
+          return (!ledgerStartDate || date >= ledgerStartDate) && (!ledgerEndDate || date <= ledgerEndDate) &&
+            (financeTypeFilter === 'all' || (financeTypeFilter === 'income' ? r.amount > 0 : r.amount < 0)) &&
+            (!search || (r.description || '').toLowerCase().includes(search) || (r.subCategory || '').toLowerCase().includes(search));
+        });
+      } catch { setSaveStatus({ state: 'error', message: 'No se pudo completar la exportación del libro.' }); return; }
+    }
+    const listToExport = selectAnalyticsRows<any>('financialRecords', exportRows, { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) });
     if (listToExport.length === 0) {
       alert("No hay movimientos para exportar en esta cuenta.");
       return;
@@ -1085,12 +1171,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleAddRow = () => {
+    if (saveInFlightRef.current) return;
     const lastEntry = manualEntries[manualEntries.length - 1];
     const date = lastEntry ? lastEntry.date : getLocalDateString(new Date());
     const time = lastEntry ? lastEntry.time : new Date().toTimeString().slice(0, 5);
 
     setManualEntries([...manualEntries, {
-        tempId: Math.random().toString(36).substr(2, 9),
+        tempId: crypto.randomUUID(),
         date: date,
         time: time,
         amount: '',
@@ -1105,6 +1192,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleDuplicateRow = (tempId: string) => {
+    if (saveInFlightRef.current) return;
     const index = manualEntries.findIndex(e => e.tempId === tempId);
     if (index === -1) return;
     
@@ -1112,7 +1200,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     const newEntries = [...manualEntries];
     newEntries.splice(index + 1, 0, {
         ...entryToClone,
-        tempId: Math.random().toString(36).substr(2, 9),
+        tempId: crypto.randomUUID(),
     });
     
     setManualEntries(newEntries);
@@ -1121,24 +1209,30 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const initiateSettlement = (targetStoreId: string, targetStoreName: string, amount: number, sourceAccount: AccountType, history: FinancialRecord[]) => {
       const dates = [...new Set(history.map(h => getLocalDateString(h.date)))].sort().join(', ');
       setPaymentSummary({
+          operationId: crypto.randomUUID(),
+          date: new Date().toISOString(),
           targetStoreId,
           targetStoreName,
           amount,
           sourceAccount,
-          debtReferenceDates: dates,
+          debtReferenceDates: dates || 'saldo consolidado',
           history
       });
   };
 
   const handleConfirmSettlement = async () => {
-      if (!paymentSummary) return;
+      if (!paymentSummary || saveInFlightRef.current) return;
+      saveInFlightRef.current = true;
+      setIsSavingReconciliation(true);
+      setSaveStatus({ state: 'saving', message: 'Registrando pago entre sedes…' });
       const { targetStoreId, targetStoreName, amount, sourceAccount, debtReferenceDates } = paymentSummary;
       try {
+          if (!Number.isFinite(amount) || amount <= 0 || !scope.storeIds.has(targetStoreId) || targetStoreId === activeStoreId) throw new Error('Revisa el monto y las sedes del pago.');
           const batch = writeBatch(db);
           const activeStoreName = activeStore?.name || 'Local Actual';
-          const nowIso = new Date().toISOString();
-          const mainRef = doc(collection(db, 'financialRecords'));
-          const mirrorRef = doc(collection(db, 'financialRecords'));
+          const nowIso = paymentSummary.date;
+          const mainRef = draftRef('financialRecords', `${paymentSummary.operationId}_main`);
+          const mirrorRef = draftRef('financialRecords', `${paymentSummary.operationId}_mirror`);
           const mainRecord: FinancialRecord = { id: mainRef.id, date: nowIso, storeId: activeStoreId, accountType: sourceAccount, amount: -amount, type: 'expense', description: `Cruce ${targetStoreName}: Pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: currentUser.name, isConfirmed: true, debtStoreId: targetStoreId, affectsCashBalance: true };
           const mirrorRecord: FinancialRecord = { id: mirrorRef.id, date: nowIso, storeId: targetStoreId, accountType: sourceAccount, amount: amount, type: 'income_manual', description: `Cruce ${activeStoreName}: Recibo pago deuda ref. ${debtReferenceDates}`, subCategory: 'Cruce Sedes', registeredBy: `${currentUser.name} (vía ${activeStoreName})`, isConfirmed: true, debtStoreId: activeStoreId, relatedRecordId: mainRef.id, affectsCashBalance: true };
           mainRecord.relatedRecordId = mirrorRef.id;
@@ -1147,7 +1241,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           batch.set(mirrorRef, mirrorRecord);
 
           // Log history
-          const hMainRef = doc(collection(db, 'financialRecordsHistory'));
+          const hMainRef = draftRef('financialRecordsHistory', `${paymentSummary.operationId}_main_audit`);
           batch.set(hMainRef, {
               id: hMainRef.id,
               recordId: mainRef.id,
@@ -1159,7 +1253,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               accountType: sourceAccount
           });
 
-          const hMirrorRef = doc(collection(db, 'financialRecordsHistory'));
+          const hMirrorRef = draftRef('financialRecordsHistory', `${paymentSummary.operationId}_mirror_audit`);
           batch.set(hMirrorRef, {
               id: hMirrorRef.id,
               recordId: mirrorRef.id,
@@ -1173,7 +1267,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
           await batch.commit();
           setPaymentSummary(null);
-      } catch (error) { alert("Hubo un error al registrar el pago."); }
+          setSaveStatus({ state: 'saved', message: 'Pago confirmado en ambas sedes.' });
+      } catch (error) { setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el pago. Puedes reintentarlo con el mismo borrador.' }); }
+      finally { saveInFlightRef.current = false; setIsSavingReconciliation(false); }
   };
 
   const parseInputToNumber = (val: string) => val.replace(/[^0-9-]/g, '');
@@ -1186,7 +1282,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const handleUpdateEntryField = (tempId: string, field: keyof ManualEntry, value: any) => {
-    setManualEntries(manualEntries.map(e => {
+    if (saveInFlightRef.current) return;
+    setManualEntries(previous => previous.map(e => {
         if (e.tempId === tempId) {
             let finalValue = value;
             if (field === 'amount' || field === 'cruceAmount') finalValue = parseInputToNumber(value);
@@ -1199,7 +1296,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const adjustEntryDate = (tempId: string, days: number) => {
-      setManualEntries(manualEntries.map(e => {
+      setManualEntries(previous => previous.map(e => {
           if (e.tempId === tempId) {
               const d = new Date(e.date + 'T12:00:00');
               d.setDate(d.getDate() + days);
@@ -1209,6 +1306,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       }));
   };
 
+  const draftRef = (name: string, id: string) => doc(db, name, `fin_${encodeURIComponent(companyId)}_${encodeURIComponent(activeStoreId)}_${encodeURIComponent(id)}`);
   const handleSaveManualEntries = async () => {
     if (saveInFlightRef.current) return;
     if (manualEntries.length === 0) { alert("Agrega al menos un movimiento antes de procesar."); return; }
@@ -1219,8 +1317,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         else alert(`Falta ingresar la DESCRIPCIÓN para el movimiento de: ${formatCOP(parseFloat(incompleteEntry.amount))}`);
         return;
     }
+    const invalid = manualEntries.find(entry => !Number.isFinite(Number(entry.amount)) || (entry.cruceAmount && !Number.isFinite(Number(entry.cruceAmount))) || !entry.date || !entry.time ||
+      (entry.debtStoreId && (!scope.storeIds.has(entry.debtStoreId) || entry.debtStoreId === activeStoreId)) ||
+      (entry.debtStoreId && entry.physicalStoreId !== activeStoreId && entry.physicalStoreId !== entry.debtStoreId));
+    if (invalid) { alert('Revisa el monto, la fecha y las dos sedes del cruce.'); return; }
+    if (manualEntries.length > 60) { alert('Procesa máximo 60 filas por lote.'); return; }
     saveInFlightRef.current = true;
     setIsSavingReconciliation(true);
+    setSaveStatus({ state: 'saving', message: 'Guardando movimientos…' });
+    try {
     const batch = writeBatch(db);
     const activeStoreName = activeStore?.name || 'Local Actual';
     manualEntries.forEach(e => {
@@ -1233,7 +1338,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         // 1. Registro Local (si hay remanente)
         if (localAmountVal !== 0 || !e.debtStoreId) {
-            const localRef = doc(collection(db, 'financialRecords'));
+            const localRef = draftRef('financialRecords', `${e.tempId}_local`);
             const localRecord: FinancialRecord = { 
                 id: localRef.id, 
                 date: dateTime, 
@@ -1249,7 +1354,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             };
             batch.set(localRef, cleanObject(localRecord));
 
-            const historyRef = doc(collection(db, 'financialRecordsHistory'));
+            const historyRef = draftRef('financialRecordsHistory', `${e.tempId}_local_audit`);
             batch.set(historyRef, {
                 id: historyRef.id,
                 recordId: localRef.id,
@@ -1264,8 +1369,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         // 2. Registro de Cruce (si hay deuda)
         if (e.debtStoreId && cruceAmountVal !== 0) {
-            const mainRef = doc(collection(db, 'financialRecords'));
-            const mirrorRef = doc(collection(db, 'financialRecords'));
+            const mainRef = draftRef('financialRecords', `${e.tempId}_main`);
+            const mirrorRef = draftRef('financialRecords', `${e.tempId}_mirror`);
             
             const mainSubCategory = e.subCategory === 'Cruce Sedes' ? 'Cruce Sedes' : `Cruce ${targetStoreName}`;
             const affectsMainBalance = e.physicalStoreId === activeStoreId;
@@ -1291,7 +1396,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             };
             batch.set(mainRef, cleanObject(mainRecord));
 
-            const mainHistoryRef = doc(collection(db, 'financialRecordsHistory'));
+            const mainHistoryRef = draftRef('financialRecordsHistory', `${e.tempId}_main_audit`);
             batch.set(mainHistoryRef, {
                 id: mainHistoryRef.id,
                 recordId: mainRef.id,
@@ -1329,7 +1434,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             };
             batch.set(mirrorRef, cleanObject(mirrorRecord));
 
-            const mirrorHistoryRef = doc(collection(db, 'financialRecordsHistory'));
+            const mirrorHistoryRef = draftRef('financialRecordsHistory', `${e.tempId}_mirror_audit`);
             batch.set(mirrorHistoryRef, {
                 id: mirrorHistoryRef.id,
                 recordId: mirrorRef.id,
@@ -1342,23 +1447,24 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
             });
         }
     });
-    // Cerrar el formulario al iniciar el guardado evita la sensación de bloqueo
-    // y deja claro que el lote ya fue enviado. Firestore mantiene el batch atómico.
-    setShowAddModal(false);
-    try {
       await batch.commit();
+      setShowAddModal(false);
       setManualEntries([]);
+      setSaveStatus({ state: 'saved', message: 'Movimientos confirmados.' });
     } catch (error) {
       setShowAddModal(true);
       console.error('Error saving reconciliation entries:', error);
-      alert('No se pudo guardar el movimiento. No vuelvas a procesarlo hasta verificar el mensaje.');
+      setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el guardado. Conservamos el borrador para reintentarlo.' });
     } finally {
       saveInFlightRef.current = false;
       setIsSavingReconciliation(false);
     }
   };
 
+  const editingOriginalRef = useRef<FinancialRecord | null>(null);
   const handleOpenEdit = (record: FinancialRecord) => {
+      if (saveInFlightRef.current) return;
+      editingOriginalRef.current = record;
       const datePart = getLocalDateString(record.date);
       const timePart = record.date.includes('T') ? record.date.split('T')[1]?.slice(0, 5) : '12:00';
       setEditingRecord({
@@ -1374,13 +1480,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       if (!editingRecord || saveInFlightRef.current) return;
       saveInFlightRef.current = true;
       setIsSavingReconciliation(true);
+      setSaveStatus({ state: 'saving', message: 'Guardando el cambio…' });
+      try {
       const { amountString, timeString, dateString, ...recordToSave } = editingRecord;
       if ('saldo' in recordToSave) delete (recordToSave as any).saldo;
       const amountVal = parseFloat(amountString || '0');
       const dateTime = `${dateString || getLocalDateString(new Date())}T${timeString || '12:00'}:00`;
       recordToSave.date = dateTime; recordToSave.amount = amountVal;
 
-      const originalRecord = allRecords.find(r => r.id === recordToSave.id);
+      const originalRecord = editingOriginalRef.current;
       const batch = writeBatch(db);
       batch.set(doc(db, 'financialRecords', recordToSave.id), recordToSave, { merge: true });
 
@@ -1399,25 +1507,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           });
       }
 
-      // Reflejar el cambio de inmediato en pantalla. El listener de Firestore
-      // lo confirmará después sin obligar al usuario a esperar el recálculo completo.
-      const optimisticRecord = { ...recordToSave } as FinancialRecord;
-      setAllRecords(previous => previous.map(record =>
-          record.id === optimisticRecord.id ? { ...record, ...optimisticRecord } : record
-      ));
+      await batch.commit();
       setEditingRecord(null);
-
-      try {
-          await batch.commit();
+      setSaveStatus({ state: 'saved', message: 'Cambio confirmado.' });
       } catch (error) {
-          console.error('Error updating reconciliation record:', error);
-          // Revertir únicamente si Firestore realmente rechazó la escritura.
-          if (originalRecord) {
-              setAllRecords(previous => previous.map(record =>
-                  record.id === originalRecord.id ? originalRecord : record
-              ));
-          }
-          alert('No se pudo guardar el cambio. Inténtalo nuevamente.');
+          setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el cambio. El formulario conserva tus datos.' });
       } finally {
           saveInFlightRef.current = false;
           setIsSavingReconciliation(false);
@@ -1446,7 +1540,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   };
 
   const confirmDelete = async () => {
-      if (!recordToDelete || pendingDeletionIdsRef.current.has(recordToDelete.id)) return;
+      if (!recordToDelete || saveInFlightRef.current || pendingDeletionIdsRef.current.has(recordToDelete.id)) return;
+      saveInFlightRef.current = true;
+      setIsSavingReconciliation(true);
+      setSaveStatus({ state: 'saving', message: 'Eliminando el movimiento…' });
       const target = recordToDelete;
       pendingDeletionIdsRef.current.add(target.id);
       const startedAt = performance.now();
@@ -1455,7 +1552,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       deletionMetricsRef.current.set(target.id, { startedAt });
       console.info('[Conciliación][diagnóstico] Inicio eliminación', { loadedRecords, storeRecords, visibleRecords: filteredRecords.length });
       setRecordToDelete(null);
-      setAllRecords(previous => previous.filter(record => record.id !== target.id));
+
       requestAnimationFrame(() => requestAnimationFrame(() => {
           console.info('[Conciliación][diagnóstico] Interfaz actualizada', { id: target.id, elapsedMs: Math.round(performance.now() - startedAt), loadedRecords, storeRecords });
       }));
@@ -1477,14 +1574,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
           const commitAt = performance.now();
           const metric = deletionMetricsRef.current.get(target.id);
           if (metric) metric.commitAt = commitAt;
+          setSaveStatus({ state: 'saved', message: 'Eliminación confirmada.' });
           console.info('[Conciliación][diagnóstico] Firebase confirmó eliminación', { id: target.id, durationMs: Math.round(commitAt - startedAt), loadedRecords, storeRecords });
       } catch (error) {
           deletionMetricsRef.current.delete(target.id);
           console.error('[Conciliación][diagnóstico] Error al eliminar registro', { elapsedMs: Math.round(performance.now() - startedAt), error });
           setAllRecords(previous => previous.some(record => record.id === target.id) ? previous : [...previous, target]);
-          alert('No se pudo eliminar el registro. Se restauró en pantalla. Comprueba la conexión e inténtalo nuevamente.');
+          setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se pudo eliminar el movimiento.' });
       } finally {
           pendingDeletionIdsRef.current.delete(target.id);
+          saveInFlightRef.current = false;
+          setIsSavingReconciliation(false);
       }
   };
 
@@ -1492,7 +1592,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       const confirmMsg = log.action === 'delete' 
           ? `¿Estás seguro de que deseas restaurar este registro? Se volverá a registrar exactamente como estaba en el libro de caja.`
           : `¿Estás seguro de que deseas volver este registro a su versión anterior? Esto revertirá los cambios hechos por ${log.changedBy}.`;
-      if (!window.confirm(confirmMsg)) return;
+      if (!log.previousState) { alert("No hay estado anterior capturado para restaurar."); return; }
+      if (saveInFlightRef.current || !window.confirm(confirmMsg)) return;
+      saveInFlightRef.current = true;
+      setIsSavingReconciliation(true);
+      setSaveStatus({ state: 'saving', message: 'Restaurando movimiento…' });
 
       try {
           const recordId = log.recordId;
@@ -1519,17 +1623,18 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
               changedBy: currentUser.name,
               previousState: currentRecord || null,
               newState: recordToRestore,
+              relatedPreviousState: log.relatedPreviousState || null,
               storeId: log.storeId,
               accountType: log.accountType,
               description: `Restaurado a la versión modificada el ${new Date(log.timestamp).toLocaleString()}`
           });
 
           await batch.commit();
-          alert("Registro restaurado exitosamente.");
+          setSaveStatus({ state: 'saved', message: 'Restauración confirmada.' });
       } catch (error) {
           console.error("Error restoring record:", error);
-          alert("Hubo un error al restaurar el registro.");
-      }
+          setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se pudo restaurar el movimiento.' });
+      } finally { saveInFlightRef.current = false; setIsSavingReconciliation(false); }
   };
 
   const handleExportCategoryToAccounting = (name: string, value: number) => {
@@ -1561,6 +1666,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
   return (
     <div className="w-full space-y-4 sm:space-y-6 animate-fade-in px-2 sm:px-4 lg:px-8">
+        {(saveStatus.message || ledger.error) && <div role={saveStatus.state === 'error' ? 'alert' : 'status'} aria-live="polite" className={`sticky top-0 z-[10000] rounded-xl px-4 py-3 text-sm font-semibold shadow ${saveStatus.state === 'error' ? 'bg-red-50 text-red-700' : 'bg-white text-accent dark:bg-slate-900'}`}>
+          {saveStatus.message || ledger.error}
+        </div>}
+
         {/* Modal de Edición de Nombres de Cuentas */}
         {isEditingNames && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -3022,10 +3131,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Saldo Real Cuenta</p>
                                 <p className={`text-sm sm:text-xl font-black leading-none ${currentBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCOP(currentBalance)}</p>
                             </div>
-                            <button onClick={() => { handleAddRow(); setShowAddModal(true); }} className="p-2.5 sm:p-3 bg-accent text-white rounded-xl shadow-lg hover:scale-105 transition-all"><PlusCircleIcon className="w-5 h-5 sm:w-6 h-6" /></button>
+                            <button aria-label="Agregar movimiento" disabled={isSavingReconciliation} onClick={() => { if (!manualEntries.length) handleAddRow(); setShowAddModal(true); }} className="p-2.5 sm:p-3 bg-accent text-white rounded-xl shadow-lg hover:scale-105 transition-all"><PlusCircleIcon className="w-5 h-5 sm:w-6 h-6" /></button>
                         </div>
                     </div>
                     
+                    <div className="flex items-center justify-between gap-2 px-4 py-2 border-b dark:border-slate-800 text-xs">
+                        <span>{ledger.loading ? 'Cargando libro…' : ledger.reading ? 'Buscando movimientos…' : `${recordsWithBalance.length} movimientos${ledger.hasMore ? ' cargados' : ''}`} · Página {pageIndex + 1}</span>
+                        <div className="flex gap-2">
+                            <button type="button" disabled={pageIndex === 0} onClick={() => setLedgerPage(pageIndex - 1)} className="px-3 py-2 rounded-lg bg-accent/10 disabled:opacity-40">Anterior</button>
+                            <button type="button" disabled={pageIndex === maxLedgerPage && !ledger.hasMore || ledger.reading} onClick={async () => { if (pageIndex === maxLedgerPage && ledger.hasMore) await ledger.loadMore(); setLedgerPage(pageIndex + 1); }} className="px-3 py-2 rounded-lg bg-accent/10 disabled:opacity-40">Siguiente</button>
+                        </div>
+                    </div>
                     <div className="flex-grow overflow-x-auto">
                         <table className="w-full text-left border-collapse text-[10px] sm:text-xs">
                             <thead>
@@ -3048,7 +3164,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 </tr>
                             </thead>
                             <tbody className="divide-y dark:divide-gray-800">
-                                {(!ledgerStartDate || new Date(ledgerStartDate) <= new Date(records[records.length-1]?.date || Date.now())) && searchTerm === '' && financeTypeFilter === 'all' && (
+                                {!ledger.indexed && pageIndex === maxLedgerPage && (!ledgerStartDate || new Date(ledgerStartDate) <= new Date(records[records.length-1]?.date || Date.now())) && searchTerm === '' && financeTypeFilter === 'all' && (
                                     <tr className="bg-accent/5 font-black italic">
                                         <td className="p-3 sm:p-4 text-center text-gray-300">--</td>
                                         <td className="p-3 sm:p-4 text-gray-400">---</td>
@@ -3059,7 +3175,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                         <td className="p-3 sm:p-4"></td>
                                     </tr>
                                 )}
-                                {recordsWithBalance.map(record => {
+                                {displayedRecords.map(record => {
                                     const isSelected = selectedRecordIds.has(record.id);
                                     return (
                                         <tr 
@@ -3262,9 +3378,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         {showAddModal && (
             <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">
-                    <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
+                    <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
                     <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0"><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p><p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p></div><div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p><p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{activeTab.toUpperCase()}</p></div></div>
-                    <div className="flex-grow overflow-y-auto p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-900/50">
+                    <div className="flex-grow overflow-y-auto p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-900/50"><fieldset disabled={isSavingReconciliation} className="contents">
                         <div className="space-y-4">
                             <div className="hidden md:grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest"><div className="col-span-2">Fecha y Hora</div><div className="col-span-1">Cuenta</div><div className="col-span-2">Descripción</div><div className="col-span-2">Categoría</div><div className="col-span-1 text-right">Monto $</div><div className="col-span-3 text-center border-l border-gray-300 dark:border-gray-600">Conf. Cruzada</div><div className="col-span-1"></div></div>
                             {manualEntries.map((entry) => {
@@ -3355,8 +3471,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 )})}
                         </div>
                         <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
-                    </div>
-                    <div className="p-4 sm:p-6 bg-gray-5 dark:bg-gray-900 border-t dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"><div className="text-[8px] sm:text-[10px] font-bold text-gray-400 italic text-center sm:text-left max-w-sm hidden sm:block">💡 Tip: Usa la "Configuración Cruzada" para pagar facturas de otros locales sin descuadrar tu propio arqueo final.</div><div className="flex gap-2 w-full sm:w-auto"><button onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-6 py-3.5 text-gray-500 font-black uppercase text-[10px] sm:text-xs">Cancelar</button><button onClick={handleSaveManualEntries} disabled={isSavingReconciliation} className="flex-[2] sm:flex-none bg-accent text-white font-black py-3.5 px-8 sm:px-12 rounded-2xl shadow-xl hover:bg-accent-hover transition-all active:scale-95 uppercase text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'GUARDANDO...' : 'PROCESAR LOTE'}</button></div></div>
+                    </fieldset></div>
+                    <div className="p-4 sm:p-6 bg-gray-5 dark:bg-gray-900 border-t dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"><div className="text-[8px] sm:text-[10px] font-bold text-gray-400 italic text-center sm:text-left max-w-sm hidden sm:block">💡 Tip: Usa la "Configuración Cruzada" para pagar facturas de otros locales sin descuadrar tu propio arqueo final.</div><div className="flex gap-2 w-full sm:w-auto"><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-6 py-3.5 text-gray-500 font-black uppercase text-[10px] sm:text-xs">Cancelar</button><button onClick={handleSaveManualEntries} disabled={isSavingReconciliation} className="flex-[2] sm:flex-none bg-accent text-white font-black py-3.5 px-8 sm:px-12 rounded-2xl shadow-xl hover:bg-accent-hover transition-all active:scale-95 uppercase text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'GUARDANDO...' : 'PROCESAR LOTE'}</button></div></div>
                 </div>
             </div>
         )}
@@ -3365,7 +3481,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
              <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
                 <div className="bg-white dark:bg-secondary rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden border border-accent/20 animate-scale-up">
                     <div className="p-3.5 bg-accent text-white flex justify-between items-center"><h3 className="font-black uppercase tracking-widest text-xs sm:text-sm">Editar Movimiento</h3><button onClick={() => setEditingRecord(null)} className="hover:bg-white/20 p-1 rounded-full"><CrossIcon className="w-4 h-4" /></button></div>
-                    <form onSubmit={handleUpdateSingleRecord} className="p-4 sm:p-5 space-y-3">
+                    <form onSubmit={handleUpdateSingleRecord} className="p-4 sm:p-5 space-y-3"><fieldset disabled={isSavingReconciliation} className="contents">
                         <div className="grid grid-cols-2 gap-3">
                             <div className="col-span-1">
                                 <label className="text-[9px] font-black text-gray-400 uppercase mb-0.5 block">Fecha</label>
@@ -3399,7 +3515,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             <button type="button" onClick={() => setEditingRecord(null)} className="flex-1 p-2 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
                             <button type="submit" disabled={isSavingReconciliation} className="flex-1 bg-accent text-white font-black p-2 rounded-xl shadow-lg hover:bg-accent-hover transition-colors uppercase text-[10px] disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'Guardando...' : 'Guardar Cambios'}</button>
                         </div>
-                    </form>
+                    </fieldset></form>
                 </div>
              </div>
         )}
@@ -3451,8 +3567,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                          </div>
                          
                          <div className="flex gap-2 pt-4">
-                             <button onClick={() => setPaymentSummary(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs">Cancelar</button>
-                             <button onClick={handleConfirmSettlement} className="flex-1 bg-accent text-white font-bold p-3 rounded-xl shadow-lg uppercase text-xs">REGISTRAR PAGO</button>
+                             <button disabled={isSavingReconciliation} onClick={() => setPaymentSummary(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-xs">Cancelar</button>
+                             <button disabled={isSavingReconciliation} onClick={handleConfirmSettlement} className="flex-1 bg-accent text-white font-bold p-3 rounded-xl shadow-lg uppercase text-xs">{isSavingReconciliation ? 'GUARDANDO…' : 'REGISTRAR PAGO'}</button>
                          </div>
                      </div>
                  </div>
@@ -3484,7 +3600,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         <p className="text-[10px] text-gray-400 italic">Esta acción no se puede deshacer y afectará los saldos de conciliación.</p>
                         <div className="flex gap-2 pt-2">
                             <button onClick={() => setRecordToDelete(null)} className="flex-1 p-3 text-gray-500 font-bold uppercase text-[10px] hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Cancelar</button>
-                            <button onClick={confirmDelete} className="flex-1 bg-red-500 text-white font-black p-3 rounded-xl shadow-lg hover:bg-red-600 transition-colors uppercase text-[10px]">ELIMINAR AHORA</button>
+                            <button disabled={isSavingReconciliation} onClick={confirmDelete} className="flex-1 bg-red-500 text-white font-black p-3 rounded-xl shadow-lg hover:bg-red-600 transition-colors uppercase text-[10px]">ELIMINAR AHORA</button>
                         </div>
                     </div>
                 </div>
