@@ -1,5 +1,7 @@
 # Conciliación 1.1.159: validación en staging
 
+**Registro de la primera fase.** Después se activaron la identidad y las reglas verificadas de 1.1.160; véase `STAGING_IDENTITY.md`. El siguiente ajuste de paginación y resúmenes está preparado en `STAGING_LEDGER.md`, pendiente del despliegue autorizado. Las referencias al login y reglas anteriores en este documento describen el estado de esa primera prueba.
+
 Fecha: 16 de octubre de 2026. Proyecto de prueba: `vestika-staging`, Firestore Standard, base `(default)`, región `southamerica-east1`. Referencia anterior de staging: `ba19cf52959cb9307a1543516b41c85361afee37`.
 
 ## Disponible para probar en staging

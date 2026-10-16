@@ -13,9 +13,9 @@ const enabled = (import.meta as ImportMeta & { env?: Record<string, string> }).e
 
 // The indexed path is used only AFTER server-side verification/backfill. Until
 // then, the existing source of truth is kept, scoped to the active store.
-export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, accountType, month, showGlobal, search, rangeStart, rangeEnd, setRows }: {
+export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, accountType, month, showGlobal, showClosures = false, search, rangeStart, rangeEnd, setRows }: {
   companyId: string; storeId: string; storeIds: string[]; scopeKey: string; accountType: string; month: string; showGlobal: boolean;
-  search: string; rangeStart: string; rangeEnd: string; setRows: (value: FinancialRecord[]) => void;
+  showClosures?: boolean; search: string; rangeStart: string; rangeEnd: string; setRows: (value: FinancialRecord[]) => void;
 }) {
   const key = `${scopeKey}:${storeId}`;
   const accountKey = `${key}:${accountType}`;
@@ -24,11 +24,13 @@ export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, acc
   const [metadata, setMetadata] = useState<{ key: string; value: LedgerSummary | null }>({ key: '', value: null });
   const [monthly, setMonthly] = useState<{ key: string; rows: FinancialRecord[]; value: any }>({ key: '', rows: [], value: null });
   const [account, setAccount] = useState<{ key: string; rows: FinancialRecord[]; cursor?: any; more: boolean; newerTotal?: number }>({ key: '', rows: [], more: false });
-  const [peers, setPeers] = useState<{ key: string; rows: FinancialRecord[] }>({ key: '', rows: [] });
+  const [peers, setPeers] = useState<{ key: string; rows: FinancialRecord[]; pages: Record<string, { cursor?: any; more: boolean }> }>({ key: '', rows: [], pages: {} });
+  const [peerReading, setPeerReading] = useState<Record<string, boolean>>({});
   const [globalMetadata, setGlobalMetadata] = useState<{ key: string; values: Record<string, LedgerSummary | null> }>({ key: '', values: {} });
   const [legacyRows, setLegacyRows] = useState<FinancialRecord[]>([]);
   const [error, setError] = useState('');
   const [reading, setReading] = useState(false);
+  const [closureKey, setClosureKey] = useState('');
   const summary = metadata.key === key ? metadata.value : null;
   const indexed = !!summary?.ready && summary.schemaVersion === 1;
   const scope = useMemo(() => ({ companyId, storeIds: new Set(storeIds) }), [companyId, JSON.stringify(storeIds)]);
@@ -37,6 +39,11 @@ export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, acc
     try { assertTenantData('financialRecords', row, scope); return row.storeId === storeId; } catch { return false; }
   }) as FinancialRecord[], [scope, storeId]);
   const globals = globalMetadata.key === scopeKey && showGlobal ? globalMetadata.values : {};
+  useEffect(() => {
+    for (const [id, request] of peerRequest.current) peerRequest.current.set(id, request + 1);
+    setPeers({ key, rows: [], pages: {} });
+    setPeerReading({});
+  }, [key, indexed, summary?.revision]);
   const legacyStores = (showGlobal ? storeIds : [storeId]).filter(id => {
     if (!scope.storeIds.has(id)) return false;
     if (!enabled) return true;
@@ -59,16 +66,23 @@ export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, acc
     if (!indexed || !allowed) return;
     const monthKey = `${key}:${month}`;
     const base = `${rootPath(companyId, storeId)}/months/${month}`;
-    const stopRows = onSnapshot(query(collection(db, `${base}/entries`), orderBy('ledgerTime', 'desc')), snapshot => {
-      const rows = validate(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
-      setMonthly(previous => ({ key: monthKey, rows, value: previous.key === monthKey ? previous.value : null }));
-    }, () => setError('No se pudieron cargar los movimientos del mes.'));
     const stopSummary = onSnapshot(doc(db, base), snapshot => {
       const value = snapshot.exists() && snapshot.data().companyId === companyId && snapshot.data().storeId === storeId ? snapshot.data() : null;
       setMonthly(previous => ({ key: monthKey, rows: previous.key === monthKey ? previous.rows : [], value }));
     }, () => setError('No se pudo cargar el resumen del mes.'));
-    return () => { stopRows(); stopSummary(); };
+    return stopSummary;
   }, [key, month, indexed, allowed, validate]);
+
+  useEffect(() => {
+    setClosureKey('');
+    if (!indexed || !allowed || !showClosures) return;
+    const monthKey = `${key}:${month}`;
+    return onSnapshot(query(collection(db, `${rootPath(companyId, storeId)}/months/${month}/entries`), orderBy('ledgerTime', 'desc')), snapshot => {
+      const rows = validate(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
+      setMonthly(previous => ({ key: monthKey, rows, value: previous.key === monthKey ? previous.value : null }));
+      setClosureKey(monthKey);
+    }, () => setError('No se pudieron cargar los movimientos del mes.'));
+  }, [key, month, indexed, allowed, showClosures, validate]);
 
   useEffect(() => {
     if (!indexed || !allowed || search || rangeStart || rangeEnd) return;
@@ -116,14 +130,36 @@ export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, acc
     if (end !== undefined) filters.push(where('ledgerTime', '<=', end));
     return readAll(`${rootPath(companyId, storeId)}/accounts/${accountType}/entries`, filters, end);
   }, [key, accountType, readAll, rangeStart, rangeEnd]);
+  // Full history is reserved for explicit exports. Opening a crossing reads
+  // only one page, irrespective of the amount of accumulated history.
   const readPeer = useCallback(async (peerId: string) => {
     if (!indexed || !allowed || !scope.storeIds.has(peerId)) return [];
-    const request = (peerRequest.current.get(peerId) || 0) + 1; peerRequest.current.set(peerId, request);
     const { rows } = await readAll(`${rootPath(companyId, storeId)}/peers/${peerId}/entries`);
-    if (currentKey.current !== key || peerRequest.current.get(peerId) !== request) return rows;
-    setPeers(previous => ({ key, rows: [...(previous.key === key ? previous.rows.filter(r => r.debtStoreId !== peerId) : []), ...rows] }));
     return rows;
   }, [key, indexed, allowed, scope, readAll]);
+  const loadPeerPage = useCallback(async (peerId: string, append = false) => {
+    if (!indexed || !allowed || !scope.storeIds.has(peerId)) return;
+    const page = peers.key === key ? peers.pages[peerId] : undefined;
+    if (append && (!page?.more || !page.cursor)) return;
+    const request = (peerRequest.current.get(peerId) || 0) + 1; peerRequest.current.set(peerId, request);
+    const readingKey = `${key}:${peerId}`;
+    setPeerReading(previous => ({ ...previous, [readingKey]: true }));
+    try {
+      const base = collection(db, `${rootPath(companyId, storeId)}/peers/${peerId}/entries`);
+      const constraints: any[] = [orderBy('ledgerTime', 'desc')];
+      if (append) constraints.push(startAfter(page!.cursor));
+      constraints.push(limit(LEDGER_PAGE_SIZE));
+      const snapshot = await getDocs(query(base, ...constraints));
+      if (currentKey.current !== key || peerRequest.current.get(peerId) !== request) return;
+      const rows = validate(snapshot.docs.map(d => ({ ...d.data(), id: d.id }))).filter(row => row.debtStoreId === peerId);
+      setPeers(previous => ({ key,
+        rows: [...new Map([...(previous.key === key ? previous.rows.filter(row => append || row.debtStoreId !== peerId) : []), ...rows].map(row => [row.id, row])).values()],
+        pages: { ...(previous.key === key ? previous.pages : {}), [peerId]: { cursor: snapshot.docs.at(-1), more: snapshot.size === LEDGER_PAGE_SIZE } }
+      }));
+    } finally {
+      if (peerRequest.current.get(peerId) === request) setPeerReading(previous => ({ ...previous, [readingKey]: false }));
+    }
+  }, [key, indexed, allowed, scope, peers, validate]);
   const readAllPeers = useCallback(async () => {
     const ids = Object.keys(summary?.peers || {}).filter(id => scope.storeIds.has(id));
     const rows: FinancialRecord[] = [];
@@ -158,17 +194,19 @@ export function useFinancialLedger({ companyId, storeId, storeIds, scopeKey, acc
 
   const activeRows = useMemo(() => {
     if (!indexed) return [];
-    return [...(monthly.key === `${key}:${month}` ? monthly.rows : []), ...(account.key === accountKey ? account.rows : [])];
-  }, [indexed, monthly, account, peers, key, accountKey, month]);
+    return [...(showClosures && monthly.key === `${key}:${month}` ? monthly.rows : []), ...(account.key === accountKey ? account.rows : [])];
+  }, [indexed, monthly, account, key, accountKey, month, showClosures]);
   const legacyKey = JSON.stringify(legacyStores);
   useEffect(() => {
     const validLegacy = legacyRows.filter(row => legacyStores.includes(row.storeId));
     const merged = [...new Map([...validLegacy, ...activeRows].map(row => [row.id, row])).values()];
     setRows(merged);
   }, [legacyRows, legacyKey, activeRows, setRows]);
-  return { indexed, loading: enabled && allowed && metadata.key !== key, summary, globals, month: monthly.key === `${key}:${month}` ? monthly.value : null,
+  return { indexed, loading: enabled && allowed && metadata.key !== key, closuresLoading: indexed && showClosures && closureKey !== `${key}:${month}`, summary, globals, month: monthly.key === `${key}:${month}` ? monthly.value : null,
     accountNewerTotal: account.key === accountKey ? account.newerTotal || 0 : 0,
     peerRows: peers.key === key ? peers.rows : [],
     accountRows: account.key === accountKey ? account.rows : [], hasMore: indexed && account.key === accountKey && account.more,
-    reading, error, loadMore, readAccount, readPeer, readAllPeers };
+    peerHasMore: (peerId: string) => peers.key === key && !!peers.pages[peerId]?.more,
+    peerLoading: (peerId: string) => !!peerReading[`${key}:${peerId}`],
+    reading, error, loadMore, loadPeerPage, readAccount, readPeer, readAllPeers };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectFinancialRecord, ledgerRoot, ledgerDay, ledgerTime, emptyLedgerSummary, emptyLedgerMonth, applyLedgerDelta } from '../functions/src/financialProjection.mjs';
+import { projectFinancialRecord, invalidateFinancialProjection, ledgerRoot, ledgerDay, ledgerTime, emptyLedgerSummary, emptyLedgerMonth, applyLedgerDelta } from '../functions/src/financialProjection.mjs';
 function memoryDb() {
   const data = new Map(), versions = new Map(); let version = 0;
   const put = (path, value) => { data.set(path, structuredClone(value)); versions.set(path, ++version); };
@@ -52,4 +52,16 @@ test('100 stores and 50,000 historical rows keep totals isolated; delta cost is 
   }
   const own=summaries.get('store-50'),month=months.get('store-50');applyLedgerDelta(own,month,record('x',{storeId:'store-50',amount:0.1}),-1);
   assert.equal(own.accounts.cash,49.9);assert.equal(summaries.get('store-49').accounts.cash,50);
+});
+
+test('invalid data revokes a verified balance; correction clears diagnostics but requires reverification',async()=>{
+ const {db,data,put}=memoryDb();put('stores/metro',{companyId:'bombon'});
+ put('financialRecords/a',record('a'));await projectFinancialRecord(db,'a');
+ const root=ledgerRoot('bombon','metro');put(root,{...data.get(root),ready:true});
+ put('financialRecords/a',record('a',{companyId:'foreign'}));
+ await assert.rejects(projectFinancialRecord(db,'a'),/company mismatch/);
+ await invalidateFinancialProjection(db,'a','Financial source company mismatch');
+ assert.equal(data.get(root).ready,false);assert.equal(data.has(ledgerRoot('foreign','metro')),false);assert.equal(data.has('financialLedgerErrors/a'),true);
+ put('financialRecords/a',record('a',{amount:-250}));await projectFinancialRecord(db,'a');
+ assert.equal(data.get(root).accounts.cash,-250);assert.equal(data.get(root).ready,false);assert.equal(data.has('financialLedgerErrors/a'),false);
 });

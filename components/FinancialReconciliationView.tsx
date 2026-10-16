@@ -140,7 +140,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useViewFilter('FinancialReconciliationView:selectedMonth', now.getMonth());
   const [selectedYear, setSelectedYear] = useViewFilter('FinancialReconciliationView:selectedYear', now.getFullYear());
-  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(true);
+  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(false);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
   const [showBothClosures, setShowBothClosures] = useState(false);
   const [showGlobalSummary, setShowGlobalSummary] = useState(false);
@@ -205,7 +205,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
   const ledger = useFinancialLedger({ companyId, storeId: activeStoreId, storeIds: stores.map(store => store.id), scopeKey: `${currentUser.id}:${companyId}`,
-    accountType: activeTab, month: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`, showGlobal: showGlobalSummary,
+    accountType: activeTab, month: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`, showGlobal: showGlobalSummary, showClosures: isSystemLoadsOpen,
     search: searchTerm, rangeStart: ledgerStartDate, rangeEnd: ledgerEndDate, setRows: setAllRecords });
   useCompanyCollection('financialRecordsHistory', [activeStoreId].filter(id => scope.storeIds.has(id)), `${currentUser.id}:${companyId}`, showHistoryModal, setHistoryLogs, stores.map(store => store.id));
 
@@ -975,12 +975,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [filteredRecords, records, activeTab, initialBalanceValue, ledger.indexed, ledger.accountRows, ledger.accountNewerTotal, currentBalance]);
 
   const [ledgerPage, setLedgerPage] = useState(0);
-  useEffect(() => { setLedgerPage(0); }, [activeStoreId, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter, ledger.indexed, ledger.accountRows]);
+  useEffect(() => { setLedgerPage(0); }, [activeStoreId, activeTab, searchTerm, ledgerStartDate, ledgerEndDate, financeTypeFilter, ledger.indexed]);
   const maxLedgerPage = Math.max(0, Math.ceil(recordsWithBalance.length / LEDGER_PAGE_SIZE) - 1);
   const pageIndex = Math.min(ledgerPage, maxLedgerPage);
   const displayedRecords = recordsWithBalance.slice(pageIndex * LEDGER_PAGE_SIZE, (pageIndex + 1) * LEDGER_PAGE_SIZE);
   useEffect(() => {
-    if (ledger.indexed && expandedDebtStoreId) ledger.readPeer(expandedDebtStoreId).catch(() => setSaveStatus({ state: 'error', message: 'No se pudo cargar el historial del cruce.' }));
+    if (ledger.indexed && expandedDebtStoreId) ledger.loadPeerPage(expandedDebtStoreId).catch(() => setSaveStatus({ state: 'error', message: 'No se pudo cargar el historial del cruce.' }));
   }, [activeStoreId, expandedDebtStoreId, ledger.indexed, ledger.summary?.revision]);
 
   // Estadísticas estilo Excel para movimientos seleccionados
@@ -1941,7 +1941,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                             <div className="relative flex-1 min-w-[180px]">
                                 <input
                                     type="text"
-                                    placeholder="Buscar en descripción, categoría o usuario..."
+                                    placeholder={ledger.indexed ? 'Buscar en los movimientos cargados...' : 'Buscar en descripción, categoría o usuario...'}
                                     value={interStoreSearchQuery}
                                     onChange={(e) => setInterStoreSearchQuery(e.target.value)}
                                     className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-1.5 pl-8 pr-3 text-xs font-bold outline-none focus:border-accent"
@@ -1979,7 +1979,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     );
                                     return { ...b, history: matchesHistory };
                                 })
-                                .filter(b => b.history.length > 0 || (showSettledBalances && interStoreSearchQuery === ''));
+                                .filter(b => b.history.length > 0 || ((ledger.indexed || showSettledBalances) && interStoreSearchQuery === ''));
 
                             if (filteredList.length === 0) {
                                 return (
@@ -2128,6 +2128,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             </tbody>
                                         </table>
                                     </div>
+                                    {ledger.indexed && (!item.history.length || ledger.peerHasMore(item.storeId)) && (
+                                        <button type="button" disabled={ledger.peerLoading(item.storeId)} onClick={() => ledger.loadPeerPage(item.storeId, item.history.length > 0).catch(() => setSaveStatus({ state: 'error', message: 'No se pudo cargar el historial del cruce.' }))} className="m-3 px-3 py-2 rounded-lg bg-accent/10 text-xs font-bold disabled:opacity-40">
+                                            {ledger.peerLoading(item.storeId) ? 'Cargando movimientos…' : item.history.length ? 'Cargar más movimientos' : 'Ver movimientos'}
+                                        </button>
+                                    )}
                                 </div>
                             ));
                         })()}
@@ -2504,6 +2509,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                     </div>
                                                 )
                                             })}
+                                            {ledger.indexed && ledger.peerHasMore(item.storeId) && <button type="button" disabled={ledger.peerLoading(item.storeId)} onClick={() => ledger.loadPeerPage(item.storeId, true).catch(() => setSaveStatus({ state: 'error', message: 'No se pudo cargar el historial del cruce.' }))} className="px-3 py-2 rounded-lg bg-accent/10 text-xs font-bold disabled:opacity-40">{ledger.peerLoading(item.storeId) ? 'Cargando movimientos…' : 'Cargar más movimientos'}</button>}
                                         </div>
                                     )}
                                 </div>
@@ -2628,7 +2634,12 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
-            {isSystemLoadsOpen && (
+            {isSystemLoadsOpen && (ledger.closuresLoading ? (
+                <div role="status" className="lg:col-span-4 p-5 rounded-2xl bg-white dark:bg-secondary">
+                    <p>Cargando cierres del mes…</p>
+                    <button type="button" onClick={() => setIsSystemLoadsOpen(false)} className="mt-3 text-accent">Ocultar cierres</button>
+                </div>
+            ) : (
                 <div className="lg:col-span-4 space-y-4 animate-fade-in">
                     <div className="bg-white dark:bg-secondary p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col h-full lg:max-h-[800px]">
                         <div className="mb-4 flex flex-col gap-3">
@@ -3060,7 +3071,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         </div>
                 </div>
             </div>
-            )}
+            ))}
 
             <div className={`${isSystemLoadsOpen ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-4 transition-all duration-300`}>
                 <div className="sticky top-[120px] md:top-[120px] z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm -mx-1 px-1 py-2">
@@ -3139,7 +3150,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                         <span>{ledger.loading ? 'Cargando libro…' : ledger.reading ? 'Buscando movimientos…' : `${recordsWithBalance.length} movimientos${ledger.hasMore ? ' cargados' : ''}`} · Página {pageIndex + 1}</span>
                         <div className="flex gap-2">
                             <button type="button" disabled={pageIndex === 0} onClick={() => setLedgerPage(pageIndex - 1)} className="px-3 py-2 rounded-lg bg-accent/10 disabled:opacity-40">Anterior</button>
-                            <button type="button" disabled={pageIndex === maxLedgerPage && !ledger.hasMore || ledger.reading} onClick={async () => { if (pageIndex === maxLedgerPage && ledger.hasMore) await ledger.loadMore(); setLedgerPage(pageIndex + 1); }} className="px-3 py-2 rounded-lg bg-accent/10 disabled:opacity-40">Siguiente</button>
+                            <button type="button" disabled={pageIndex === maxLedgerPage && !ledger.hasMore || ledger.reading} onClick={async () => { try { if (pageIndex === maxLedgerPage && ledger.hasMore) await ledger.loadMore(); setLedgerPage(pageIndex + 1); } catch { setSaveStatus({ state: 'error', message: 'No se pudo cargar la siguiente página. Intenta nuevamente.' }); } }} className="px-3 py-2 rounded-lg bg-accent/10 disabled:opacity-40">Siguiente</button>
                         </div>
                     </div>
                     <div className="flex-grow overflow-x-auto">

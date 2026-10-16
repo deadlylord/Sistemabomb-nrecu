@@ -16,6 +16,7 @@ export function stagingRest(getAccessToken) {
   }
   return {
     request,
+    decodeDocument: document,
     async list(collection) {
       const result = []; let pageToken;
       do {

@@ -2,7 +2,7 @@
 export const LEDGER_SCHEMA = 1;
 export const ledgerRoot = (companyId, storeId) => `financialLedgerCompanies/${companyId}/stores/${storeId}`;
 export function ledgerDay(date) {
-  if (!date || !Number.isFinite(new Date(date).getTime())) throw new Error('Invalid financial date');
+  if (typeof date !== 'string' || !date || !Number.isFinite(new Date(date).getTime())) throw new Error('Invalid financial date');
   if (/^\d{4}-\d\d-\d\d(?:T\d\d:\d\d(?::\d\d(?:\.\d+)?)?)?$/.test(date)) return date.slice(0, 10);
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(date));
   const part = key => parts.find(p => p.type === key).value;
@@ -60,12 +60,16 @@ export async function projectFinancialRecord(db, id) {
     const before = state.exists ? state.data().record : null;
     let after = source.exists ? { ...source.data(), id } : null;
     if (after) {
+      const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && !value.includes('/');
+      if (!validId(after.storeId)) throw new Error('Financial source store invalid');
       const store = await tx.get(db.doc(`stores/${after.storeId}`));
       if (!store.exists) throw new Error('Financial source store missing');
       const companyId = store.data().companyId || 'default_company';
+      if (!validId(companyId)) throw new Error('Financial source company invalid');
       if (after.companyId && after.companyId !== companyId) throw new Error('Financial source company mismatch');
       after.companyId = companyId;
       if (after.debtStoreId) {
+        if (!validId(after.debtStoreId)) throw new Error('Financial peer store invalid');
         const peer = await tx.get(db.doc(`stores/${after.debtStoreId}`));
         if (!peer.exists || (peer.data().companyId || 'default_company') !== companyId || after.debtStoreId === after.storeId) throw new Error('Financial peer company mismatch');
       }
@@ -90,5 +94,27 @@ export async function projectFinancialRecord(db, id) {
     for (const path of projectionLocations(before)) if (!afterPaths.has(path)) tx.delete(db.doc(path));
     if (after) for (const path of afterPaths) tx.set(db.doc(path), { ...after, ledgerTime: ledgerTime(after.date), balanceAmount: after.affectsCashBalance === false ? 0 : after.amount });
     tx.set(stateRef, { sourceVersion, record: after });
+    tx.delete(db.doc(`financialLedgerErrors/${id}`));
+  });
+}
+
+// A permanently invalid source must never leave a previously verified balance
+// advertised as current. Resolve affected roots through trusted store/state
+// documents, rather than trusting a client's companyId.
+export async function invalidateFinancialProjection(db, id, reason) {
+  await db.runTransaction(async tx => {
+    const [source, state] = await Promise.all([tx.get(db.doc(`financialRecords/${id}`)), tx.get(db.doc(`financialLedgerState/${id}`))]);
+    const roots = new Set();
+    const before = state.exists ? state.data().record : null;
+    if (before) roots.add(ledgerRoot(before.companyId, before.storeId));
+    const storeId = source.exists ? source.data().storeId : null;
+    if (typeof storeId === 'string' && storeId && !storeId.includes('/')) {
+      const store = await tx.get(db.doc(`stores/${storeId}`));
+      if (store.exists) roots.add(ledgerRoot(store.data().companyId || 'default_company', storeId));
+    }
+    const summaries = [];
+    for (const path of roots) summaries.push([path, await tx.get(db.doc(path))]);
+    for (const [path, snapshot] of summaries) if (snapshot.exists) tx.set(db.doc(path), { ...snapshot.data(), ready: false, invalidatedAt: new Date().toISOString() });
+    tx.set(db.doc(`financialLedgerErrors/${id}`), { reason, at: new Date().toISOString() });
   });
 }
