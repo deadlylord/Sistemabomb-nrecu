@@ -1,6 +1,6 @@
 # Identidad verificada de staging: 1.1.160
 
-Proyecto autorizado para esta prueba: **vestika-staging**, Firestore Standard, región `southamerica-east1`. Producción `factura2-6e811` no se cambia. La versión 1.1.160 activa el login verificado mediante `VITE_VERIFIED_IDENTITY=true` únicamente en el contexto de staging. La proyección de conciliación conserva su bandera apagada.
+Proyecto autorizado para esta prueba: **vestika-staging**, Firestore Standard, región `southamerica-east1`. Producción `factura2-6e811` no se cambia. La versión 1.1.160 activa el login verificado mediante `VITE_VERIFIED_IDENTITY=true` únicamente en el contexto de staging. La fase 1.1.161 activa la proyección de conciliación tras comprobar el servidor y los resúmenes; véase `STAGING_LEDGER.md`.
 
 ## Preparado
 

@@ -17,12 +17,12 @@
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
 
-# Keep the verified projection off until server identity and rules are ready.
+# Staging uses only summaries verified against their current source records.
 [context.staging.environment]
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
-  VITE_FINANCIAL_LEDGER_INDEXED = "false"
+  VITE_FINANCIAL_LEDGER_INDEXED = "true"
 
 # Keep HTML and service worker fresh after each staging deploy.
 [[headers]]
