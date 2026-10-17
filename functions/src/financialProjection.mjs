@@ -54,47 +54,73 @@ export function projectionLocations(record) {
 // Read the current source INSIDE the transaction, rather than trusting trigger
 // ordering. Duplicate or out-of-order events converge to the current document.
 export async function projectFinancialRecord(db, id) {
-  const sourceRef = db.doc(`financialRecords/${id}`), stateRef = db.doc(`financialLedgerState/${id}`);
+  return projectFinancialRecords(db, [id]);
+}
+
+// A backfill shares one summary update across at most 50 sources. This bounds
+// transaction size/contention without freezing the collection or rewriting it.
+export async function projectFinancialRecords(db, ids) {
+  if (!Array.isArray(ids) || !ids.length || ids.length > 50 || new Set(ids).size !== ids.length ||
+      ids.some(id => typeof id !== 'string' || !id || id.includes('/'))) throw new Error('Invalid financial projection batch');
   return db.runTransaction(async tx => {
-    const [source, state] = await Promise.all([tx.get(sourceRef), tx.get(stateRef)]);
-    const before = state.exists ? state.data().record : null;
-    let after = source.exists ? { ...source.data(), id } : null;
-    if (after) {
-      const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && !value.includes('/');
-      if (!validId(after.storeId)) throw new Error('Financial source store invalid');
-      const store = await tx.get(db.doc(`stores/${after.storeId}`));
-      if (!store.exists) throw new Error('Financial source store missing');
-      const companyId = store.data().companyId || 'default_company';
-      if (!validId(companyId)) throw new Error('Financial source company invalid');
-      if (after.companyId && after.companyId !== companyId) throw new Error('Financial source company mismatch');
-      after.companyId = companyId;
-      if (after.debtStoreId) {
-        if (!validId(after.debtStoreId)) throw new Error('Financial peer store invalid');
-        const peer = await tx.get(db.doc(`stores/${after.debtStoreId}`));
-        if (!peer.exists || (peer.data().companyId || 'default_company') !== companyId || after.debtStoreId === after.storeId) throw new Error('Financial peer company mismatch');
+    const cache = new Map();
+    const read = path => {
+      if (!cache.has(path)) cache.set(path, tx.get(db.doc(path)));
+      return cache.get(path);
+    };
+    const snapshots = await Promise.all(ids.map(async id => {
+      const [source, state] = await Promise.all([read(`financialRecords/${id}`), read(`financialLedgerState/${id}`)]);
+      return { id, source, state };
+    }));
+    const changes = await Promise.all(snapshots.map(async ({ id, source, state }) => {
+      const before = state.exists ? state.data().record : null;
+      let after = source.exists ? { ...source.data(), id } : null;
+      if (after) {
+        const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 128 && !value.includes('/');
+        if (!validId(after.storeId)) throw new Error('Financial source store invalid');
+        const store = await read(`stores/${after.storeId}`);
+        if (!store.exists) throw new Error('Financial source store missing');
+        const companyId = store.data().companyId || 'default_company';
+        if (!validId(companyId)) throw new Error('Financial source company invalid');
+        if (after.companyId && after.companyId !== companyId) throw new Error('Financial source company mismatch');
+        after.companyId = companyId;
+        if (after.debtStoreId) {
+          if (!validId(after.debtStoreId)) throw new Error('Financial peer store invalid');
+          const peer = await read(`stores/${after.debtStoreId}`);
+          if (!peer.exists || (peer.data().companyId || 'default_company') !== companyId || after.debtStoreId === after.storeId) throw new Error('Financial peer company mismatch');
+        }
+        ledgerDay(after.date);
       }
-      ledgerDay(after.date);
-    }
-    const sourceVersion = source.exists ? `${source.updateTime.seconds}:${source.updateTime.nanoseconds}` : null;
-    if (state.exists && state.data().sourceVersion === sourceVersion) return;
-    const summaryPaths = [...new Set([before, after].filter(Boolean).map(r => ledgerRoot(r.companyId, r.storeId)))];
-    const monthPaths = [...new Set([before, after].filter(Boolean).map(r => `${ledgerRoot(r.companyId, r.storeId)}/months/${ledgerDay(r.date).slice(0, 7)}`))];
-    const values = new Map();
-    for (const path of [...summaryPaths, ...monthPaths]) {
-      const snap = await tx.get(db.doc(path));
-      const owner = [before, after].find(r => r && (path === ledgerRoot(r.companyId, r.storeId) || path.startsWith(`${ledgerRoot(r.companyId, r.storeId)}/`)));
-      values.set(path, snap.exists ? snap.data() : summaryPaths.includes(path) ? emptyLedgerSummary(owner.companyId, owner.storeId) : emptyLedgerMonth(owner.companyId, owner.storeId));
-    }
-    for (const [record, sign] of [[before, -1], [after, 1]]) if (record) {
+      const sourceVersion = source.exists ? `${source.updateTime.seconds}:${source.updateTime.nanoseconds}` : null;
+      return state.exists && state.data().sourceVersion === sourceVersion ? null : { id, before, after, sourceVersion };
+    }));
+    const pending = changes.filter(Boolean);
+    if (!pending.length) return;
+    const records = pending.flatMap(change => [change.before, change.after]).filter(Boolean);
+    const summaryPaths = new Set(records.map(record => ledgerRoot(record.companyId, record.storeId)));
+    const monthPaths = new Set(records.map(record => `${ledgerRoot(record.companyId, record.storeId)}/months/${ledgerDay(record.date).slice(0, 7)}`));
+    // Fifty arbitrary cross-store moves could exceed the 500-write limit.
+    const paths = [...new Set([...summaryPaths, ...monthPaths])];
+    const writeBudget = paths.length + pending.reduce((count, change) => count + 2 +
+      new Set([...projectionLocations(change.before), ...projectionLocations(change.after)]).size, 0);
+    if (writeBudget > 450) throw new Error('Financial projection batch exceeds write budget');
+    const values = new Map(await Promise.all(paths.map(async path => {
+      const snapshot = await read(path);
+      const owner = records.find(record => path === ledgerRoot(record.companyId, record.storeId) || path.startsWith(`${ledgerRoot(record.companyId, record.storeId)}/`));
+      return [path, snapshot.exists ? snapshot.data() : summaryPaths.has(path) ? emptyLedgerSummary(owner.companyId, owner.storeId) : emptyLedgerMonth(owner.companyId, owner.storeId)];
+    })));
+    for (const change of pending) for (const [record, sign] of [[change.before, -1], [change.after, 1]]) if (record) {
       const root = ledgerRoot(record.companyId, record.storeId);
       applyLedgerDelta(values.get(root), values.get(`${root}/months/${ledgerDay(record.date).slice(0, 7)}`), record, sign);
     }
     for (const [path, value] of values) tx.set(db.doc(path), { ...value, revision: (value.revision || 0) + 1 });
-    const afterPaths = new Set(projectionLocations(after));
-    for (const path of projectionLocations(before)) if (!afterPaths.has(path)) tx.delete(db.doc(path));
-    if (after) for (const path of afterPaths) tx.set(db.doc(path), { ...after, ledgerTime: ledgerTime(after.date), balanceAmount: after.affectsCashBalance === false ? 0 : after.amount });
-    tx.set(stateRef, { sourceVersion, record: after });
-    tx.delete(db.doc(`financialLedgerErrors/${id}`));
+    for (const { id, before, after, sourceVersion } of pending) {
+      const afterPaths = new Set(projectionLocations(after));
+      for (const path of projectionLocations(before)) if (!afterPaths.has(path)) tx.delete(db.doc(path));
+      if (after) for (const path of afterPaths) tx.set(db.doc(path), { ...after, ledgerTime: ledgerTime(after.date), balanceAmount: after.affectsCashBalance === false ? 0 : after.amount });
+      tx.set(db.doc(`financialLedgerState/${id}`), { sourceVersion, record: after });
+      tx.delete(db.doc(`financialLedgerErrors/${id}`));
+    }
   });
 }
 

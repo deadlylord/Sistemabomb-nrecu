@@ -1,0 +1,24 @@
+{
+  "score": 1,
+  "summary": "Revisión de la propuesta compatible, todavía sin desplegar. Los espacios derivados quedan de escritura exclusiva del servidor y los estados son privados. Se conserva la política histórica de los documentos de negocio; esta política permite identidades anónimas y no puede considerarse aislamiento seguro por empresa. No se presenta esta entrega como migración de identidad ni como reparación de esa limitación previa.",
+  "findings": [
+    {
+      "check": "Authority Source",
+      "severity": "critical",
+      "issue": "Limitación histórica conservada: una identidad anónima no demuestra empresa, sede ni rol. La política compatible no impone aislamiento de lectura por empresa a esos clientes y los documentos de identidad históricos siguen siendo modificables bajo la política existente.",
+      "recommendation": "Completar por separado la migración de identidad verificada, su autoridad de roles/empresa y la prohibición de escrituras directas de identidad. No afirmar que la compatibilidad anónima proporciona esa protección."
+    },
+    {
+      "check": "The Update Bypass",
+      "severity": "minor",
+      "issue": "Verificación aprobada en emulador: create, update y delete sobre derivados están denegados y el permiso global excluye expresamente esos espacios. Un lote mixto no permite modificar el resumen ni confirmar parcialmente la fuente.",
+      "recommendation": "Conservar las exclusiones y las pruebas de integración en cualquier cambio posterior."
+    },
+    {
+      "check": "Business Logic vs. Rules",
+      "severity": "minor",
+      "issue": "La propuesta solo puede generarse automáticamente si la política real coincide con la forma histórica conocida. Cualquier otra regla requiere revisión para no perder restricciones existentes.",
+      "recommendation": "Leer, comparar y respaldar la regla desplegada antes de publicar. La validación administrativa permanece pendiente de reconexión."
+    }
+  ]
+}

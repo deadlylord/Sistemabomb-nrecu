@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectFinancialRecord, invalidateFinancialProjection, ledgerRoot, ledgerDay, ledgerTime, emptyLedgerSummary, emptyLedgerMonth, applyLedgerDelta } from '../functions/src/financialProjection.mjs';
+import { projectFinancialRecord, projectFinancialRecords, invalidateFinancialProjection, ledgerRoot, ledgerDay, ledgerTime, emptyLedgerSummary, emptyLedgerMonth, applyLedgerDelta } from '../functions/src/financialProjection.mjs';
 function memoryDb() {
   const data = new Map(), versions = new Map(); let version = 0;
   const put = (path, value) => { data.set(path, structuredClone(value)); versions.set(path, ++version); };
@@ -64,4 +64,24 @@ test('invalid data revokes a verified balance; correction clears diagnostics but
  assert.equal(data.get(root).ready,false);assert.equal(data.has(ledgerRoot('foreign','metro')),false);assert.equal(data.has('financialLedgerErrors/a'),true);
  put('financialRecords/a',record('a',{amount:-250}));await projectFinancialRecord(db,'a');
  assert.equal(data.get(root).accounts.cash,-250);assert.equal(data.get(root).ready,false);assert.equal(data.has('financialLedgerErrors/a'),false);
+});
+
+
+test('online backfill groups 50 rows into one summary revision and retries without duplicating sources',async()=>{
+ const {db,data,put}=memoryDb();put('stores/metro',{companyId:'bombon'});put('stores/divino',{companyId:'bombon'});
+ const ids=Array.from({length:50},(_,i)=>String(i));for(const id of ids)put('financialRecords/'+id,record(id,{amount:10,debtStoreId:'divino'}));
+ const originals=new Map([...data].filter(([path])=>path.startsWith('financialRecords/')).map(([path,value])=>[path,structuredClone(value)]));
+ await projectFinancialRecords(db,ids);const root=ledgerRoot('bombon','metro');
+ assert.equal(data.get(root).revision,1);assert.equal(data.get(root).count,50);assert.equal(data.get(root).accounts.cash,500);
+ await projectFinancialRecords(db,ids);assert.equal(data.get(root).revision,1);
+ put('financialRecords/0',record('0',{amount:30,debtStoreId:'divino'}));data.delete('financialRecords/1');
+ await projectFinancialRecords(db,ids);assert.equal(data.get(root).count,49);assert.equal(data.get(root).accounts.cash,510);
+ for(const[path,value]of originals)if(!['financialRecords/0','financialRecords/1'].includes(path))assert.deepEqual(data.get(path),value);
+});
+test('invalid or oversized backfill batches fail atomically',async()=>{
+ const {db,data,put}=memoryDb();put('stores/metro',{companyId:'bombon'});
+ put('financialRecords/good',record('good'));put('financialRecords/bad',record('bad',{companyId:'foreign'}));
+ await assert.rejects(projectFinancialRecords(db,['good','bad']),/company mismatch/);
+ assert.equal([...data.keys()].some(path=>path.startsWith('financialLedger')),false);
+ for(const ids of [[],['good','good'],Array.from({length:51},(_,i)=>String(i)),['invalid/id']])await assert.rejects(projectFinancialRecords(db,ids),/Invalid financial projection batch/);
 });
