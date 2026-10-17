@@ -23,8 +23,8 @@
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
-  # Enable only after deploying the processors/rules/indexes and verifying stores.
-  VITE_BUSINESS_SUMMARIES = "false"
+  # Rules, indexes, processors and store histories verified in vestika-staging.
+  VITE_BUSINESS_SUMMARIES = "true"
 
 # Keep HTML and service worker fresh after each staging deploy.
 [[headers]]

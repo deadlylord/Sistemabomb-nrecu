@@ -159,6 +159,9 @@ test("admin overview subscribes to no raw inventory/sales/purchases/history, ope
     const overview = () =>
       renderer.root.findByProps({ screen: "BusinessOverview" });
     assert.equal(overview().props.store.id, "a1");
+    await act(async () => renderer.root.findByType(m.Header).props.onToggleGlobalMode());
+    assert.equal(live().some(c=>rawNames.includes(c.q.name)),false,'global search does not load inventories on the overview');
+    await act(async () => renderer.root.findByType(m.Header).props.onToggleGlobalMode());
     await act(async () => overview().props.onOpenDetails());
     assert.equal(
       renderer.root.findAllByProps({ screen: "BusinessOverview" }).length,

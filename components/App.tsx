@@ -536,7 +536,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
   const needsInventory = !isSummaryDashboard && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
   const inventoryStoreKey = businessSummariesEnabled
-    ? JSON.stringify(isGlobalMode || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
+    ? JSON.stringify(isGlobalMode && needsInventory || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
     : companyStoreKey;
   useEffect(() => {
     if (!isOperationalView || !isAdmin || !currentUser || !isAuthReady) return;
