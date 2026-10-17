@@ -1,5 +1,5 @@
 import { auth, db } from '../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, addDoc, collection } from 'firebase/firestore';
 import { verifiedIdentityEnabled } from './identityConfig';
 import type { Seller, Store, Role, Company } from '../types';
 
@@ -25,6 +25,9 @@ export async function loginVerified(identifier: string, password: string) {
 }
 export const manageVerifiedUser = (data: Record<string, unknown>) => call('vestikaStagingUsers', data);
 export const manageVerifiedRole = (data: Record<string, unknown>) => call('vestikaStagingRoles', data);
+export function recordVerifiedLogin(user: Seller) {
+  addDoc(collection(db, 'loginHistory'), { sellerId:user.id, sellerName:user.name, companyId:user.companyId, storeId:user.storeId, date:new Date().toISOString() }).catch(() => console.warn('No se pudo registrar el historial de ingreso.'));
+}
 export async function logoutVerified(expectedSellerId?: string) {
   const sdk = await import('firebase/auth');
   const signed = auth.currentUser;

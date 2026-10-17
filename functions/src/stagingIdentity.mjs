@@ -27,6 +27,7 @@ export const vestikaStagingLogin = onCall(options, protect(async request => {
   const db = getFirestore();
   const result = await authenticateIdentity(request.data, {
     enabled: true,
+    includeContext: true,
     read: async (collection, id) => { const s = await db.collection(collection).doc(id).get(); return s.exists ? s.data() : null; },
     createCustomToken: (uid, claims) => getAuth().createCustomToken(uid, claims),
     consumeAttempt: async identifier => {
@@ -40,8 +41,7 @@ export const vestikaStagingLogin = onCall(options, protect(async request => {
       });
     }
   });
-  const [store, role, company] = await Promise.all(['stores/' + result.user.storeId, 'roles/' + result.user.roleId, 'companies/' + result.user.companyId].map(path => db.doc(path).get()));
-  return { ...result, store: { ...store.data(), id: store.id }, role: { ...role.data(), id: role.id }, company: { ...company.data(), id: company.id } };
+  return result;
 }));
 export const vestikaStagingUsers = onCall(options, protect(request => manageStagingUser(getFirestore(), request.auth, request.data)));
 export const vestikaStagingRoles = onCall(options, protect(request => manageStagingRole(getFirestore(), request.auth, request.data)));

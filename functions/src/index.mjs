@@ -37,3 +37,4 @@ export const vestikaLogin = onCall({ region: 'us-central1', enforceAppCheck: tru
 // from stores on the server. Client rules must deny writes to this projection.
 export { financialLedgerChanged } from './financialTrigger.mjs';
 export { vestikaStagingLogin, vestikaStagingUsers, vestikaStagingRoles } from './stagingIdentity.mjs';
+export { businessSalesChanged, businessLayawaysChanged, businessIncidentsChanged, businessExpensesChanged, businessInventoryChanged } from './businessTrigger.mjs';

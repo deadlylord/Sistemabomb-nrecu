@@ -39,6 +39,12 @@ test('verified staging login, user management and tenant rules',async t=>{
     ['authLoginIndex/'+loginIndexId('mixed.legacy')]:{sellerId:'admin'}, ['authLoginIndex/'+loginIndexId('Admin Name')]:{sellerId:'admin'},
     'financialRecords/own':record('own'), 'financialRecords/otherStore':record('otherStore','a2'), 'financialRecords/foreign':record('foreign','b1',{companyId:'b'}),
     'inventory/p1':{id:'p1',companyId:'a',storeId:'a1',name:'One',stock:1}, 'inventory/p2':{id:'p2',companyId:'b',storeId:'b1',name:'Other',stock:10},
+    'businessSummaryCompanies/a/stores/a1':{companyId:'a',storeId:'a1',ready:true,inventoryValue:100},
+    'businessSummaryCompanies/a/stores/a2':{companyId:'a',storeId:'a2',ready:true,inventoryValue:200},
+    'businessSummaryCompanies/a/stores/a1/days/2026-10-16':{companyId:'a',storeId:'a1',income:50},
+    'businessSummaryCompanies/b/stores/b1':{companyId:'b',storeId:'b1',ready:true,inventoryValue:900},
+    'businessSummaryState/sales_own':{sourceVersion:'private'},
+    'businessSummaryErrors/sales_own':{reason:'private'},
     'financialLedgerCompanies/a/stores/a1':{companyId:'a',storeId:'a1',ready:true,accounts:{cash:100}},
     'financialLedgerCompanies/b/stores/b1':{companyId:'b',storeId:'b1',ready:true,accounts:{cash:100}}
   };
@@ -61,6 +67,16 @@ test('verified staging login, user management and tenant rules',async t=>{
       for(const path of ['companies/b','stores/b1','sellers/foreign','financialRecords/foreign','authCredentials/admin','authLoginIndex/'+loginIndexId('mixed.legacy')])await assertFails(getDoc(doc(client,path)));
       await assertFails(getDoc(doc(env.authenticatedContext('anonymous',{firebase:{sign_in_provider:'anonymous'}}).firestore(),'sellers/admin')));
       await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'inventory/p1')));
+    });
+    await t.test('business summaries preserve company/store permissions and remain server owned',async()=>{
+      const client=env.authenticatedContext(auth.uid,{...baseClaims,firebase:{sign_in_provider:'custom'}}).firestore();
+      for(const path of ['businessSummaryCompanies/a/stores/a1','businessSummaryCompanies/a/stores/a2','businessSummaryCompanies/a/stores/a1/days/2026-10-16'])await assertSucceeds(getDoc(doc(client,path)));
+      await assertSucceeds(getDocs(collection(client,'businessSummaryCompanies/a/stores/a1/days')));
+      for(const path of ['businessSummaryCompanies/b/stores/b1','businessSummaryState/sales_own','businessSummaryErrors/sales_own'])await assertFails(getDoc(doc(client,path)));
+      for(const path of ['businessSummaryCompanies/a/stores/a1','businessSummaryCompanies/a/stores/a1/days/2026-10-16','businessSummaryState/injected'])await assertFails(setDoc(doc(client,path),{companyId:'a',storeId:'a1',income:999}));
+      const seller=env.authenticatedContext(identityUid('seller'),{...baseClaims,sellerId:'seller',roleId:'seller',firebase:{sign_in_provider:'custom'}}).firestore();
+      await assertFails(getDoc(doc(seller,'businessSummaryCompanies/a/stores/a2')));
+      await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'businessSummaryCompanies/a/stores/a1')));
     });
     await t.test('client cannot write identity/roles/private collections, move ownership, forge peers or alter summaries',async()=>{
       const client=env.authenticatedContext(auth.uid,{...baseClaims,firebase:{sign_in_provider:'custom'}}).firestore();

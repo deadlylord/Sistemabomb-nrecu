@@ -176,6 +176,10 @@ service cloud.firestore {
       allow update: if live() && hasAny(['inventory','settings']) && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
       allow delete: if live() && hasAny(['inventory','settings']) && scoped(resource.data);
     }
+    match /businessSummaryCompanies/{companyId}/stores/{storeId}/{detail=**} {
+      allow read: if live() && (developer() || companyId == request.auth.token.companyId && storeCompany(storeId) == companyId && (administrator() || storeId == request.auth.token.storeId)) && hasAny(['dashboard','ceo_center']);
+      allow write: if false;
+    }
     match /financialLedgerCompanies/{companyId}/stores/{storeId}/{detail=**} {
       allow read: if live() && (developer() || companyId == request.auth.token.companyId && storeCompany(storeId) == companyId && (administrator() || storeId == request.auth.token.storeId)) && hasAny(['financial_reconciliation','accounting']);
       allow write: if false;

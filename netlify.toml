@@ -23,6 +23,8 @@
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
+  # Enable only after deploying the processors/rules/indexes and verifying stores.
+  VITE_BUSINESS_SUMMARIES = "false"
 
 # Keep HTML and service worker fresh after each staging deploy.
 [[headers]]

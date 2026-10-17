@@ -21,7 +21,7 @@ async function fixture(run) {
     'firebase/functions': `import {control} from 'fixture-control';
       export const getFunctions=(app,region)=>({app,region});
       export const httpsCallable=(_,name)=>async data=>{control.calls.push({name,data});if(control.serverError)throw control.serverError;return {data:{customToken:'fixture-token',user:control.user,store:{id:'a1',companyId:'a'},role:{id:'r',companyId:'a'},company:{id:'a'}}}};`,
-    'firebase/firestore': `import {control} from 'fixture-control';export const doc=(_,name,id)=>({name,id});
+    'firebase/firestore': `import {control} from 'fixture-control';export const addDoc=async()=>{};export const collection=(_,name)=>({name});export const doc=(_,name,id)=>({name,id});
       export const onSnapshot=(ref,apply,error)=>{const item={ref,apply,error,closed:false};control.snapshots.push(item);queueMicrotask(()=>{if(!item.closed)apply({exists:()=>true,data:()=>ref.name==='sellers'?control.user:{companyId:'a'}})});return()=>{item.closed=true}};`
   };
   try {
