@@ -6,6 +6,7 @@ import { bogotaDateKey, completeChartYear } from "../services/incomeChart";
 import { previousPeriod } from "../services/previousPeriod";
 import { useViewFilter } from "../services/viewFilters";
 import VestikaLoader from "./VestikaLoader";
+import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 const SalesHistoryChart = lazy(() => import("./SalesHistoryChart"));
 const cop = (value: number) =>
   new Intl.NumberFormat("es-CO", {
@@ -51,12 +52,14 @@ export default function BusinessOverview({
   stores,
   scope,
   onOpenDetails,
+  onOpenVerification,
 }: {
   companyId: string;
   store?: Store;
   stores: Store[];
   scope: string;
-  onOpenDetails: () => void;
+  onOpenDetails: (section?: string) => void;
+  onOpenVerification: () => void;
 }) {
   const today = bogotaDateKey(new Date());
   const [start, setStart] = useViewFilter("DashboardView:startDate", today);
@@ -92,6 +95,12 @@ export default function BusinessOverview({
     d.setUTCDate(d.getUTCDate() + offset);
     const value = bogotaDateKey(d);
     dates(value, value);
+  };
+  const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const setLast7Days = () => {
+    const d = new Date(today + "T12:00:00-05:00");
+    d.setUTCDate(d.getUTCDate() - 6);
+    dates(bogotaDateKey(d), today);
   };
   const chartData =
     mode === "daily"
@@ -140,13 +149,35 @@ export default function BusinessOverview({
     ["Utilidad neta estimada", cop(values.profit - values.expenses)],
   ];
   return (
-    <div className="space-y-4">
-      <div className={tile}>
+    <div className="max-w-7xl mx-auto min-w-0 space-y-4 sm:space-y-8 overflow-x-clip pb-[calc(12rem+env(safe-area-inset-bottom))] lg:pb-0">
+      {/* Mobile compact date controls and shortcuts, directly above bottom navigation. */}
+      <div className="lg:hidden fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[95] bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 shadow-lg px-2 py-1.5 space-y-1">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap pb-0.5">
+          <button onClick={() => dates(today, today)} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-200 text-xs font-bold">Hoy</button>
+
+          <button onClick={setLast7Days} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Semana</button>
+          <button onClick={() => dates(today.slice(0, 7) + "-01", today)} className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">Mes</button>
+
+          <input aria-label="Fecha desde" type="date" value={start} onChange={e => setStart(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <span className="text-xs text-slate-400">–</span>
+          <input aria-label="Fecha hasta" type="date" value={end} onChange={e => setEnd(e.target.value)} className="shrink-0 w-[115px] rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent px-1 py-1.5 text-xs" />
+          <div className="ml-auto flex shrink-0 items-center gap-1 rounded-xl border border-accent/20 bg-accent/10 p-0.5 shadow-sm"><button aria-label="Día anterior" onClick={() => shift(-1)} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"><ChevronLeftIcon className="w-4 h-4" /></button><button aria-label="Día siguiente" onClick={() => shift(1)} disabled={rangeEnd >= today} className="shrink-0 px-1.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 disabled:opacity-40"><ChevronRightIcon className="w-4 h-4" /></button></div>
+
+        </div>
+        <div className="flex items-center justify-between gap-1 overflow-x-auto whitespace-nowrap">
+          <button onClick={() => scrollToSection('payment-report')} className="px-2 py-1 text-[11px] font-semibold text-accent">Pagos</button>
+          <button onClick={() => onOpenDetails('price-analysis')} className="px-2 py-1 text-[11px] font-semibold text-accent">Precios</button>
+          <button onClick={() => onOpenDetails('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
+          <button onClick={() => scrollToSection('sales-chart')} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
+          <button onClick={onOpenVerification} className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">Inventario</button>
+        </div>
+      </div>
+      <div className={`hidden lg:block ${tile}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-bold">Resumen del negocio</h1>
           <button
             className="text-sm font-bold text-accent"
-            onClick={onOpenDetails}
+            onClick={() => onOpenDetails()}
           >
             Historial y herramientas
           </button>
@@ -218,14 +249,16 @@ export default function BusinessOverview({
         <div role="status" className={tile}>
           El resumen de esta sede está pendiente de verificación. Puedes
           consultar sus datos en{" "}
-          <button className="text-accent font-bold" onClick={onOpenDetails}>
+          <button className="text-accent font-bold" onClick={() => onOpenDetails()}>
             Historial y herramientas
           </button>
           .
         </div>
       ) : (
         <>
-          <div className={tile}>
+          <div id="payment-report" className={tile}>
+            <h1 className="text-2xl font-bold text-accent mb-4">Resumen del negocio</h1>
+            <p className="text-sm text-slate-500 mb-3">{store?.name}</p>
             <p className="text-sm font-semibold text-accent">
               Ingresos del período
             </p>
@@ -289,13 +322,13 @@ export default function BusinessOverview({
               ))}
             </div>
             <button
-              onClick={onOpenDetails}
+              onClick={() => onOpenDetails()}
               className="text-sm text-accent mt-3 font-semibold"
             >
               Ver movimientos y desglose completo
             </button>
           </div>
-          <div className={tile}>
+          <div id="sales-chart" className={tile}>
             <div className="flex flex-wrap gap-2 items-center mb-4">
               <h2 className="font-bold mr-auto">Evolución del negocio</h2>
               <select

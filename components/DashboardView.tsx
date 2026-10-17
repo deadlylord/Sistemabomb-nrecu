@@ -17,6 +17,7 @@ import { analyzeSalesData } from '../services/geminiService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface DashboardViewProps {
+  initialSection?: string;
   companyId: string;
   stores: Store[];
   allLayaways: Layaway[];
@@ -101,6 +102,9 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, inventory: rawInventory, currentStore, sellers, onUpdateSale, onUpdateLayaway, onDeleteSale, onReprintSale,
     onOpenVerification, purchases: rawPurchases, allSales: rawAllSales, allInventory: rawAllInventory, categories: rawCategories, allStockTakes: rawAllStockTakes
   } = props;
+  React.useEffect(() => {
+    if (props.initialSection) document.getElementById(props.initialSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [props.initialSection]);
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(currentStore && scope.storeIds.has(currentStore.id) ? [currentStore.id] : []) };
   const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
