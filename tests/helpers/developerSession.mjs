@@ -22,6 +22,7 @@ export async function developerSession({browser=false,summaries=false,verified=t
       export const snapshot=q=>q.id ? (records.get(q.name)||[]).filter(r=>r.id===q.id).map(r=>document(q.name,r))[0]||{exists:()=>false} : {docs:(records.get(q.name)||[]).filter(r=>(q.filters||[]).every(f=>!f.field||(f.op==='in'?f.value.includes(r[f.field]):r[f.field]===f.value))).map(r=>document(q.name,r)),docChanges(){return this.docs.map(doc=>({type:'added',doc}))},get empty(){return !this.docs.length}};
       export function onSnapshot(q,apply){const c={q,apply,closed:false}; connections.push(c); queueMicrotask(()=>{if(!c.closed)apply(snapshot(q))});return()=>{c.closed=true}};
       export const getDoc=async q=>snapshot(q); export const getDocs=async q=>snapshot(q);
+      export const getDocFromServer=getDoc, getDocsFromServer=getDocs;
       export const addDoc=async(ref,data)=>{writes.push({ref,data});return{id:'generated'}};
       export const setDoc=async()=>{throw Error('unexpected write')}, updateDoc=setDoc, deleteDoc=setDoc;
       export const writeBatch=()=>({update:setDoc,set:setDoc,delete:setDoc,commit:async()=>{}});

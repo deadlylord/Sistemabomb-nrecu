@@ -13,6 +13,7 @@ import { belongsToCompany, selectCompanyCategories } from '../services/companyCa
 import { hasPlatformDeveloperAccess, isPlatformOwner, isPlatformRole, assertCompanyRole, assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
 import { setPlatformDeveloper } from '../services/platformDevelopers';
 import { operationContextKey } from '../services/operationContext';
+import { commitUniqueLegacyUser } from '../services/uniqueLegacyUsers';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { db, auth } from '../firebase';
@@ -2857,8 +2858,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         : DEFAULT_CLIENT_ALLOWED_VIEWS
     };
 
-    const batch = nativeWriteBatch(db);
-    batch.set(companyRef, cleanObject(newCompany));
+    const initialWrites: { ref: DocumentReference; data: any }[] = [{ ref: companyRef, data: cleanObject(newCompany) }];
 
     // Create initial Store for this company
     const storeRef = doc(collection(db, 'stores'));
@@ -2877,14 +2877,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       nextInvoiceNumber: 1,
       initialBalances: { cash: 0, qr: 0 }
     };
-    batch.set(storeRef, cleanObject(initialStore));
+    initialWrites.push({ ref: storeRef, data: cleanObject(initialStore) });
+    let initialAdmin: { ref: DocumentReference; data: Seller } | undefined;
 
     // Create initial Admin user if provided
     if (adminUserData) {
       const adminRole = roles.find(r => r.name === 'Administrator' && (r.companyId || DEFAULT_COMPANY_ID) === DEFAULT_COMPANY_ID);
       if (!adminRole) throw new Error('No existe el rol Administrator.');
       const roleRef = doc(db, 'roles', `${companyId}__role__${adminRole.id}`);
-      batch.set(roleRef, { ...adminRole, id: roleRef.id, companyId });
+      initialWrites.push({ ref: roleRef, data: { ...adminRole, id: roleRef.id, companyId } });
       const sellerRef = doc(collection(db, 'sellers'));
       const newAdmin: Seller = {
         id: sellerRef.id,
@@ -2896,10 +2897,18 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         companyId: companyId,
         isDisabled: false
       };
-      batch.set(sellerRef, cleanObject(newAdmin));
+      initialAdmin = { ref: sellerRef, data: cleanObject(newAdmin) as Seller };
     }
 
-    await batch.commit();
+    if (initialAdmin) {
+      await commitUniqueLegacyUser(db, { ...initialAdmin, action: 'create' }, transaction => {
+        initialWrites.forEach(write => transaction.set(write.ref, write.data));
+      });
+    } else {
+      const batch = nativeWriteBatch(db);
+      initialWrites.forEach(write => batch.set(write.ref, write.data));
+      await batch.commit();
+    }
   };
 
   const handleUpdateCompany = async (company: Company) => {
@@ -2982,7 +2991,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       companyId: companyId,
       isDisabled: false
     };
-    await nativeSetDoc(sellerRef, cleanObject(newAdmin));
+    await commitUniqueLegacyUser(db, { ref: sellerRef, action: 'create', data: cleanObject(newAdmin) });
   };
   const assertCanManageUser = async (id: string) => {
     if (isOwner) return;
@@ -2996,7 +3005,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const handleCreatePlatformDeveloper = async (data: { name: string; username: string; password: string; storeId: string }) => {
     assertPlatformOwnerAction(currentUser, currentView);
     if (!data.name.trim() || !data.username.trim() || !data.password.trim()) throw new Error('Completa nombre, usuario y contraseña.');
-    if (sellers.some(seller => (seller.username || seller.name || '').trim().toLowerCase() === data.username.trim().toLowerCase())) throw new Error('Ese usuario ya existe.');
     const store = await getDoc(nativeDoc(db, 'stores', data.storeId));
     if (!store.exists()) throw new Error('Selecciona una sede existente para el usuario.');
     const companyId = store.data().companyId || DEFAULT_COMPANY_ID;
@@ -3004,10 +3012,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     if (!adminRole) throw new Error('No se encontró el rol base de la empresa.');
     const roleId = await ensureCompanyRole(db, adminRole.id, companyId);
     const ref = nativeDoc(collection(db, 'sellers'));
-    const batch = nativeWriteBatch(db);
-    batch.set(ref, { id: ref.id, name: data.name.trim(), username: data.username.trim(), password: data.password.trim(), storeId: data.storeId, companyId, roleId, platformRole: 'developer', isDisabled: false });
-    batch.set(nativeDoc(db, 'platformDevelopers', ref.id), { userId: ref.id, role: 'developer', active: true, grantedBy: PLATFORM_OWNER_USER_ID, grantedAt: new Date().toISOString() });
-    await batch.commit();
+    await commitUniqueLegacyUser(db, { ref, action: 'create', data: { id: ref.id, name: data.name.trim(), username: data.username.trim(), password: data.password.trim(), storeId: data.storeId, companyId, roleId, platformRole: 'developer', isDisabled: false } }, transaction => {
+      transaction.set(nativeDoc(db, 'platformDevelopers', ref.id), { userId: ref.id, role: 'developer', active: true, grantedBy: PLATFORM_OWNER_USER_ID, grantedAt: new Date().toISOString() });
+    });
   };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
     if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'create', name, password, roleId, storeId, username, companyId: operationalCompanyId }); return; }
@@ -3028,7 +3035,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       isDisabled: false
     };
     if (username) newSellerData.username = username;
-    await setDoc(newRef, cleanObject(newSellerData));
+    await commitUniqueLegacyUser(db, {
+      ref: nativeDoc(db, 'sellers', newRef.id), action: 'create', data: cleanObject(newSellerData),
+      validate: (_before, next) => assertTenantData('sellers', next, { companyId: userCompanyId, storeIds: visibleStoreIds })
+    });
   };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
     if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'update', id, name, password, roleId, storeId, username }); return; }
@@ -3047,9 +3057,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     const data: any = { name, roleId, storeId, companyId: userCompanyId };
     if (password) data.password = password;
     if (username !== undefined) data.username = username;
-    await updateDoc(doc(db, 'sellers', id), cleanObject(data));
+    await commitUniqueLegacyUser(db, {
+      ref: nativeDoc(db, 'sellers', id), action: 'update', data: cleanObject(data),
+      validate: (before, next) => {
+        assertTenantData('sellers', before, { companyId: userCompanyId, storeIds: visibleStoreIds });
+        assertTenantData('sellers', next, { companyId: userCompanyId, storeIds: visibleStoreIds });
+      }
+    });
   };
-  const handleDeleteSeller = async (id: string) => { if (verifiedIdentityEnabled) { if(window.confirm('¿Eliminar vendedor?')) await manageVerifiedUser({ action: 'delete', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
+  const handleDeleteSeller = async (id: string) => { if (verifiedIdentityEnabled) { if(window.confirm('¿Eliminar vendedor?')) await manageVerifiedUser({ action: 'delete', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await commitUniqueLegacyUser(db, { ref: nativeDoc(db, 'sellers', id), action: 'delete', validate: before => assertTenantData('sellers', before, { companyId: operationalCompanyId, storeIds: visibleStoreIds }) }); };
   const handleToggleSellerStatus = async (id: string) => { if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'toggle', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
   const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { if (verifiedIdentityEnabled) { await manageVerifiedRole({ action: 'create', name, userType, permissions: [], companyId: operationalCompanyId }); return; } assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
   const handleUpdateRole = async (updatedRole: Role) => {

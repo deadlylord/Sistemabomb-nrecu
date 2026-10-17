@@ -53,16 +53,12 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
   };
   
   const handleSave = async (name: string, password: string, roleId: string, storeId: string, username?: string, isDev?: boolean) => {
-    try {
-      if (editingSeller) {
-        await onUpdateSeller(editingSeller.id, name, password, roleId, storeId, username, isDev);
-      } else {
-        await onAddSeller(name, password, roleId, storeId, username, isDev);
-      }
-      setIsModalOpen(false);
-    } catch (error: any) {
-      alert(error?.message || 'No se pudo guardar el usuario.');
+    if (editingSeller) {
+      await onUpdateSeller(editingSeller.id, name, password, roleId, storeId, username, isDev);
+    } else {
+      await onAddSeller(name, password, roleId, storeId, username, isDev);
     }
+    setIsModalOpen(false);
   };
 
   const filteredSellers = useMemo(() => {
