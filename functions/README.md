@@ -1,4 +1,10 @@
-# Identidad verificada de Vestika — preparación, sin activar
+# Identidad verificada de Vestika
+
+**Staging actualizado (1.1.161):** las tres funciones `vestikaStagingLogin`, `vestikaStagingUsers` y `vestikaStagingRoles` están activas, junto con `financialLedgerChanged`, únicamente en `vestika-staging`. Véanse `../security/STAGING_IDENTITY.md` y `../security/STAGING_LEDGER.md` para migración, reglas, pruebas y configuración operativa.
+
+La preparación de producción descrita a continuación corresponde al endpoint separado `vestikaLogin`, que sigue sin activarse. No copiar la excepción de App Check de staging a producción.
+
+## Preparación original de producción
 
 Estado: servidor preparado; el POS 1.1.129 conserva su acceso actual. Este código no se importa en la aplicación ni modifica las reglas de producción. No representa aislamiento completo de Firebase todavía.
 

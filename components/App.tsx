@@ -1,3 +1,6 @@
+import { verifiedIdentityEnabled } from '../services/identityConfig';
+import type { VerifiedSession } from './VerifiedEntry';
+import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
 import { assertCartAvailability } from '../services/cartAvailability';
 import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
@@ -43,9 +46,8 @@ import { ViewFiltersProvider } from '../services/viewFilters';
 import AppErrorBoundary from './AppErrorBoundary';
 import VestikaLoader from './VestikaLoader';
 import { useStoreCollection } from '../services/useStoreCollection';
-import StockTakeModal from './StockTakeModal';
 import LoginView from './LoginView';
-import ReportsModal from './ReportsView';
+const ReportsModal = lazy(() => import('./ReportsView'));
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_ROLES, INITIAL_SELLERS, INITIAL_STORES, formatCOP, toTitleCase, generateUniqueSku, normalizeText } from '../constants';
 import ReceiptModal from './ReceiptModal';
 import RecaudoReceiptModal from './RecaudoReceiptModal';
@@ -71,6 +73,7 @@ const IncidentsView = lazy(() => import('./IncidentsView'));
 const CeoCenterView = lazy(() => import('./CeoCenterView').then(module => ({ default: module.CeoCenterView })));
 const DeveloperCenterView = lazy(() => import('./DeveloperCenterView'));
 const DashboardView = lazy(() => import('./DashboardView'));
+const scopedStoreLoadingEnabled = import.meta.env?.VITE_STORE_SCOPED_LOADING === 'true';
 const SmartAccountantView = lazy(() => import('./SmartAccountantView'));
 const FinancialReconciliationView = lazy(() => import('./FinancialReconciliationView'));
 const GiftVouchersView = lazy(() => import('./GiftVouchersView'));
@@ -127,9 +130,9 @@ const getRoleUserType = (role?: Role): 'admin' | 'seller' | 'developer' => {
   return 'seller';
 };
 
-const App: React.FC = () => {
+const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession }) => {
   const [giftVouchers, setGiftVouchers] = useState<GiftVoucher[]>([]);
-  const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
+  const [currentView, setCurrentView] = useState<View>(() => initialSession && getRoleUserType(initialSession.role) === 'seller' ? View.POS : View.DASHBOARD);
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); }, [currentView]);
   const [inventory, setInventory] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -147,21 +150,21 @@ const App: React.FC = () => {
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [categoryState, setCategoryState] = useState<{ companyId: string; items: Category[] }>({ companyId: '', items: [] });
   const categoryRepairs = useRef(new Set<string>());
-  const [sellers, setSellers] = useState<Seller[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [activeCompanyId, setActiveCompanyId] = useState<string>(localStorage.getItem('activeCompanyId') || DEFAULT_COMPANY_ID);
+  const [sellers, setSellers] = useState<Seller[]>(initialSession ? [initialSession.user] : []);
+  const [roles, setRoles] = useState<Role[]>(initialSession ? [initialSession.role] : []);
+  const [stores, setStores] = useState<Store[]>(initialSession ? [initialSession.store] : []);
+  const [companies, setCompanies] = useState<Company[]>(initialSession ? [initialSession.company] : []);
+  const [activeCompanyId, setActiveCompanyId] = useState<string>(initialSession?.user.companyId || localStorage.getItem('activeCompanyId') || DEFAULT_COMPANY_ID);
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
   const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]);
-  const [currentUser, setCurrentUser] = useState<Seller | null>(null);
+  const [currentUser, setCurrentUser] = useState<Seller | null>(initialSession?.user || null);
   const [developerGrant, setDeveloperGrant] = useState<PlatformDeveloperGrant | null>(null);
   const [developerGrants, setDeveloperGrants] = useState<PlatformDeveloperGrant[]>([]);
-  const [currentStoreId, setCurrentStoreId] = useState<string | null>(localStorage.getItem('currentStoreId'));
+  const [currentStoreId, setCurrentStoreId] = useState<string | null>(initialSession?.user.storeId || localStorage.getItem('currentStoreId'));
   const currentStoreIdRef = useRef<string | null>(currentStoreId);
   const inventoryByStoreRef = useRef<Map<string, Product[]>>(new Map());
   const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('theme') as 'light' | 'dark' || 'dark');
@@ -437,6 +440,11 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
+      if (verifiedIdentityEnabled) {
+        setIsAuthReady(true);
+        if (!user) setCurrentUser(null);
+        return;
+      }
       if (user) setIsAuthReady(true);
       else {
         signInAnonymously(auth).catch(error => {
@@ -456,15 +464,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'stores')), setStores),
-      attachFirestoreListener(query(collection(db, 'roles')), setRoles),
-      attachFirestoreListener(query(collection(db, 'companies')), setCompanies),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'stores'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'stores')), setStores),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'roles'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'roles')), setRoles),
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'companies'), where('__name__', '==', currentUser.companyId)) : query(collection(db, 'companies')), setCompanies),
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [isAppReady, isAuthReady, !!currentUser]);
+  }, [isAppReady, isAuthReady, currentUser?.id, currentUser?.companyId, isDeveloper]);
 
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || scopedStoreLoadingEnabled && ![View.POS,View.CEO_CENTER].includes(currentView)) return;
     let active = true;
     const rows = new Map<string, CeoDailyNote[]>();
     const queries = operationalCompanyId === DEFAULT_COMPANY_ID
@@ -477,12 +485,12 @@ const App: React.FC = () => {
       setCeoNotes([...new Map([...rows.values()].flat().map(note => [note.id, note])).values()]);
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
   useEffect(() => {
     if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
-      attachFirestoreListener(query(collection(db, 'sellers')), setSellers)
+      attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'sellers'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
   }, [currentUser?.id, isAppReady, isAuthReady]);
@@ -508,7 +516,7 @@ const App: React.FC = () => {
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
 
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || scopedStoreLoadingEnabled && currentView !== View.INVENTORY_TRANSFER) return;
     let active = true;
     const ids = [...visibleStoreIds];
     const rows = new Map<string, InventoryTransfer[]>();
@@ -520,32 +528,28 @@ const App: React.FC = () => {
       }));
     }));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
+  const needsInventory = (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
+  const inventoryStoreKey = scopedStoreLoadingEnabled
+    ? JSON.stringify(isGlobalMode && needsInventory || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
+    : companyStoreKey;
   useEffect(() => {
-    if (!isOperationalView || !isAdmin || !currentUser) return;
-
+    if (!isOperationalView || !isAdmin || !currentUser || !isAuthReady) return;
     let active = true;
-    const storeIds: string[] = JSON.parse(companyStoreKey);
-    const unsubscribers = storeIds.map(storeId => {
-      const inventoryQuery = query(collection(db, 'inventory'), where('storeId', '==', storeId));
-      return onSnapshot(inventoryQuery, snapshot => {
-        if (!active) return;
-        const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
-        inventoryByStoreRef.current.set(storeId, storeInventory);
-
-        // This single session cache serves Dashboard, multisite search and POS.
-        // Switching stores therefore does not reconnect and reread the same catalog.
-        setGlobalInventoryForSearch(storeIds.flatMap(id => inventoryByStoreRef.current.get(id) || []));
-        if (currentStoreIdRef.current === storeId) setInventory(storeInventory);
-      }, error => console.error(`Error loading inventory for store ${storeId}:`, error));
-    });
-
+    const storeIds: string[] = JSON.parse(inventoryStoreKey);
+    const unsubscribers = storeIds.map(storeId => onSnapshot(query(collection(db, 'inventory'), where('storeId', '==', storeId)), snapshot => {
+      if (!active) return;
+      const storeInventory = snapshot.docs.map(document => ({ ...document.data(), id: document.id } as Product)).filter(isOwnInventory);
+      inventoryByStoreRef.current.set(storeId, storeInventory);
+      setGlobalInventoryForSearch(storeIds.flatMap(id => inventoryByStoreRef.current.get(id) || []));
+      if (currentStoreIdRef.current === storeId) setInventory(storeInventory);
+    }, error => console.error(`Error loading inventory for store ${storeId}:`, error)));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAdmin, currentUser?.id, companyStoreKey, dataScope]);
+  }, [isOperationalView, isAdmin, currentUser?.id, inventoryStoreKey, dataScope, isAuthReady, companyStoreKey]);
 
 
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || currentView === View.DASHBOARD || currentView === View.FINANCIAL_RECONCILIATION);
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !scopedStoreLoadingEnabled && currentView === View.DASHBOARD);
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
@@ -642,6 +646,7 @@ const App: React.FC = () => {
 
     switch (currentView) {
         case View.DASHBOARD:
+            if (scopedStoreLoadingEnabled) attachStore('expenses', setExpenses);
             attachStore('dailyNotes', setDailyNotes);
             attachStore('stockTakes', setStockTakes);
             break;
@@ -770,7 +775,7 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prevTheme => (prevTheme === 'dark' ? 'light' : 'dark'));
 
-  const createProductHistoryLog = (product: { id: string; name: string; storeId: string; [key: string]: any }, changedBy: string, changeType: ProductChangeType, details: string): ProductHistoryLog => {
+  const createProductHistoryLog = (product: { id: string; name: string; storeId: string; [key: string]: any }, changedBy: string, changeType: ProductChangeType, details: string, stockDelta?: number): ProductHistoryLog => {
     const newLogRef = doc(collection(db, 'productHistory'));
     return {
       id: newLogRef.id,
@@ -781,6 +786,7 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString(),
       changeType,
       details,
+      ...(stockDelta === undefined ? {} : { stockDelta }),
     };
   };
 
@@ -915,6 +921,7 @@ const App: React.FC = () => {
                         changedBy: saleData.seller,
                         timestamp: saleDate.toISOString(),
                         changeType: ProductChangeType.SALE,
+                        stockDelta: -item.quantity,
                         details: `Venta #${currentInvoiceNumber}. Cantidad: -${item.quantity}. Precio Venta: ${formatCOP(item.price)}${isPromo ? ' (Precio Promoción)' : ''}`
                     };
                     transaction.set(logRef, log);
@@ -1049,6 +1056,7 @@ const App: React.FC = () => {
                         changedBy: seller,
                         timestamp: saleDate.toISOString(),
                         changeType: ProductChangeType.LAYAWAY_RESERVED,
+                        stockDelta: -item.quantity,
                         details: `Apartado por Abono #${finalInvoiceNumber}. Cantidad: -${item.quantity}.`
                     };
                     transaction.set(logRef, log);
@@ -1130,6 +1138,7 @@ const App: React.FC = () => {
                           changedBy: currentUser?.name || 'Sistema',
                           timestamp: new Date().toISOString(),
                           changeType: ProductChangeType.PRE_ORDER_FULFILLED,
+                          stockDelta: -item.quantity,
                           details: `Encargo #${layawayData.invoiceNumber} recibido. Cantidad: -${item.quantity}.`
                       };
                       transaction.set(logRef, log);
@@ -1173,9 +1182,9 @@ const App: React.FC = () => {
       const newTransferRef = doc(collection(db, 'inventoryTransfers'));
       const newTransfer: Omit<InventoryTransfer, 'id'> = { fromStoreId, toStoreId, productId, productName: fromProduct.name, quantity, productCost: fromProduct.cost, totalCost: fromProduct.cost * quantity, createdAt: new Date().toISOString(), sellerName, settled: false };
       batch.set(newTransferRef, newTransfer);
-      const outLog = createProductHistoryLog(fromProduct, sellerName, ProductChangeType.TRANSFER_OUT, `-${quantity} a ${getStoreName(toStoreId)} (antes: ${fromProduct.stock})`);
+      const outLog = createProductHistoryLog(fromProduct, sellerName, ProductChangeType.TRANSFER_OUT, `-${quantity} a ${getStoreName(toStoreId)} (antes: ${fromProduct.stock})`, -quantity);
       batch.set(doc(db, 'productHistory', outLog.id), outLog);
-      const inLog = createProductHistoryLog(toProduct, sellerName, ProductChangeType.TRANSFER_IN, `+${quantity} desde ${getStoreName(fromStoreId)} (antes: ${toProduct.stock})`);
+      const inLog = createProductHistoryLog(toProduct, sellerName, ProductChangeType.TRANSFER_IN, `+${quantity} desde ${getStoreName(fromStoreId)} (antes: ${toProduct.stock})`, quantity);
       batch.set(doc(db, 'productHistory', inLog.id), inLog);
       if (!existingBatch) { await batch.commit(); alert('Traslado realizado con éxito.'); }
     } catch (error: any) { console.error("Error durante el traslado de inventario:", error); throw error; }
@@ -1232,7 +1241,8 @@ const App: React.FC = () => {
           fromProduct || { id: fromProductRef.id, name: transfer.productName, storeId: transfer.fromStoreId, cost: transfer.productCost, price: 0, categoryId: '', stock: 0 },
           currentUser.name,
           ProductChangeType.TRANSFER_DELETED,
-          `+${transfer.quantity} devueltas por anulación/reversión de traslado a ${toStoreName}`
+          `+${transfer.quantity} devueltas por anulación/reversión de traslado a ${toStoreName}`,
+          transfer.quantity
         );
         batch.set(doc(db, 'productHistory', outLog.id), outLog);
       }
@@ -1253,7 +1263,8 @@ const App: React.FC = () => {
           toProduct,
           currentUser.name,
           ProductChangeType.TRANSFER_DELETED,
-          `-${transfer.quantity} descontadas por anulación/reversión de traslado desde ${fromStoreName}`
+          `-${transfer.quantity} descontadas por anulación/reversión de traslado desde ${fromStoreName}`,
+          -transfer.quantity
         );
         batch.set(doc(db, 'productHistory', inLog.id), inLog);
       }
@@ -1344,84 +1355,39 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const incident = incidents.find(i => i.id === incidentId);
     if (!incident) return;
-    // Procesamiento único: leer el estado real antes de modificar stock.
-    if (incident.type === IncidentType.DAMAGED || incident.type === IncidentType.PRODUCT_EXCHANGE) {
+
+    if (incident.type === IncidentType.DAMAGED) {
       try {
+        const approvalContext = operationContextRef.current;
+        const incidentRef = doc(db, 'incidents', incidentId);
+        const logRef = doc(collection(db, 'productHistory'));
         await runTransaction(db, async transaction => {
-          const incidentRef = doc(db, 'incidents', incidentId);
-          const current = await transaction.get(incidentRef);
-          if (!current.exists()) return;
-          const latest = current.data() as Incident;
-          if (!visibleStoreIds.has(latest.storeId)) throw new Error('Novedad fuera de las sedes autorizadas.');
-          const damage = latest.type === IncidentType.DAMAGED;
-          const expected = damage ? IncidentStatus.DAÑADO_REPORTADO : IncidentStatus.CAMBIO_SOLICITADO;
-          if (latest.status !== expected) return;
-          const status = damage ? IncidentStatus.EN_ARREGLO_CAMBIO : IncidentStatus.CAMBIO_PROCESADO;
-          const changes = damage
-            ? [{ productId: latest.productId, productName: latest.productName || 'Producto', quantity: -1, type: ProductChangeType.DAMAGED }]
-            : [
-                ...(latest.returnedItems || []).map(item => ({ productId: item.productId, productName: item.productName, quantity: Number(item.quantity), type: ProductChangeType.EXCHANGE_IN })),
-                ...(latest.takenItems || []).map(item => ({ productId: item.productId, productName: item.productName, quantity: -Number(item.quantity), type: ProductChangeType.EXCHANGE_OUT }))
-              ];
-          if (changes.some(change => !change.productId || !Number.isFinite(change.quantity) || change.quantity === 0)) throw new Error('Novedad con productos o cantidades inválidas.');
-          const refs = [...new Set(changes.map(change => change.productId as string))].map(id => ({ id, ref: doc(db, 'inventory', id) }));
-          const snapshots = await Promise.all(refs.map(async item => ({ id: item.id, snapshot: await transaction.get(item.ref), ref: item.ref })));
-          for (const item of snapshots) {
-            if (!item.snapshot.exists() || item.snapshot.data()?.storeId !== latest.storeId) throw new Error('Producto del cambio no encontrado en su sede.');
-          }
-          const saleRef = !damage && latest.originalSaleId ? doc(db, 'sales', latest.originalSaleId) : null;
-          const saleSnapshot = saleRef ? await transaction.get(saleRef) : null;
-          const timestamp = new Date().toISOString();
-          for (const item of snapshots) {
-            const related = changes.filter(change => change.productId === item.id);
-            const delta = related.reduce((sum, change) => sum + change.quantity, 0);
-            const before = Number(item.snapshot.data()?.stock || 0);
-            if (delta) transaction.update(item.ref, { stock: before + delta });
-            let running = before;
-            for (const change of related) {
-              const logRef = doc(collection(db, 'productHistory'));
-              transaction.set(logRef, {
-                id: logRef.id, productId: item.id, productName: change.productName,
-                storeId: latest.storeId, changedBy: currentUser.name, timestamp,
-                changeType: change.type, incidentId, stockBefore: running,
-                stockAfter: running + change.quantity, quantityChange: change.quantity,
-                details: `Novedad ${incidentId}. Stock: ${running} → ${running + change.quantity} (${change.quantity > 0 ? '+' : ''}${change.quantity})`
-              });
-              running += change.quantity;
-            }
-          }
-          transaction.update(incidentRef, {
-            status, resolutionDate: timestamp,
-            history: [...(latest.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad aprobada y procesada' }]
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+          const incidentSnapshot = await transaction.get(incidentRef);
+          if (!incidentSnapshot.exists()) throw new Error('La novedad ya no existe.');
+          const saved = { ...incidentSnapshot.data(), id: incidentId } as Incident;
+          if (saved.type !== IncidentType.DAMAGED || saved.status !== IncidentStatus.DAÑADO_REPORTADO) return;
+          if (!saved.productId) throw new Error('No se especificó un producto.');
+          const savedProductRef = doc(db, 'inventory', saved.productId);
+          const productSnapshot = await transaction.get(savedProductRef);
+          if (!productSnapshot.exists()) throw new Error('La prenda ya no existe en el inventario.');
+          const product = { ...productSnapshot.data(), id: saved.productId } as Product;
+          if (product.storeId !== saved.storeId || (product.companyId && product.companyId !== operationalCompanyId)) throw new Error('La prenda no pertenece a la empresa y sede de la novedad.');
+          if (Number(product.stock) < 1) throw new Error('No hay stock disponible para marcar esta prenda como dañada.');
+          const now = new Date().toISOString();
+          const history = [...(saved.history || []), { status: IncidentStatus.EN_ARREGLO_CAMBIO, changedBy: currentUser.name, timestamp: now, notes: 'Novedad aprobada y procesada' }];
+          transaction.update(savedProductRef, { stock: increment(-1) });
+          transaction.update(incidentRef, { status: IncidentStatus.EN_ARREGLO_CAMBIO, resolutionDate: now, history });
+          transaction.set(logRef, {
+            id: logRef.id, productId: product.id, productName: product.name,
+            companyId: operationalCompanyId, storeId: product.storeId, changedBy: currentUser.name,
+            timestamp: now, changeType: ProductChangeType.DAMAGED, stockDelta: -1,
+            details: 'Prenda reportada como dañada. Stock rebajado: -1.'
           });
-          if (saleRef && saleSnapshot?.exists()) {
-            const sale = saleSnapshot.data() as Sale;
-            const saleItems = (Array.isArray(sale.items) ? sale.items : Object.values(sale.items || {}) as CartItem[]);
-            const updatedItems = saleItems.map(item => ({ ...item }));
-            for (const ret of latest.returnedItems || []) {
-              const index = updatedItems.findIndex(item => item.id === ret.productId);
-              if (index >= 0) {
-                updatedItems[index].quantity -= ret.quantity;
-                if (updatedItems[index].quantity <= 0) updatedItems.splice(index, 1);
-              }
-            }
-            for (const taken of latest.takenItems || []) {
-              const index = updatedItems.findIndex(item => item.id === taken.productId);
-              if (index >= 0) updatedItems[index].quantity += taken.quantity;
-              else updatedItems.push({
-                id: taken.productId, name: taken.productName, sku: taken.sku || '',
-                categoryId: taken.categoryId || '', price: taken.price, cost: taken.cost,
-                quantity: taken.quantity, storeId: sale.storeId, description: 'Artículo por cambio', imageUrl: ''
-              } as CartItem);
-            }
-            const subtotal = updatedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-            const discount = sale.discountPercent ? Math.round(subtotal * sale.discountPercent / 100) : (sale.discountAmount || 0);
-            transaction.update(saleRef, { items: updatedItems, totalAmount: subtotal - discount + (sale.paymentSurchargeAmount || 0), discountAmount: discount });
-          }
         });
       } catch (error: any) {
-        console.error('Error aprobando novedad con inventario:', error);
-        alert(`No se pudo procesar la novedad: ${error.message}`);
+        console.error('Error approving damaged incident:', error);
+        alert(`Error al aprobar: ${error.message}`);
       }
       return;
     }
@@ -1446,6 +1412,7 @@ const App: React.FC = () => {
                 changedBy: currentUser.name,
                 timestamp: new Date().toISOString(),
                 changeType: ProductChangeType.DAMAGED,
+                stockDelta: -1,
                 details: `Prenda reportada como dañada. Stock rebajado: -1.`
             };
             batch.set(damageLogRef, damageLog);
@@ -1465,6 +1432,7 @@ const App: React.FC = () => {
                     changedBy: currentUser.name,
                     timestamp: new Date().toISOString(),
                     changeType: ProductChangeType.EXCHANGE_IN,
+                    stockDelta: item.quantity,
                     details: `Devolución por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: +${item.quantity}`
                 };
                 batch.set(exchangeInLogRef, exchangeInLog);
@@ -1480,6 +1448,7 @@ const App: React.FC = () => {
                     changedBy: currentUser.name,
                     timestamp: new Date().toISOString(),
                     changeType: ProductChangeType.EXCHANGE_OUT,
+                    stockDelta: -item.quantity,
                     details: `Salida por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: -${item.quantity}`
                 };
                 batch.set(exchangeOutLogRef, exchangeOutLog);
@@ -1556,99 +1525,136 @@ const App: React.FC = () => {
   };
 
   const handleResolveIncident = async (incidentId: string, receivedProductId?: string) => {
-    if (!currentUser) return;
-    if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
-    const incidentRef = doc(db, 'incidents', incidentId);
-    try {
+    const incident = incidents.find(i => i.id === incidentId);
+    if (!incident || !currentUser) throw new Error('No se encontró la novedad o la sesión cambió.');
+    if (incident.type === IncidentType.DAMAGED) {
+      if (recordReadOnly || !currentStoreId || operationContextRef.current !== contextAtRender) throw new Error('No puedes recibir prendas en esta sesión o la sede cambió.');
+      const receivingContext = operationContextRef.current;
+      const receivingStore = currentStoreId;
+      const receivingCompany = operationalCompanyId;
+      const receivingUser = currentUser.name;
+      const targetId = receivedProductId || incident.productId;
+      if (!targetId) throw new Error('Selecciona la prenda recibida.');
+      const receiptRef = doc(db, 'incidents', incidentId);
+      const targetRef = doc(db, 'inventory', targetId);
+      const logRef = doc(collection(db, 'productHistory'));
       await runTransaction(db, async transaction => {
-        const snapshot = await transaction.get(incidentRef);
-        if (!snapshot.exists()) return;
-        const incident = snapshot.data() as Incident;
-        if (!visibleStoreIds.has(incident.storeId)) throw new Error('La novedad no pertenece a una sede autorizada.');
-        const isDamage = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO;
-        const isWarranty = incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE;
-        if (!isDamage && !isWarranty) return; // Ya resuelta: no sumar stock otra vez.
-        const targetProductId = isDamage ? receivedProductId || incident.productId : undefined;
-        if (isDamage && !targetProductId) throw new Error('Selecciona la prenda recibida.');
-        const productRef = isDamage && targetProductId ? doc(db, 'inventory', targetProductId) : null;
-        const productSnapshot = productRef ? await transaction.get(productRef) : null;
-        if (productRef && (!productSnapshot?.exists() || productSnapshot.data()?.storeId !== incident.storeId)) throw new Error('Producto no encontrado en la sede de la novedad.');
-        const timestamp = new Date().toISOString();
-        const status = isDamage ? IncidentStatus.DEVUELTO_Y_RESUELTO : IncidentStatus.WARRANTY_RETURNED;
-        const receiptPlan = isDamage && productRef && productSnapshot
-          ? planDamagedReceipt(
-              { ...incident, id: incidentId },
-              { ...productSnapshot.data(), id: targetProductId } as Product,
-              operationalCompanyId,
-              incident.storeId,
-              isAdmin || isDeveloper,
-              currentUser.name,
-              timestamp
-            )
-          : null;
-        if (isDamage && !receiptPlan) return;
-        if (productRef && productSnapshot) {
-          const before = Number(productSnapshot.data()?.stock || 0);
-          transaction.update(productRef, { stock: before + 1 });
-          const logRef = doc(collection(db, 'productHistory'));
-          transaction.set(logRef, {
-            id: logRef.id, productId: targetProductId, productName: productSnapshot.data()?.name || incident.productName || 'Producto',
-            storeId: incident.storeId, changedBy: currentUser.name, timestamp,
-            changeType: ProductChangeType.DAMAGED_RETURNED,
-            incidentId, stockBefore: before, stockAfter: before + 1, quantityChange: 1,
-            details: `${receiptPlan?.notes || 'Prenda dañada retornada de arreglo.'} Stock: ${before} → ${before + 1} (+1). Novedad: ${incidentId}`
-          });
-        }
-        transaction.update(incidentRef, {
-          ...(receiptPlan?.update || {
-            status, resolutionDate: timestamp,
-            history: [...(incident.history || []), { status, changedBy: currentUser.name, timestamp, notes: 'Novedad resuelta/finalizada' }]
-          })
+        if (operationContextRef.current !== receivingContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+        const receiptSnapshot = await transaction.get(receiptRef);
+        const productSnapshot = await transaction.get(targetRef);
+        if (!receiptSnapshot.exists() || !productSnapshot.exists()) throw new Error('La novedad o la prenda ya no existen.');
+        const savedIncident = { ...receiptSnapshot.data(), id: incidentId } as Incident;
+        const receivedProduct = { ...productSnapshot.data(), id: targetId } as Product;
+        const plan = planDamagedReceipt(savedIncident, receivedProduct, receivingCompany, receivingStore, isAdmin || isDeveloper, receivingUser, new Date().toISOString());
+        if (!plan) return;
+        if (operationContextRef.current !== receivingContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+        transaction.update(targetRef, { stock: increment(1) });
+        transaction.update(receiptRef, plan.update);
+        transaction.set(logRef, {
+          id: logRef.id, productId: targetId, productName: receivedProduct.name,
+          companyId: receivingCompany, storeId: receivingStore, changedBy: receivingUser,
+          timestamp: plan.update.resolutionDate, changeType: ProductChangeType.DAMAGED_RETURNED, stockDelta: 1,
+          details: `${plan.notes} Novedad: ${incidentId}.`
         });
       });
-    } catch (error: any) {
-      console.error('Error resolviendo novedad:', error);
-      throw error;
+      return;
+    }
+    const batch = writeBatch(db);
+    const incidentRef = doc(db, 'incidents', incidentId);
+    let newStatus: IncidentStatus | null = null;
+    if (incident.type === IncidentType.WARRANTY && incident.status === IncidentStatus.WARRANTY_ACTIVE) newStatus = IncidentStatus.WARRANTY_RETURNED;
+    if (newStatus) { 
+        const updatedHistory = [
+            ...(incident.history || []),
+            {
+                status: newStatus,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                notes: 'Novedad resuelta/finalizada'
+            }
+        ];
+        batch.update(incidentRef, { 
+            status: newStatus, 
+            resolutionDate: new Date().toISOString(),
+            history: updatedHistory
+        }); 
+        await batch.commit(); 
     }
   };
 
-  const handleUpdateIncident = async (incident: Incident) => {
+  const handleUpdateIncident = async (incident: Incident) => { 
     if (operationContextRef.current !== contextAtRender) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
-    const incidentRef = doc(db, 'incidents', incident.id);
-    await runTransaction(db, async transaction => {
-      const snapshot = await transaction.get(incidentRef);
-      if (!snapshot.exists()) throw new Error('La novedad ya no existe.');
-      const previous = snapshot.data() as Incident;
-      if (previous.storeId !== incident.storeId || !visibleStoreIds.has(previous.storeId)) throw new Error('La novedad no pertenece a esta sede.');
-      if (previous.damagedReceipt) {
-        if (incident.status !== previous.status || incident.productId !== previous.productId) throw new Error('La recepción ya está registrada. No se puede modificar su estado ni la prenda enviada.');
-        incident.damagedReceipt = previous.damagedReceipt;
-      }
-      const oldImpact = previous.type === IncidentType.DAMAGED && previous.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
-      const newImpact = incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
-      if (previous.type === IncidentType.DAMAGED && incident.productId !== previous.productId) throw new Error('No se puede cambiar el producto de una novedad dañada; crea una nueva novedad.');
-      const stockChange = newImpact - oldImpact;
-      const productRef = stockChange && previous.productId ? doc(db, 'inventory', previous.productId) : null;
-      const productSnapshot = productRef ? await transaction.get(productRef) : null;
-      if (productRef && (!productSnapshot?.exists() || productSnapshot.data()?.storeId !== previous.storeId)) throw new Error('Producto no encontrado en esta sede.');
-      const timestamp = new Date().toISOString();
-      if (productRef && productSnapshot) {
-        const before = Number(productSnapshot.data()?.stock || 0);
-        transaction.update(productRef, { stock: before + stockChange });
-        const logRef = doc(collection(db, 'productHistory'));
-        transaction.set(logRef, {
-          id: logRef.id, productId: previous.productId, productName: previous.productName || 'Producto',
-          storeId: previous.storeId, changedBy: currentUser?.name || 'Sistema', timestamp,
-          changeType: stockChange > 0 ? ProductChangeType.DAMAGED_RETURNED : ProductChangeType.DAMAGED,
-          incidentId: incident.id, stockBefore: before, stockAfter: before + stockChange, quantityChange: stockChange,
-          details: `Estado modificado de ${previous.status} a ${incident.status}. Stock: ${before} → ${before + stockChange}`
-        });
-      }
-      const history = previous.status !== incident.status
-        ? [...(previous.history || []), { status: incident.status, changedBy: currentUser?.name || 'Sistema', timestamp, notes: 'Estado actualizado manualmente por administrador' }]
-        : previous.history || [];
-      transaction.set(incidentRef, cleanObject({ ...incident, history, companyId: previous.companyId, storeId: previous.storeId }), { merge: true });
-    });
+    const existingIncident = incidents.find(i => i.id === incident.id);
+    if (!existingIncident || existingIncident.storeId !== incident.storeId) throw new Error('La novedad no pertenece a esta sede.');
+    if (incident.type === IncidentType.DAMAGED) {
+      const editContext = operationContextRef.current;
+      const incidentRef = doc(db, 'incidents', incident.id);
+      const logRef = doc(collection(db, 'productHistory'));
+      await runTransaction(db, async transaction => {
+        if (operationContextRef.current !== editContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+        const snapshot = await transaction.get(incidentRef);
+        if (!snapshot.exists()) throw new Error('La novedad ya no existe.');
+        const saved = { ...snapshot.data(), id: incident.id } as Incident;
+        if (saved.type !== IncidentType.DAMAGED || saved.storeId !== incident.storeId) throw new Error('La novedad no pertenece a esta sede.');
+        if (saved.damagedReceipt && (incident.status !== saved.status || incident.productId !== saved.productId)) throw new Error('La recepción ya está registrada. No se puede modificar su estado ni la prenda enviada desde la edición general.');
+        if (saved.status === IncidentStatus.EN_ARREGLO_CAMBIO && incident.productId !== saved.productId) throw new Error('No se puede cambiar la prenda original mientras está en arreglo/cambio. Registra el reemplazo al recibirla.');
+
+        const oldImpact = saved.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+        const newImpact = incident.status === IncidentStatus.EN_ARREGLO_CAMBIO ? -1 : 0;
+        const stockChange = newImpact - oldImpact;
+        const timestamp = new Date().toISOString();
+        const nextHistory = incident.status === saved.status ? (saved.history || []) : [
+          ...(saved.history || []),
+          { status: incident.status, changedBy: currentUser?.name || 'Sistema', timestamp, notes: 'Estado actualizado manualmente por administrador' }
+        ];
+
+        if (stockChange !== 0) {
+          if (!incident.productId) throw new Error('No se especificó un producto para ajustar el inventario.');
+          const productRef = doc(db, 'inventory', incident.productId);
+          const productSnapshot = await transaction.get(productRef);
+          if (!productSnapshot.exists()) throw new Error('La prenda no existe en el inventario.');
+          const product = { ...productSnapshot.data(), id: incident.productId } as Product;
+          if (product.storeId !== incident.storeId || (product.companyId && product.companyId !== operationalCompanyId)) throw new Error('La prenda no pertenece a la empresa y sede de la novedad.');
+          if (Number(product.stock) + stockChange < 0) throw new Error('No hay stock disponible para marcar esta prenda como dañada.');
+          transaction.update(productRef, { stock: increment(stockChange) });
+          transaction.set(logRef, {
+            id: logRef.id, productId: product.id, productName: product.name,
+            companyId: operationalCompanyId, storeId: product.storeId,
+            changedBy: currentUser?.name || 'Sistema', timestamp,
+            changeType: stockChange > 0 ? ProductChangeType.DAMAGED_RETURNED : ProductChangeType.DAMAGED,
+            stockDelta: stockChange,
+            details: `Estado de novedad modificado manualmente de ${saved.status} a ${incident.status}. Ajuste de stock: ${stockChange > 0 ? '+' : ''}${stockChange}.`
+          });
+        }
+
+        const { damagedReceipt: savedReceipt, ...updates } = cleanObject(incident);
+        transaction.set(incidentRef, {
+          ...updates,
+          history: nextHistory,
+          ...(saved.damagedReceipt ? { damagedReceipt: saved.damagedReceipt } : savedReceipt ? { damagedReceipt: savedReceipt } : {})
+        }, { merge: true });
+      });
+      return;
+    }
+    const batch = writeBatch(db);
+
+    if (existingIncident && existingIncident.status !== incident.status) {
+        incident.history = [
+            ...(incident.history || []),
+            {
+                status: incident.status,
+                changedBy: currentUser?.name || 'Sistema',
+                timestamp: new Date().toISOString(),
+                notes: 'Estado actualizado manualmente por administrador'
+            }
+        ];
+
+    }
+    batch.set(doc(db, 'incidents', incident.id), cleanObject(incident), { merge: true }); 
+    await batch.commit();
+
+    // Shared subscriptions deliver the committed change in its original scope.
+
   };
 
   const handleDeleteIncident = async (incidentId: string) => {
@@ -1708,7 +1714,8 @@ const App: React.FC = () => {
               fromProduct || { id: fromProductRef.id, name: incident.productName || 'Producto', storeId: incident.fromStoreId, cost: 0, price: 0, categoryId: '', stock: 0 },
               currentUser.name,
               ProductChangeType.TRANSFER_DELETED,
-              `+${qty} devueltas por anulación de novedad de traslado a ${toStoreName}`
+              `+${qty} devueltas por anulación de novedad de traslado a ${toStoreName}`,
+              qty
             );
             batch.set(doc(db, 'productHistory', log.id), log);
           }
@@ -1731,7 +1738,8 @@ const App: React.FC = () => {
               toProduct,
               currentUser.name,
               ProductChangeType.TRANSFER_DELETED,
-              `-${qty} descontadas por anulación de novedad de traslado desde ${fromStoreName}`
+              `-${qty} descontadas por anulación de novedad de traslado desde ${fromStoreName}`,
+              -qty
             );
             batch.set(doc(db, 'productHistory', log.id), log);
           }
@@ -1766,35 +1774,44 @@ const App: React.FC = () => {
       }
     }
 
-    // 2. Eliminación segura: devolver stock únicamente si el estado real aún está en arreglo.
-    if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO) {
-      if (!window.confirm('¿Eliminar novedad de prenda dañada? Se restaurará +1 unidad al inventario.')) return;
-      try {
-        await runTransaction(db, async transaction => {
+    // 2. Si es una novedad de prenda dañada que estaba en arreglo
+    if (incident.type === IncidentType.DAMAGED && incident.status === IncidentStatus.EN_ARREGLO_CAMBIO && incident.productId) {
+      if (window.confirm('¿Eliminar novedad de prenda dañada? Se restaurará +1 unidad al inventario.')) {
+        try {
+          const deleteContext = operationContextRef.current;
           const incidentRef = doc(db, 'incidents', incidentId);
-          const snapshot = await transaction.get(incidentRef);
-          if (!snapshot.exists()) return;
-          const latest = snapshot.data() as Incident;
-          if (latest.status !== IncidentStatus.EN_ARREGLO_CAMBIO || latest.type !== IncidentType.DAMAGED) throw new Error('La novedad cambió de estado. Actualiza la pantalla.');
-          if (!latest.productId || !visibleStoreIds.has(latest.storeId)) throw new Error('Novedad o producto no autorizado.');
-          const productRef = doc(db, 'inventory', latest.productId);
-          const product = await transaction.get(productRef);
-          if (!product.exists() || product.data()?.storeId !== latest.storeId) throw new Error('Producto no encontrado en la sede.');
-          const before = Number(product.data()?.stock || 0);
           const logRef = doc(collection(db, 'productHistory'));
-          transaction.update(productRef, { stock: before + 1 });
-          transaction.set(logRef, {
-            id: logRef.id, productId: latest.productId, productName: latest.productName || 'Producto',
-            storeId: latest.storeId, changedBy: currentUser.name, timestamp: new Date().toISOString(),
-            changeType: ProductChangeType.DAMAGED_RETURNED, incidentId,
-            stockBefore: before, stockAfter: before + 1, quantityChange: 1,
-            details: `Novedad eliminada. Stock: ${before} → ${before + 1} (+1)`
+          let restored = false;
+          await runTransaction(db, async transaction => {
+            if (operationContextRef.current !== deleteContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+            const incidentSnapshot = await transaction.get(incidentRef);
+            if (!incidentSnapshot.exists()) return;
+            const saved = { ...incidentSnapshot.data(), id: incidentId } as Incident;
+            if (saved.type !== IncidentType.DAMAGED || saved.status !== IncidentStatus.EN_ARREGLO_CAMBIO || saved.damagedReceipt || !saved.productId) return;
+            const productRef = doc(db, 'inventory', saved.productId);
+            const productSnapshot = await transaction.get(productRef);
+            if (!productSnapshot.exists()) throw new Error('La prenda ya no existe en el inventario.');
+            const product = { ...productSnapshot.data(), id: saved.productId } as Product;
+            if (product.storeId !== saved.storeId || (product.companyId && product.companyId !== operationalCompanyId)) throw new Error('La prenda no pertenece a la empresa y sede de la novedad.');
+            transaction.update(productRef, { stock: increment(1) });
+            transaction.delete(incidentRef);
+            transaction.set(logRef, {
+              id: logRef.id, productId: product.id, productName: product.name,
+              companyId: operationalCompanyId, storeId: product.storeId,
+              changedBy: currentUser.name, timestamp: new Date().toISOString(),
+              changeType: ProductChangeType.DAMAGED_RETURNED, stockDelta: 1,
+              details: 'Novedad de prenda dañada eliminada. Stock restaurado: +1'
+            });
+            restored = true;
           });
-          transaction.delete(incidentRef);
-        });
-      } catch (error: any) {
-        console.error('Error al eliminar novedad dañada:', error);
-        alert(`Error al eliminar: ${error.message}`);
+          if (!restored) return;
+          alert('Novedad eliminada y stock restaurado.');
+          return;
+        } catch (error: any) {
+          console.error("Error al eliminar novedad de daño:", error);
+          alert(`Error al eliminar novedad: ${error.message}`);
+          return;
+        }
       }
       return;
     }
@@ -1833,6 +1850,7 @@ const App: React.FC = () => {
                       changedBy: currentUser.name,
                       timestamp: new Date().toISOString(),
                       changeType: ProductChangeType.LAYAWAY_DELETED,
+                      stockDelta: item.quantity,
                       details: `Abono #${originalLayaway.invoiceNumber} editado (producto liberado). Stock devuelto: +${item.quantity}`
                   };
                   batch.set(logRef, log);
@@ -1856,6 +1874,7 @@ const App: React.FC = () => {
                       changedBy: currentUser.name,
                       timestamp: new Date().toISOString(),
                       changeType: ProductChangeType.LAYAWAY_RESERVED,
+                      stockDelta: -item.quantity,
                       details: `Abono #${updatedLayaway.invoiceNumber} editado (producto reservado). Stock restado: -${item.quantity}`
                   };
                   batch.set(logRef, log);
@@ -1890,6 +1909,7 @@ const App: React.FC = () => {
                   changedBy: currentUser.name,
                   timestamp: new Date().toISOString(),
                   changeType: ProductChangeType.LAYAWAY_DELETED,
+                  stockDelta: item.quantity,
                   details: `Abono eliminado/cancelado. Stock devuelto: +${item.quantity}`
               };
               batch.set(logRef, log);
@@ -1962,17 +1982,30 @@ const App: React.FC = () => {
           }
       });
 
-      if (updatedSale.items.length > 0) {
+      const originalQuantities = new Map<string, number>();
+      const updatedQuantities = new Map<string, number>();
+      originalSale.items.forEach(item => {
+          if (item?.id && !item.id.startsWith('voucher-')) originalQuantities.set(item.id, (originalQuantities.get(item.id) || 0) + item.quantity);
+      });
+      updatedSale.items.forEach(item => {
+          if (item?.id && !item.id.startsWith('voucher-')) updatedQuantities.set(item.id, (updatedQuantities.get(item.id) || 0) + item.quantity);
+      });
+      const itemById = new Map([...originalSale.items, ...updatedSale.items].filter(item => item?.id).map(item => [item.id, item]));
+      for (const productId of new Set([...originalQuantities.keys(), ...updatedQuantities.keys()])) {
+          const stockDelta = (originalQuantities.get(productId) || 0) - (updatedQuantities.get(productId) || 0);
+          if (stockDelta === 0 || !allKnownProducts.some(product => product.id === productId)) continue;
+          const item = itemById.get(productId)!;
           const logRef = doc(collection(db, 'productHistory'));
           const log: ProductHistoryLog = {
               id: logRef.id,
-              productId: updatedSale.items[0].id, 
-              productName: "Venta Editada",
+              productId,
+              productName: item.name,
               storeId: updatedSale.storeId,
               changedBy: currentUser.name,
               timestamp: new Date().toISOString(),
-              changeType: ProductChangeType.RETURN, 
-              details: `Factura #${updatedSale.invoiceNumber} editada. Inventario ajustado.`
+              changeType: ProductChangeType.RETURN,
+              stockDelta,
+              details: `Factura #${updatedSale.invoiceNumber} editada. Ajuste de stock: ${stockDelta > 0 ? '+' : ''}${stockDelta}.`
           };
           batch.set(logRef, log);
       }
@@ -2007,6 +2040,7 @@ const App: React.FC = () => {
                   changedBy: currentUser.name,
                   timestamp: new Date().toISOString(),
                   changeType: ProductChangeType.SALE_DELETED,
+                  stockDelta: item.quantity,
                   details: `Venta #${sale.invoiceNumber} eliminada. Stock restaurado: +${item.quantity}`
               };
               batch.set(logRef, log);
@@ -2070,7 +2104,7 @@ const App: React.FC = () => {
               const product = inventory.find(p => p.id === pid);
               if (product) {
                 batch.update(productRef, { stock: count });
-                const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste de inventario vía conteo físico a ${count} unidades (antes: ${product.stock}).`);
+                const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste de inventario vía conteo físico a ${count} unidades (antes: ${product.stock}).`, count - product.stock);
                 batch.set(doc(db, 'productHistory', log.id), log);
               }
           });
@@ -2089,7 +2123,7 @@ const App: React.FC = () => {
             const product = inventory.find(p => p.id === pid);
             if (product) {
               batch.update(productRef, { stock: count });
-              const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste diferido de inventario (Conteo del ${new Date(stockTake.createdAt).toLocaleDateString()}) a ${count} unidades (antes: ${product.stock}).`);
+              const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste diferido de inventario (Conteo del ${new Date(stockTake.createdAt).toLocaleDateString()}) a ${count} unidades (antes: ${product.stock}).`, count - product.stock);
               batch.set(doc(db, 'productHistory', log.id), log);
             }
         });
@@ -2147,7 +2181,7 @@ const App: React.FC = () => {
       if (!product || !isOwnInventory(product)) throw new Error('El conteo contiene un producto de otra sede o categoría.');
       if (product) {
         batch.update(productRef, { stock: count });
-        const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste detallado de stock a ${count} unidades por administrador.`);
+        const log = createProductHistoryLog(product, currentUser.name, ProductChangeType.STOCK_TAKE_APPLIED, `Ajuste detallado de stock a ${count} unidades por administrador.`, count - product.stock);
         batch.set(doc(db, 'productHistory', log.id), log);
       }
     });
@@ -2304,6 +2338,7 @@ const App: React.FC = () => {
                       changedBy: currentUser?.name || 'Administrador',
                       timestamp: new Date().toISOString(),
                       changeType: ProductChangeType.MANUAL_EDIT,
+                      stockDelta: newProductData.stock,
                       details: `Incremento de stock por adición: +${newProductData.stock} (antes: ${currentStock})`
                   });
               }
@@ -2407,6 +2442,7 @@ const App: React.FC = () => {
               changedBy: currentUser?.name || 'Administrador',
               timestamp: new Date().toISOString(),
               changeType: ProductChangeType.MANUAL_EDIT,
+              stockDelta: updatedProduct.stock - oldStock,
               details
           };
           batch.set(logRef, log);
@@ -2647,6 +2683,7 @@ const App: React.FC = () => {
                 changedBy: currentUser.name,
                 timestamp: new Date().toISOString(),
                 changeType: ProductChangeType.PURCHASE,
+                stockDelta: entry.quantity,
                 details: `Compra de ${entry.quantity} unidades (Antes: ${currentStock})`
             };
             batch.set(logRef, log);
@@ -2689,6 +2726,7 @@ const App: React.FC = () => {
         changedBy: currentUser.name,
         timestamp: new Date().toISOString(),
         changeType: ProductChangeType.PURCHASE_EDIT,
+        stockDelta: qtyDiff,
         details: `Edición de compra. Ajuste stock: ${qtyDiff > 0 ? '+' : ''}${qtyDiff}`
     });
 
@@ -2716,6 +2754,7 @@ const App: React.FC = () => {
         changedBy: currentUser.name,
         timestamp: new Date().toISOString(),
         changeType: ProductChangeType.PURCHASE_DELETE,
+        stockDelta: -purchase.quantity,
         details: `Compra eliminada. Se restaron ${purchase.quantity} unidades.`
     });
 
@@ -2971,6 +3010,7 @@ const App: React.FC = () => {
     await batch.commit();
   };
   const handleAddSeller = async (name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'create', name, password, roleId, storeId, username, companyId: operationalCompanyId }); return; }
     const userCompanyId = operationalCompanyId;
     if (!visibleStoreIds.has(storeId)) throw new Error('No se puede crear un usuario en una tienda de otra empresa.');
     const assignedRole = roles.find(role => role.id === roleId);
@@ -2991,6 +3031,7 @@ const App: React.FC = () => {
     await setDoc(newRef, cleanObject(newSellerData));
   };
   const handleUpdateSeller = async (id: string, name: string, password: string, roleId: string, storeId: string, username?: string) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'update', id, name, password, roleId, storeId, username }); return; }
     await assertCanManageUser(id);
     const assignedRole = roles.find(role => role.id === roleId);
     assertCompanyRole(assignedRole);
@@ -3008,10 +3049,11 @@ const App: React.FC = () => {
     if (username !== undefined) data.username = username;
     await updateDoc(doc(db, 'sellers', id), cleanObject(data));
   };
-  const handleDeleteSeller = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
-  const handleToggleSellerStatus = async (id: string) => { await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
-  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
+  const handleDeleteSeller = async (id: string) => { if (verifiedIdentityEnabled) { if(window.confirm('¿Eliminar vendedor?')) await manageVerifiedUser({ action: 'delete', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes eliminar al propietario Carlos.'); if(window.confirm('¿Eliminar vendedor?')) await deleteDoc(doc(db, 'sellers', id)); };
+  const handleToggleSellerStatus = async (id: string) => { if (verifiedIdentityEnabled) { await manageVerifiedUser({ action: 'toggle', id }); return; } await assertCanManageUser(id); if (id === PLATFORM_OWNER_USER_ID) throw new Error('No puedes desactivar al propietario Carlos.'); const seller = sellers.find(s => s.id === id); if (seller) await updateDoc(doc(db, 'sellers', id), { isDisabled: !seller.isDisabled }); };
+  const handleAddRole = async (name: string, userType: 'admin' | 'seller' | 'developer' = 'seller') => { if (verifiedIdentityEnabled) { await manageVerifiedRole({ action: 'create', name, userType, permissions: [], companyId: operationalCompanyId }); return; } assertCompanyRole({ id: '', name, permissions: [], userType }); const newRef = doc(collection(db, 'roles')); await setDoc(newRef, { id: newRef.id, name, permissions: [], userType, companyId: operationalCompanyId }); };
   const handleUpdateRole = async (updatedRole: Role) => {
+    if (verifiedIdentityEnabled) { await manageVerifiedRole({ action: 'update', id: updatedRole.id, name: updatedRole.name, userType: getRoleUserType(updatedRole), permissions: updatedRole.permissions }); return; }
     const original = roles.find(role => role.id === updatedRole.id);
     assertTenantData('roles', original, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
     assertTenantData('roles', updatedRole, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
@@ -3165,6 +3207,20 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
+    if (verifiedIdentityEnabled) {
+      try {
+        const result = await loginVerified(identifier, passwordAttempt);
+        setStores([result.store]); setRoles([result.role]); setCompanies([result.company]); setSellers([result.user]);
+        setCurrentUser(result.user); setActiveCompanyId(result.user.companyId!);
+        localStorage.setItem('activeCompanyId', result.user.companyId!);
+        selectStore(result.user.storeId);
+        setCurrentView(getRoleUserType(result.role) === 'seller' ? View.POS : View.DASHBOARD);
+        nativeAddDoc(collection(db, 'loginHistory'), { sellerId: result.user.id, sellerName: result.user.name, storeId: result.user.storeId, companyId: result.user.companyId, date: new Date().toISOString() }).catch(() => console.warn('No se pudo registrar el historial de ingreso.'));
+      } catch (error: any) {
+        alert(error?.code === 'functions/resource-exhausted' ? 'Demasiados intentos. Espera unos minutos.' : error?.code === 'functions/unauthenticated' ? 'Usuario o contraseña incorrecta.' : 'No se pudo verificar el acceso. Intenta nuevamente.');
+      }
+      return;
+    }
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanPass = (passwordAttempt || '').trim();
     // Fetch seller records only after the user submits credentials, not at startup.
@@ -3246,7 +3302,12 @@ const App: React.FC = () => {
     }
   };
   
-  const handleLogout = () => { currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+  const handleLogout = () => { if (verifiedIdentityEnabled) logoutVerified(currentUser?.id).catch(() => console.warn('No se pudo cerrar la sesión.')).finally(() => window.location.reload()); setRoles([]); setStores([]); setSellers([]); setCompanies([]); currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
+
+  useEffect(() => {
+    if (!verifiedIdentityEnabled || !currentUser) return;
+    return watchVerifiedIdentity(currentUser, handleLogout);
+  }, [currentUser?.id, currentUser?.authVersion]);
 
   if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
 
@@ -3259,7 +3320,7 @@ const App: React.FC = () => {
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary key={`${dataScope}:${currentStoreId}:${currentView}`}>
 
         <Suspense fallback={<VestikaLoader />} >
-        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={allIncidents.filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
+        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
@@ -3302,10 +3363,10 @@ const App: React.FC = () => {
                 stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={isAdmin ? allSales.filter(s => visibleStoreIds.has(s.storeId)) : sales} 
-                layaways={isAdmin ? allLayaways.filter(l => visibleStoreIds.has(l.storeId)) : layaways} 
+                sales={sales}
+                layaways={layaways}
                 expenses={expenses}
-                incidents={isAdmin ? allIncidents.filter(i => visibleStoreIds.has(i.storeId)) : incidents}
+                incidents={incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}
                 onAddExpense={handleAddExpense}
@@ -3391,7 +3452,7 @@ const App: React.FC = () => {
       </main>
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
-      <ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} />
+      {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {currentUser && showRecaudoReceipt && lastRecaudo && lastRecaudo.storeId === currentStoreId && (!lastRecaudo.companyId || lastRecaudo.companyId === operationalCompanyId) && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
       {isVerificationModalOpen && (

@@ -48,20 +48,23 @@ export async function authenticateIdentity(input, dependencies) {
   if (!store || store.isDisabled || store.status === 'inactive') reject();
   const companyId = store.companyId || DEFAULT_COMPANY;
   if (!validId(companyId) || seller.companyId && seller.companyId !== companyId) reject();
-  const company = await dependencies.read('companies', companyId);
+  const platformOwner = index.sellerId === OWNER_ID;
+  const [company, role, grant] = await Promise.all([
+    dependencies.read('companies', companyId),
+    dependencies.read('roles', seller.roleId),
+    platformOwner ? null : dependencies.read('platformDevelopers', index.sellerId)
+  ]);
   if (!company || company.isDisabled || ['inactive', 'suspended'].includes(company.status)) reject();
-  const role = await dependencies.read('roles', seller.roleId);
   if (!role || role.isDisabled || (role.companyId || DEFAULT_COMPANY) !== companyId) reject();
   const roleName = String(role.name || '').trim().toLowerCase();
   if (role.userType === 'developer' || ['developer', 'desarrollador'].includes(roleName)) reject();
-  const platformOwner = index.sellerId === OWNER_ID;
-  const grant = platformOwner ? null : await dependencies.read('platformDevelopers', index.sellerId);
   const platformDeveloper = platformOwner || !!(grant && grant.userId === index.sellerId && grant.role === 'developer' && grant.active === true && grant.grantedBy === OWNER_ID);
-  const claims = { identityVersion: 1, sellerId: index.sellerId, companyId, storeId: seller.storeId, roleId: seller.roleId, platformOwner, platformDeveloper };
+  const claims = { identityVersion: 1, authVersion: seller.authVersion || 0, sellerId: index.sellerId, companyId, storeId: seller.storeId, roleId: seller.roleId, platformOwner, platformDeveloper };
   const uid = `vestika:${createHash('sha256').update(index.sellerId).digest('hex')}`;
   const customToken = await dependencies.createCustomToken(uid, claims);
   // Whitelist rather than returning the seller document (which currently has a password).
-  return { customToken, user: { id: index.sellerId, name: seller.name || '', username: seller.username || '', companyId, storeId: seller.storeId, roleId: seller.roleId }, claims };
+  return { customToken, user: { id: index.sellerId, name: seller.name || '', username: seller.username || '', companyId, storeId: seller.storeId, roleId: seller.roleId, authVersion: seller.authVersion || 0 }, claims,
+    ...(dependencies.includeContext ? { store: { ...store, id: seller.storeId }, role: { ...role, id: seller.roleId }, company: { ...company, id: companyId } } : {}) };
 }
 export function nextAttempt(state, now, limit) {
   const current = state && Number.isFinite(state.windowStart) && now >= state.windowStart && now - state.windowStart < 600000 ? state : { windowStart: now, count: 0 };

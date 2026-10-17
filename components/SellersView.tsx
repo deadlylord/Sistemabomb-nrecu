@@ -1,3 +1,4 @@
+import { verifiedIdentityEnabled } from '../services/identityConfig';
 import { useViewFilter } from '../services/viewFilters';
 import { PLATFORM_OWNER_USER_ID } from '../services/developerAccess';
 import React, { useState, useMemo } from 'react';
@@ -177,6 +178,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
                       </td>
                       <td className="p-3 font-semibold text-gray-600 dark:text-text-dark">{getStoreName(seller.storeId)}</td>
                       <td className="p-3">
+                        {verifiedIdentityEnabled ? <span className="text-xs text-gray-500">Protegida</span> : (
                         <div className="flex items-center space-x-2">
                           {visiblePasswords[seller.id] ? (
                             <span className="font-mono font-bold text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-slate-800 dark:text-slate-100 select-all border border-gray-300 dark:border-gray-700">
@@ -196,6 +198,7 @@ const SellersView: React.FC<SellersViewProps> = ({ sellers, roles, stores, onAdd
                             {visiblePasswords[seller.id] ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                           </button>
                         </div>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                           <div className="flex justify-center items-center space-x-2">

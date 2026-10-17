@@ -34,7 +34,7 @@ test('render failures show recovery; a new module can still open',async()=>{
  const {default:Boundary}=await import(pathToFileURL(path).href);
  function Broken(){throw Error('chunk failed');}
  await act(async()=>{renderer=create(React.createElement(Boundary,{key:'a'},React.createElement(Broken)));});
- assert.equal(renderer.root.findByProps({role:'alert'}).findByType('button').children[0],'Volver a abrir');
+ assert.equal(renderer.root.findByProps({role:'alert'}).findByType('button').children[0],'Reintentar pantalla');
  await act(async()=>renderer.update(React.createElement(Boundary,{key:'b'},React.createElement('div',null,'working'))));
  assert.equal(JSON.stringify(renderer.toJSON()).includes('working'),true);
  }finally{if(renderer)await act(async()=>renderer.unmount());console.error=log;await rm(dir,{recursive:true,force:true});}

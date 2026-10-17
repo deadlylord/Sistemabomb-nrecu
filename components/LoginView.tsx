@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { MailIcon, LockIcon, EyeIcon } from './Icons';
-import { APP_VERSIONS } from '../constants';
+import { APP_VERSION } from '../services/appVersion';
 
 interface LoginViewProps {
   onLogin: (username: string, password: string) => void;
@@ -14,7 +14,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const currentVersion = APP_VERSIONS.find(v => v.isCurrent)?.version || '1.0.0';
+  const currentVersion = APP_VERSION;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

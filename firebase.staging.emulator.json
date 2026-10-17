@@ -1,0 +1,4 @@
+{
+  "firestore": { "rules": "security/firestore.staging.rules", "indexes":"security/firestore.staging.indexes.json" },
+  "emulators": { "firestore": { "host": "127.0.0.1", "port": 8086 }, "ui": { "enabled": false }, "singleProjectMode": false }
+}

@@ -762,7 +762,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <p className="text-sm text-slate-600 dark:text-slate-300">{preOrderSelection ? 'Por traer: selecciona prendas, incluso con stock 0.' : 'Selecciona prendas para la venta.'}</p>
                         <button type="button" onClick={startPreOrderSelection} aria-pressed={preOrderSelection} className="shrink-0 flex items-center gap-2 rounded-lg bg-yellow-500 px-3 py-2 text-sm font-bold text-white hover:bg-yellow-600">
-                            <TruckIcon className="w-4 h-4" /> Por traer
+                            <TruckIcon className="w-4 h-4" /> Abono por traer
                         </button>
                         {preOrderSelection && <button type="button" onClick={() => setPreOrderSelection(false)} className="text-sm text-accent underline shrink-0">Volver a venta</button>}
                     </div>

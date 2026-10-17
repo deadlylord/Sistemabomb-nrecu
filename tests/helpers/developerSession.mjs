@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 
 // Entire App controller and real navigation/Developer Center; Firestore is in-memory.
 // Operational screens expose their received props so isolation is checked at the boundary.
-export async function developerSession({browser=false}={}) {
+export async function developerSession({browser=false,summaries=false,verified=true}={}) {
   const dir = await mkdtemp(join(process.cwd(), 'tests/.developer-session-'));
-  const screens = ['LoginView', 'DashboardView', 'PosView', 'InventoryView', 'InventoryTransferView', 'LayawayView', 'SalesView', 'PurchasesView', 'SellersView', 'StoresView', 'StockTakeHistoryView', 'CustomersView', 'SettingsView', 'PayrollView', 'RoleManagerView', 'IncidentsView', 'CeoCenterView', 'SmartAccountantView', 'FinancialReconciliationView', 'GiftVouchersView', 'TagScanningView', 'ReportsView', 'ReceiptModal', 'RecaudoReceiptModal', 'InventoryVerificationModal', 'PendingIncidentsBriefingModal'];
-  const result = await build({bundle:true, write:false, format:'esm', platform:browser?'browser':'node', external:browser?[]:['react'], stdin:{contents:`${browser ? "export {createElement} from 'react'; export {createRoot} from 'react-dom/client';" : ''}export {default as App} from './components/App'; export {default as Header} from './components/Header'; export {default as DeveloperCenter} from './components/DeveloperCenterView'; export {View, DEFAULT_COMPANY_ID} from './types'; export {PLATFORM_OWNER_USER_ID} from './services/developerAccess'; export * from 'firebase/firestore'; export {renderedScreens} from 'screen-state';`, resolveDir:process.cwd()}, plugins:[{name:'session-fixtures',setup(b){
+  const screens = ['BusinessOverview', 'LoginView', 'DashboardView', 'PosView', 'InventoryView', 'InventoryTransferView', 'LayawayView', 'SalesView', 'PurchasesView', 'SellersView', 'StoresView', 'StockTakeHistoryView', 'CustomersView', 'SettingsView', 'PayrollView', 'RoleManagerView', 'IncidentsView', 'CeoCenterView', 'SmartAccountantView', 'FinancialReconciliationView', 'GiftVouchersView', 'TagScanningView', 'ReportsView', 'ReceiptModal', 'RecaudoReceiptModal', 'InventoryVerificationModal', 'PendingIncidentsBriefingModal'];
+  const result = await build({...(summaries?{define:{'import.meta.env':JSON.stringify({VITE_VERIFIED_IDENTITY:verified?'true':'false',VITE_STORE_SCOPED_LOADING:'true'})}}:{}),bundle:true, write:false, format:'esm', platform:browser?'browser':'node', external:browser?[]:['react'], stdin:{contents:`${browser ? "export {createElement} from 'react'; export {createRoot} from 'react-dom/client';" : ''}export {default as App} from './components/App'; export {default as Header} from './components/Header'; export {default as DeveloperCenter} from './components/DeveloperCenterView'; export {View, DEFAULT_COMPANY_ID} from './types'; export {PLATFORM_OWNER_USER_ID} from './services/developerAccess'; export * from 'firebase/firestore'; export {renderedScreens} from 'screen-state';`, resolveDir:process.cwd()}, plugins:[{name:'session-fixtures',setup(b){
+    if(summaries){b.onResolve({filter:/services\/verifiedAuth$/},a=>({path:a.path,namespace:'verified'}));b.onLoad({filter:/.*/,namespace:'verified'},()=>({contents:'export const watchVerifiedIdentity=()=>()=>{}; export const loginVerified=async()=>{throw Error("unexpected login")}; export const logoutVerified=async()=>{}; export const manageVerifiedUser=async()=>{}; export const manageVerifiedRole=async()=>{};'}));}
     b.onResolve({filter:/^(firebase\/(firestore|auth)|\.\.\/firebase)$/}, a=>({path:a.path,namespace:'fixtures'}));
     b.onLoad({filter:/.*/,namespace:'fixtures'},a=>({contents:a.path==='../firebase' ? 'export const db={}; export const auth={};' : a.path==='firebase/auth' ? 'export const onAuthStateChanged=(_,f)=>{f({uid:"test"});return()=>{}}; export const signInAnonymously=async()=>{};' : `
       export const records=new Map(), connections=[], writes=[];
@@ -18,7 +19,7 @@ export async function developerSession({browser=false}={}) {
       export const limit=value=>({limit:value}); export const orderBy=()=>({});
       export const query=(source,...filters)=>({...source,filters});
       const document=(name,row)=>({id:row.id,data:()=>row,exists:()=>true});
-      export const snapshot=q=>q.id ? (records.get(q.name)||[]).filter(r=>r.id===q.id).map(r=>document(q.name,r))[0]||{exists:()=>false} : {docs:(records.get(q.name)||[]).filter(r=>(q.filters||[]).every(f=>!f.field||r[f.field]===f.value)).map(r=>document(q.name,r)),get empty(){return !this.docs.length}};
+      export const snapshot=q=>q.id ? (records.get(q.name)||[]).filter(r=>r.id===q.id).map(r=>document(q.name,r))[0]||{exists:()=>false} : {docs:(records.get(q.name)||[]).filter(r=>(q.filters||[]).every(f=>!f.field||(f.op==='in'?f.value.includes(r[f.field]):r[f.field]===f.value))).map(r=>document(q.name,r)),docChanges(){return this.docs.map(doc=>({type:'added',doc}))},get empty(){return !this.docs.length}};
       export function onSnapshot(q,apply){const c={q,apply,closed:false}; connections.push(c); queueMicrotask(()=>{if(!c.closed)apply(snapshot(q))});return()=>{c.closed=true}};
       export const getDoc=async q=>snapshot(q); export const getDocs=async q=>snapshot(q);
       export const addDoc=async(ref,data)=>{writes.push({ref,data});return{id:'generated'}};
@@ -44,7 +45,7 @@ export function browserGlobals() {
   const values=new Map();
   globalThis.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,String(v)),removeItem:k=>values.delete(k)};
   globalThis.window={scrollTo(){},addEventListener(){},removeEventListener(){},confirm:()=>true};
-  globalThis.document={documentElement:{style:{setProperty(){}},classList:{add(){},remove(){},toggle(){}}},addEventListener(){},removeEventListener(){}};
+  globalThis.document={documentElement:{style:{setProperty(){},removeProperty(){}},classList:{add(){},remove(){},toggle(){}}},addEventListener(){},removeEventListener(){}};
   globalThis.alert=message=>{throw Error(message)};
   return ()=>Object.assign(globalThis,previous);
 }

@@ -212,6 +212,8 @@ export interface ProductHistoryLog {
   timestamp: string;
   changeType: ProductChangeType;
   details: string;
+  /** Signed inventory movement: positive adds units, negative removes them. */
+  stockDelta?: number;
 }
 
 export interface LabelConfig {
@@ -323,6 +325,7 @@ export interface Seller {
   isDeveloper?: boolean;
   platformRole?: 'developer' | null; // Display/protection metadata; authorization uses platformDevelopers.
   isDisabled?: boolean;
+  authVersion?: number;
 }
 
 export interface Product {

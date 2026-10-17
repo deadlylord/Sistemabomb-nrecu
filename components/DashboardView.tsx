@@ -101,19 +101,19 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, inventory: rawInventory, currentStore, sellers, onUpdateSale, onUpdateLayaway, onDeleteSale, onReprintSale,
     onOpenVerification, purchases: rawPurchases, allSales: rawAllSales, allInventory: rawAllInventory, categories: rawCategories, allStockTakes: rawAllStockTakes
   } = props;
-  const scope = analyticsScope(companyId, stores);
-  const storeScope = { companyId, storeIds: new Set(currentStore && scope.storeIds.has(currentStore.id) ? [currentStore.id] : []) };
-  const sales = selectAnalyticsRows<Sale>('sales', rawSales, storeScope);
-  const layaways = selectAnalyticsRows<Layaway>('layaways', rawLayaways, storeScope);
-  const expenses = selectAnalyticsRows<Expense>('expenses', rawExpenses, storeScope);
-  const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
-  const purchases = selectAnalyticsRows<Purchase>('purchases', rawPurchases, storeScope);
-  const allSales = selectAnalyticsRows<Sale>('sales', rawAllSales, scope);
-  const allInventory = selectAnalyticsRows<Product>('inventory', rawAllInventory, scope);
-  const categories = selectAnalyticsRows<Category>('categories', rawCategories, scope);
-  const allLayaways = selectAnalyticsRows<Layaway>('layaways', rawAllLayaways, scope);
-  const allIncidents = selectAnalyticsRows<Incident>('incidents', rawAllIncidents, scope);
-  const allStockTakes = selectAnalyticsRows<StockTake>('stockTakes', rawAllStockTakes, scope);
+  const scope = useMemo(() => analyticsScope(companyId, stores), [companyId, stores]);
+  const storeScope = useMemo(() => ({ companyId, storeIds: new Set(currentStore && scope.storeIds.has(currentStore.id) ? [currentStore.id] : []) }), [companyId, currentStore?.id, scope]);
+  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, storeScope), [rawSales, storeScope]);
+  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, storeScope), [rawLayaways, storeScope]);
+  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, storeScope), [rawExpenses, storeScope]);
+  const inventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawInventory, storeScope), [rawInventory, storeScope]);
+  const purchases = useMemo(() => selectAnalyticsRows<Purchase>('purchases', rawPurchases, storeScope), [rawPurchases, storeScope]);
+  const allSales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawAllSales, scope), [rawAllSales, scope]);
+  const allInventory = useMemo(() => selectAnalyticsRows<Product>('inventory', rawAllInventory, scope), [rawAllInventory, scope]);
+  const categories = useMemo(() => selectAnalyticsRows<Category>('categories', rawCategories, scope), [rawCategories, scope]);
+  const allLayaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawAllLayaways, scope), [rawAllLayaways, scope]);
+  const allIncidents = useMemo(() => selectAnalyticsRows<Incident>('incidents', rawAllIncidents, scope), [rawAllIncidents, scope]);
+  const allStockTakes = useMemo(() => selectAnalyticsRows<StockTake>('stockTakes', rawAllStockTakes, scope), [rawAllStockTakes, scope]);
 
 
   const isAdmin = useMemo(() => {

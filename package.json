@@ -1,7 +1,7 @@
 {
   "name": "original-cambios-ok-conectarda-a-firestore-facturacion-bombon",
   "private": true,
-  "version": "1.1.158",
+  "version": "1.1.166",
   "type": "module",
   "scripts": {
     "dev": "npm run build:styles && vite",
@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test:performance": "node --experimental-strip-types --test tests/*.test.mjs",
-    "build:styles": "npm exec --yes --package=tailwindcss@3.4.17 -- tailwindcss --config tailwind.config.cjs --input styles/tailwind.css --output .generated/tailwind.css --minify"
+    "build:styles": "npm exec --yes --package=tailwindcss@3.4.17 -- tailwindcss --config tailwind.config.cjs --input styles/tailwind.css --output .generated/tailwind.css --minify",
+    "test:firestore:rules": "npx --yes firebase-tools@15.34.0 emulators:exec --config firebase.emulator.json --only firestore --project demo-vestika-rules \"node --test tests/firestore/*.test.mjs\"",
+    "test:staging:rules": "npx --yes firebase-tools@15.34.0 emulators:exec --config firebase.staging.emulator.json --only firestore --project demo-vestika-identity \"node --test tests/firestore/stagingIdentity.test.mjs tests/firestore/businessSummary.test.mjs\""
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
@@ -23,6 +25,7 @@
     "recharts": "^3.7.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "react-test-renderer": "19.2.4",

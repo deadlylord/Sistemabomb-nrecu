@@ -178,8 +178,8 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, preOrderSelection, onS
 
         {cartItems.length === 0 ? (
           <div className="text-center py-6 space-y-3">
-            <p className="text-slate-500 dark:text-slate-400">{preOrderSelection ? 'Selecciona las prendas del encargo en el catálogo.' : 'Tu carrito está vacío.'}</p>
-            <button type="button" onClick={onStartPreOrder} className="w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-yellow-600">Por traer: seleccionar prendas</button>
+            <p className="text-slate-500 dark:text-slate-400">{preOrderSelection ? 'Selecciona las prendas del abono por traer en el catálogo.' : 'Tu carrito está vacío.'}</p>
+            <button type="button" onClick={onStartPreOrder} className="w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-yellow-600">Abono por traer: seleccionar prendas</button>
           </div>
         ) : (
           <>
@@ -339,7 +339,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, preOrderSelection, onS
                 >
                   Procesar Venta
                 </button>
-                {(preOrderSelection || hasStockShortage) && <p className="text-xs text-yellow-700 dark:text-yellow-300">{preOrderSelection ? 'Estás preparando un encargo. Confirma con «Crear encargo por traer».' : 'Hay prendas sin stock suficiente. Usa «Por traer» para crear el encargo.'}</p>}
+                {(preOrderSelection || hasStockShortage) && <p className="text-xs text-yellow-700 dark:text-yellow-300">{preOrderSelection ? 'Estás preparando un abono por traer. El stock se descuenta al recibir las prendas.' : 'Hay prendas sin stock suficiente. Usa «Abono por traer» para seleccionarlas.'}</p>}
                 <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => onHoldSale()} className="w-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-300 font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
                         <PauseIcon />
@@ -351,7 +351,7 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, preOrderSelection, onS
                     </button>
                     <button onClick={() => preOrderSelection ? handleLayawayClick(true) : onStartPreOrder()} className="col-span-2 w-full bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-yellow-600 transition-colors">
                         <TruckIcon />
-                        <span>{preOrderSelection ? 'Crear encargo por traer' : 'Por traer: seleccionar prendas'}</span>
+                        <span>{preOrderSelection ? 'Crear Abono por traer' : 'Abono por traer'}</span>
                     </button>
                 </div>
               </div>
@@ -381,11 +381,11 @@ const CartPanel: React.FC<CartPanelProps> = ({ cartItems, preOrderSelection, onS
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border dark:border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-sm max-h-[90dvh] overflow-y-auto">
                 <h3 className="text-xl font-bold text-accent mb-4">
-                  {isPreOrder ? 'Crear Abono por Traer (Encargo)' : 'Crear Abono'}
+                  {isPreOrder ? 'Crear Abono por traer' : 'Crear Abono'}
                 </h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-4">
                   {isPreOrder
-                    ? 'El stock NO se descontará hasta que marques el producto como recibido.'
+                    ? 'El stock no se descontará hasta que marques las prendas como recibidas.'
                     : 'Ingresa los datos para asociarlos a este abono.'}
                 </p>
                 {layawayError && (

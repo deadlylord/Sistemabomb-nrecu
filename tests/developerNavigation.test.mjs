@@ -34,7 +34,7 @@ test('developer can select another company store without borrowing that company 
     assert.ok(button(s.header(),'Cambiar Sede') || text(s.header()).includes('Cambiar Sede'),'authorized developer store selector opens');
     await act(async()=>button(s.header(),'Sede B2').props.onClick());
     assert.equal(s.header().props.currentStore.id,'B2');
-    assert.ok(text(s.header()).includes('Traslados Internos'));
+    assert.ok(text(s.header()).includes('Traslados'));
   }finally{await s.cleanup()}
 });
 
@@ -131,7 +131,7 @@ test('ordinary seller cannot open Developer Center, transfers or switch to anoth
   const s=await setup({ownerAccess:false});try{
     assert.equal(s.header().props.isDeveloper,false);
     assert.equal(text(s.header()).includes('Developer Center'),false);
-    assert.equal(text(s.header()).includes('Traslados Internos'),false);
+    assert.equal(text(s.header()).includes('Traslados'),false);
     await act(async()=>s.header().props.onSwitchStore('B1'));
     assert.equal(s.header().props.currentStore.id,'A1');
     await s.navigate(s.View.DEVELOPER_CENTER);

@@ -1,0 +1,55 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Existing public production config remains the fallback; UI overrides are supported.
+[context.production.environment]
+  VITE_VERIFIED_IDENTITY = "false"
+  VITE_FINANCIAL_LEDGER_INDEXED = "false"
+  VITE_STORE_SCOPED_LOADING = "true"
+  VITE_FIREBASE_API_KEY = "AIzaSyCsEfJKMRzfOirlzpzPag8hwIyDzEwXicU"
+  VITE_FIREBASE_AUTH_DOMAIN = "factura2-6e811.firebaseapp.com"
+  VITE_FIREBASE_DATABASE_URL = "https://factura2-6e811-default-rtdb.firebaseio.com"
+  VITE_FIREBASE_PROJECT_ID = "factura2-6e811"
+  VITE_FIREBASE_PRODUCTION_PROJECT_ID = "factura2-6e811"
+  VITE_FIREBASE_STORAGE_BUCKET = "factura2-6e811.firebasestorage.app"
+  VITE_FIREBASE_MESSAGING_SENDER_ID = "1038601908493"
+  VITE_FIREBASE_APP_ID = "1:1038601908493:web:bfcaf3c4312aae287fc044"
+  VITE_FIREBASE_MEASUREMENT_ID = "G-1RBDBWCRDW"
+  VITE_APP_ENV = "production"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+
+# Deploy Previews are deliberately marked staging. Configure their Firebase
+# variables in Netlify UI to point to the dedicated Vestika staging project.
+[context.deploy-preview.environment]
+  VITE_APP_ENV = "staging"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+
+[context.branch-deploy.environment]
+  VITE_APP_ENV = "staging"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+
+# Staging retains its separately verified identity and ledger processors.
+[context.staging.environment]
+  VITE_VERIFIED_IDENTITY = "true"
+  VITE_APP_ENV = "staging"
+  VITE_USE_FIREBASE_EMULATORS = "false"
+  VITE_FINANCIAL_LEDGER_INDEXED = "true"
+  # Rules, indexes, processors and store histories verified in vestika-staging.
+  VITE_STORE_SCOPED_LOADING = "true"
+
+# Keep HTML and service worker fresh after each staging deploy.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

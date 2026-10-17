@@ -1,7 +1,8 @@
 
 import React from 'react';
-import { Product, ProductHistoryLog, ProductChangeType } from '../types';
+import { Product, ProductHistoryLog } from '../types';
 import { CrossIcon, TrashIcon } from './Icons';
+import { calculateProductHistoryBalances } from '../services/productHistoryBalance';
 
 interface ProductHistoryModalProps {
   isOpen: boolean;
@@ -18,77 +19,7 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
     .filter(log => log.productId === product.id && log.storeId === product.storeId)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-  // Calculate running balances working backwards from current stock
-  let currentRunningStock = product.stock;
-  const historyWithBalance = [...productHistory].map((log) => {
-    const balanceAfter = currentRunningStock;
-    
-    // Helper to extract the quantity from a string, avoiding invoice numbers
-    const extractQty = (text: string) => {
-      // Look for numbers after specific keywords or symbols that indicate quantity
-      const match = text.match(/(?:Cantidad: |de |restaurado: |^|[-+])\s*([-+]?\d+)/i);
-      if (match) {
-          return Math.abs(parseInt(match[1], 10));
-      }
-      // If it's a simple number at the start (like "-5 a Tienda X")
-      const simpleMatch = text.match(/^[-+]?\d+/);
-      if (simpleMatch) {
-          return Math.abs(parseInt(simpleMatch[0], 10));
-      }
-      return 0;
-    };
-
-    // Reverse the change to find the stock before this log
-    if (log.changeType === ProductChangeType.SALE || 
-        log.changeType === ProductChangeType.TRANSFER_OUT || 
-        log.changeType === ProductChangeType.DAMAGED ||
-        log.changeType === ProductChangeType.EXCHANGE_OUT ||
-        log.changeType === ProductChangeType.LAYAWAY_RESERVED ||
-        log.changeType === ProductChangeType.PRE_ORDER_FULFILLED) {
-      const qty = extractQty(log.details);
-      currentRunningStock += qty;
-    } else if (log.changeType === ProductChangeType.SALE_DELETED || 
-               log.changeType === ProductChangeType.TRANSFER_IN || 
-               log.changeType === ProductChangeType.PURCHASE ||
-               log.changeType === ProductChangeType.EXCHANGE_IN ||
-               log.changeType === ProductChangeType.DAMAGED_RETURNED ||
-               log.changeType === ProductChangeType.LAYAWAY_DELETED ||
-               log.changeType === ProductChangeType.RETURN) {
-      const qty = extractQty(log.details);
-      currentRunningStock -= qty;
-    } else if (log.changeType === ProductChangeType.PURCHASE_DELETE) {
-      const qty = extractQty(log.details);
-      currentRunningStock += qty; // Deleting a purchase reduces stock, so backwards we add it
-    } else if (log.changeType === ProductChangeType.MANUAL_EDIT || 
-               log.changeType === ProductChangeType.STOCK_TAKE_APPLIED ||
-               log.changeType === ProductChangeType.DETAILED_VERIFICATION ||
-               log.changeType === ProductChangeType.INCONSISTENCY_FIX ||
-               log.changeType === ProductChangeType.PURCHASE_EDIT) {
-      const oldMatch = log.details.match(/Stock (\d+) ->/) || 
-                       log.details.match(/antes: (\d+)/) || 
-                       log.details.match(/Antes: (\d+)/) ||
-                       log.details.match(/Cantidad: (\d+) ->/);
-      
-      if (oldMatch) {
-        currentRunningStock = parseInt(oldMatch[1], 10);
-      } else {
-        const diffMatch = log.details.match(/Ajuste stock:\s*([-+]?\d+)/i);
-        if (diffMatch) {
-          const diff = parseInt(diffMatch[1], 10);
-          currentRunningStock -= diff;
-        }
-      }
-    } else if (log.changeType === ProductChangeType.CREATED) {
-      const initialStockMatch = log.details.match(/Stock inicial: (\d+)/i);
-      if (initialStockMatch) {
-        currentRunningStock = parseInt(initialStockMatch[1], 10);
-      } else {
-        currentRunningStock = 0;
-      }
-    }
-
-    return { ...log, balanceAfter };
-  });
+  const historyWithBalance = calculateProductHistoryBalances(productHistory, product.stock);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -142,7 +73,7 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
                     <td className="p-3 text-sm text-gray-600 dark:text-text-dark">{log.details}</td>
                     <td className="p-3 text-sm text-center">
                       <span className="font-bold text-base px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                        {log.balanceAfter}
+                        {log.balanceAfter === null ? '—' : log.balanceAfter}
                       </span>
                     </td>
                     <td className="p-3 text-sm font-medium">{log.changedBy}</td>
@@ -168,7 +99,7 @@ const ProductHistoryModal: React.FC<ProductHistoryModalProps> = ({ isOpen, onClo
           )}
         </div>
         <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-300">
-          <strong>Nota de Auditoría:</strong> La columna "Stock Final" se calcula retroactivamente desde el stock actual ({product.stock}). Si nota saltos inexplicables o si el stock inicial no coincide con la creación del producto, verifique si hubo ajustes manuales sin registro o si existen productos duplicados con el mismo nombre.
+          <strong>Nota de Auditoría:</strong> La columna "Stock Final" se reconstruye desde el stock actual ({product.stock}) y los movimientos registrados. Un guion indica que falta un dato de un registro antiguo para calcular con certeza los saldos anteriores.
         </div>
       </div>
     </div>
