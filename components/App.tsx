@@ -73,8 +73,7 @@ const IncidentsView = lazy(() => import('./IncidentsView'));
 const CeoCenterView = lazy(() => import('./CeoCenterView').then(module => ({ default: module.CeoCenterView })));
 const DeveloperCenterView = lazy(() => import('./DeveloperCenterView'));
 const DashboardView = lazy(() => import('./DashboardView'));
-const BusinessOverview = lazy(() => import('./BusinessOverview'));
-const businessSummariesEnabled = verifiedIdentityEnabled && import.meta.env.VITE_BUSINESS_SUMMARIES === 'true';
+const scopedStoreLoadingEnabled = verifiedIdentityEnabled && import.meta.env.VITE_STORE_SCOPED_LOADING === 'true';
 const SmartAccountantView = lazy(() => import('./SmartAccountantView'));
 const FinancialReconciliationView = lazy(() => import('./FinancialReconciliationView'));
 const GiftVouchersView = lazy(() => import('./GiftVouchersView'));
@@ -332,10 +331,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
   const [settledDataContext, setSettledDataContext] = useState(operationContext);
   const dataContextReady = settledDataContext === operationContext;
-  const [dashboardDetailScope, setDashboardDetailScope] = useState('');
-  const [dashboardDetailSection, setDashboardDetailSection] = useState<string>();
-  const isSummaryDashboard = businessSummariesEnabled && currentView === View.DASHBOARD && dashboardDetailScope !== operationContext;
-  useEffect(() => { if (currentView !== View.DASHBOARD) setDashboardDetailScope(''); }, [currentView]);
   const overlayScope = `${operationContext}:${currentView}`;
   const [settledOverlayScope, setSettledOverlayScope] = useState(overlayScope);
   useEffect(() => {
@@ -477,7 +472,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [isAppReady, isAuthReady, currentUser?.id, currentUser?.companyId, isDeveloper]);
 
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || businessSummariesEnabled && ![View.POS,View.CEO_CENTER].includes(currentView)) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || scopedStoreLoadingEnabled && ![View.POS,View.CEO_CENTER].includes(currentView)) return;
     let active = true;
     const rows = new Map<string, CeoDailyNote[]>();
     const queries = operationalCompanyId === DEFAULT_COMPANY_ID
@@ -493,15 +488,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
   useEffect(() => {
-    if (!isAppReady || !isAuthReady || !currentUser || isSummaryDashboard) return;
+    if (!isAppReady || !isAuthReady || !currentUser) return;
     const unsubscribers = [
       attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'sellers'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [currentUser?.id, isAppReady, isAuthReady, isSummaryDashboard]);
+  }, [currentUser?.id, isAppReady, isAuthReady]);
   
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || isSummaryDashboard) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
     const companyId = operationalCompanyId;
     // The original company also retains its historical untagged categories.
     const categoryQuery = companyId === DEFAULT_COMPANY_ID
@@ -518,10 +513,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       setCategoryState({ companyId, items: [] });
     });
     return () => { active = false; unsubscribe(); };
-  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, isSummaryDashboard]);
+  }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId]);
 
   useEffect(() => {
-    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || businessSummariesEnabled && currentView !== View.INVENTORY_TRANSFER) return;
+    if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser || scopedStoreLoadingEnabled && currentView !== View.INVENTORY_TRANSFER) return;
     let active = true;
     const ids = [...visibleStoreIds];
     const rows = new Map<string, InventoryTransfer[]>();
@@ -535,8 +530,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
-  const needsInventory = !isSummaryDashboard && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
-  const inventoryStoreKey = businessSummariesEnabled
+  const needsInventory = (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
+  const inventoryStoreKey = scopedStoreLoadingEnabled
     ? JSON.stringify(isGlobalMode && needsInventory || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
     : companyStoreKey;
   useEffect(() => {
@@ -554,7 +549,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [isOperationalView, isAdmin, currentUser?.id, inventoryStoreKey, dataScope, isAuthReady, companyStoreKey]);
 
 
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !businessSummariesEnabled && currentView === View.DASHBOARD);
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !scopedStoreLoadingEnabled && currentView === View.DASHBOARD);
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
@@ -577,14 +572,11 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   
   useEffect(() => {
     if (!isOperationalView || !currentUser || !currentStoreId || !visibleStoreIds.has(currentStoreId)) return;
-    if (isSummaryDashboard) {
-      return attachFirestoreListener(query(collection(db,'incidents'),where('storeId','==',currentStoreId),where('status','in',[IncidentStatus.DAÑADO_REPORTADO,IncidentStatus.CAMBIO_SOLICITADO,IncidentStatus.TRASLADO_SOLICITADO,IncidentStatus.WARRANTY_ACTIVE,IncidentStatus.PENDIENTE_APROBACION])),setIncidents);
-    }
     return subscribeStoreRows('incidents', currentStoreId, dataScope, rows => setIncidents(rows.filter(row => {
       try { assertTenantData('incidents', row, { companyId: operationalCompanyId, storeIds: visibleStoreIds }); return true; }
       catch { return false; }
     })));
-  }, [isOperationalView, currentUser?.id, currentStoreId, dataScope, companyStoreKey, isSummaryDashboard]);
+  }, [isOperationalView, currentUser?.id, currentStoreId, dataScope, companyStoreKey]);
 
   const hasDataAccess = !!currentUser && canAccessCurrentView;
   const canLoadStore = isOperationalView && isAppReady && isAuthReady && hasDataAccess && !!currentStoreId && visibleStoreIds.has(currentStoreId);
@@ -634,19 +626,14 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     });
   }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
-  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isSummaryDashboard && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
-  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && !isSummaryDashboard && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
-  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && !isSummaryDashboard && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
-  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && !isSummaryDashboard && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
-  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && !isSummaryDashboard && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
+  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
+  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
+  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
+  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
+  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
 
   useEffect(() => {
-    if (!canLoadStore || !currentStoreId || !isSummaryDashboard) return;
-    return attachFirestoreListener(query(collection(db,'layaways'),where('storeId','==',currentStoreId),where('status','==','pre-order')),setLayaways);
-  },[canLoadStore,currentStoreId,isSummaryDashboard,dataScope]);
-
-  useEffect(() => {
-    if (!canLoadStore || !currentStoreId || isSummaryDashboard) return;
+    if (!canLoadStore || !currentStoreId) return;
 
     let active = true;
     const unsubscribers: (() => void)[] = [];
@@ -659,7 +646,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
     switch (currentView) {
         case View.DASHBOARD:
-            if (businessSummariesEnabled) attachStore('expenses', setExpenses);
+            if (scopedStoreLoadingEnabled) attachStore('expenses', setExpenses);
             attachStore('dailyNotes', setDailyNotes);
             attachStore('stockTakes', setStockTakes);
             break;
@@ -707,7 +694,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             break;
     }
     return () => { active = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [canLoadStore, currentStoreId, currentView, dataScope, isSummaryDashboard]);
+  }, [canLoadStore, currentStoreId, currentView, dataScope]);
   useEffect(() => {
     if (currentUser && !hasShownBriefing && dataContextReady && currentView !== View.DEVELOPER_CENTER) {
       const pendingIncidentsCount = incidents.filter(i => 
@@ -3333,9 +3320,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary key={`${dataScope}:${currentStoreId}:${currentView}`}>
 
         <Suspense fallback={<VestikaLoader />} >
-        {currentView === View.DASHBOARD && isSummaryDashboard && <BusinessOverview companyId={operationalCompanyId} store={currentStore} stores={visibleStores} scope={dataScope} onOpenDetails={(section) => { setDashboardDetailSection(section); setDashboardDetailScope(operationContext); }} onOpenVerification={() => { setDashboardDetailSection(undefined); setDashboardDetailScope(operationContext); setIsVerificationModalOpen(true); }} />}
-        {currentView === View.DASHBOARD && !isSummaryDashboard && businessSummariesEnabled && <button className="mb-3 text-accent font-bold" onClick={() => setDashboardDetailScope('')}>‹ Volver al resumen</button>}
-        {currentView === View.DASHBOARD && !isSummaryDashboard && <DashboardView key={`${dataScope}:${currentStoreId}`} initialSection={dashboardDetailSection} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(businessSummariesEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
+        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}

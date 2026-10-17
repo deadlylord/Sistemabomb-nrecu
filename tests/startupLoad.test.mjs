@@ -84,7 +84,7 @@ test("login form loads no Firebase or operational module before submit; pending 
     await rm(dir, { recursive: true, force: true });
   }
 });
-test("admin overview subscribes to no raw inventory/sales/purchases/history, opening detail loads active store only", async () => {
+test("complete dashboard opens directly and loads detailed data for the active store only", async () => {
   const restore = browserGlobals(),
     m = await developerSession({ summaries: true });
   let renderer;
@@ -144,30 +144,17 @@ test("admin overview subscribes to no raw inventory/sales/purchases/history, ope
         "daily_notes",
         "inventoryTransfers",
       ];
-    assert.equal(
-      live().some((c) => rawNames.includes(c.q.name)),
-      false,
-    );
-    const alert = live().find((c) => c.q.name === "incidents");
-    assert.equal(alert.q.filters.find((f) => f.field === "status").op, "in");
-    assert.deepEqual(
-      live()
-        .find((c) => c.q.name === "layaways")
-        .q.filters.find((f) => f.field === "status").value,
-      "pre-order",
-    );
-    const overview = () =>
-      renderer.root.findByProps({ screen: "BusinessOverview" });
-    assert.equal(overview().props.store.id, "a1");
-    await act(async () => renderer.root.findByType(m.Header).props.onToggleGlobalMode());
-    assert.equal(live().some(c=>rawNames.includes(c.q.name)),false,'global search does not load inventories on the overview');
-    await act(async () => renderer.root.findByType(m.Header).props.onToggleGlobalMode());
-    await act(async () => overview().props.onOpenDetails("sales-history"));
-    assert.equal(
-      renderer.root.findAllByProps({ screen: "BusinessOverview" }).length,
-      0,
-    );
-    assert.equal(renderer.root.findByProps({ screen: "DashboardView" }).props.initialSection, "sales-history");
+    const dashboard = () => renderer.root.findByProps({ screen: "DashboardView" });
+    assert.equal(renderer.root.findAllByProps({screen:"BusinessOverview"}).length, 0);
+    assert.equal(dashboard().props.currentStore.id, "a1");
+    for (const name of ["inventory", "sales", "purchases", "layaways", "incidents", "stockTakes", "dailyNotes", "expenses"]) {
+      assert.equal(live().filter(c => c.q.name === name).length, 1, name + " has one shared subscription");
+    }
+    assert.equal(live().some(c => ["inventoryTransfers", "productHistory", "customers"].includes(c.q.name)), false);
+    const before = live().filter(c => ["sales", "layaways"].includes(c.q.name));
+    await act(async () => renderer.root.findByType(m.Header).props.setCurrentView(m.View.POS));
+    await act(async () => renderer.root.findByType(m.Header).props.setCurrentView(m.View.DASHBOARD));
+    for (const connection of before) assert.equal(connection.closed, false, "shared sales connections survive navigation");
     for (const c of live().filter((c) =>
       ["inventory", "sales", "purchases", "layaways", "incidents"].includes(
         c.q.name,
@@ -177,15 +164,12 @@ test("admin overview subscribes to no raw inventory/sales/purchases/history, ope
     await act(async () =>
       renderer.root.findByType(m.Header).props.onSwitchStore("a2"),
     );
-    assert.equal(overview().props.store.id, "a2");
-    assert.equal(
-      live().some((c) => rawNames.includes(c.q.name)),
-      false,
-    );
+    assert.equal(dashboard().props.currentStore.id, "a2");
+    for (const c of live().filter(c => rawNames.includes(c.q.name))) assert.equal(c.q.filters.find(f=>f.field==="storeId").value,"a2");
     await act(async () =>
       renderer.root.findByType(m.Header).props.onSwitchStore("foreign"),
     );
-    assert.equal(overview().props.store.id, "a2");
+    assert.equal(dashboard().props.currentStore.id, "a2");
   } finally {
     if (renderer) await act(async () => renderer.unmount());
     await m.cleanup();

@@ -39,3 +39,7 @@ El ingreso actualizado, las reglas, los tres índices y los cinco procesadores e
 - Compilación con identidad y resúmenes habilitados aprobada.
 - Suite completa: 136/138 aprobadas; persisten dos comprobaciones anteriores con textos desactualizados de navegación/recuperación. Se corrigió el simulador de Firestore (`docChanges`) y de estilos usado por esas pruebas, sin cambiar la lógica de producción para hacerlas pasar.
 - Typecheck conserva tres errores previos en `AppErrorBoundary` (`setState`/`props`); no agrega errores en los componentes nuevos. `git diff --check` sin errores.
+
+## Corrección 1.1.165
+
+El resumen reducido fue retirado del flujo. Se restaura DashboardView completo con sus funciones y cálculos originales. `VITE_STORE_SCOPED_LOADING=true` conserva en staging las consultas de la sede activa; los informes multisede cargan al abrirse. Se conserva el ingreso diferido. Las fuentes detalladas de la sede sí se leen para sostener el historial completo, medios de pago, diferencias, categorías y top de productos; no se afirma una reducción de esas lecturas a acumulados. Los acumulados desplegados no sustituyen la vista original.

@@ -24,7 +24,7 @@
   VITE_USE_FIREBASE_EMULATORS = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
   # Rules, indexes, processors and store histories verified in vestika-staging.
-  VITE_BUSINESS_SUMMARIES = "true"
+  VITE_STORE_SCOPED_LOADING = "true"
 
 # Keep HTML and service worker fresh after each staging deploy.
 [[headers]]
