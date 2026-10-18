@@ -14,7 +14,7 @@ const projectId='demo-vestika-online-ledger',db=new Firestore({projectId});
 const facade={projectId:'factura2-6e811',doc:db.doc.bind(db),collection:db.collection.bind(db),batch:db.batch.bind(db),runTransaction:db.runTransaction.bind(db)};
 const options={projectId:'factura2-6e811',companyId:'a',storeId:'s1',documentId:FieldPath.documentId()};
 const root='financialLedgerCompanies/a/stores/s1';
-const legacy="rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if request.auth != null; } } }";
+const legacy="rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /inventory/{document=**} { allow read: if true; allow write: if request.auth != null; } match /categories/{document=**} { allow read: if true; allow write: if request.auth != null; } match /{document=**} { allow read, write: if request.auth != null; } } }";
 
 test('production-compatible rules and online construction preserve ongoing work',async t=>{
  const env=await initializeTestEnvironment({projectId,firestore:{rules:prepareCompatibleLedgerRules(legacy).source}});
@@ -39,6 +39,9 @@ test('production-compatible rules and online construction preserve ongoing work'
   await t.test('legacy login/business reads and writes remain usable; derived writes and private state remain denied',async()=>{
    const client=env.authenticatedContext('anonymous',{firebase:{sign_in_provider:'anonymous'}}).firestore();
    await assertSucceeds(getDocs(collection(client,'sellers')));
+   const publicClient=env.unauthenticatedContext().firestore();
+   await assertSucceeds(getDocs(collection(publicClient,'inventory')));await assertSucceeds(getDocs(collection(publicClient,'categories')));
+   await assertFails(getDocs(collection(publicClient,'financialRecords')));
    await assertSucceeds(getDocs(query(collection(client,root+'/accounts/cash/entries'),orderBy('ledgerTime','desc'),limit(50))));
    await assertSucceeds(setDoc(doc(client,'financialRecords/business-write'),{storeId:'s1',amount:5}));await assertSucceeds(deleteDoc(doc(client,'financialRecords/business-write')));
    for(const path of [root,root+'/accounts/cash/entries/r0000',root+'/months/2026-08',root+'/peers/s2/entries/r0000']){

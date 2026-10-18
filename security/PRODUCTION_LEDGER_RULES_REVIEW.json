@@ -1,6 +1,6 @@
 {
   "score": 1,
-  "summary": "Revisión de la propuesta compatible, todavía sin desplegar. Los espacios derivados quedan de escritura exclusiva del servidor y los estados son privados. Se conserva la política histórica de los documentos de negocio; esta política permite identidades anónimas y no puede considerarse aislamiento seguro por empresa. No se presenta esta entrega como migración de identidad ni como reparación de esa limitación previa.",
+  "summary": "Revisión de las reglas compatibles desplegadas en producción. El catálogo público de inventario y categorías se conserva y se comprobó mediante el SDK real. Los espacios derivados quedan de escritura exclusiva del servidor y los estados son privados. Se conserva la política histórica de los documentos de negocio; esta política permite identidades anónimas y no puede considerarse aislamiento seguro por empresa. No se presenta esta entrega como migración de identidad ni como reparación de esa limitación previa.",
   "findings": [
     {
       "check": "Authority Source",
@@ -17,8 +17,8 @@
     {
       "check": "Business Logic vs. Rules",
       "severity": "minor",
-      "issue": "La propuesta solo puede generarse automáticamente si la política real coincide con la forma histórica conocida. Cualquier otra regla requiere revisión para no perder restricciones existentes.",
-      "recommendation": "Leer, comparar y respaldar la regla desplegada antes de publicar. La validación administrativa permanece pendiente de reconexión."
+      "issue": "La generación reconoce únicamente el permiso histórico autenticado y su variante con catálogo público de inventario y categorías. La política real de producción fue leída, respaldada y comparada antes de desplegar; se detiene ante cualquier otra forma.",
+      "recommendation": "Conservar la comprobación del hash exacto y las referencias de rollback en despliegues posteriores."
     }
   ]
 }

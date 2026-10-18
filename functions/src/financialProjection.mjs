@@ -68,10 +68,12 @@ export async function projectFinancialRecords(db, ids) {
       if (!cache.has(path)) cache.set(path, tx.get(db.doc(path)));
       return cache.get(path);
     };
-    const snapshots = await Promise.all(ids.map(async id => {
-      const [source, state] = await Promise.all([read(`financialRecords/${id}`), read(`financialLedgerState/${id}`)]);
-      return { id, source, state };
-    }));
+    // One batchGet replaces up to 100 concurrent streaming RPCs. Besides
+    // reducing overhead, it avoids exhausting operator/network connections.
+    const initialPaths=ids.flatMap(id=>[`financialRecords/${id}`,`financialLedgerState/${id}`]);
+    const initial=await tx.getAll(...initialPaths.map(path=>db.doc(path)));
+    initialPaths.forEach((path,index)=>cache.set(path,Promise.resolve(initial[index])));
+    const snapshots=ids.map((id,index)=>({id,source:initial[index*2],state:initial[index*2+1]}));
     const changes = await Promise.all(snapshots.map(async ({ id, source, state }) => {
       const before = state.exists ? state.data().record : null;
       let after = source.exists ? { ...source.data(), id } : null;

@@ -11,7 +11,7 @@ import { prepareCompatibleLedgerRules } from '../src/compatibleLedgerRules.mjs';
 import { backfillOnlineLedger, verifyOnlineLedger } from '../src/onlineFinancialLedger.mjs';
 
 const root=fileURLToPath(new URL('../../',import.meta.url)),projectId='factura2-6e811';
-const legacy="rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if request.auth != null; } } }";
+const legacy="rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /inventory/{document=**} { allow read: if true; allow write: if request.auth != null; } match /categories/{document=**} { allow read: if true; allow write: if request.auth != null; } match /{document=**} { allow read, write: if request.auth != null; } } }";
 export async function packProductionLedger() {
   const projection=await readFile(new URL('../src/financialProjection.mjs',import.meta.url),'utf8');
   const trigger=await readFile(new URL('../src/productionFinancialTrigger.mjs',import.meta.url),'utf8');
@@ -35,6 +35,17 @@ async function cliCredential() {
   if(!account)throw Error('Firebase administrative reconnection required; store login is unaffected');
   return {async getAccessToken(){const token=await cli.getAccessToken(account.tokens.refresh_token,['https://www.googleapis.com/auth/cloud-platform']);return{access_token:token.access_token,expires_in:Math.max(1,Math.floor(((token.expires_at||Date.now()+3600000)-Date.now())/1000))};}};
 }
+export function operatorFirestoreOptions(credential) {
+  // Use the transport's own auth library: Admin and google-gax can depend on
+  // different major versions whose request-header formats are incompatible.
+  const require=createRequire(import.meta.url);
+  const firestoreRequire=createRequire(require.resolve('@google-cloud/firestore'));
+  const transportRequire=createRequire(firestoreRequire.resolve('google-gax'));
+  const {GoogleAuth,OAuth2Client}=transportRequire('google-auth-library');
+  const authClient=new OAuth2Client();
+  authClient.refreshHandler=async()=>{const token=await credential.getAccessToken();return{access_token:token.access_token,expiry_date:Date.now()+token.expires_in*1000};};
+  return{projectId,preferRest:true,auth:new GoogleAuth({projectId,authClient})};
+}
 export async function runProductionLedger(args) {
   const {values}=parseArgs({args,options:{mode:{type:'string'},store:{type:'string'},after:{type:'string'}},strict:true,allowPositionals:false});
   const mode=values.mode;
@@ -43,7 +54,7 @@ export async function runProductionLedger(args) {
   const bundle=await packProductionLedger();
   if(mode==='pack')return{mode,projectId,...bundle,deployed:false,sourceWrites:0};
   const credential=await cliCredential();
-  async function get(url){const token=await credential.getAccessToken();const response=await fetch(url,{headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(30000)});if(!response.ok){const error=Error('Administrative request failed ('+response.status+')');error.status=response.status;throw error;}return response.json();}
+  async function get(url){const token=await credential.getAccessToken();const response=await fetch(url,{headers:{Authorization:'Bearer '+token.access_token},signal:AbortSignal.timeout(30000)});if(!response.ok){const data=await response.json();const error=Error('Administrative request failed ('+response.status+')');error.status=response.status;error.reason=data.error?.details?.find(value=>value.reason)?.reason;throw error;}return response.json();}
   const metadata=await get('https://firestore.googleapis.com/v1/projects/'+projectId+'/databases/(default)');
   if(metadata.databaseEdition!=='STANDARD'||metadata.locationId!=='nam5'||metadata.type!=='FIRESTORE_NATIVE')throw Error('Production database identity/edition/location mismatch');
   const release=await get('https://firebaserules.googleapis.com/v1/projects/'+projectId+'/releases/cloud.firestore');
@@ -53,14 +64,16 @@ export async function runProductionLedger(args) {
   const rulesPatched=createHash('sha256').update(liveRules).digest('hex')===bundle.rulesHash;
   // An unknown ruleset is never silently replaced. The captured exact previous
   // source is an operator rollback artifact, separate from client deployment.
-  if(!rulesPatched){const patch=prepareCompatibleLedgerRules(liveRules);await writeFile(join(root,'security/production-ledger.previous.rules.local'),liveRules,{mode:0o600});await writeFile(join(root,'security/production-ledger.previous.manifest.local'),JSON.stringify({projectId,previousRuleset:release.rulesetName,previousHash:patch.previousHash,desiredHash:patch.hash})+'\n',{mode:0o600});}
+  if(!rulesPatched){const patch=prepareCompatibleLedgerRules(liveRules);if(patch.hash!==bundle.rulesHash)throw Error('Production public-catalog policy differs from the reviewed deployment');await writeFile(join(root,'security/production-ledger.previous.rules.local'),liveRules,{mode:0o600});await writeFile(join(root,'security/production-ledger.previous.manifest.local'),JSON.stringify({projectId,previousRuleset:release.rulesetName,previousHash:patch.previousHash,desiredHash:patch.hash})+'\n',{mode:0o600});}
   const functionUrl='https://cloudfunctions.googleapis.com/v2/projects/'+projectId+'/locations/us-central1/functions/'+bundle.functionName;
-  let server;try{server=await get(functionUrl);}catch(error){if(error.status!==404)throw error;}
+  let server;try{server=await get(functionUrl);}catch(error){if(error.status!==404&&error.reason!=='SERVICE_DISABLED')throw error;}
   const serverReady=server?.state==='ACTIVE'&&server.labels?.vestika_ledger_build===bundle.buildHash&&server.eventTrigger?.retryPolicy==='RETRY_POLICY_RETRY'&&server.serviceConfig?.maxInstanceCount===5;
   if(mode==='check')return{mode,projectId,database:metadata.databaseEdition,location:metadata.locationId,rulesPatched,serverReady:!!serverReady,...bundle,sourceWrites:0};
   if(!rulesPatched||!serverReady)throw Error('Deploy the reviewed rules and exact isolated processor before building or activating');
-  const {initializeApp}=await import('firebase-admin/app');const{getFirestore,FieldPath}=await import('firebase-admin/firestore');
-  const app=initializeApp({credential,projectId},'production-ledger-operator');const db=getFirestore(app);db.settings({preferRest:true});
+  // Admin getFirestore(app) only accepts service-account/ADC credentials.
+  // The operator uses the existing CLI session without creating key files.
+  const {Firestore,FieldPath}=await import('firebase-admin/firestore');
+  const db=new Firestore(operatorFirestoreOptions(credential));
   try{
     const stores=await db.collection('stores').get();const selected=values.store||null;
     if(selected&&!stores.docs.some(store=>store.id===selected))throw Error('Unknown production store');
@@ -75,7 +88,7 @@ export async function runProductionLedger(args) {
       console.log(JSON.stringify(results.at(-1)));
     }
     return{mode,projectId,stores:results.length,sourceWrites:0,activated:mode==='activate'};
-  }finally{await db.terminate();await app.delete();}
+  }finally{await db.terminate();}
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){
  runProductionLedger(process.argv.slice(2)).then(value=>console.log(JSON.stringify(value))).catch(error=>{console.error(error.message);process.exitCode=1;});

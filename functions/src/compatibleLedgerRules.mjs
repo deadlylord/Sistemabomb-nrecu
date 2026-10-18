@@ -5,7 +5,11 @@ import { createHash } from 'node:crypto';
 export function prepareCompatibleLedgerRules(liveRules) {
   if (typeof liveRules !== 'string') throw new Error('Live production rules are required');
   const normalized = liveRules.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').replace(/\s/g, '').replace(/"/g, "'");
-  if (normalized !== "rules_version='2';servicecloud.firestore{match/databases/{database}/documents{match/{document=**}{allowread,write:ifrequest.auth!=null;}}}") throw new Error('Unknown production rules; preserve and review them before deployment');
+  const catchAll = "match/{document=**}{allowread,write:ifrequest.auth!=null;}";
+  const catalog = "match/inventory/{document=**}{allowread:iftrue;allowwrite:ifrequest.auth!=null;}match/categories/{document=**}{allowread:iftrue;allowwrite:ifrequest.auth!=null;}";
+  const shell = body => "rules_version='2';servicecloud.firestore{match/databases/{database}/documents{" + body + '}}';
+  const publicCatalog = normalized === shell(catalog + catchAll);
+  if (!publicCatalog && normalized !== shell(catchAll)) throw new Error('Unknown production rules; preserve and review them before deployment');
   const source = `// Compatibility activation: existing business access remains unchanged.
 // Derived financial data is server-owned. Verified tenant identity is a separate
 // migration; anonymous legacy identities still have the existing read scope.
@@ -29,7 +33,9 @@ service cloud.firestore {
         && role.companyId == companyId && !role.get('isDisabled', false)
         && (storeId == token.storeId || role.get('userType', '') == 'admin');
     }
-    match /financialLedgerCompanies/{companyId}/stores/{storeId} {
+    ${publicCatalog ? `match /inventory/{document=**} { allow read: if true; allow write: if authenticated(); }
+    match /categories/{document=**} { allow read: if true; allow write: if authenticated(); }
+    ` : ''}match /financialLedgerCompanies/{companyId}/stores/{storeId} {
       allow read: if ledgerScope(companyId, storeId);
       allow write: if false;
       match /accounts/{account}/entries/{id} { allow read: if ledgerScope(companyId, storeId); allow write: if false; }

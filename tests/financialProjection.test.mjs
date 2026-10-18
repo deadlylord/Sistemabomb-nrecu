@@ -2,17 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { projectFinancialRecord, projectFinancialRecords, invalidateFinancialProjection, ledgerRoot, ledgerDay, ledgerTime, emptyLedgerSummary, emptyLedgerMonth, applyLedgerDelta } from '../functions/src/financialProjection.mjs';
 function memoryDb() {
-  const data = new Map(), versions = new Map(); let version = 0;
+  const data = new Map(), versions = new Map(), reads={single:0,batchSizes:[]}; let version = 0;
   const put = (path, value) => { data.set(path, structuredClone(value)); versions.set(path, ++version); };
   const snapshot = ref => ({ exists: data.has(ref.path), data: () => structuredClone(data.get(ref.path)), updateTime: { seconds: 0, nanoseconds: versions.get(ref.path) || 0 } });
   const db = { doc: path => ({ path }), runTransaction: async callback => {
     const writes = []; let writing = false;
-    const tx = { get: async ref => { assert.equal(writing, false, 'all reads precede writes'); return snapshot(ref); },
+    const tx = { get: async ref => { reads.single++; assert.equal(writing, false, 'all reads precede writes'); return snapshot(ref); },
+      getAll: async(...refs)=>{reads.batchSizes.push(refs.length);assert.equal(writing,false,'all reads precede writes');return refs.map(snapshot);},
       set: (ref, value) => { writing = true; writes.push(() => put(ref.path, value)); },
       delete: ref => { writing = true; writes.push(() => data.delete(ref.path)); } };
     const result = await callback(tx); for (const write of writes) write(); return result;
   } };
-  return { db, data, put };
+  return { db, data, put, reads };
 }
 const record = (id, extras = {}) => ({ id, companyId: 'bombon', storeId: 'metro', amount: -100, accountType: 'cash', date: '2026-10-01T23:59:00-05:00', subCategory: 'Servicios', description: 'Factura', ...extras });
 
@@ -68,10 +69,11 @@ test('invalid data revokes a verified balance; correction clears diagnostics but
 
 
 test('online backfill groups 50 rows into one summary revision and retries without duplicating sources',async()=>{
- const {db,data,put}=memoryDb();put('stores/metro',{companyId:'bombon'});put('stores/divino',{companyId:'bombon'});
+ const {db,data,put,reads}=memoryDb();put('stores/metro',{companyId:'bombon'});put('stores/divino',{companyId:'bombon'});
  const ids=Array.from({length:50},(_,i)=>String(i));for(const id of ids)put('financialRecords/'+id,record(id,{amount:10,debtStoreId:'divino'}));
  const originals=new Map([...data].filter(([path])=>path.startsWith('financialRecords/')).map(([path,value])=>[path,structuredClone(value)]));
  await projectFinancialRecords(db,ids);const root=ledgerRoot('bombon','metro');
+ assert.deepEqual(reads.batchSizes,[100]);assert.ok(reads.single<=4,'shared store and summary reads stay bounded');
  assert.equal(data.get(root).revision,1);assert.equal(data.get(root).count,50);assert.equal(data.get(root).accounts.cash,500);
  await projectFinancialRecords(db,ids);assert.equal(data.get(root).revision,1);
  put('financialRecords/0',record('0',{amount:30,debtStoreId:'divino'}));data.delete('financialRecords/1');

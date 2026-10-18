@@ -5,7 +5,7 @@
 # Existing public production config remains the fallback; UI overrides are supported.
 [context.production.environment]
   VITE_VERIFIED_IDENTITY = "false"
-  VITE_FINANCIAL_LEDGER_INDEXED = "false"
+  VITE_FINANCIAL_LEDGER_INDEXED = "true"
   VITE_STORE_SCOPED_LOADING = "true"
   VITE_FIREBASE_API_KEY = "AIzaSyCsEfJKMRzfOirlzpzPag8hwIyDzEwXicU"
   VITE_FIREBASE_AUTH_DOMAIN = "factura2-6e811.firebaseapp.com"

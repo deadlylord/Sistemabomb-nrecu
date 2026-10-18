@@ -35,3 +35,19 @@ test('independent legacy balances preserve cash exclusions, Addi/QR debts and op
  ]);
  assert.deepEqual(result,{accounts:{cash:100,addi:30,qr:40,sistecredito:-5},peers:{peer:{total:30,cash:20,qr:10,count:3}}});
 });
+
+
+test('the actual production public catalog policy survives the compatible patch without widening other collections',()=>{
+ const actual=legacy.replace('match /{document=**}',"match /inventory/{document=**} { allow read: if true; allow write: if request.auth != null; } match /categories/{document=**} { allow read: if true; allow write: if request.auth != null; } match /{document=**}");
+ const result=prepareCompatibleLedgerRules(actual);assert.match(result.source,/match \/inventory\/\{document=\*\*\}/);assert.match(result.source,/match \/categories\/\{document=\*\*\}/);
+ assert.notEqual(result.hash,prepareCompatibleLedgerRules(legacy).hash);
+ assert.throws(()=>prepareCompatibleLedgerRules(actual.replace('allow read: if true','allow read: if false')),/Unknown production rules/);
+});
+
+test('operator OAuth uses Firestore transport headers without service-account key files', async()=>{
+ const{operatorFirestoreOptions}=await import('../functions/scripts/productionLedger.mjs');
+ let requests=0;const options=operatorFirestoreOptions({async getAccessToken(){requests++;return{access_token:'operator-unit-test-token',expires_in:3600};}});
+ assert.equal(options.projectId,'factura2-6e811');assert.equal(options.preferRest,true);
+ const headers=await options.auth.getRequestHeaders();assert.equal(headers.Authorization,'Bearer operator-unit-test-token');assert.equal(requests,1);
+ assert.equal(options.credentials,undefined);
+});
