@@ -249,11 +249,16 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-2 sm:p-4">
-      <div className="bg-white dark:bg-secondary rounded-xl shadow-2xl w-full max-w-4xl h-[calc(100dvh-1rem)] sm:h-auto max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+    <div
+      className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-sale-title"
+    >
+      <div className="bg-white dark:bg-secondary rounded-none sm:rounded-xl shadow-2xl w-full max-w-4xl h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0 bg-white dark:bg-secondary">
-          <h2 className="text-lg sm:text-2xl font-bold text-accent">Editar Venta #{sale.invoiceNumber}</h2>
+          <h2 id="edit-sale-title" className="text-lg sm:text-2xl font-bold text-accent">Editar Venta #{sale.invoiceNumber}</h2>
           <button
             type="button"
             onClick={() => { if (!savingRef.current) onClose(); }}
@@ -439,9 +444,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
 
           {saveError && <p role="alert" className="px-4 py-2 text-sm text-red-600">{saveError}</p>}
           {/* Sticky Footer */}
-          <div className="px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-end gap-3 shrink-0 bg-white dark:bg-secondary z-10">
-            <button type="button" onClick={() => { if (!savingRef.current) onClose(); }} className="px-5 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
-            <button type="submit" className="px-7 py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
+          <div data-testid="edit-sale-mobile-actions" className="px-3 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:flex sm:justify-end gap-2 sm:gap-3 shrink-0 bg-white dark:bg-secondary z-20 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:shadow-none">
+            <button type="button" onClick={() => { if (!savingRef.current) onClose(); }} className="w-full sm:w-auto px-3 sm:px-5 py-3 sm:py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
+            <button type="submit" className="w-full sm:w-auto px-3 sm:px-7 py-3 sm:py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
           </div>
           </fieldset>
         </form>

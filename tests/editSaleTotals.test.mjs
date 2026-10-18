@@ -70,6 +70,20 @@ test('sale date and seller corrections follow the original payment without losin
   }finally{await act(async()=>f.r.unmount());}
 });
 
+test('mobile editor owns the full viewport and keeps both actions in a protected footer',async()=>{
+  const f=await mount();
+  try {
+    const dialog=f.r.root.findByProps({role:'dialog'});
+    assert.match(dialog.props.className,/z-\[9999\]/);
+    assert.match(dialog.props.className,/p-0/);
+    const panel=dialog.findAll(node=>typeof node.props?.className==='string').find(node=>node.props.className.includes('h-[100dvh]'));
+    assert.ok(panel);
+    const actions=f.r.root.findByProps({'data-testid':'edit-sale-mobile-actions'});
+    assert.match(actions.props.className,/grid-cols-2/);
+    assert.equal(actions.findAllByType('button').length,2);
+  } finally { await act(async()=>f.r.unmount()); }
+});
+
 test('pure totals reject invalid amounts and preserve payment metadata when correcting a surcharge payment',()=>{
   assert.deepEqual(saleEditTotals([{price:50000,quantity:2}],'percent',10,3000),{subtotal:100000,discountAmount:10000,discountPercent:10,totalAmount:93000});
   const p=adjustedSalePayment({amount:103000,method:'QR',date:'2026-10-15',seller:'Ana',baseAmount:100000,surchargeAmount:3000},53000,3000);
