@@ -17,3 +17,6 @@ Problemas históricos a vigilar: edición móvil de ventas/abonos, traslados dup
 
 ## Regla de negocio confirmada — V-VENTAS-001
 Al editar una venta, cualquier unidad eliminada debe devolverse automáticamente al inventario de la tienda de origen. Calcular la diferencia entre cantidades originales y nuevas por producto, sin afectar otras tiendas y sin duplicar ajustes ante reintentos. Validar esta regla mediante pruebas antes de modificar el flujo actual. Anulaciones y devoluciones de clientes requieren reglas separadas.
+
+## Regla de negocio confirmada — V-VENTAS-002
+Al agregar prendas durante la edición de una venta, descontar automáticamente las unidades agregadas del inventario correspondiente a la tienda de la venta. Calcular el ajuste neto por producto frente a la venta original; evitar descontar dos veces ante reintentos. La política de existencias insuficientes queda pendiente de confirmación y no debe suponerse.
