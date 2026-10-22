@@ -29,3 +29,12 @@ Al editar la cantidad de una prenda de una venta, ajustar el inventario exclusiv
 
 ## Regla de negocio confirmada — V-VENTAS-005
 Al cambiar exclusivamente el precio de una prenda durante la edición de una venta, recalcular el subtotal, descuentos/recargos aplicables y total de la venta; ajustar los pagos para que cuadren con el total nuevo, sin modificar existencias de inventario. Conservar coherencia de medios de pago, fechas y trazabilidad; el criterio exacto de redistribución cuando hay varios medios de pago queda pendiente de confirmación. Evitar movimientos de stock si no cambian productos ni cantidades.
+
+## Análisis previo obligatorio para cada petición
+1. Identificar archivos y flujos implicados y dependencias directas/indirectas (carga por tienda, navegación, estado local, filtros, Firestore, reportes, conciliación, traslados).
+2. Separar intención del usuario de implementación propuesta; nunca asumir que optimizar lecturas autoriza perder estado de UI.
+3. Enumerar invariantes aprobadas y posibles regresiones, con nivel de certeza (comprobado, probable, riesgo).
+4. Explicar impactos en español no técnico antes de cambios importantes; preguntar solo por decisiones de negocio no inferibles.
+5. Elegir implementación que preserve contratos anteriores, añadir pruebas de regresión y documentar nuevas reglas confirmadas.
+6. Si un cambio nuevo contradice una regla existente, señalar la contradicción y pedir prioridad antes de actuar.
+Ejemplo: cargar solo datos de tienda activa no debe borrar filtros de conciliación ni cerrar paneles al cambiar de sede. Separar el ciclo de vida de los datos por tienda del estado de navegación y búsqueda por usuario/empresa.
