@@ -18,3 +18,6 @@ No rediseñar ni redefinir flujos existentes solo por documentar Skills. Ante ca
 
 ### Caso reportado: conciliación (regresión por paginación)
 Comportamiento esperado que el usuario quiere recuperar: al cambiar de sede, el panel/libro de conciliación que estaba expandido permanece abierto y el texto de búsqueda se conserva y se aplica en la nueva sede. La paginación no debe reiniciar esos estados. Es un requisito de preservación, no una corrección implementada ni validada aún.
+
+## Matriz de impacto y regresión obligatoria
+Por cada cambio registrar: petición, módulos afectados, dependencias, comportamiento previo que debe mantenerse, escenarios de cambio de tienda/rol, pruebas y resultado. Especial atención a remounts de componentes, persistencia de filtros y paneles, carga por tienda, paginación, edición móvil y conciliación. Las pruebas estáticas de código no sustituyen la comprobación funcional. Ante una regresión, rastrear commits y diferenciar causalidad demostrada de hipótesis.
