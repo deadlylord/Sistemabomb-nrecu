@@ -20,3 +20,6 @@ Al editar una venta, cualquier unidad eliminada debe devolverse automáticamente
 
 ## Regla de negocio confirmada — V-VENTAS-002
 Al agregar prendas durante la edición de una venta, descontar automáticamente las unidades agregadas del inventario correspondiente a la tienda de la venta. Calcular el ajuste neto por producto frente a la venta original; evitar descontar dos veces ante reintentos. La política de existencias insuficientes queda pendiente de confirmación y no debe suponerse.
+
+## Regla de negocio confirmada — V-VENTAS-003
+Al editar una venta, no permitir agregar unidades de prendas si el inventario disponible de la tienda de origen es insuficiente. Validar disponibilidad al guardar contra el estado vigente, considerando el ajuste neto de la propia venta, y evitar que dos ediciones concurrentes consuman las mismas unidades. No permitir stock negativo por esta operación. No asumir excepciones de administrador sin confirmación.
