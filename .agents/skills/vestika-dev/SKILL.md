@@ -23,3 +23,6 @@ Al agregar prendas durante la edición de una venta, descontar automáticamente 
 
 ## Regla de negocio confirmada — V-VENTAS-003
 Al editar una venta, no permitir agregar unidades de prendas si el inventario disponible de la tienda de origen es insuficiente. Validar disponibilidad al guardar contra el estado vigente, considerando el ajuste neto de la propia venta, y evitar que dos ediciones concurrentes consuman las mismas unidades. No permitir stock negativo por esta operación. No asumir excepciones de administrador sin confirmación.
+
+## Regla de negocio confirmada — V-VENTAS-004
+Al editar la cantidad de una prenda de una venta, ajustar el inventario exclusivamente por la diferencia entre cantidad original y nueva. Si aumenta, descontar únicamente el incremento y validar existencias suficientes al guardar; si disminuye, devolver únicamente la diferencia. Mantener el ajuste limitado a la tienda de la venta y prevenir duplicados por reintentos o concurrencia.
