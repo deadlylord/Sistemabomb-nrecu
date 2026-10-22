@@ -24,3 +24,6 @@ Confirmar prerequisitos antes de ejecutarlos; no usar bases reales para pruebas.
 - .agents/skills/vestika-git-deploy/SKILL.md
 
 En cada entrega: causa, archivos cambiados, riesgos, pruebas realizadas/no realizadas y plan de reversión.
+
+## Regla obligatoria: análisis de impacto antes de cada cambio
+Antes de implementar cualquier petición, explicar en lenguaje sencillo: (1) qué cambiará, (2) qué módulos, datos y estados podrían verse afectados, (3) qué comportamientos ya aprobados deben conservarse, (4) riesgos y mitigaciones, (5) pruebas de regresión y (6) si se requiere aclaración o autorización. No responder solo «listo» sin evaluar dependencias. Distinguir causa comprobada, causa probable y riesgo hipotético; no atribuir regresiones a peticiones del usuario sin evidencia. El usuario define el comportamiento deseado; el agente es responsable de analizar consecuencias técnicas. Documentar cada nuevo requisito confirmado y sus invariantes, sin redefinir comportamientos existentes que ya funcionan. Para cambios con riesgos significativos, presentar alternativas y solicitar decisión antes de implementar.
