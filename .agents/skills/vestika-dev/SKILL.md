@@ -14,3 +14,6 @@ description: Diagnosticar y desarrollar cambios seguros en el POS Vestika React/
 8. Preparar PR con evidencia; no desplegar sin autorización.
 
 Problemas históricos a vigilar: edición móvil de ventas/abonos, traslados duplicados, conciliación congelada, login lento, paneles de resumen ausentes y lecturas Firebase excesivas. Confirmar siempre si siguen presentes.
+
+## Regla de negocio confirmada — V-VENTAS-001
+Al editar una venta, cualquier unidad eliminada debe devolverse automáticamente al inventario de la tienda de origen. Calcular la diferencia entre cantidades originales y nuevas por producto, sin afectar otras tiendas y sin duplicar ajustes ante reintentos. Validar esta regla mediante pruebas antes de modificar el flujo actual. Anulaciones y devoluciones de clientes requieren reglas separadas.
