@@ -26,3 +26,6 @@ Al editar una venta, no permitir agregar unidades de prendas si el inventario di
 
 ## Regla de negocio confirmada — V-VENTAS-004
 Al editar la cantidad de una prenda de una venta, ajustar el inventario exclusivamente por la diferencia entre cantidad original y nueva. Si aumenta, descontar únicamente el incremento y validar existencias suficientes al guardar; si disminuye, devolver únicamente la diferencia. Mantener el ajuste limitado a la tienda de la venta y prevenir duplicados por reintentos o concurrencia.
+
+## Regla de negocio confirmada — V-VENTAS-005
+Al cambiar exclusivamente el precio de una prenda durante la edición de una venta, recalcular el subtotal, descuentos/recargos aplicables y total de la venta; ajustar los pagos para que cuadren con el total nuevo, sin modificar existencias de inventario. Conservar coherencia de medios de pago, fechas y trazabilidad; el criterio exacto de redistribución cuando hay varios medios de pago queda pendiente de confirmación. Evitar movimientos de stock si no cambian productos ni cantidades.
