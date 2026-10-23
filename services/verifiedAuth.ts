@@ -1,5 +1,5 @@
 import { auth, db } from '../firebase';
-import { doc, onSnapshot, addDoc, collection } from 'firebase/firestore';
+import { doc, onSnapshot, addDoc, collection } from './measuredFirestore';
 import { verifiedIdentityEnabled } from './identityConfig';
 import type { Seller, Store, Role, Company } from '../types';
 

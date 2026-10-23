@@ -1,3 +1,4 @@
+import { clearReadMeasurement, setReadContext } from '../services/readDiagnostics';
 import { verifiedIdentityEnabled } from '../services/identityConfig';
 import type { VerifiedSession } from './VerifiedEntry';
 import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
@@ -39,7 +40,7 @@ import {
   runTransaction as nativeRunTransaction,
   orderBy,
   deleteField
-} from 'firebase/firestore';
+} from '../services/measuredFirestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID, DEFAULT_CLIENT_ALLOWED_VIEWS } from '../types';
 import Header from './Header';
@@ -73,6 +74,7 @@ const RoleManagerView = lazy(() => import('./RoleManagerView'));
 const IncidentsView = lazy(() => import('./IncidentsView'));
 const CeoCenterView = lazy(() => import('./CeoCenterView').then(module => ({ default: module.CeoCenterView })));
 const DeveloperCenterView = lazy(() => import('./DeveloperCenterView'));
+const ReadDiagnosticsPanel = lazy(() => import('./ReadDiagnosticsPanel'));
 const DashboardView = lazy(() => import('./DashboardView'));
 const scopedStoreLoadingEnabled = import.meta.env?.VITE_STORE_SCOPED_LOADING === 'true';
 const SmartAccountantView = lazy(() => import('./SmartAccountantView'));
@@ -359,6 +361,12 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
   }, [dataScope, companyStoreKey]);
+  const readMeasurementUser = useRef(currentUser?.id);
+  useEffect(() => {
+    if (readMeasurementUser.current !== currentUser?.id || !isDeveloper) clearReadMeasurement();
+    readMeasurementUser.current = currentUser?.id;
+    setReadContext({ view: String(currentView), companyId: operationalCompanyId, storeId: currentStoreId || '' });
+  }, [currentView, operationalCompanyId, currentStoreId, currentUser?.id, isDeveloper]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
   const { setDoc, updateDoc, deleteDoc, addDoc, runTransaction } = tenantWriter;
   const doc = ((...args: any[]) => { const ref = (nativeDoc as any)(...args); if (args.length === 1) tenantWriter.registerNew(ref); return ref; }) as typeof nativeDoc;
@@ -3466,6 +3474,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         </AppErrorBoundary>}
       </main>
+      {isDeveloper && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
       {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}

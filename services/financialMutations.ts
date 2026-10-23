@@ -1,5 +1,5 @@
-import { doc } from 'firebase/firestore';
-import type { DocumentReference, Firestore } from 'firebase/firestore';
+import { doc } from './measuredFirestore';
+import type { DocumentReference, Firestore } from './measuredFirestore';
 import type { FinancialRecord } from '../types';
 
 export type FinancialOperation = { kind: 'set' | 'update' | 'delete'; ref: DocumentReference; data?: any; options?: any };

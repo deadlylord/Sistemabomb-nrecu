@@ -10,7 +10,7 @@ import {
   setDoc as nativeSetDoc,
   updateDoc as nativeUpdateDoc,
   deleteDoc as nativeDeleteDoc
-} from 'firebase/firestore';
+} from '../services/measuredFirestore';
 import { Product, Store, Category, Seller } from '../types';
 import { 
   CheckIcon, TagIcon, SparklesIcon, PackageIcon, AlertTriangleIcon, RefreshIcon, PlayIcon, CameraIcon, SearchIcon, CrossIcon, TrashIcon

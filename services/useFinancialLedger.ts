@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, getDoc, getDocs, getAggregateFromServer, sum, limit, onSnapshot, orderBy, query, startAfter, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, getAggregateFromServer, sum, limit, onSnapshot, orderBy, query, startAfter, where } from './measuredFirestore';
 import { db } from '../firebase';
 import { assertTenantData } from './tenantWrites';
 import { useCompanyCollection } from './useCompanyCollection';

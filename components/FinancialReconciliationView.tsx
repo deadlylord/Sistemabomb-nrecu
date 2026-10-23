@@ -10,7 +10,7 @@ import { DEFAULT_COMPANY_ID, FinancialRecord, Store, Sale, Layaway, PaymentMetho
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc as nativeDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc as nativeDoc } from '../services/measuredFirestore';
 
 interface FinancialReconciliationViewProps {
   companyId: string;

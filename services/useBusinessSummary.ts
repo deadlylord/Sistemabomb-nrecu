@@ -7,7 +7,7 @@ import {
   orderBy,
   query,
   where,
-} from "firebase/firestore";
+} from "./measuredFirestore";
 import { db } from "../firebase";
 import {
   businessRoot,

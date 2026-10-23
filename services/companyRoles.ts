@@ -1,6 +1,6 @@
 import { isPlatformRole } from './developerAccess';
-import { doc, getDoc, runTransaction } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
+import { doc, getDoc, runTransaction } from './measuredFirestore';
+import type { Firestore } from './measuredFirestore';
 import { DEFAULT_COMPANY_ID, View, type Role } from '../types';
 
 // Preserve a legacy role's permissions, but assign an independent role ID to each

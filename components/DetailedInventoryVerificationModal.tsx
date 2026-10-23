@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, PendingDetailedVerification } from '../types';
 import { SearchIcon, CrossIcon, CheckIcon, PackageIcon, EyeIcon, HistoryIcon, TrashIcon, ChevronDownIcon, AlertTriangleIcon, PlusCircleIcon } from './Icons';
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from '../services/measuredFirestore';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { DEFAULT_COMPANY_ID } from '../types';
 import { formatCOP } from '../constants';

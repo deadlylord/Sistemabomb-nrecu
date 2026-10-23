@@ -1,5 +1,5 @@
-import { collection, doc, getDocFromServer, getDocsFromServer, runTransaction } from 'firebase/firestore';
-import type { DocumentReference, Firestore, Transaction } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, getDocsFromServer, runTransaction } from './measuredFirestore';
+import type { DocumentReference, Firestore, Transaction } from './measuredFirestore';
 
 type UserIdentity = { id?: string; name?: string; username?: string; [key: string]: any };
 type UserMutation = {

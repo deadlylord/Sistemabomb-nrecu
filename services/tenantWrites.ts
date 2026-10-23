@@ -1,7 +1,7 @@
 import { prepareFinancialOperations, sameFinancialVersion } from './financialMutations';
 import { assertCompanyRole, isPlatformRole } from './developerAccess';
-import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from 'firebase/firestore';
-import type { Firestore, DocumentReference, WriteBatch } from 'firebase/firestore';
+import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from './measuredFirestore';
+import type { Firestore, DocumentReference, WriteBatch } from './measuredFirestore';
 import { DEFAULT_COMPANY_ID, IncidentType } from '../types';
 
 export type TenantScope = { companyId: string; storeIds: Set<string> };
