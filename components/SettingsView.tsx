@@ -639,7 +639,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
                 Configuración de Etiquetas
             </h3>
             <p className="text-sm text-gray-500 mb-6">Configura las dimensiones y la información que se mostrará en las etiquetas de productos.</p>
-            <LabelConfigPanel store={localSettings} onSave={handleLabelConfigSave} />
+            <LabelConfigPanel key={`${companyId}:${localSettings.id}`} store={localSettings} onSave={handleLabelConfigSave} />
         </div>
 
         {isAdmin && (
