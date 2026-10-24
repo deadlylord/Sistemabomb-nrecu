@@ -31,8 +31,11 @@
 
 # Staging retains its separately verified identity and ledger processors.
 [context.staging.environment]
-  # Three load-test stores verified against 4,670 source records on 2026-10-24.
-  VITE_DASHBOARD_SUMMARY = "true"
+  # Keep the original dashboard layout; monthly chart uses verified summaries.
+  VITE_DASHBOARD_SUMMARY = "false"
+  # Enable month-scoped sales after its composite index is ready.
+  VITE_DASHBOARD_MONTHLY_SALES = "false"
+  VITE_DASHBOARD_MONTHLY_CHART = "true"
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"

@@ -1,3 +1,5 @@
+import { dashboardSalesRanges, type SalesRange } from '../services/dashboardSalesRange';
+import type { useBusinessSummary } from '../services/useBusinessSummary';
 import { sumCashCollections } from '../services/cashCollections';
 import SalesHistoryChart from './SalesHistoryChart';
 import { buildIncomeChart, isPeriodIncome, bogotaDateKey, completeChartYear } from '../services/incomeChart';
@@ -18,6 +20,9 @@ import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface DashboardViewProps {
   initialSection?: string;
+  monthlySummary?: ReturnType<typeof useBusinessSummary>;
+  onSummaryRangeChange?: (value: { start: string; end: string; year: number }) => void;
+  onSalesRangesChange?: (ranges: SalesRange[]) => void;
   companyId: string;
   stores: Store[];
   allLayaways: Layaway[];
@@ -198,6 +203,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [chartYear, setChartYear] = useState(() => Number(bogotaDateKey(new Date()).slice(0, 4)));
   const [chartMetric, setChartMetric] = useState<'income' | 'sales'>('income');
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('monthly');
+  const salesRangesKey = JSON.stringify(dashboardSalesRanges(startDate, endDate, salesMonthFilter, salesHistoryStartDate, salesHistoryEndDate));
+  useEffect(() => { props.onSalesRangesChange?.(JSON.parse(salesRangesKey)); }, [salesRangesKey, props.onSalesRangesChange]);
+  useEffect(() => {
+    const previous = previousPeriod(startDate, endDate);
+    props.onSummaryRangeChange?.({ start: previous ? toYYYYMMDD(previous.start) : startDate || '1900-01-01', end: endDate || bogotaDateKey(new Date()), year: chartYear });
+  }, [startDate, endDate, chartYear, props.onSummaryRangeChange]);
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
   const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients' | 'query'>('insights');
@@ -668,6 +679,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const range = previousPeriod(startDate, endDate);
     if (!range) return null;
     const { start: previousStart, end: previousEnd } = range;
+    if (props.monthlySummary?.ready && !props.monthlySummary.loading && !props.monthlySummary.error) return { total: props.monthlySummary.total(toYYYYMMDD(previousStart), toYYYYMMDD(previousEnd)).income, start: previousStart.toLocaleDateString("es-CO"), end: previousEnd.toLocaleDateString("es-CO") };
     const inPrevious = (date: string) => {
       const time = new Date(date).getTime();
       return time >= previousStart.getTime() && time <= previousEnd.getTime();
@@ -693,7 +705,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       if (valid && (incident.type === IncidentType.RECAUDO || (incident.paymentMethod && isPeriodIncome(incident.paymentMethod))) && (incident.adjustmentAmount || 0) > 0) total += Number(incident.adjustmentAmount) || 0;
     }
     return { total, start: previousStart.toLocaleDateString('es-CO'), end: previousEnd.toLocaleDateString('es-CO') };
-  }, [startDate, endDate, sales, layaways, allIncidents, currentStore?.id]);
+  }, [startDate, endDate, sales, layaways, allIncidents, currentStore?.id, props.monthlySummary]);
 
   const togglePaymentMethodFilter = (method: string) => {
     setPaymentMethodFilter(prev => 
@@ -906,6 +918,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   }, [sales, layaways]);
 
   const salesChartData = useMemo(() => {
+    if (props.monthlySummary) {
+      const summary = props.monthlySummary;
+      const field = chartMetric === 'income' ? 'income' : 'sales';
+      if (chartViewMode === 'daily') return summary.days.filter(d => d.date! >= startDate && d.date! <= endDate).map(d => ({ label: d.date!, total: d[field], partialTotal: d[field] }));
+      const cutoff = Number(bogotaDateKey(new Date()).slice(-2));
+      return completeChartYear(summary.months.map(month => ({ label: month.month, total: Object.values(month.days).reduce((sum: number, day: any) => sum + (day[field] || 0), 0) as number, partialTotal: Object.entries(month.days).reduce((sum, [date, day]: [string, any]) => sum + (Number(date.slice(-2)) <= cutoff ? day[field] || 0 : 0), 0) })), chartYear);
+    }
     if (chartMetric === 'income') {
       if (chartViewMode === 'daily') return buildIncomeChart(detailedReportData.allPayments, 'daily');
       return completeChartYear(buildIncomeChart(loadedPaymentLedger, 'monthly'), chartYear);
@@ -925,7 +944,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
     const points = Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
     return chartViewMode === 'daily' ? points : completeChartYear(points, chartYear);
-  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments, loadedPaymentLedger, chartYear]);
+  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments, loadedPaymentLedger, chartYear, props.monthlySummary, startDate, endDate]);
 
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -937,6 +956,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         monthsSet.add(ym);
       }
     };
+    if (props.onSalesRangesChange) { const now = new Date(); for (let i=0;i<24;i++) addDate(new Date(now.getFullYear(),now.getMonth()-i,15).toISOString()); }
     sales.forEach(s => addDate(s.createdAt));
     layaways.forEach(l => addDate(l.createdAt));
 
@@ -956,7 +976,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           label: `${monthName} ${year}`
         };
       });
-  }, [sales, layaways]);
+  }, [sales, layaways, props.onSalesRangesChange]);
 
   const managedSales = useMemo(() => {
     const layawayIds = new Set(layaways.map(l => l.id));
@@ -1435,7 +1455,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${chartViewMode === 'daily' ? `${startDate} al ${endDate}` : `Enero a diciembre de ${chartYear} · Meses completos, independientes del filtro de fechas`} · Pagos recibidos, recaudos, ingresos y excedentes de cambios. Excluye bonos usados como pago. Sin aplicar filtros por medio de pago.` : `${chartViewMode === 'daily' ? 'Histórico cargado' : `Enero a diciembre de ${chartYear}`} de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.`}</p>
           {chartMetric === 'income' && <p className="mb-3 font-bold text-accent">{chartViewMode === 'daily' ? 'Total del período' : `Total ${chartYear}`}: {formatCOP(salesChartData.reduce((sum, point) => sum + point.total, 0))}</p>}
-          <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${chartYear}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Dinero recibido por mes') : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartViewMode !== 'daily'} />
+          {props.monthlySummary && (props.monthlySummary.loading || props.monthlySummary.chartLoading || props.monthlySummary.error || !props.monthlySummary.ready) ? <p role="status" className="text-sm text-accent">{props.monthlySummary.error || (props.monthlySummary.loading || props.monthlySummary.chartLoading ? "Cargando gráfico…" : "El resumen del gráfico no está verificado para esta sede.")}</p> : <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${chartYear}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Dinero recibido por mes') : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartViewMode !== 'daily'} />}
         </section>
         {editingSale && (<EditSaleModal isOpen={!!editingSale} onClose={() => setEditingSale(null)} sale={editingSale} sellers={sellers} inventory={inventory} onUpdateSale={onUpdateSale} />)}
         {editingLayaway && (<EditLayawayModal isOpen={!!editingLayaway} onClose={() => setEditingLayaway(null)} layaway={editingLayaway} sellers={sellers} inventory={inventory} onUpdateLayaway={onUpdateLayaway || (() => {})} />)}

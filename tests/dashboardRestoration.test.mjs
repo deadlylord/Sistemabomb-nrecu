@@ -41,6 +41,10 @@ test('original dashboard retains payment breakdown, editable history, price diff
       await act(async()=>bar.findAllByType('button').find(n=>n.children.join('')===label).props.onClick());
       assert.equal(scrolled.at(-1),id);
     }
+    const year=new Date().getFullYear();
+    await act(async()=>renderer.update(React.createElement(Dashboard,{...props,monthlySummary:{ready:true,loading:false,chartLoading:false,error:null,days:[],months:[{month:year+'-01',days:{[year+'-01-01']:{income:12345,sales:8000}}}],total:()=>({income:0})}})));
+    assert.equal(renderer.root.findByProps({screen:'SalesHistoryChart'}).props.data[0].total,12345,'visible January column comes from monthly summary, independent of loaded current-month sales');
+    await act(async()=>renderer.update(React.createElement(Dashboard,props)));
     const chartData = renderer.root.findByProps({screen:'SalesHistoryChart'}).props.data;
     const search = () => renderer.root.findByProps({placeholder:'Factura, cliente, producto...'});
     await act(async()=>search().props.onChange({target:{value:'ningún resultado'}}));

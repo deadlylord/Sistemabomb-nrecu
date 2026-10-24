@@ -38,6 +38,7 @@ export function useBusinessSummary(
   end: string,
   year: number | null,
   scope: string,
+  enabled = true,
 ) {
   const key = `${scope}:${companyId}:${storeId}`;
   const [metadata, setMetadata] = useState<{
@@ -66,7 +67,7 @@ export function useBusinessSummary(
   const rangeKey = `${key}:${start}:${end}`;
   const monthKey = `${key}:${year}`;
   useEffect(() => {
-    if (!companyId || !storeId) return;
+    if (!enabled || !companyId || !storeId) return;
     let active = true;
     setFailure(null);
     const stop = onSnapshot(
@@ -97,9 +98,9 @@ export function useBusinessSummary(
         }),
     );
     return () => { active = false; stop(); };
-  }, [key]);
+  }, [key, enabled]);
   useEffect(() => {
-    if (!ready) return;
+    if (!enabled || !ready) return;
     let active = true;
     const stops = [
       onSnapshot(
@@ -148,9 +149,9 @@ export function useBusinessSummary(
       );
     else setRepeats({ key: rangeKey, rows: [] });
     return () => { active = false; stops.forEach((stop) => stop()); };
-  }, [rangeKey, ready]);
+  }, [rangeKey, ready, enabled]);
   useEffect(() => {
-    if (!ready || year === null) return;
+    if (!enabled || !ready || year === null) return;
     let active = true;
     const stop = onSnapshot(
       query(
@@ -168,7 +169,7 @@ export function useBusinessSummary(
         setFailure({ key: monthKey, message: "No se pudo cargar el gráfico del año." }),
     );
     return () => { active = false; stop(); };
-  }, [monthKey, ready]);
+  }, [monthKey, ready, enabled]);
   const rows = days.key === rangeKey ? days.rows : [];
   function total(from: string, to: string): SummaryDay {
     const value = emptyBusinessDay() as SummaryDay;
