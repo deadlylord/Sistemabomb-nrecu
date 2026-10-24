@@ -147,10 +147,10 @@ for (const verified of [true, false]) test(`complete dashboard loads active stor
     const dashboard = () => renderer.root.findByProps({ screen: "DashboardView" });
     assert.equal(renderer.root.findAllByProps({screen:"BusinessOverview"}).length, 0);
     assert.equal(dashboard().props.currentStore.id, "a1");
-    for (const name of ["inventory", "sales", "purchases", "layaways", "incidents", "stockTakes", "dailyNotes", "expenses"]) {
+    for (const name of ["inventory", "sales", "layaways", "incidents", "stockTakes", "expenses"]) {
       assert.equal(live().filter(c => c.q.name === name).length, 1, name + " has one shared subscription");
     }
-    assert.equal(live().some(c => ["inventoryTransfers", "productHistory", "customers"].includes(c.q.name)), false);
+    assert.equal(live().some(c => ["purchases", "giftVouchers", "dailyNotes", "inventoryTransfers", "productHistory", "customers"].includes(c.q.name)), false, "unused operational data stays deferred on dashboard");
     const before = live().filter(c => ["sales", "layaways"].includes(c.q.name));
     await act(async () => renderer.root.findByType(m.Header).props.setCurrentView(m.View.POS));
     await act(async () => renderer.root.findByType(m.Header).props.setCurrentView(m.View.DASHBOARD));

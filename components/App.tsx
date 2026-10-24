@@ -641,9 +641,11 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
   useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
   useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING].includes(currentView), setSales);
-  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
+  // Dashboard's visible reports do not consume purchase records. Load them
+  // in the operational screens that need them instead of during every login.
+  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
   useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING].includes(currentView), setLayaways);
-  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
+  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
 
   useEffect(() => {
     if (!canLoadStore || !currentStoreId) return;
@@ -660,10 +662,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     switch (currentView) {
         case View.DASHBOARD:
             if (scopedStoreLoadingEnabled) attachStore('expenses', setExpenses);
-            attachStore('dailyNotes', setDailyNotes);
             attachStore('stockTakes', setStockTakes);
             break;
         case View.POS:
+            attachStore('dailyNotes', setDailyNotes);
             // Shared live data stays connected while navigating operational screens.
             attachStore('customers', setCustomers);
             attachStore('heldCarts', setHeldCarts);
