@@ -118,3 +118,25 @@ tres veces. La candidata de reglas de staging enlaza ese documento una vez con
 ahora pasa; se comprueba también revocación del grant y contraparte inválida.
 Esto no modifica las reglas de producción. Las reglas de staging siguen siendo
 un prototipo que requiere revisión antes de una migración general.
+
+## Carga de cierres a demanda (1.1.174)
+
+Conciliación deja de solicitar ventas, apartados y gastos desde App al entrar.
+La vista abre dos consultas por sede (ventas y apartados) solo cuando el operador
+abre Cierres de Caja. Ambas se cierran al ocultar el panel o cambiar de sede.
+Se esperan las dos respuestas antes de mostrar o permitir confirmar los cierres;
+los errores se muestran sin presentar un conjunto parcial como resultado completo.
+Respuestas tardías o de otra empresa/sede se descartan.
+
+Es una reducción de la carga inicial, no un índice de pagos por período. Con
+Cierres de Caja abierto, todavía se lee el historial de ventas/apartados de esa
+sede. No filtrar por createdAt: se perderían pagos recientes de apartados antiguos.
+La fórmula de pagos, comisiones, ajustes, detalles y cierres no cambia. Los gastos
+no se consultan porque esta vista usa el libro financiero para sus resúmenes.
+
+La cuenta del libro, la cuenta de cierres, el modo de todas las cuentas y el panel
+abierto se conservan en memoria al cambiar de sede o navegar dentro de la misma
+empresa/usuario. El proveedor existente los reinicia al cambiar empresa/usuario.
+Los borradores, movimientos, selección de registros y datos siguen separados por
+sede; no se retiene el formulario de otra sede. El panel abierto vuelve a cargar
+los datos de la sede nueva y no se cierra durante la carga.

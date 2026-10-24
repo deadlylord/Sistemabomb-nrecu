@@ -636,9 +636,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
   useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
-  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
+  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING].includes(currentView), setSales);
   useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
-  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
+  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING].includes(currentView), setLayaways);
   useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
 
   useEffect(() => {
@@ -697,9 +697,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 setAccountingChatHistory(Array.isArray(data.messages) ? data.messages : []);
               } catch { setAccountingChatHistory([]); }
             }));
-            break;
-        case View.FINANCIAL_RECONCILIATION:
-            attachStore('expenses', setExpenses);
             break;
     }
     return () => { active = false; unsubscribers.forEach(unsub => unsub()); };
@@ -3387,9 +3384,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={sales}
-                layaways={layaways}
-                expenses={expenses}
                 incidents={incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}

@@ -1,3 +1,4 @@
+import { useReconciliationSources } from '../services/useReconciliationSources';
 import { beginDiagnosticPhase, finishDiagnosticPhase, safeDiagnosticErrorCode } from '../services/readDiagnostics';
 import { useFinancialDraft } from '../services/useFinancialDraft';
 import { useFinancialLedger, LEDGER_PAGE_SIZE } from '../services/useFinancialLedger';
@@ -7,7 +8,7 @@ import { createTenantWriter } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { DEFAULT_COMPANY_ID, FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
+import { DEFAULT_COMPANY_ID, FinancialRecord, Store, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
@@ -19,9 +20,6 @@ interface FinancialReconciliationViewProps {
   stores: Store[];
   activeStoreId?: string;
   onSetActiveStoreId?: (id: string) => void;
-  sales: Sale[];
-  layaways: Layaway[];
-  expenses: Expense[];
   incidents: Incident[];
   currentUser: Seller;
   onNavigate?: (view: View) => void;
@@ -102,12 +100,9 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores: rawStores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, incidents: rawIncidents, currentUser, onNavigate, onAddExpense }) => {
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores: rawStores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, incidents: rawIncidents, currentUser, onNavigate, onAddExpense }) => {
   const stores = useMemo(() => rawStores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === companyId), [companyId, rawStores]);
   const scope = useMemo(() => analyticsScope(companyId, stores), [companyId, stores]);
-  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
-  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
-  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, scope), [rawExpenses, scope]);
   const incidents = useMemo(() => selectAnalyticsRows<Incident>('incidents', rawIncidents, scope), [rawIncidents, scope]);
   const storeKey = JSON.stringify(stores.map(store => store.id).sort());
   const writer = useMemo(() => createTenantWriter(db, { companyId, storeIds: new Set<string>(JSON.parse(storeKey)) }), [companyId, storeKey]);
@@ -124,8 +119,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [rawAllRecords, setAllRecords] = useState<FinancialRecord[]>([]);
   const allRecords = useMemo(() => selectAnalyticsRows<FinancialRecord>('financialRecords', rawAllRecords, scope), [rawAllRecords, scope]);
   const records = useMemo(() => allRecords.filter(record => record.storeId === activeStoreId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id)), [allRecords, activeStoreId]);
-  const [activeTab, setActiveTab] = useState<AccountType>('cash');
-  const [closuresActiveTab, setClosuresActiveTab] = useState<AccountType>('cash');
+  const [activeTab, setActiveTab] = useViewFilter<AccountType>('FinancialReconciliationView:activeTab', 'cash');
+  const [closuresActiveTab, setClosuresActiveTab] = useViewFilter<AccountType>('FinancialReconciliationView:closuresActiveTab', 'cash');
   const [sisteRangeStart, setSisteRangeStart] = useViewFilter('FinancialReconciliationView:sisteRangeStart', '');
   const [sisteRangeEnd, setSisteRangeEnd] = useViewFilter('FinancialReconciliationView:sisteRangeEnd', '');
   const [searchTerm, setSearchTerm] = useViewFilter('FinancialReconciliationView:searchTerm', '');
@@ -141,9 +136,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useViewFilter('FinancialReconciliationView:selectedMonth', now.getMonth());
   const [selectedYear, setSelectedYear] = useViewFilter('FinancialReconciliationView:selectedYear', now.getFullYear());
-  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(false);
+  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useViewFilter('FinancialReconciliationView:isSystemLoadsOpen', false);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
-  const [showBothClosures, setShowBothClosures] = useState(false);
+  const [showBothClosures, setShowBothClosures] = useViewFilter('FinancialReconciliationView:showBothClosures', false);
   const [showGlobalSummary, setShowGlobalSummary] = useState(false);
   const [showInterStoreModal, setShowInterStoreModal] = useState(false);
   const [interStoreFilterStoreId, setInterStoreFilterStoreId] = useState<string>('all');
@@ -204,6 +199,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [saveStatus.state]);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  const closureSources = useReconciliationSources(companyId, activeStoreId, `${currentUser.id}:${companyId}`, isSystemLoadsOpen && scope.storeIds.has(activeStoreId));
+  const sales = closureSources.sales;
+  const layaways = closureSources.layaways;
 
   const ledger = useFinancialLedger({ companyId, storeId: activeStoreId, storeIds: stores.map(store => store.id), scopeKey: `${currentUser.id}:${companyId}`,
     accountType: activeTab, month: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`, showGlobal: showGlobalSummary, showClosures: isSystemLoadsOpen,
@@ -2641,7 +2640,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
-            {isSystemLoadsOpen && (ledger.closuresLoading ? (
+            {isSystemLoadsOpen && (closureSources.error ? (
+                <div role="alert" className="lg:col-span-4 p-5 rounded-2xl bg-red-50 text-red-800"><p>{closureSources.error}</p><button type="button" onClick={() => setIsSystemLoadsOpen(false)} className="mt-3 underline">Cerrar cierres</button></div>
+            ) : ledger.closuresLoading || closureSources.loading ? (
                 <div role="status" className="lg:col-span-4 p-5 rounded-2xl bg-white dark:bg-secondary">
                     <p>Cargando cierres del mes…</p>
                     <button type="button" onClick={() => setIsSystemLoadsOpen(false)} className="mt-3 text-accent">Ocultar cierres</button>
@@ -2700,7 +2701,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block pl-1">Seleccionar Cuenta</span>
                                <div className="grid grid-cols-2 gap-1.5">
                                    <button 
-                                     onClick={() => setClosuresActiveTab('cash')} 
+                                     aria-label="Cuenta de cierres: cash" aria-pressed={closuresActiveTab === 'cash'} onClick={() => setClosuresActiveTab('cash')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'cash' 
                                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/15' 
@@ -2709,7 +2710,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">💵</span> Efectivo
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('qr')} 
+                                     aria-label="Cuenta de cierres: qr" aria-pressed={closuresActiveTab === 'qr'} onClick={() => setClosuresActiveTab('qr')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'qr' 
                                          ? 'bg-blue-500 border-blue-500 text-white shadow-md shadow-blue-500/15' 
@@ -2718,7 +2719,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">📱</span> Pago QR
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('addi')} 
+                                     aria-label="Cuenta de cierres: addi" aria-pressed={closuresActiveTab === 'addi'} onClick={() => setClosuresActiveTab('addi')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'addi' 
                                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/15' 
@@ -2727,7 +2728,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">💎</span> Addi
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('sistecredito')} 
+                                     aria-label="Cuenta de cierres: sistecredito" aria-pressed={closuresActiveTab === 'sistecredito'} onClick={() => setClosuresActiveTab('sistecredito')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'sistecredito' 
                                          ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/15' 
@@ -3093,8 +3094,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <span className="text-[10px] font-black uppercase hidden sm:inline">Cierres</span>
                             </button>
                         )}
-                        <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
-                        <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                        <button aria-label="Cuenta del libro: cash" aria-pressed={activeTab === 'cash'} onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
+                        <button aria-label="Cuenta del libro: qr" aria-pressed={activeTab === 'qr'} onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
                     </div>
                 </div>
 
