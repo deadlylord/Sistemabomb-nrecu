@@ -35,25 +35,26 @@ export async function authenticateIdentity(input, dependencies) {
   const identifier = normalizeIdentifier(input?.identifier);
   const password = input?.password;
   if (typeof password !== 'string' || !password.trim() || password.length > 256) reject();
-  await dependencies.consumeAttempt(identifier);
-  const index = await dependencies.read('authLoginIndex', loginIndexId(identifier));
+  const measure = dependencies.measure || ((_phase, run) => run());
+  await measure('attempts', () => dependencies.consumeAttempt(identifier));
+  const index = await measure('index', () => dependencies.read('authLoginIndex', loginIndexId(identifier)));
   if (!index || !validId(index.sellerId)) reject();
-  const credential = await dependencies.read('authCredentials', index.sellerId);
-  if (!credential || credential.disabled === true || !(await verifyPassword(password, credential.passwordHash))) reject();
-  const seller = await dependencies.read('sellers', index.sellerId);
+  const credential = await measure('credentials', () => dependencies.read('authCredentials', index.sellerId));
+  if (!credential || credential.disabled === true || !(await measure('password', () => verifyPassword(password, credential.passwordHash)))) reject();
+  const seller = await measure('seller', () => dependencies.read('sellers', index.sellerId));
   if (!seller || seller.isDisabled || !validId(seller.storeId) || !validId(seller.roleId)) reject();
   const aliases = [seller.username, seller.name].filter(value => typeof value === 'string' && value.trim()).map(normalizeIdentifier);
   if (!aliases.includes(identifier)) reject(); // Renaming invalidates a stale login index.
-  const store = await dependencies.read('stores', seller.storeId);
+  const store = await measure('store', () => dependencies.read('stores', seller.storeId));
   if (!store || store.isDisabled || store.status === 'inactive') reject();
   const companyId = store.companyId || DEFAULT_COMPANY;
   if (!validId(companyId) || seller.companyId && seller.companyId !== companyId) reject();
   const platformOwner = index.sellerId === OWNER_ID;
-  const [company, role, grant] = await Promise.all([
+  const [company, role, grant] = await measure('permissions', () => Promise.all([
     dependencies.read('companies', companyId),
     dependencies.read('roles', seller.roleId),
     platformOwner ? null : dependencies.read('platformDevelopers', index.sellerId)
-  ]);
+  ]));
   if (!company || company.isDisabled || ['inactive', 'suspended'].includes(company.status)) reject();
   if (!role || role.isDisabled || (role.companyId || DEFAULT_COMPANY) !== companyId) reject();
   const roleName = String(role.name || '').trim().toLowerCase();
@@ -61,7 +62,7 @@ export async function authenticateIdentity(input, dependencies) {
   const platformDeveloper = platformOwner || !!(grant && grant.userId === index.sellerId && grant.role === 'developer' && grant.active === true && grant.grantedBy === OWNER_ID);
   const claims = { identityVersion: 1, authVersion: seller.authVersion || 0, sellerId: index.sellerId, companyId, storeId: seller.storeId, roleId: seller.roleId, platformOwner, platformDeveloper };
   const uid = `vestika:${createHash('sha256').update(index.sellerId).digest('hex')}`;
-  const customToken = await dependencies.createCustomToken(uid, claims);
+  const customToken = await measure('token', () => dependencies.createCustomToken(uid, claims));
   // Whitelist rather than returning the seller document (which currently has a password).
   return { customToken, user: { id: index.sellerId, name: seller.name || '', username: seller.username || '', companyId, storeId: seller.storeId, roleId: seller.roleId, authVersion: seller.authVersion || 0 }, claims,
     ...(dependencies.includeContext ? { store: { ...store, id: seller.storeId }, role: { ...role, id: seller.roleId }, company: { ...company, id: companyId } } : {}) };

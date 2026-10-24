@@ -8,8 +8,10 @@ export type ReadRow = ReadContext & { resource: string; operation: string; reque
 type Session = { id: number; label: string; startedAt: string; stoppedAt?: string; active: boolean;
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
   droppedGroups: number; droppedTimings: number };
-export type DiagnosticPhase = 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar';
-type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string };
+export type DiagnosticPhase = 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: restaurar estado de sesión' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar';
+const serverLoginPhases = ['attempts', 'index', 'credentials', 'password', 'seller', 'store', 'permissions', 'token'] as const;
+type ServerLoginTiming = { version: 1; totalMs: number; phases: { phase: typeof serverLoginPhases[number]; durationMs: number }[] };
+type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string; server?: ServerLoginTiming };
 const timings: Timing[] = [];
 let sessionStarted = 0;
 let context: ReadContext = { view: 'Inicio', companyId: '', storeId: '' };
@@ -20,7 +22,7 @@ const listeners = new Set<number>();
 const subscribers = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cached: ReturnType<typeof buildSnapshot>;
-function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size, timings: timings.map(t => ({ ...t })) }; }
+function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size, timings: timings.map(t => ({ ...t, ...(t.server ? { server: { ...t.server, phases: t.server.phases.map(p => ({ ...p })) } } : {}) })) }; }
 function changed(immediate = false) {
   revision++;
   if (!subscribers.size) return;
@@ -116,6 +118,16 @@ export function finishDiagnosticPhase(ticket: ReturnType<typeof beginDiagnosticP
   ticket.timing.status = error ? 'error' : 'success';
   const code = error ? safeDiagnosticErrorCode(cause) : undefined;
   if (code) ticket.timing.errorCode = code;
+  changed();
+}
+export function attachServerLoginTiming(ticket: ReturnType<typeof beginDiagnosticPhase>, input: unknown) {
+  if (!ticket || !session?.active || ticket.sessionId !== session.id || ticket.timing.phase !== 'Login: servicio de identidad') return;
+  const value = input as ServerLoginTiming | undefined;
+  const validDuration = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 30000;
+  if (!value || value.version !== 1 || !validDuration(value.totalMs) || !Array.isArray(value.phases) || value.phases.length !== serverLoginPhases.length) return;
+  if (!value.phases.every((p, i) => p && p.phase === serverLoginPhases[i] && validDuration(p.durationMs) && p.durationMs <= value.totalMs)) return;
+  // Copy only the fixed schema. Never copy arbitrary server fields into exports.
+  ticket.timing.server = { version: 1, totalMs: value.totalMs, phases: value.phases.map(p => ({ phase: p.phase, durationMs: p.durationMs })) };
   changed();
 }
 export function measureDiagnosticPhase<T>(phase: DiagnosticPhase, run: () => Promise<T>): Promise<T> {

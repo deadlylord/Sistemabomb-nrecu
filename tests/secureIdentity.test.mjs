@@ -1,3 +1,4 @@
+import { authenticateStagingLogin } from '../functions/src/stagingLoginDiagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { authenticateIdentity, hashPassword, verifyPassword, loginIndexId, nextAttempt, OWNER_ID } from '../functions/src/identity.mjs';
@@ -57,3 +58,23 @@ test('accounts get separate Firebase UIDs; rate limiting uses fixed windows and 
 });
 
 test('long valid seller IDs produce Firebase UIDs within the 128-character limit', async()=>{const f=fixture({id:'x'.repeat(128)});await login(f);assert.ok(f.tokens[0].uid.length <= 128);assert.equal(f.tokens[0].claims.sellerId.length,128);});
+
+test('staging diagnostics measure the same successful checks without leaking credentials or adding reads',async()=>{
+ const plain=fixture(), measured=fixture();plain.deps.includeContext=measured.deps.includeContext=true;
+ const input={identifier:'Carlos',password};
+ const baseline=await authenticateStagingLogin(input,plain.deps);
+ const result=await authenticateStagingLogin(input,measured.deps,true);
+ const {loginDiagnostics,...identity}=result;assert.deepEqual(identity,baseline);
+ assert.equal('loginDiagnostics' in baseline,false);assert.deepEqual(measured.reads,plain.reads);assert.deepEqual(measured.attempts,plain.attempts);
+ assert.deepEqual(loginDiagnostics.phases.map(p=>p.phase),['attempts','index','credentials','password','seller','store','permissions','token']);
+ assert.ok(loginDiagnostics.totalMs>=loginDiagnostics.phases.reduce((n,p)=>n+p.durationMs,0));
+ assert.ok(loginDiagnostics.phases.every(p=>p.durationMs>=0));
+ assert.doesNotMatch(JSON.stringify(loginDiagnostics),new RegExp(`${password}|${encoded}|Carlos|mayla|fake-signed-token`));
+});
+test('staging diagnostics preserve rejection of invalid passwords, suspended accounts and exhausted rate limits',async()=>{
+ for(const change of [f=>f.records.get('authCredentials/mayla-user').passwordHash='bad',f=>f.records.get('companies/mayla').status='suspended',f=>f.deps.consumeAttempt=async()=>{throw Object.assign(new Error('limit'),{code:'resource-exhausted'})}]){
+  const f=fixture();change(f);await assert.rejects(authenticateStagingLogin({identifier:'Carlos',password},f.deps,true),error=>{
+   assert.ok(['unauthenticated','resource-exhausted'].includes(error.code));assert.equal('loginDiagnostics' in error,false);return true;
+  });assert.equal(f.tokens.length,0);
+ }
+});

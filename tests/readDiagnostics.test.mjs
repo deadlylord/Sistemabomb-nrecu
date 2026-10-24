@@ -89,3 +89,16 @@ test('error diagnostics retain only allowlisted codes, never arbitrary codes or 
  assert.equal(meter.getReadDiagnostics().timings[1].errorCode,undefined);
  assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/PRIVATE_FAILURE_MESSAGE|PRIVATE_CODE/);
 }));
+
+test('server login timings reject malformed payloads and completions from a different measurement',()=>withMeter(async({meter})=>{
+ const phases=['attempts','index','credentials','password','seller','store','permissions','token'];
+ const data={version:1,totalMs:80,phases:phases.map(phase=>({phase,durationMs:10}))};
+ meter.startReadMeasurement('One');const ticket=meter.beginDiagnosticPhase('Login: servicio de identidad');
+ for(const bad of [null,{}, {...data,totalMs:Infinity},{...data,phases:[{phase:'secret',durationMs:1}]},{...data,phases:data.phases.map(p=>({...p,durationMs:-1}))}]){
+  meter.attachServerLoginTiming(ticket,bad);assert.equal(meter.getReadDiagnostics().timings[0].server,undefined);
+ }
+ meter.attachServerLoginTiming(ticket,data);assert.equal(meter.getReadDiagnostics().timings[0].server.totalMs,80);
+ data.phases[0].durationMs=77;assert.equal(meter.getReadDiagnostics().timings[0].server.phases[0].durationMs,10);
+ meter.stopReadMeasurement();const before=meter.getReadDiagnostics();meter.attachServerLoginTiming(ticket,data);assert.deepEqual(meter.getReadDiagnostics(),before);
+ meter.startReadMeasurement('Two');meter.attachServerLoginTiming(ticket,data);assert.equal(meter.getReadDiagnostics().timings.length,0);
+}));

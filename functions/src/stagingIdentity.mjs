@@ -3,7 +3,8 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { createHash } from 'node:crypto';
-import { authenticateIdentity, IdentityError, nextAttempt } from './identity.mjs';
+import { IdentityError, nextAttempt } from './identity.mjs';
+import { authenticateStagingLogin } from './stagingLoginDiagnostics.mjs';
 import { manageStagingUser } from './stagingUsers.mjs';
 import { manageStagingRole } from './stagingRoles.mjs';
 
@@ -25,7 +26,7 @@ const protect = callback => async request => {
 };
 export const vestikaStagingLogin = onCall(options, protect(async request => {
   const db = getFirestore();
-  const result = await authenticateIdentity(request.data, {
+  const result = await authenticateStagingLogin(request.data, {
     enabled: true,
     includeContext: true,
     read: async (collection, id) => { const s = await db.collection(collection).doc(id).get(); return s.exists ? s.data() : null; },
@@ -40,7 +41,7 @@ export const vestikaStagingLogin = onCall(options, protect(async request => {
         refs.forEach((ref, i) => tx.set(ref, { ...next[i], expiresAt: Timestamp.fromMillis(next[i].windowStart + 600000) }));
       });
     }
-  });
+  }, request.data?.diagnostics === true);
   return result;
 }));
 export const vestikaStagingUsers = onCall(options, protect(request => manageStagingUser(getFirestore(), request.auth, request.data)));

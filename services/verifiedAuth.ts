@@ -1,5 +1,5 @@
 import { prepareLoginModules } from './loginModules';
-import { measureDiagnosticPhase } from './readDiagnostics';
+import { measureDiagnosticPhase, beginDiagnosticPhase, finishDiagnosticPhase, attachServerLoginTiming } from './readDiagnostics';
 import { auth, db } from '../firebase';
 import { doc, onSnapshot, addDoc, collection } from './measuredFirestore';
 import { verifiedIdentityEnabled } from './identityConfig';
@@ -16,8 +16,18 @@ async function call<T>(name: string, data: unknown): Promise<T> {
 export async function loginVerified(identifier: string, password: string) {
   assertTarget();
   const [sdk, functions] = await measureDiagnosticPhase('Login: preparar Firebase', prepareLoginModules);
+  await measureDiagnosticPhase('Login: restaurar estado de sesión', () => auth.authStateReady());
   await measureDiagnosticPhase('Login: cerrar sesión previa', () => sdk.signOut(auth));
-  const result = await measureDiagnosticPhase('Login: servicio de identidad', async () => (await functions.httpsCallable<unknown, { customToken: string; user: Seller; store: Store; role: Role; company: Company }>(functions.getFunctions(auth.app, 'southamerica-east1'), 'vestikaStagingLogin')({ identifier, password })).data);
+  const serviceTicket = beginDiagnosticPhase('Login: servicio de identidad');
+  let result: { customToken: string; user: Seller; store: Store; role: Role; company: Company; loginDiagnostics?: unknown };
+  try {
+    result = (await functions.httpsCallable<unknown, typeof result>(functions.getFunctions(auth.app, 'southamerica-east1'), 'vestikaStagingLogin')({ identifier, password, ...(serviceTicket ? { diagnostics: true } : {}) })).data;
+    finishDiagnosticPhase(serviceTicket);
+    attachServerLoginTiming(serviceTicket, result.loginDiagnostics);
+  } catch (error) {
+    finishDiagnosticPhase(serviceTicket, true, error);
+    throw error;
+  }
   const signed = await measureDiagnosticPhase('Login: autenticar en Firebase', () => sdk.signInWithCustomToken(auth, result.customToken));
   const { claims } = await measureDiagnosticPhase('Login: validar identidad', () => signed.user.getIdTokenResult());
   if (claims.identityVersion !== 1 || claims.sellerId !== result.user.id || claims.companyId !== result.user.companyId || claims.storeId !== result.user.storeId || claims.roleId !== result.user.roleId || claims.authVersion !== result.user.authVersion) {
