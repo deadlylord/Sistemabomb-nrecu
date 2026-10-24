@@ -54,3 +54,28 @@ test('transaction instrumentation preserves method bindings, options, results an
  assert.equal(result,'saved');const value=meter.getReadDiagnostics();assert.equal(value.session.transactionAttempts,2);
  assert.equal(value.rows[0].requests,2);assert.equal(value.rows[0].serverChanges,2);
 }));
+test('timings retain transaction confirmation, retry callbacks and results without retaining payloads',()=>withMeter(async({meter,measured})=>{
+ meter.startReadMeasurement('Guardar');
+ const saved=await measured.runTransaction({},async tx=>{await tx.get({path:'financialRecords/private-id'});return {secret:'PRIVATE_PAYLOAD'};});
+ assert.equal(saved.secret,'PRIVATE_PAYLOAD');
+ const timings=meter.getReadDiagnostics().timings;
+ assert.equal(timings.filter(t=>t.phase==='Transacción completa').length,1);
+ assert.equal(timings.filter(t=>t.phase==='Callback de transacción').length,2);
+ assert.ok(timings.every(t=>t.status==='success'&&t.durationMs>=0));
+ assert.ok(timings[0].durationMs>=timings.slice(1).reduce((n,t)=>n+t.durationMs,0));
+ assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/PRIVATE_PAYLOAD|private-id/);
+}));
+test('timings distinguish failure and incomplete work and reject late completion across sessions',()=>withMeter(async({meter})=>{
+ assert.equal(meter.beginDiagnosticPhase('Transacción completa'),undefined);
+ meter.startReadMeasurement('Guardar');
+ const error=Error('PRIVATE_ERROR');
+ await assert.rejects(meter.measureDiagnosticPhase('Validar empresa y referencias',async()=>{throw error}),e=>e===error);
+ assert.equal(meter.getReadDiagnostics().timings[0].status,'error');
+ assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/PRIVATE_ERROR/);
+ const ticket=meter.beginDiagnosticPhase('Transacción completa');meter.stopReadMeasurement();
+ assert.equal(meter.getReadDiagnostics().timings[1].status,'incomplete');
+ const before=meter.getReadDiagnostics();meter.finishDiagnosticPhase(ticket);assert.deepEqual(meter.getReadDiagnostics(),before);
+ meter.startReadMeasurement('Otra');meter.finishDiagnosticPhase(ticket);assert.equal(meter.getReadDiagnostics().timings.length,0);
+ for(let i=0;i<205;i++)meter.beginDiagnosticPhase('Transacción completa');
+ assert.equal(meter.getReadDiagnostics().timings.length,200);assert.equal(meter.getReadDiagnostics().session.droppedTimings,5);
+}));

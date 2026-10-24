@@ -86,3 +86,20 @@ de servidor ni consultas operativas.
 - Compilación de producción y revisión de espacios aprobadas.
 - TypeScript: tres errores de AppErrorBoundary, reproducidos también en la
   versión base. No hay errores adicionales por este cambio.
+
+## Tiempos del guardado (1.1.172)
+
+La exportación incluye `timings`: duración de la transacción completa (hasta
+que el SDK confirma o rechaza), cada ejecución de su callback y etapas del
+escritor financiero: comprobación de recibo, lecturas, preparación y validación.
+El lote manual también mide desde el comienzo del procesamiento hasta actualizar
+el estado de confirmación del formulario. No mide el renderizado posterior ni la
+actualización asíncrona de los resúmenes. Las fases se anidan: no se suman al total.
+La diferencia entre transacción completa y callbacks incluye arranque, esperas,
+reintentos y confirmación; no atribuirla exclusivamente al servidor o a la red.
+
+Iniciar antes de guardar y detener después de la confirmación. Una operación en
+curso al detener se marca incompleta. Los resultados tardíos no cambian la sesión
+terminada ni contaminan otra. Se retienen como máximo 200 etapas con etiquetas
+fijas, contexto de empresa/sede y tiempos, sin mensajes, montos ni documentos.
+No cambia las comprobaciones de duplicación ni agrega consultas o escrituras.

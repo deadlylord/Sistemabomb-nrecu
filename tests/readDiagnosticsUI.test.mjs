@@ -21,7 +21,10 @@ test('operator can start, observe and stop a local measurement across panel clos
   meter.observeListenerSnapshot('sales',{size:50,metadata:{fromCache:false},docChanges:()=>Array.from({length:50},()=>({type:'added'}))});
   await act(async()=>button('● Midiendo · Ver / detener').props.onClick());
   assert.match(JSON.stringify(renderer.toJSON()),/Cambios desde servidor/);assert.match(JSON.stringify(renderer.toJSON()),/50/);
-  await act(async()=>button('Detener').props.onClick());assert.equal(meter.getReadDiagnostics().session.active,false);
+  await meter.measureDiagnosticPhase('Transacción completa', async () => 'ok');
+  await act(async()=>button('Detener').props.onClick());
+  assert.match(JSON.stringify(renderer.toJSON()), /Tiempos del guardado/);
+  assert.match(JSON.stringify(renderer.toJSON()), /Transacción completa/);assert.equal(meter.getReadDiagnostics().session.active,false);
   assert.equal(button('Descargar resultado').props.disabled,false);
  }finally{if(renderer)await act(async()=>renderer.unmount());await rm(dir,{recursive:true,force:true})}
 });

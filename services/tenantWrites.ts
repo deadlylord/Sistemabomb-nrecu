@@ -1,3 +1,4 @@
+import { measureDiagnosticPhase } from './readDiagnostics';
 import { prepareFinancialOperations, sameFinancialVersion } from './financialMutations';
 import { assertCompanyRole, isPlatformRole } from './developerAccess';
 import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from './measuredFirestore';
@@ -136,7 +137,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       // after a lost acknowledgement must not apply that batch twice.
       const receipt = operations.find(op => op.kind === 'set' && collectionName(op.ref) === 'financialRecordsHistory' && op.data?.recordId);
       if (receipt) {
-        const saved = await read(receipt.ref);
+        const saved = await measureDiagnosticPhase('Comprobar registro previo', () => read(receipt.ref));
         if (saved.exists()) {
           assertTenantData('financialRecordsHistory', saved.data(), scope);
           for (const audit of operations.filter(op => op.kind === 'set' && collectionName(op.ref) === 'financialRecordsHistory')) {
@@ -149,10 +150,10 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       }
       // Independent point reads share one in-flight promise per path. A long
       // manual batch must not wait for a network round trip for each row.
-      await Promise.all(operations.filter(op => collectionName(op.ref) === 'financialRecords' ||
-        collectionName(op.ref) === 'financialRecordsHistory' && !generated.has(op.ref.path)).map(op => read(op.ref)));
-      const prepared = await prepareFinancialOperations(db, operations, scope, read, assertTenantData);
-      await validate(prepared, read);
+      await measureDiagnosticPhase('Lecturas de documentos', () => Promise.all(operations.filter(op => collectionName(op.ref) === 'financialRecords' ||
+        collectionName(op.ref) === 'financialRecordsHistory' && !generated.has(op.ref.path)).map(op => read(op.ref))));
+      const prepared = await measureDiagnosticPhase('Preparar movimientos', () => prepareFinancialOperations(db, operations, scope, read, assertTenantData));
+      await measureDiagnosticPhase('Validar empresa y referencias', () => validate(prepared, read));
       for (const op of prepared) apply(transaction, op);
     });
     operations.forEach(op => generated.delete(op.ref.path));

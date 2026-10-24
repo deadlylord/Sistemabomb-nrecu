@@ -1,3 +1,4 @@
+import { beginDiagnosticPhase, finishDiagnosticPhase } from '../services/readDiagnostics';
 import { useFinancialDraft } from '../services/useFinancialDraft';
 import { useFinancialLedger, LEDGER_PAGE_SIZE } from '../services/useFinancialLedger';
 import { useViewFilter } from '../services/viewFilters';
@@ -1322,6 +1323,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       (entry.debtStoreId && entry.physicalStoreId !== activeStoreId && entry.physicalStoreId !== entry.debtStoreId));
     if (invalid) { alert('Revisa el monto, la fecha y las dos sedes del cruce.'); return; }
     if (manualEntries.length > 60) { alert('Procesa máximo 60 filas por lote.'); return; }
+    const saveTiming = beginDiagnosticPhase('Guardar conciliación: hasta confirmación en cliente');
+    let saveFailed = true;
     saveInFlightRef.current = true;
     setIsSavingReconciliation(true);
     setSaveStatus({ state: 'saving', message: 'Guardando movimientos…' });
@@ -1451,11 +1454,13 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       setShowAddModal(false);
       setManualEntries([]);
       setSaveStatus({ state: 'saved', message: 'Movimientos confirmados.' });
+      saveFailed = false;
     } catch (error) {
       setShowAddModal(true);
       console.error('Error saving reconciliation entries:', error);
       setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el guardado. Conservamos el borrador para reintentarlo.' });
     } finally {
+      finishDiagnosticPhase(saveTiming, saveFailed);
       saveInFlightRef.current = false;
       setIsSavingReconciliation(false);
     }

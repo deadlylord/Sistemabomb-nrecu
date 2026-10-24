@@ -7,7 +7,11 @@ export type ReadRow = ReadContext & { resource: string; operation: string; reque
   unknownChanges: number; largestResult: number; missing: number; totalMs: number };
 type Session = { id: number; label: string; startedAt: string; stoppedAt?: string; active: boolean;
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
-  droppedGroups: number };
+  droppedGroups: number; droppedTimings: number };
+export type DiagnosticPhase = 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias';
+type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete' };
+const timings: Timing[] = [];
+let sessionStarted = 0;
 let context: ReadContext = { view: 'Inicio', companyId: '', storeId: '' };
 let session: Session | null = null;
 let nextId = 0, revision = 0, cachedRevision = -1;
@@ -16,7 +20,7 @@ const listeners = new Set<number>();
 const subscribers = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cached: ReturnType<typeof buildSnapshot>;
-function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size }; }
+function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size, timings: timings.map(t => ({ ...t })) }; }
 function changed(immediate = false) {
   revision++;
   if (!subscribers.size) return;
@@ -28,12 +32,12 @@ export function subscribeReadDiagnostics(fn: () => void) { subscribers.add(fn); 
 export function getReadDiagnostics() { if (revision !== cachedRevision) { cached = buildSnapshot(); cachedRevision = revision; } return cached; }
 export function setReadContext(value: ReadContext) { context = value; }
 export function startReadMeasurement(label: string) {
-  rows.clear(); session = { id: ++nextId, label: label.trim().slice(0, 100) || 'Medición', startedAt: new Date().toISOString(),
-    active: true, initialListeners: listeners.size, listenerStarts: 0, listenerStops: 0, transactionAttempts: 0, droppedGroups: 0 };
+  rows.clear(); timings.length = 0; sessionStarted = performance.now(); session = { id: ++nextId, label: label.trim().slice(0, 100) || 'Medición', startedAt: new Date().toISOString(),
+    active: true, initialListeners: listeners.size, listenerStarts: 0, listenerStops: 0, transactionAttempts: 0, droppedGroups: 0, droppedTimings: 0 };
   changed(true);
 }
-export function stopReadMeasurement() { if (session?.active) { session = { ...session, active: false, stoppedAt: new Date().toISOString() }; changed(true); } }
-export function clearReadMeasurement() { if (!session && !rows.size) return; session = null; rows.clear(); changed(true); }
+export function stopReadMeasurement() { if (session?.active) { for (const t of timings) if (t.status === 'running') { t.status = 'incomplete'; t.durationMs = performance.now() - sessionStarted - t.startOffsetMs; } session = { ...session, active: false, stoppedAt: new Date().toISOString() }; changed(true); } }
+export function clearReadMeasurement() { if (!session && !rows.size) return; session = null; rows.clear(); timings.length = 0; changed(true); }
 export function readMeasurementActive() { return !!session?.active; }
 export function safeReadResource(path: string) { return path.split('/').map((part, i) => i % 2 ? '*' : part).join('/'); }
 function rowFor(resource: string, operation: string, ctx: ReadContext) {
@@ -91,3 +95,25 @@ export function listenerOpened() {
   };
 }
 export function observeTransactionAttempt() { if (session?.active) { session.transactionAttempts++; changed(); } }
+
+// Fixed phase labels only: no records, amounts, IDs, messages or return values.
+export function beginDiagnosticPhase(phase: DiagnosticPhase) {
+  if (!session?.active) return undefined;
+  if (timings.length >= 200) { session.droppedTimings++; changed(); return undefined; }
+  const started = performance.now();
+  const timing: Timing = { ...context, id: ++nextId, phase, startOffsetMs: started - sessionStarted, durationMs: 0, status: 'running' };
+  timings.push(timing); changed();
+  return { sessionId: session.id, started, timing };
+}
+export function finishDiagnosticPhase(ticket: ReturnType<typeof beginDiagnosticPhase>, error = false) {
+  if (!ticket || !session?.active || ticket.sessionId !== session.id) return;
+  ticket.timing.durationMs = performance.now() - ticket.started;
+  ticket.timing.status = error ? 'error' : 'success'; changed();
+}
+export function measureDiagnosticPhase<T>(phase: DiagnosticPhase, run: () => Promise<T>): Promise<T> {
+  const ticket = beginDiagnosticPhase(phase);
+  if (!ticket) return run();
+  try {
+    return run().then(value => { finishDiagnosticPhase(ticket); return value; }, error => { finishDiagnosticPhase(ticket, true); throw error; });
+  } catch (error) { finishDiagnosticPhase(ticket, true); throw error; }
+}

@@ -1,6 +1,6 @@
 import * as sdk from 'firebase/firestore';
 import { beginObservedRead, finishObservedRead, listenerOpened, observeListenerError, observeListenerSnapshot,
-  observeTransactionAttempt, readMeasurementActive, safeReadResource } from './readDiagnostics';
+  observeTransactionAttempt, readMeasurementActive, safeReadResource, measureDiagnosticPhase } from './readDiagnostics';
 export * from 'firebase/firestore';
 
 const queryPaths = new WeakMap<object, string>();
@@ -49,12 +49,12 @@ export const onSnapshot: typeof sdk.onSnapshot = ((...args: any[]) => {
 
 export const runTransaction: typeof sdk.runTransaction = ((db: any, callback: any, options?: any) => {
   if (!readMeasurementActive()) return sdk.runTransaction(db, callback, options);
-  return sdk.runTransaction(db, async transaction => {
+  return measureDiagnosticPhase('Transacción completa', () => sdk.runTransaction(db, async transaction => {
     observeTransactionAttempt();
     const proxy = new Proxy(transaction, { get(target, key) {
       if (key === 'get') return (ref: any) => measuredRead(target.get.bind(target), 'Transacción/get')(ref);
       const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
     } });
-    return callback(proxy);
-  }, options);
+    return measureDiagnosticPhase('Callback de transacción', () => callback(proxy));
+  }, options));
 }) as typeof sdk.runTransaction;
