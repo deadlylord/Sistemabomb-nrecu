@@ -2179,6 +2179,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => {
     if (!currentStoreId || !currentUser) return;
     
+    const startedAt = performance.now();
     const draftId = `${categoryId}_${currentStoreId}`;
     const draftRef = doc(db, 'pendingDetailedVerifications', draftId);
     const now = new Date().toISOString();
@@ -2212,7 +2213,16 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         counts: historicalCounts, 
         updatedAt: now 
     }));
-    await batch.commit();
+    const preparationMs = Math.round(performance.now() - startedAt);
+    const payloadBytes = new TextEncoder().encode(JSON.stringify({ draftData, historicalCounts })).byteLength;
+    const commitStartedAt = performance.now();
+    try {
+      await batch.commit();
+      if (import.meta.env.DEV) console.info('[inventory-verification-save]', { preparationMs, commitMs: Math.round(performance.now() - commitStartedAt), payloadBytes, categoryProductCount: Object.keys(systemSnapshot).length, status: 'success' });
+    } catch (error) {
+      if (import.meta.env.DEV) console.warn('[inventory-verification-save]', { preparationMs, commitMs: Math.round(performance.now() - commitStartedAt), payloadBytes, categoryProductCount: Object.keys(systemSnapshot).length, status: 'error' });
+      throw error;
+    }
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {
