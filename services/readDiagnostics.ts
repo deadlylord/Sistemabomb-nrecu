@@ -8,7 +8,7 @@ export type ReadRow = ReadContext & { resource: string; operation: string; reque
 type Session = { id: number; label: string; startedAt: string; stoppedAt?: string; active: boolean;
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
   droppedGroups: number; droppedTimings: number };
-export type DiagnosticPhase = 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar';
+export type DiagnosticPhase = 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar';
 type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string };
 const timings: Timing[] = [];
 let sessionStarted = 0;

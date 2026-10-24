@@ -1,3 +1,4 @@
+import { prepareLoginModules } from './loginModules';
 import { measureDiagnosticPhase } from './readDiagnostics';
 import { auth, db } from '../firebase';
 import { doc, onSnapshot, addDoc, collection } from './measuredFirestore';
@@ -14,9 +15,9 @@ async function call<T>(name: string, data: unknown): Promise<T> {
 }
 export async function loginVerified(identifier: string, password: string) {
   assertTarget();
-  const sdk = await import('firebase/auth');
-  await sdk.signOut(auth);
-  const result = await measureDiagnosticPhase('Login: servicio de identidad', () => call<{ customToken: string; user: Seller; store: Store; role: Role; company: Company }>('vestikaStagingLogin', { identifier, password }));
+  const [sdk, functions] = await measureDiagnosticPhase('Login: preparar Firebase', prepareLoginModules);
+  await measureDiagnosticPhase('Login: cerrar sesión previa', () => sdk.signOut(auth));
+  const result = await measureDiagnosticPhase('Login: servicio de identidad', async () => (await functions.httpsCallable<unknown, { customToken: string; user: Seller; store: Store; role: Role; company: Company }>(functions.getFunctions(auth.app, 'southamerica-east1'), 'vestikaStagingLogin')({ identifier, password })).data);
   const signed = await measureDiagnosticPhase('Login: autenticar en Firebase', () => sdk.signInWithCustomToken(auth, result.customToken));
   const { claims } = await measureDiagnosticPhase('Login: validar identidad', () => signed.user.getIdTokenResult());
   if (claims.identityVersion !== 1 || claims.sellerId !== result.user.id || claims.companyId !== result.user.companyId || claims.storeId !== result.user.storeId || claims.roleId !== result.user.roleId || claims.authVersion !== result.user.authVersion) {

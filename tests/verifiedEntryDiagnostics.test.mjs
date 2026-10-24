@@ -11,9 +11,11 @@ async function fixture(env,run){
  const dir=await mkdtemp(join(process.cwd(),'tests/.entry-diagnostics-'));let r;
  try{
  const b=await build({bundle:true,write:false,format:'esm',platform:'node',external:['react'],define:{'import.meta.env':JSON.stringify({VITE_APP_ENV:env})},stdin:{contents:`export {default as Entry} from './components/VerifiedEntry';export * as meter from './services/readDiagnostics';export {control} from 'entry-control';`,resolveDir:process.cwd()},plugins:[{name:'entry-fixture',setup(b){
+ b.onResolve({filter:/^firebase\/(auth|functions)$/},a=>({path:a.path,namespace:'sdk-prefetch'}));
+ b.onLoad({filter:/.*/,namespace:'sdk-prefetch'},()=>({contents:"import {control} from 'entry-control';control.prepared++;"}));
  b.onResolve({filter:/^entry-control$/},()=>({path:'control',namespace:'entry'}));
  b.onResolve({filter:/^\.\/LoginView$|^\.\/App$|verifiedAuth$/},a=>({path:a.path,namespace:'entry'}));
- b.onLoad({filter:/.*/,namespace:'entry'},a=>({resolveDir:process.cwd(),contents:a.path==='control'?`export const control={calls:0,resolve:null,reject:null};`:
+ b.onLoad({filter:/.*/,namespace:'entry'},a=>({resolveDir:process.cwd(),contents:a.path==='control'?`export const control={calls:0,prepared:0,resolve:null,reject:null};`:
  a.path==='./LoginView'?`import React from 'react';export default function Login(props){return React.createElement('test-login',props)}`:
  a.path==='./App'?`import React from 'react';import Panel from './components/ReadDiagnosticsPanel';export default function App(){return React.createElement(Panel,{available:true})}`:
  `import {control} from 'entry-control';export const recordVerifiedLogin=()=>{};export const loginVerified=()=>{control.calls++;return new Promise((resolve,reject)=>{control.resolve=resolve;control.reject=reject})};`}));}}]});
@@ -34,4 +36,11 @@ test('verified entry starts meter before authentication and preserves it when Ap
 }));
 test('production entry does not expose pre-login diagnostics',()=>fixture('production',async({control},r)=>{
  assert.equal(control.calls,0);assert.equal(r.root.findAllByType('button').length,0);
+}));
+
+
+test('starting to fill verified login prepares SDK code once but does not submit credentials',()=>fixture('staging',async({control},r)=>{
+ assert.equal(control.prepared,0);assert.equal(control.calls,0);
+ await act(async()=>{r.root.findByType('test-login').props.onPrepareLogin();r.root.findByType('test-login').props.onPrepareLogin();});
+ assert.equal(control.prepared,2);assert.equal(control.calls,0);
 }));

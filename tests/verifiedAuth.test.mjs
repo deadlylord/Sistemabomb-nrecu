@@ -25,7 +25,7 @@ async function fixture(run) {
       export const onSnapshot=(ref,apply,error)=>{const item={ref,apply,error,closed:false};control.snapshots.push(item);queueMicrotask(()=>{if(!item.closed)apply({exists:()=>true,data:()=>ref.name==='sellers'?control.user:{companyId:'a'}})});return()=>{item.closed=true}};`
   };
   try {
-    const result=await build({bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env':JSON.stringify({VITE_VERIFIED_IDENTITY:'true'})},stdin:{contents:"export * from './services/verifiedAuth';export * as meter from './services/readDiagnostics';export {control} from 'fixture-control';",resolveDir:process.cwd()},plugins:[{name:'verified-fixtures',setup(b){b.onResolve({filter:/^(fixture-control|firebase\/(auth|functions|firestore)|\.\.\/firebase)$/},a=>({path:a.path,namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},a=>({contents:modules[a.path]}));}}]});
+    const result=await build({bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env':JSON.stringify({VITE_VERIFIED_IDENTITY:'true'})},stdin:{contents:"export * from './services/verifiedAuth';export {prepareLoginModules} from './services/loginModules';export * as meter from './services/readDiagnostics';export {control} from 'fixture-control';",resolveDir:process.cwd()},plugins:[{name:'verified-fixtures',setup(b){b.onResolve({filter:/^(fixture-control|firebase\/(auth|functions|firestore)|\.\.\/firebase)$/},a=>({path:a.path,namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},a=>({contents:modules[a.path]}));}}]});
     const path=join(dir,'auth.mjs');await writeFile(path,result.outputFiles[0].text);await run(await import(pathToFileURL(path).href));
   }finally{await rm(dir,{recursive:true,force:true});}
 }
@@ -35,7 +35,7 @@ test('verified login uses server credentials, validates signed claims and perfor
   const result=await loginVerified(' MiXeD.Legacy ','test-only-password');
   assert.equal(result.user.id,'u');assert.equal(control.calls.length,1);assert.equal(control.calls[0].name,'vestikaStagingLogin');
   assert.equal(control.snapshots.length,0);assert.equal(control.signedIn,1);assert.equal('password' in result.user,false);
-  assert.deepEqual(meter.getReadDiagnostics().timings.map(t=>t.phase),['Login: servicio de identidad','Login: autenticar en Firebase','Login: validar identidad']);
+  assert.deepEqual(meter.getReadDiagnostics().timings.map(t=>t.phase),['Login: preparar Firebase','Login: cerrar sesión previa','Login: servicio de identidad','Login: autenticar en Firebase','Login: validar identidad']);
   assert.ok(meter.getReadDiagnostics().timings.every(t=>t.status==='success'));
   assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/test-only-password|fixture-token|MiXeD/);
 }));
@@ -54,4 +54,11 @@ test('revocation and cross-tab account changes invalidate once; old tab cannot s
   const count=control.signouts;await logoutVerified('u');assert.equal(control.signouts,count,'do not terminate the newer shared Firebase identity');
   control.snapshots[0].apply({exists:()=>true,data:()=>({...user,authVersion:2})});assert.equal(invalidated,1);
   stop();assert.equal(control.listeners.size,0);assert.ok(control.snapshots.every(s=>s.closed));
+}));
+
+
+test('preparing login modules is reusable and does not sign out, authenticate, call identity or subscribe to data',()=>fixture(async({prepareLoginModules,loginVerified,control})=>{
+ const first=prepareLoginModules(),second=prepareLoginModules();assert.equal(first,second);await first;
+ assert.equal(control.calls.length,0);assert.equal(control.signouts,0);assert.equal(control.signedIn,0);assert.equal(control.snapshots.length,0);
+ await loginVerified('user','secret');assert.equal(control.calls.length,1);assert.equal(control.signouts,1);assert.equal(control.signedIn,1);
 }));
