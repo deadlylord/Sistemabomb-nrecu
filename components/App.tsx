@@ -5,6 +5,7 @@ import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, 
 import { assertCartAvailability } from '../services/cartAvailability';
 import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
+import { createVerifiedCompanyAdmin } from '../services/createVerifiedCompanyAdmin';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
@@ -2982,6 +2983,14 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     adminData: { name: string; username: string; password: string }
   ) => {
     if (!isDeveloper) throw new Error('Solo Developer puede gestionar empresas y sus usuarios iniciales.');
+    if (verifiedIdentityEnabled) {
+      const company = companies.find(company => company.id === companyId);
+      if (!company) throw new Error('No se encontró la empresa del usuario.');
+      const snapshot = await getDoc(doc(db, 'stores', storeId));
+      if (!snapshot.exists()) throw new Error('No se encontró la sede del usuario.');
+      await createVerifiedCompanyAdmin(company, { ...snapshot.data(), id: storeId } as Store, roles, adminData, manageVerifiedRole, manageVerifiedUser);
+      return;
+    }
     const adminRole = roles.find(r => r.name === 'Administrator' && (r.companyId || DEFAULT_COMPANY_ID) === DEFAULT_COMPANY_ID);
     if (!adminRole) throw new Error('No existe el rol Administrator.');
     assertUserLimit(companyId, adminRole.id);
