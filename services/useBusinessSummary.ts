@@ -187,6 +187,7 @@ export function useBusinessSummary(
   }
   return {
     meta,
+    metadataLoaded: metadata.key === key,
     ready,
     total,
     days: rows,

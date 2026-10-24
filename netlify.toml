@@ -36,6 +36,7 @@
   # Month-scoped sales index verified READY in vestika-staging.
   VITE_DASHBOARD_MONTHLY_SALES = "true"
   VITE_DASHBOARD_MONTHLY_CHART = "true"
+  VITE_DASHBOARD_INVENTORY_SUMMARY = "true"
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
