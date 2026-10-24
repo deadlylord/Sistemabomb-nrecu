@@ -135,6 +135,38 @@ test('verified staging login, user management and tenant rules',async t=>{
       await assert.rejects(manageStagingRole(db,auth,{action:'update',id:'admin',name:'Own',userType:'admin',permissions:['pos']}),{code:'permission-denied'});
       await assert.rejects(manageStagingRole(db,auth,{action:'create',name:'Developer',userType:'admin',permissions:['developer_center']}),{code:'invalid-argument'});
     });
+    await t.test('granted developer creates a UI-shaped cross after switching to the synthetic company',async()=>{
+      const companyId='load_reads_20261023_company';
+      const storeIds=['load_reads_20261023_store_1','load_reads_20261023_store_2'];
+      await db.doc('companies/'+companyId).set({name:'Load test',status:'active'});
+      for(const id of storeIds)await db.doc('stores/'+id).set({companyId,name:id});
+      await db.doc('platformDevelopers/admin').set({userId:'admin',role:'developer',active:true,grantedBy:'-OYqLOlA2gyy_TrUtzf2'});
+      const dir=await mkdtemp(fileURLToPath(new URL('../.developer-cross-',import.meta.url)));
+      try {
+        const path=join(dir,'writer.mjs');await build({entryPoints:['services/tenantWrites.ts'],outfile:path,bundle:true,format:'esm',platform:'node',external:['firebase/firestore']});
+        const {createTenantWriter}=await import(pathToFileURL(path).href);
+        const client=env.authenticatedContext(auth.uid,{...baseClaims,platformDeveloper:true,firebase:{sign_in_provider:'custom'}}).firestore();
+        const writer=createTenantWriter(client,{companyId,storeIds:new Set(storeIds)});
+        const base='fin_'+companyId+'_'+storeIds[0]+'_00000000-0000-4000-8000-000000000001';
+        const left={...record(base+'_main',storeIds[0]),relatedRecordId:base+'_mirror',debtStoreId:storeIds[1],affectsCashBalance:true,isConfirmed:true,subCategory:'Cruce Sedes'};
+        delete left.companyId;
+        const right={...left,id:base+'_mirror',relatedRecordId:base+'_main',storeId:storeIds[1],debtStoreId:storeIds[0],amount:-100,type:'expense',affectsCashBalance:false};
+        const batch=writer.writeBatch();
+        for(const row of [left,right]){
+          batch.set(doc(client,'financialRecords/'+row.id),row);
+          batch.set(doc(client,'financialRecordsHistory/'+row.id+'_audit'),{id:row.id+'_audit',recordId:row.id,action:'create',timestamp:'2026-10-23T21:11:00-05:00',changedBy:'Staging Admin',newState:row,storeId:row.storeId,accountType:row.accountType});
+        }
+        await assertSucceeds(batch.commit());
+        for(const row of [left,right])assert.equal((await getDoc(doc(client,'financialRecords/'+row.id))).data().companyId,companyId);
+        // The optimization must not permit a missing/foreign mate or survive
+        // revocation of the live grant, even while the signed token is stale.
+        await assertFails(setDoc(doc(client,'financialRecords/invalid_developer_pair'),{...left,id:'invalid_developer_pair',companyId,relatedRecordId:'foreign'}));
+        await db.doc('platformDevelopers/admin').update({active:false});
+        await assertFails(getDoc(doc(client,'financialRecords/'+left.id)));
+        await assertFails(setDoc(doc(client,'financialRecords/revoked_developer'),{...record('revoked_developer',storeIds[0]),companyId}));
+        await db.doc('platformDevelopers/admin').update({active:true});
+      }finally{await rm(dir,{recursive:true,force:true});}
+    });
     await t.test('paired tenant writer works with strict rules; direct partial changes are rejected',async()=>{
       const dir=await mkdtemp(fileURLToPath(new URL('../.identity-writer-',import.meta.url)));
       try {

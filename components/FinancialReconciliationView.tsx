@@ -1,4 +1,4 @@
-import { beginDiagnosticPhase, finishDiagnosticPhase } from '../services/readDiagnostics';
+import { beginDiagnosticPhase, finishDiagnosticPhase, safeDiagnosticErrorCode } from '../services/readDiagnostics';
 import { useFinancialDraft } from '../services/useFinancialDraft';
 import { useFinancialLedger, LEDGER_PAGE_SIZE } from '../services/useFinancialLedger';
 import { useViewFilter } from '../services/viewFilters';
@@ -1325,6 +1325,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     if (manualEntries.length > 60) { alert('Procesa máximo 60 filas por lote.'); return; }
     const saveTiming = beginDiagnosticPhase('Guardar conciliación: hasta confirmación en cliente');
     let saveFailed = true;
+    let saveError: unknown;
     saveInFlightRef.current = true;
     setIsSavingReconciliation(true);
     setSaveStatus({ state: 'saving', message: 'Guardando movimientos…' });
@@ -1457,10 +1458,11 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       saveFailed = false;
     } catch (error) {
       setShowAddModal(true);
+      saveError = error;
       console.error('Error saving reconciliation entries:', error);
-      setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el guardado. Conservamos el borrador para reintentarlo.' });
+      setSaveStatus({ state: 'error', message: `${error instanceof Error ? error.message : 'No se confirmó el guardado.'}${safeDiagnosticErrorCode(error) ? ` (Código: ${safeDiagnosticErrorCode(error)})` : ''} Conservamos el borrador para revisarlo o reintentarlo.` });
     } finally {
-      finishDiagnosticPhase(saveTiming, saveFailed);
+      finishDiagnosticPhase(saveTiming, saveFailed, saveError);
       saveInFlightRef.current = false;
       setIsSavingReconciliation(false);
     }
@@ -3396,6 +3398,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                 <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">
                     <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
                     <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0"><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p><p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p></div><div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p><p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{activeTab.toUpperCase()}</p></div></div>
+                    {saveStatus.message && (saveStatus.state === 'error' || saveStatus.state === 'saving') && <div data-testid="manual-entry-save-feedback" role={saveStatus.state === 'error' ? 'alert' : 'status'} aria-live={saveStatus.state === 'error' ? 'assertive' : 'polite'} className={`shrink-0 border-b px-4 py-3 text-sm font-semibold ${saveStatus.state === 'error' ? 'bg-red-50 text-red-800 border-red-200' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>{saveStatus.message}</div>}
                     <div className="flex-grow overflow-y-auto p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-900/50"><fieldset disabled={isSavingReconciliation} className="contents">
                         <div className="space-y-4">
                             <div className="hidden md:grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest"><div className="col-span-2">Fecha y Hora</div><div className="col-span-1">Cuenta</div><div className="col-span-2">Descripción</div><div className="col-span-2">Categoría</div><div className="col-span-1 text-right">Monto $</div><div className="col-span-3 text-center border-l border-gray-300 dark:border-gray-600">Conf. Cruzada</div><div className="col-span-1"></div></div>

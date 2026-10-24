@@ -37,7 +37,11 @@ test('ledger renders 50 of 5,000 rows with full balances, blocks double save and
   let first;
   await act(async()=>{first=button('PROCESAR LOTE').props.onClick();button('PROCESAR LOTE').props.onClick();await Promise.resolve()});
   assert.equal(batches.length,1);assert.match(JSON.stringify(renderer.toJSON()),/GUARDANDO/);assert.match(JSON.stringify(renderer.toJSON()),/Ingresar Lote/);
-  await act(async()=>{batches[0].reject(new Error('Sin conexión'));await first});
+  await act(async()=>{batches[0].reject(Object.assign(new Error('Sin conexión'), { code: 'permission-denied' }));await first});
+  const feedback = renderer.root.findByProps({'data-testid':'manual-entry-save-feedback'});
+  assert.equal(feedback.props.role, 'alert');
+  assert.match(feedback.children.join(''), /Sin conexión/);
+  assert.match(feedback.children.join(''), /permission-denied/);
   assert.match(JSON.stringify(renderer.toJSON()),/Sin conexión/);assert.equal(input('Concepto...').props.value,'Prueba');
   let retry;await act(async()=>{retry=button('PROCESAR LOTE').props.onClick();await Promise.resolve()});
   assert.equal(batches.length,2);assert.equal(batches[0].operations[0].ref.path,batches[1].operations[0].ref.path,'retry retains the same financial document ID');

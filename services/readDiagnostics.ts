@@ -9,7 +9,7 @@ type Session = { id: number; label: string; startedAt: string; stoppedAt?: strin
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
   droppedGroups: number; droppedTimings: number };
 export type DiagnosticPhase = 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias';
-type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete' };
+type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string };
 const timings: Timing[] = [];
 let sessionStarted = 0;
 let context: ReadContext = { view: 'Inicio', companyId: '', storeId: '' };
@@ -105,15 +105,23 @@ export function beginDiagnosticPhase(phase: DiagnosticPhase) {
   timings.push(timing); changed();
   return { sessionId: session.id, started, timing };
 }
-export function finishDiagnosticPhase(ticket: ReturnType<typeof beginDiagnosticPhase>, error = false) {
+const diagnosticErrorCodes = new Set(['permission-denied', 'unauthenticated', 'unavailable', 'deadline-exceeded', 'aborted', 'resource-exhausted', 'failed-precondition', 'invalid-argument', 'not-found', 'already-exists', 'cancelled', 'internal', 'unknown', 'data-loss', 'unimplemented']);
+export function safeDiagnosticErrorCode(error: unknown) {
+  const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code.replace(/^firestore\//, '') : '';
+  return diagnosticErrorCodes.has(code) ? code : undefined;
+}
+export function finishDiagnosticPhase(ticket: ReturnType<typeof beginDiagnosticPhase>, error = false, cause?: unknown) {
   if (!ticket || !session?.active || ticket.sessionId !== session.id) return;
   ticket.timing.durationMs = performance.now() - ticket.started;
-  ticket.timing.status = error ? 'error' : 'success'; changed();
+  ticket.timing.status = error ? 'error' : 'success';
+  const code = error ? safeDiagnosticErrorCode(cause) : undefined;
+  if (code) ticket.timing.errorCode = code;
+  changed();
 }
 export function measureDiagnosticPhase<T>(phase: DiagnosticPhase, run: () => Promise<T>): Promise<T> {
   const ticket = beginDiagnosticPhase(phase);
   if (!ticket) return run();
   try {
-    return run().then(value => { finishDiagnosticPhase(ticket); return value; }, error => { finishDiagnosticPhase(ticket, true); throw error; });
-  } catch (error) { finishDiagnosticPhase(ticket, true); throw error; }
+    return run().then(value => { finishDiagnosticPhase(ticket); return value; }, error => { finishDiagnosticPhase(ticket, true, error); throw error; });
+  } catch (error) { finishDiagnosticPhase(ticket, true, error); throw error; }
 }

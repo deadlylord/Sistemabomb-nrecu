@@ -103,3 +103,18 @@ curso al detener se marca incompleta. Los resultados tardíos no cambian la sesi
 terminada ni contaminan otra. Se retienen como máximo 200 etapas con etiquetas
 fijas, contexto de empresa/sede y tiempos, sin mensajes, montos ni documentos.
 No cambia las comprobaciones de duplicación ni agrega consultas o escrituras.
+
+## Error visible del cruce (1.1.173)
+
+El lote muestra el estado y el error dentro del formulario, conservando los
+mismos IDs del borrador. El diagnóstico solo exporta códigos de error de Firebase
+incluidos en una lista permitida; nunca exporta mensajes ni detalles del registro.
+
+Se reprodujo en el emulador un cruce con un Developer delegado que cambia de
+empresa: las reglas anteriores alcanzaban el límite de 1000 expresiones y
+rechazaban la escritura. El helper del grant repetía la misma lectura completa
+tres veces. La candidata de reglas de staging enlaza ese documento una vez con
+`let` y conserva las mismas tres condiciones de autorización. El caso que fallaba
+ahora pasa; se comprueba también revocación del grant y contraparte inválida.
+Esto no modifica las reglas de producción. Las reglas de staging siguen siendo
+un prototipo que requiere revisión antes de una migración general.

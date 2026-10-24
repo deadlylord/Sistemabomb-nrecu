@@ -79,3 +79,13 @@ test('timings distinguish failure and incomplete work and reject late completion
  for(let i=0;i<205;i++)meter.beginDiagnosticPhase('Transacción completa');
  assert.equal(meter.getReadDiagnostics().timings.length,200);assert.equal(meter.getReadDiagnostics().session.droppedTimings,5);
 }));
+
+test('error diagnostics retain only allowlisted codes, never arbitrary codes or messages',()=>withMeter(async({meter})=>{
+ meter.startReadMeasurement('Error');
+ const e=Object.assign(Error('PRIVATE_FAILURE_MESSAGE'),{code:'firestore/permission-denied'});
+ await assert.rejects(meter.measureDiagnosticPhase('Transacción completa',async()=>{throw e}),x=>x===e);
+ assert.equal(meter.getReadDiagnostics().timings[0].errorCode,'permission-denied');
+ const ticket=meter.beginDiagnosticPhase('Transacción completa');meter.finishDiagnosticPhase(ticket,true,{code:'PRIVATE_CODE'});
+ assert.equal(meter.getReadDiagnostics().timings[1].errorCode,undefined);
+ assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/PRIVATE_FAILURE_MESSAGE|PRIVATE_CODE/);
+}));
