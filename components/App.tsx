@@ -1,4 +1,4 @@
-import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext } from '../services/readDiagnostics';
+import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext, measureDiagnosticPhase } from '../services/readDiagnostics';
 import { verifiedIdentityEnabled, loginDiagnosticsEnabled } from '../services/identityConfig';
 import type { VerifiedSession } from './VerifiedEntry';
 import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
@@ -2212,7 +2212,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         counts: historicalCounts, 
         updatedAt: now 
     }));
-    await batch.commit();
+    await measureDiagnosticPhase('Borrador: validar y guardar', () => batch.commit());
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {

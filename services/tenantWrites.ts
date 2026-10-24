@@ -101,7 +101,21 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
           if (name === 'incidents' && collectionName(ref) === 'sales' && ref.id === data.originalSaleId && linkedData.storeId !== data.storeId) throw new Error('La venta original pertenece a otra sede.');
         }
       }
+      let draftProductsLoaded = false;
       for (const ref of references) {
+        // Keep the existing validation order and ownership checks. Once category
+        // checks pass, fetch independent count references in bounded groups.
+        // Reuse the per-commit cache across counts, snapshot and history.
+        if (!draftProductsLoaded && collectionName(ref) === 'inventory' &&
+            ['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name)) {
+          draftProductsLoaded = true;
+          const products = [...new Map(references.filter(item => collectionName(item) === 'inventory' && !pending.has(item.path) && !cache.has(item.path)).map(item => [item.path, item])).values()];
+          if (products.length) await measureDiagnosticPhase('Borrador: comprobar productos', async () => {
+            for (let offset = 0; offset < products.length; offset += 12) {
+              await Promise.all(products.slice(offset, offset + 12).map(load));
+            }
+          });
+        }
         const staged = pending.get(ref.path);
         const linked = staged ? null : await load(ref);
         if (!staged && !linked.exists()) throw new Error('No se encontró un registro vinculado.');
