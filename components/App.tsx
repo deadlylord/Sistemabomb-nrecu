@@ -506,7 +506,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'sellers'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [currentUser?.id, isAppReady, isAuthReady]);
+  }, [currentUser?.id, currentUser?.companyId, isAppReady, isAuthReady, isDeveloper]);
   
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
