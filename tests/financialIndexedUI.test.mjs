@@ -14,7 +14,7 @@ test('indexed UI advances to page two and lists a crossing before its detail is 
  globalThis.localStorage={getItem:()=>null,setItem(){}};globalThis.window={confirm:()=>true};globalThis.alert=()=>{};
  let renderer;
  try {
-  const result=await build({bundle:true,write:false,format:'esm',platform:'node',external:['react'],stdin:{contents:`export {default as Screen} from './components/FinancialReconciliationView';`,resolveDir:process.cwd()},plugins:[{name:'indexed-ui-fixtures',setup(b){
+  const result=await build({bundle:true,write:false,format:'esm',platform:'node',external:['react','react-dom'],stdin:{contents:`export {default as Screen} from './components/FinancialReconciliationView';`,resolveDir:process.cwd()},plugins:[{name:'indexed-ui-fixtures',setup(b){
    b.onResolve({filter:/(tenantWrites|useFinancialLedger|useCompanyCollection)$|^(firebase\/firestore|\.\.\/firebase)$/},a=>({path:a.path.split('/').at(-1),namespace:'fixture'}));
    b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:
     a.path==='tenantWrites'?`export const assertTenantData=()=>{};export const createTenantWriter=()=>({registerNew(){}});`:

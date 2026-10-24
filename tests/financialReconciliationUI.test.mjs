@@ -14,7 +14,7 @@ test('ledger renders 50 of 5,000 rows with full balances, blocks double save and
  const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};globalThis.window={confirm:()=>true};globalThis.alert=()=>{};
  let renderer;
  try {
-  const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',external:['react'],stdin:{contents:`export {default as Screen} from './components/FinancialReconciliationView';export {batches} from './services/tenantWrites';`,resolveDir:process.cwd()},plugins:[{name:'finance-fixtures',setup(b){
+  const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',external:['react','react-dom'],stdin:{contents:`export {default as Screen} from './components/FinancialReconciliationView';export {batches} from './services/tenantWrites';`,resolveDir:process.cwd()},plugins:[{name:'finance-fixtures',setup(b){
    b.onResolve({filter:/(tenantWrites|useFinancialLedger|useCompanyCollection)$|^(firebase\/firestore|\.\.\/firebase)$/},a=>({path:/(tenantWrites|useFinancialLedger|useCompanyCollection)$/.test(a.path)?a.path.split('/').at(-1):a.path,namespace:'fixture'}));
    b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:
     a.path.endsWith('tenantWrites')?`export const batches=[];export const assertTenantData=()=>{};export function createTenantWriter(){return {registerNew(){},writeBatch(){const operations=[];const b={set:(ref,data)=>{operations.push({ref,data});return b},delete(){return b},update(){return b},commit:()=>new Promise((resolve,reject)=>batches.push({operations,resolve,reject}))};return b}}}`:
@@ -33,6 +33,11 @@ test('ledger renders 50 of 5,000 rows with full balances, blocks double save and
   const button=label=>renderer.root.findAllByType('button').find(b=>b.children.some(c=>typeof c==='string'&&c.includes(label)));
   await act(async()=>{renderer.root.findByProps({'aria-label':'Agregar movimiento'}).props.onClick()});
   const input=placeholder=>renderer.root.findAllByType('input').find(i=>i.props.placeholder===placeholder);
+  const scroll = renderer.root.findByProps({'data-testid':'manual-entry-scroll'});
+  const footer = renderer.root.findByProps({'data-testid':'manual-entry-footer'});
+  assert.equal(scroll.parent, footer.parent, 'save actions remain outside the scrolling movement list');
+  assert.equal(scroll.findAllByProps({'data-testid':'manual-entry-footer'}).length, 0);
+
   await act(async()=>{input('Monto $').props.onChange({target:{value:'200'}});input('Concepto...').props.onChange({target:{value:'Prueba'}})});
   let first;
   await act(async()=>{first=button('PROCESAR LOTE').props.onClick();button('PROCESAR LOTE').props.onClick();await Promise.resolve()});

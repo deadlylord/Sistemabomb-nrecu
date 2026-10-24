@@ -15,10 +15,10 @@ export default function ReadDiagnosticsPanel({ available }: { available: boolean
     link.href = url; link.download = `vestika-medicion-${new Date().toISOString().replace(/[:.]/g, '-')}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <>
-    <button type="button" onClick={() => setOpen(true)} className={`fixed right-3 top-16 z-[70] rounded-full px-3 py-2 text-xs font-bold shadow-lg ${active ? 'bg-amber-300 text-slate-950' : 'bg-slate-800 text-white'}`}>
+    <button type="button" onClick={() => setOpen(true)} className={`read-diagnostics-trigger fixed right-3 top-16 z-[30000] rounded-full px-3 py-2 text-xs font-bold shadow-lg ${active ? 'bg-amber-300 text-slate-950' : 'bg-slate-800 text-white'}`}>
       {active ? '● Midiendo · Ver / detener' : 'Medir consultas'}
     </button>
-    {open && <div className="fixed inset-0 z-[80] bg-black/60 p-3 sm:p-6 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Medición de consultas">
+    {open && <div className="fixed inset-0 z-[31000] bg-black/60 p-3 sm:p-6 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Medición de consultas">
       <div className="w-full max-w-5xl max-h-[90dvh] overflow-auto rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white p-4 sm:p-6 space-y-4">
         <div className="flex justify-between gap-4 items-center"><h2 className="text-lg font-bold">Medición de consultas</h2><button type="button" onClick={() => setOpen(false)} className="rounded-lg border px-3 py-2">Cerrar</button></div>
         <p className="text-sm">Inicia, cierra este panel, realiza una sola acción y vuelve a detener la medición. Repite la misma acción para comparar. Los contadores se guardan únicamente en esta pestaña.</p>
