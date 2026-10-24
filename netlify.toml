@@ -33,8 +33,8 @@
 [context.staging.environment]
   # Keep the original dashboard layout; monthly chart uses verified summaries.
   VITE_DASHBOARD_SUMMARY = "false"
-  # Enable month-scoped sales after its composite index is ready.
-  VITE_DASHBOARD_MONTHLY_SALES = "false"
+  # Month-scoped sales index verified READY in vestika-staging.
+  VITE_DASHBOARD_MONTHLY_SALES = "true"
   VITE_DASHBOARD_MONTHLY_CHART = "true"
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
