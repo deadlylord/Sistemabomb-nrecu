@@ -1,7 +1,7 @@
 import { measureDiagnosticPhase } from './readDiagnostics';
 import { prepareFinancialOperations, sameFinancialVersion } from './financialMutations';
 import { assertCompanyRole, isPlatformRole } from './developerAccess';
-import { getDoc, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from './measuredFirestore';
+import { getDoc, getDocs, collection, query, where, setDoc, updateDoc, deleteDoc, doc, writeBatch, runTransaction } from './measuredFirestore';
 import type { Firestore, DocumentReference, WriteBatch } from './measuredFirestore';
 import { DEFAULT_COMPANY_ID, IncidentType } from '../types';
 
@@ -37,7 +37,7 @@ const collectionName = (ref: DocumentReference) => ref.path.split('/')[0];
 // store-scoped subscriptions; repeated references share a read within the operation.
 export function createTenantWriter(db: Firestore, scope: TenantScope) {
   const generated = new Set<string>();
-  const validate = async (operations: Operation[], read: (ref: DocumentReference) => Promise<any>) => {
+  const validate = async (operations: Operation[], read: (ref: DocumentReference) => Promise<any>, queryDraftProducts = false) => {
     const cache = new Map<string, any>();
     const pending = new Map(operations.filter(op => op.kind === 'set').map(op => [op.ref.path, op.data]));
     const load = async (ref: DocumentReference) => {
@@ -104,15 +104,24 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
       let draftProductsLoaded = false;
       for (const ref of references) {
         // Keep the existing validation order and ownership checks. Once category
-        // checks pass, fetch independent count references in bounded groups.
+        // checks pass, load product references without serial document requests.
         // Reuse the per-commit cache across counts, snapshot and history.
         if (!draftProductsLoaded && collectionName(ref) === 'inventory' &&
             ['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name)) {
           draftProductsLoaded = true;
           const products = [...new Map(references.filter(item => collectionName(item) === 'inventory' && !pending.has(item.path) && !cache.has(item.path)).map(item => [item.path, item])).values()];
           if (products.length) await measureDiagnosticPhase('Borrador: comprobar productos', async () => {
-            for (let offset = 0; offset < products.length; offset += 12) {
-              await Promise.all(products.slice(offset, offset + 12).map(load));
+            if (queryDraftProducts) {
+              // A verification snapshots the selected category. Read it once,
+              // preserving legacy products without companyId and tenant rules.
+              // Transactions below must retain transaction.get conflict checks.
+              const result = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', data.storeId), where('categoryId', '==', data.categoryId)));
+              const found = new Map(result.docs.map(item => [item.ref.path, item]));
+              for (const item of products) cache.set(item.path, found.get(item.path) || { exists: () => false });
+            } else {
+              for (let offset = 0; offset < products.length; offset += 12) {
+                await Promise.all(products.slice(offset, offset + 12).map(load));
+              }
             }
           });
         }
@@ -193,7 +202,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
     async addDoc(collection: any, data: any) { const ref = doc(collection); generated.add(ref.path); const operations: Operation[] = [{ kind: 'set', ref, data }]; if (hasFinancialChanges(operations)) await commitFinancial(operations); else { await validate(operations, getDoc); await setDoc(ref, operations[0].data); } generated.delete(ref.path); return ref; },
     writeBatch() {
       const operations: Operation[] = []; const queue = makeQueue(operations);
-      queue.commit = async () => { if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await batch.commit(); operations.forEach(op => generated.delete(op.ref.path)); return result; };
+      queue.commit = async () => { if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc, true); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await batch.commit(); operations.forEach(op => generated.delete(op.ref.path)); return result; };
       return queue as WriteBatch;
     },
     async runTransaction<T>(_: Firestore, callback: (transaction: any) => Promise<T>) {
