@@ -25,15 +25,19 @@ async function fixture(run) {
       export const onSnapshot=(ref,apply,error)=>{const item={ref,apply,error,closed:false};control.snapshots.push(item);queueMicrotask(()=>{if(!item.closed)apply({exists:()=>true,data:()=>ref.name==='sellers'?control.user:{companyId:'a'}})});return()=>{item.closed=true}};`
   };
   try {
-    const result=await build({bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env':JSON.stringify({VITE_VERIFIED_IDENTITY:'true'})},stdin:{contents:"export * from './services/verifiedAuth';export {control} from 'fixture-control';",resolveDir:process.cwd()},plugins:[{name:'verified-fixtures',setup(b){b.onResolve({filter:/^(fixture-control|firebase\/(auth|functions|firestore)|\.\.\/firebase)$/},a=>({path:a.path,namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},a=>({contents:modules[a.path]}));}}]});
+    const result=await build({bundle:true,write:false,format:'esm',platform:'node',define:{'import.meta.env':JSON.stringify({VITE_VERIFIED_IDENTITY:'true'})},stdin:{contents:"export * from './services/verifiedAuth';export * as meter from './services/readDiagnostics';export {control} from 'fixture-control';",resolveDir:process.cwd()},plugins:[{name:'verified-fixtures',setup(b){b.onResolve({filter:/^(fixture-control|firebase\/(auth|functions|firestore)|\.\.\/firebase)$/},a=>({path:a.path,namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},a=>({contents:modules[a.path]}));}}]});
     const path=join(dir,'auth.mjs');await writeFile(path,result.outputFiles[0].text);await run(await import(pathToFileURL(path).href));
   }finally{await rm(dir,{recursive:true,force:true});}
 }
-test('verified login uses server credentials, validates signed claims and performs no client seller query',()=>fixture(async({loginVerified,control})=>{
+test('verified login uses server credentials, validates signed claims and performs no client seller query',()=>fixture(async({loginVerified,control,meter})=>{
+  meter.startReadMeasurement('Ingreso al POS');
   assert.equal(control.calls.length,0);assert.equal(control.snapshots.length,0);
   const result=await loginVerified(' MiXeD.Legacy ','test-only-password');
   assert.equal(result.user.id,'u');assert.equal(control.calls.length,1);assert.equal(control.calls[0].name,'vestikaStagingLogin');
   assert.equal(control.snapshots.length,0);assert.equal(control.signedIn,1);assert.equal('password' in result.user,false);
+  assert.deepEqual(meter.getReadDiagnostics().timings.map(t=>t.phase),['Login: servicio de identidad','Login: autenticar en Firebase','Login: validar identidad']);
+  assert.ok(meter.getReadDiagnostics().timings.every(t=>t.status==='success'));
+  assert.doesNotMatch(JSON.stringify(meter.getReadDiagnostics()),/test-only-password|fixture-token|MiXeD/);
 }));
 test('failed login never falls back to a client identity scan; wrong server project is rejected',()=>fixture(async({loginVerified,control})=>{
   control.serverError=new Error('unauthenticated');await assert.rejects(loginVerified('user','wrong'));

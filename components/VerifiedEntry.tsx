@@ -1,5 +1,8 @@
-import React, { useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import LoginView from "./LoginView";
+import { loginDiagnosticsEnabled } from "../services/identityConfig";
+import { beginDiagnosticPhase, finishDiagnosticPhase, measureDiagnosticPhase } from "../services/readDiagnostics";
+const ReadDiagnosticsPanel = lazy(() => import("./ReadDiagnosticsPanel"));
 import type { loginVerified } from "../services/verifiedAuth";
 
 export type VerifiedSession = Awaited<ReturnType<typeof loginVerified>>;
@@ -12,7 +15,9 @@ export default function VerifiedEntry() {
     initialSession?: VerifiedSession;
   }> | null>(null);
   async function login(identifier: string, password: string) {
-    const appCode = import("./App");
+    const loginTiming = beginDiagnosticPhase("Inicio de sesión: verificar acceso");
+    let succeeded = false;
+    const appCode = measureDiagnosticPhase("Login: cargar aplicación", () => import("./App"));
     // Handle an early chunk failure while the authentication request is pending.
     appCode.catch(() => {});
     try {
@@ -22,6 +27,7 @@ export default function VerifiedEntry() {
       const module = await appCode;
       setApp(() => module.default);
       setSession(verified);
+      succeeded = true;
       recordVerifiedLogin(verified.user);
     } catch (error: any) {
       alert(
@@ -31,12 +37,12 @@ export default function VerifiedEntry() {
             ? "Usuario o contraseña incorrecta."
             : "No se pudo completar el ingreso. Revisa la conexión e intenta nuevamente.",
       );
-    }
+    } finally { finishDiagnosticPhase(loginTiming, !succeeded); }
   }
   if (App && session) return <App initialSession={session} />;
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <><div className="min-h-screen flex items-center justify-center p-4">
       <LoginView onLogin={login} isAppReady />
-    </div>
+    </div>{loginDiagnosticsEnabled && <Suspense fallback={null}><ReadDiagnosticsPanel available loginMode /></Suspense>}</>
   );
 }

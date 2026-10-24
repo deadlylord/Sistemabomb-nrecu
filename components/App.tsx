@@ -1,5 +1,5 @@
-import { clearReadMeasurement, setReadContext } from '../services/readDiagnostics';
-import { verifiedIdentityEnabled } from '../services/identityConfig';
+import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext } from '../services/readDiagnostics';
+import { verifiedIdentityEnabled, loginDiagnosticsEnabled } from '../services/identityConfig';
 import type { VerifiedSession } from './VerifiedEntry';
 import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
 import { assertCartAvailability } from '../services/cartAvailability';
@@ -363,9 +363,12 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [dataScope, companyStoreKey]);
   const readMeasurementUser = useRef(currentUser?.id);
   useEffect(() => {
-    if (readMeasurementUser.current !== currentUser?.id || !isDeveloper) clearReadMeasurement();
+    // Preserve a staging measurement through the first anonymous -> user handoff.
+    // Logout or replacement of an existing user still clears all observations.
+    const previousUser = readMeasurementUser.current;
+    if (previousUser && previousUser !== currentUser?.id || !loginDiagnosticsEnabled && (previousUser !== currentUser?.id || !isDeveloper)) clearReadMeasurement();
     readMeasurementUser.current = currentUser?.id;
-    setReadContext({ view: String(currentView), companyId: operationalCompanyId, storeId: currentStoreId || '' });
+    setReadContext(currentUser ? { view: String(currentView), companyId: operationalCompanyId, storeId: currentStoreId || '' } : { view: 'Login', companyId: '', storeId: '' });
   }, [currentView, operationalCompanyId, currentStoreId, currentUser?.id, isDeveloper]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
   const { setDoc, updateDoc, deleteDoc, addDoc, runTransaction } = tenantWriter;
@@ -3228,10 +3231,14 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
+    const loginTiming = beginDiagnosticPhase('Inicio de sesión: verificar acceso');
+    let loginSucceeded = false;
+    try {
     if (verifiedIdentityEnabled) {
       try {
         const result = await loginVerified(identifier, passwordAttempt);
         setStores([result.store]); setRoles([result.role]); setCompanies([result.company]); setSellers([result.user]);
+        loginSucceeded = true;
         setCurrentUser(result.user); setActiveCompanyId(result.user.companyId!);
         localStorage.setItem('activeCompanyId', result.user.companyId!);
         selectStore(result.user.storeId);
@@ -3292,6 +3299,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       }
 
       const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
+      loginSucceeded = true;
       setCurrentUser(sessionUser);
       setActiveCompanyId(resolvedCompanyId);
       localStorage.setItem('activeCompanyId', resolvedCompanyId);
@@ -3321,6 +3329,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     } else {
       alert('Usuario o contraseña incorrecta.');
     }
+    } finally { finishDiagnosticPhase(loginTiming, !loginSucceeded); }
   };
   
   const handleLogout = () => { if (verifiedIdentityEnabled) logoutVerified(currentUser?.id).catch(() => console.warn('No se pudo cerrar la sesión.')).finally(() => window.location.reload()); setRoles([]); setStores([]); setSellers([]); setCompanies([]); currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
@@ -3330,7 +3339,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     return watchVerifiedIdentity(currentUser, handleLogout);
   }, [currentUser?.id, currentUser?.authVersion]);
 
-  if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
+  if (!currentUser) return <><div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>{loginDiagnosticsEnabled && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} loginMode={true} /></Suspense>}</>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
@@ -3468,7 +3477,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         </AppErrorBoundary>}
       </main>
-      {isDeveloper && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
+      {(isDeveloper || loginDiagnosticsEnabled) && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
       {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}

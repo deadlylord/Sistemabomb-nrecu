@@ -1,3 +1,4 @@
+import { measureDiagnosticPhase } from './readDiagnostics';
 import { auth, db } from '../firebase';
 import { doc, onSnapshot, addDoc, collection } from './measuredFirestore';
 import { verifiedIdentityEnabled } from './identityConfig';
@@ -15,9 +16,9 @@ export async function loginVerified(identifier: string, password: string) {
   assertTarget();
   const sdk = await import('firebase/auth');
   await sdk.signOut(auth);
-  const result = await call<{ customToken: string; user: Seller; store: Store; role: Role; company: Company }>('vestikaStagingLogin', { identifier, password });
-  const signed = await sdk.signInWithCustomToken(auth, result.customToken);
-  const { claims } = await signed.user.getIdTokenResult();
+  const result = await measureDiagnosticPhase('Login: servicio de identidad', () => call<{ customToken: string; user: Seller; store: Store; role: Role; company: Company }>('vestikaStagingLogin', { identifier, password }));
+  const signed = await measureDiagnosticPhase('Login: autenticar en Firebase', () => sdk.signInWithCustomToken(auth, result.customToken));
+  const { claims } = await measureDiagnosticPhase('Login: validar identidad', () => signed.user.getIdTokenResult());
   if (claims.identityVersion !== 1 || claims.sellerId !== result.user.id || claims.companyId !== result.user.companyId || claims.storeId !== result.user.storeId || claims.roleId !== result.user.roleId || claims.authVersion !== result.user.authVersion) {
     await sdk.signOut(auth); throw new Error('No se pudo verificar la identidad recibida.');
   }
