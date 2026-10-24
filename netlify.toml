@@ -31,8 +31,8 @@
 
 # Staging retains its separately verified identity and ledger processors.
 [context.staging.environment]
-  # Enable after the staging summary verification gate succeeds.
-  VITE_DASHBOARD_SUMMARY = "false"
+  # Three load-test stores verified against 4,670 source records on 2026-10-24.
+  VITE_DASHBOARD_SUMMARY = "true"
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"
