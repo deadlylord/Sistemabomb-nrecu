@@ -29,11 +29,15 @@ service cloud.firestore {
         && actualStore.get('isDisabled', false) == false && actualStore.get('status', 'active') != 'inactive';
     }
     function owner() { return request.auth.token.sellerId == '-OYqLOlA2gyy_TrUtzf2'; }
+    // Evaluate the live delegated grant once per check. Repeating the full get
+    // expression for every field exhausts the rule expression budget on pairs.
+    function activeDeveloperGrant() {
+      let grant = get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data;
+      return grant.active == true && grant.role == 'developer'
+        && grant.grantedBy == '-OYqLOlA2gyy_TrUtzf2';
+    }
     function developer() {
-      return request.auth.token.platformDeveloper == true && (owner() || (
-        get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.active == true
-        && get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.role == 'developer'
-        && get(/databases/$(database)/documents/platformDevelopers/$(request.auth.token.sellerId)).data.grantedBy == '-OYqLOlA2gyy_TrUtzf2'));
+      return request.auth.token.platformDeveloper == true && (owner() || activeDeveloperGrant());
     }
     function administrator() { return (role().get('userType', 'seller') == 'admin' || role().name in ['Administrator', 'Administrador', 'Admin'] || role().permissions.hasAny(['role_manager','ceo_center'])); }
     function storeCompany(id) { return get(/databases/$(database)/documents/stores/$(id)).data.get('companyId', 'default_company'); }

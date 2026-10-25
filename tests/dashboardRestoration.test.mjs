@@ -41,6 +41,10 @@ test('original dashboard retains payment breakdown, editable history, price diff
       await act(async()=>bar.findAllByType('button').find(n=>n.children.join('')===label).props.onClick());
       assert.equal(scrolled.at(-1),id);
     }
+    const year=new Date().getFullYear();
+    await act(async()=>renderer.update(React.createElement(Dashboard,{...props,monthlySummary:{ready:true,loading:false,chartLoading:false,error:null,days:[],months:[{month:year+'-01',days:{[year+'-01-01']:{income:12345,sales:8000}}}],total:()=>({income:0})}})));
+    assert.equal(renderer.root.findByProps({screen:'SalesHistoryChart'}).props.data[0].total,12345,'visible January column comes from monthly summary, independent of loaded current-month sales');
+    await act(async()=>renderer.update(React.createElement(Dashboard,props)));
     const chartData = renderer.root.findByProps({screen:'SalesHistoryChart'}).props.data;
     const search = () => renderer.root.findByProps({placeholder:'Factura, cliente, producto...'});
     await act(async()=>search().props.onChange({target:{value:'ningún resultado'}}));
@@ -51,10 +55,27 @@ test('original dashboard retains payment breakdown, editable history, price diff
     const priceSection=renderer.root.findByProps({id:'price-analysis'});
     await act(async()=>priceSection.findAllByType('div').find(n=>n.props.onClick).props.onClick());
     assert.ok(priceSection.findAllByType('table').length>0,'price differences retain their detailed table');
+    const originalPriceRows=JSON.stringify(priceSection.findByType('tbody').children.map(n=>n.findAllByType('td').map(td=>td.children.map(c=>typeof c==='string'?c:JSON.stringify(c.props.children)))));
     const edit=renderer.root.findAllByType('button').find(n=>n.props.title==='Editar');assert.ok(edit);
     await act(async()=>edit.props.onClick({stopPropagation(){}}));
     assert.equal(renderer.root.findByProps({screen:'EditSaleModal'}).props.sale.id,'s1');
     assert.equal(renderer.root.findByProps({screen:'EditSaleModal'}).props.onUpdateSale,props.onUpdateSale);
+    const inventoryRequests=[];
+    const onInventoryRequest=request=>inventoryRequests.push(request);
+    const optimized={...props,inventory:[],inventorySummary:{value:999999},onInventoryRequest,inventoryStatus:{loading:true,error:'',editReady:false}};
+    await act(async()=>renderer.update(React.createElement(Dashboard,optimized)));
+    assert.equal(renderer.root.findAllByProps({screen:'EditSaleModal'}).length,0,'editor must not open with a partial catalog');
+    assert.ok(text().includes('Cargando productos para editar'));
+    assert.equal(inventoryRequests.at(-1).full,true);assert.deepEqual(inventoryRequests.at(-1).productIds,['p1']);
+    const inventoryLabel=renderer.root.findAllByType('p').find(n=>n.children.join('')==='Valor del inventario');
+    assert.equal(inventoryLabel.parent.findAllByType('p')[1].children.join('').replace(/\D/g,''),'999999','inventory card uses verified total, never partial product sum');
+    await act(async()=>renderer.update(React.createElement(Dashboard,{...optimized,inventory:[product],inventoryStatus:{loading:false,error:'',editReady:true}})));
+    assert.equal(renderer.root.findByProps({screen:'EditSaleModal'}).props.inventory.length,1);
+    const optimizedPriceRows=JSON.stringify(renderer.root.findByProps({id:'price-analysis'}).findByType('tbody').children.map(n=>n.findAllByType('td').map(td=>td.children.map(c=>typeof c==='string'?c:JSON.stringify(c.props.children)))));
+    assert.equal(optimizedPriceRows,originalPriceRows,'current product prices and discount differences remain identical');
+    await act(async()=>renderer.root.findByProps({screen:'EditSaleModal'}).props.onClose());
+    assert.equal(inventoryRequests.at(-1).full,false,'closing editor releases full catalog request without another user action');
+
   } finally {
     if(renderer)await act(async()=>renderer.unmount());
     restore();await rm(dir,{recursive:true,force:true});

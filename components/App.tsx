@@ -1,11 +1,18 @@
-import { verifiedIdentityEnabled } from '../services/identityConfig';
+import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext, measureDiagnosticPhase } from '../services/readDiagnostics';
+import { verifiedIdentityEnabled, loginDiagnosticsEnabled } from '../services/identityConfig';
 import type { VerifiedSession } from './VerifiedEntry';
 import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, watchVerifiedIdentity } from '../services/verifiedAuth';
 import { assertCartAvailability } from '../services/cartAvailability';
 import { planDamagedReceipt } from '../services/damagedReceipt';
 import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
+import { createVerifiedCompanyAdmin } from '../services/createVerifiedCompanyAdmin';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
+import { useBusinessSummary } from '../services/useBusinessSummary';
+import { bogotaDateKey } from '../services/incomeChart';
+import { useDashboardInventory, type DashboardInventoryRequest } from '../services/useDashboardInventory';
+import { useDashboardSales } from '../services/useDashboardSales';
+import { currentSalesMonth, type SalesRange } from '../services/dashboardSalesRange';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 import { subscribeStoreRows } from '../services/storeSubscriptions';
 import { isolateLegacyCategoryForStore } from '../services/legacyCategoryIsolation';
@@ -39,7 +46,7 @@ import {
   runTransaction as nativeRunTransaction,
   orderBy,
   deleteField
-} from 'firebase/firestore';
+} from '../services/measuredFirestore';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { Product, CartItem, View, PaymentMethod, HeldCart, Layaway, Category, Sale, Purchase, Seller, StockTake, DailyNote, CeoDailyNote, Role, LoginRecord, Store, InventoryTransfer, Incident, IncidentType, IncidentStatus, ProductHistoryLog, ProductChangeType, PayrollRecord, Customer, Payment, PendingDetailedVerification, Expense, ExpenseCategory, GiftVoucher, FinancialRecord, Loan, Company, DEFAULT_COMPANY_ID, DEFAULT_CLIENT_ALLOWED_VIEWS } from '../types';
 import Header from './Header';
@@ -73,7 +80,13 @@ const RoleManagerView = lazy(() => import('./RoleManagerView'));
 const IncidentsView = lazy(() => import('./IncidentsView'));
 const CeoCenterView = lazy(() => import('./CeoCenterView').then(module => ({ default: module.CeoCenterView })));
 const DeveloperCenterView = lazy(() => import('./DeveloperCenterView'));
+const ReadDiagnosticsPanel = lazy(() => import('./ReadDiagnosticsPanel'));
 const DashboardView = lazy(() => import('./DashboardView'));
+const BusinessOverview = lazy(() => import('./BusinessOverview'));
+const dashboardInventorySummaryEnabled = import.meta.env?.VITE_DASHBOARD_INVENTORY_SUMMARY === 'true';
+const monthlyDashboardChartEnabled = import.meta.env?.VITE_DASHBOARD_MONTHLY_CHART === 'true';
+const monthlyDashboardSalesEnabled = import.meta.env?.VITE_DASHBOARD_MONTHLY_SALES === 'true';
+const dailySummaryEnabled = import.meta.env?.VITE_DASHBOARD_SUMMARY === 'true';
 const scopedStoreLoadingEnabled = import.meta.env?.VITE_STORE_SCOPED_LOADING === 'true';
 const SmartAccountantView = lazy(() => import('./SmartAccountantView'));
 const FinancialReconciliationView = lazy(() => import('./FinancialReconciliationView'));
@@ -182,6 +195,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const [globalInventoryForSearch, setGlobalInventoryForSearch] = useState<Product[]>([]);
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+  const [dashboardDetail, setDashboardDetail] = useState<{ key: string; section?: string } | null>(null);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isVerificationInventoryLoading, setIsVerificationInventoryLoading] = useState(false);
   const [verificationInventoryError, setVerificationInventoryError] = useState<string | null>(null);
@@ -329,6 +343,22 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const isOperationalView = currentView !== View.DEVELOPER_CENTER;
   const companyStoreKey = JSON.stringify([...visibleStoreIds].sort());
   const dataScope = `${currentUser?.id || ''}:${operationalCompanyId}`;
+  const dashboardKey = `${dataScope}:${currentStoreId}`;
+  const [dashboardSalesRequest, setDashboardSalesRequest] = useState<{ key: string; ranges: SalesRange[] }>({ key: '', ranges: [currentSalesMonth()] });
+  const onDashboardSalesRanges = useCallback((ranges: SalesRange[]) => setDashboardSalesRequest(previous => previous.key === dashboardKey && JSON.stringify(previous.ranges) === JSON.stringify(ranges) ? previous : { key: dashboardKey, ranges }), [dashboardKey]);
+  const [dashboardSummaryRequest, setDashboardSummaryRequest] = useState({ key: "", start: bogotaDateKey(new Date()), end: bogotaDateKey(new Date()), year: new Date().getFullYear() });
+  const onDashboardSummaryRange = useCallback((value: { start: string; end: string; year: number }) => setDashboardSummaryRequest(previous => previous.key === dashboardKey && previous.start === value.start && previous.end === value.end && previous.year === value.year ? previous : { key: dashboardKey, ...value }), [dashboardKey]);
+  const monthlyDashboard = monthlyDashboardSalesEnabled && currentView === View.DASHBOARD;
+  const summaryRange = dashboardSummaryRequest.key === dashboardKey ? dashboardSummaryRequest : { start: bogotaDateKey(new Date()), end: bogotaDateKey(new Date()), year: new Date().getFullYear() };
+  const dashboardBusinessSummary = useBusinessSummary(operationalCompanyId, currentStoreId || "", summaryRange.start, summaryRange.end, summaryRange.year, dataScope, currentView === View.DASHBOARD && (monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled || dashboardInventorySummaryEnabled));
+  const inventorySummaryReady = !!dashboardBusinessSummary.ready && Number.isFinite(dashboardBusinessSummary.meta?.inventoryValue);
+  const summaryInventoryMode = dashboardInventorySummaryEnabled && currentView === View.DASHBOARD && !dashboardBusinessSummary.error && (!dashboardBusinessSummary.metadataLoaded || inventorySummaryReady);
+  const [dashboardInventoryRequest, setDashboardInventoryRequest] = useState<{ key: string; request: DashboardInventoryRequest }>({ key: '', request: { productIds: [], full: false } });
+  const onDashboardInventoryRequest = useCallback((request: DashboardInventoryRequest) => setDashboardInventoryRequest(previous => previous.key === dashboardKey && JSON.stringify(previous.request) === JSON.stringify(request) ? previous : { key: dashboardKey, request }), [dashboardKey]);
+  useEffect(() => { if (currentView !== View.DASHBOARD) setDashboardInventoryRequest({ key: '', request: { productIds: [], full: false } }); }, [currentView]);
+  const summaryOnly = dailySummaryEnabled && currentView === View.DASHBOARD && dashboardDetail?.key !== dashboardKey;
+  const openDashboardDetails = (section?: string) => setDashboardDetail({ key: dashboardKey, section });
+  useEffect(() => { setDashboardDetail(null); }, [currentView, dashboardKey]);
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
   const [settledDataContext, setSettledDataContext] = useState(operationContext);
   const dataContextReady = settledDataContext === operationContext;
@@ -359,6 +389,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
   }, [dataScope, companyStoreKey]);
+  const readMeasurementUser = useRef(currentUser?.id);
+  useEffect(() => {
+    // Preserve a staging measurement through the first anonymous -> user handoff.
+    // Logout or replacement of an existing user still clears all observations.
+    const previousUser = readMeasurementUser.current;
+    if (previousUser && previousUser !== currentUser?.id || !loginDiagnosticsEnabled && (previousUser !== currentUser?.id || !isDeveloper)) clearReadMeasurement();
+    readMeasurementUser.current = currentUser?.id;
+    setReadContext(currentUser ? { view: String(currentView), companyId: operationalCompanyId, storeId: currentStoreId || '' } : { view: 'Login', companyId: '', storeId: '' });
+  }, [currentView, operationalCompanyId, currentStoreId, currentUser?.id, isDeveloper]);
   const tenantWriter = useMemo(() => createTenantWriter(db, { companyId: operationalCompanyId, storeIds: visibleStoreIds }), [operationalCompanyId, visibleStoreIds]);
   const { setDoc, updateDoc, deleteDoc, addDoc, runTransaction } = tenantWriter;
   const doc = ((...args: any[]) => { const ref = (nativeDoc as any)(...args); if (args.length === 1) tenantWriter.registerNew(ref); return ref; }) as typeof nativeDoc;
@@ -494,7 +533,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       attachFirestoreListener(verifiedIdentityEnabled && !isDeveloper ? query(collection(db, 'sellers'), where('companyId', '==', currentUser.companyId)) : query(collection(db, 'sellers')), setSellers)
     ];
     return () => unsubscribers.forEach(unsub => unsub());
-  }, [currentUser?.id, isAppReady, isAuthReady]);
+  }, [currentUser?.id, currentUser?.companyId, isAppReady, isAuthReady, isDeveloper]);
   
   useEffect(() => {
     if (!isOperationalView || !isAppReady || !isAuthReady || !currentUser) return;
@@ -531,7 +570,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
-  const needsInventory = (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
+  const needsInventory = (isVerificationModalOpen || !summaryOnly && [...(!summaryInventoryMode ? [View.DASHBOARD] : []), View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
   const inventoryStoreKey = scopedStoreLoadingEnabled
     ? JSON.stringify(isGlobalMode && needsInventory || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
     : companyStoreKey;
@@ -550,7 +589,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [isOperationalView, isAdmin, currentUser?.id, inventoryStoreKey, dataScope, isAuthReady, companyStoreKey]);
 
 
-  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !scopedStoreLoadingEnabled && currentView === View.DASHBOARD);
+  const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !scopedStoreLoadingEnabled && currentView === View.DASHBOARD && !summaryOnly);
   const companyStoreIds = [...visibleStoreIds];
   useCompanyCollection('sales', companyStoreIds, dataScope, liveAnalytics, setAllSales);
   useCompanyCollection('layaways', companyStoreIds, dataScope, liveAnalytics, setAllLayaways);
@@ -627,11 +666,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     });
   }, [canLoadStore, currentStoreId, operationalCompanyId, categoryState, inventory]);
 
-  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && (isVerificationModalOpen || [View.DASHBOARD, View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView)), setInventory);
-  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setSales);
-  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
-  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING, View.FINANCIAL_RECONCILIATION].includes(currentView), setLayaways);
-  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
+  const dashboardInventory = useDashboardInventory(operationalCompanyId, currentStoreId, dataScope, canLoadStore && summaryInventoryMode, dashboardInventoryRequest.key === dashboardKey ? dashboardInventoryRequest.request : { productIds: [], full: false });
+  useStoreCollection('inventory', currentStoreId, dataScope, canLoadStore && !isAdmin && needsInventory, setInventory);
+  const dashboardSalesStatus = useDashboardSales(operationalCompanyId, currentStoreId, dataScope, canLoadStore && monthlyDashboard, dashboardSalesRequest.key === dashboardKey ? dashboardSalesRequest.ranges : [currentSalesMonth()], setSales);
+  useStoreCollection('sales', currentStoreId, dataScope, canLoadStore && !summaryOnly && !monthlyDashboard && [View.DASHBOARD, View.POS, View.INVENTORY, View.CUSTOMERS, View.PAYROLL, View.INCIDENTS, View.ACCOUNTING].includes(currentView), setSales);
+  // Dashboard's visible reports do not consume purchase records. Load them
+  // in the operational screens that need them instead of during every login.
+  useStoreCollection('purchases', currentStoreId, dataScope, canLoadStore && [View.POS, View.INVENTORY, View.PURCHASES, View.ACCOUNTING].includes(currentView), setPurchases);
+  useStoreCollection('layaways', currentStoreId, dataScope, canLoadStore && [View.DASHBOARD, View.POS, View.INVENTORY, View.LAYAWAY, View.CUSTOMERS, View.PAYROLL, View.ACCOUNTING].includes(currentView), setLayaways);
+  useStoreCollection('giftVouchers', currentStoreId, dataScope, canLoadStore && [View.POS, View.GIFT_VOUCHERS].includes(currentView), setGiftVouchers);
 
   useEffect(() => {
     if (!canLoadStore || !currentStoreId) return;
@@ -647,11 +690,13 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
     switch (currentView) {
         case View.DASHBOARD:
-            if (scopedStoreLoadingEnabled) attachStore('expenses', setExpenses);
-            attachStore('dailyNotes', setDailyNotes);
-            attachStore('stockTakes', setStockTakes);
+            if (!summaryOnly) {
+              if (scopedStoreLoadingEnabled) attachStore('expenses', setExpenses);
+              attachStore('stockTakes', setStockTakes);
+            }
             break;
         case View.POS:
+            attachStore('dailyNotes', setDailyNotes);
             // Shared live data stays connected while navigating operational screens.
             attachStore('customers', setCustomers);
             attachStore('heldCarts', setHeldCarts);
@@ -690,12 +735,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
               } catch { setAccountingChatHistory([]); }
             }));
             break;
-        case View.FINANCIAL_RECONCILIATION:
-            attachStore('expenses', setExpenses);
-            break;
     }
     return () => { active = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [canLoadStore, currentStoreId, currentView, dataScope]);
+  }, [canLoadStore, currentStoreId, currentView, dataScope, summaryOnly]);
   useEffect(() => {
     if (currentUser && !hasShownBriefing && dataContextReady && currentView !== View.DEVELOPER_CENTER) {
       const pendingIncidentsCount = incidents.filter(i => 
@@ -1925,7 +1967,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       if (!currentUser) return;
       const batch = writeBatch(db);
       
-      const allKnownProducts = [...inventory, ...globalInventoryForSearch];
+      const allKnownProducts = [...inventory, ...globalInventoryForSearch, ...(summaryInventoryMode && dashboardInventory.editReady ? dashboardInventory.rows : [])];
 
       originalSale.items.forEach(item => {
           if (item && item.id && !item.id.startsWith('voucher-')) {
@@ -2170,7 +2212,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         counts: historicalCounts, 
         updatedAt: now 
     }));
-    await batch.commit();
+    await measureDiagnosticPhase('Borrador: validar y guardar', () => batch.commit());
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {
@@ -2974,6 +3016,14 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     adminData: { name: string; username: string; password: string }
   ) => {
     if (!isDeveloper) throw new Error('Solo Developer puede gestionar empresas y sus usuarios iniciales.');
+    if (verifiedIdentityEnabled) {
+      const company = companies.find(company => company.id === companyId);
+      if (!company) throw new Error('No se encontró la empresa del usuario.');
+      const snapshot = await getDoc(doc(db, 'stores', storeId));
+      if (!snapshot.exists()) throw new Error('No se encontró la sede del usuario.');
+      await createVerifiedCompanyAdmin(company, { ...snapshot.data(), id: storeId } as Store, roles, adminData, manageVerifiedRole, manageVerifiedUser);
+      return;
+    }
     const adminRole = roles.find(r => r.name === 'Administrator' && (r.companyId || DEFAULT_COMPANY_ID) === DEFAULT_COMPANY_ID);
     if (!adminRole) throw new Error('No existe el rol Administrator.');
     assertUserLimit(companyId, adminRole.id);
@@ -3223,10 +3273,14 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   };
 
   const handleLogin = async (identifier: string, passwordAttempt: string) => {
+    const loginTiming = beginDiagnosticPhase('Inicio de sesión: verificar acceso');
+    let loginSucceeded = false;
+    try {
     if (verifiedIdentityEnabled) {
       try {
         const result = await loginVerified(identifier, passwordAttempt);
         setStores([result.store]); setRoles([result.role]); setCompanies([result.company]); setSellers([result.user]);
+        loginSucceeded = true;
         setCurrentUser(result.user); setActiveCompanyId(result.user.companyId!);
         localStorage.setItem('activeCompanyId', result.user.companyId!);
         selectStore(result.user.storeId);
@@ -3287,6 +3341,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       }
 
       const sessionUser: Seller = { ...seller, companyId: resolvedCompanyId };
+      loginSucceeded = true;
       setCurrentUser(sessionUser);
       setActiveCompanyId(resolvedCompanyId);
       localStorage.setItem('activeCompanyId', resolvedCompanyId);
@@ -3316,6 +3371,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     } else {
       alert('Usuario o contraseña incorrecta.');
     }
+    } finally { finishDiagnosticPhase(loginTiming, !loginSucceeded); }
   };
   
   const handleLogout = () => { if (verifiedIdentityEnabled) logoutVerified(currentUser?.id).catch(() => console.warn('No se pudo cerrar la sesión.')).finally(() => window.location.reload()); setRoles([]); setStores([]); setSellers([]); setCompanies([]); currentStoreIdRef.current = null; inventoryByStoreRef.current.clear(); setCurrentUser(null); setCurrentStoreId(null); localStorage.removeItem('currentStoreId'); setIsGlobalMode(false); setActiveCart([]); setInventory([]); setHasShownBriefing(false); };
@@ -3325,7 +3381,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     return watchVerifiedIdentity(currentUser, handleLogout);
   }, [currentUser?.id, currentUser?.authVersion]);
 
-  if (!currentUser) return <div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>;
+  if (!currentUser) return <><div className="min-h-screen w-full flex items-center justify-center p-4"><LoginView onLogin={handleLogin} isAppReady={isAppReady} /></div>{loginDiagnosticsEnabled && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} loginMode={true} /></Suspense>}</>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
@@ -3336,7 +3392,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         {canAccessCurrentView && dataContextReady && <AppErrorBoundary key={`${dataScope}:${currentStoreId}:${currentView}`}>
 
         <Suspense fallback={<VestikaLoader />} >
-        {currentView === View.DASHBOARD && <DashboardView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
+        {monthlyDashboard && (dashboardSalesStatus.loading || dashboardSalesStatus.error) && <div role={dashboardSalesStatus.error ? "alert" : "status"} className="mb-3 text-sm font-semibold text-accent">{dashboardSalesStatus.error || "Cargando ventas del período…"}</div>}
+        {summaryOnly && <BusinessOverview key={dashboardKey} companyId={operationalCompanyId} store={currentStore} stores={visibleStores} scope={dataScope} onOpenDetails={openDashboardDetails} onOpenVerification={() => setIsVerificationModalOpen(true)} onSummaryUnavailable={() => openDashboardDetails('summary-unavailable')} />}
+        {dailySummaryEnabled && currentView === View.DASHBOARD && !summaryOnly && <div className="mb-4 rounded-xl bg-white dark:bg-slate-800 p-3 flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{dashboardDetail?.section === 'summary-unavailable' ? 'El resumen aún no está verificado; se muestran los datos completos de la sede.' : 'Historial y herramientas de la sede'}</span><button type="button" className="text-accent font-bold" onClick={() => setDashboardDetail(null)}>Volver al resumen</button></div>}
+        {currentView === View.DASHBOARD && !summaryOnly && <DashboardView inventorySummary={summaryInventoryMode ? { value: inventorySummaryReady ? dashboardBusinessSummary.meta!.inventoryValue : null } : undefined} onInventoryRequest={summaryInventoryMode ? onDashboardInventoryRequest : undefined} inventoryStatus={summaryInventoryMode ? dashboardInventory : undefined} monthlySummary={monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled ? dashboardBusinessSummary : undefined} onSummaryRangeChange={monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled ? onDashboardSummaryRange : undefined} onSalesRangesChange={monthlyDashboardSalesEnabled ? onDashboardSalesRanges : undefined} initialSection={dashboardDetail?.key === dashboardKey ? dashboardDetail.section : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={layaways} expenses={expenses} inventory={summaryInventoryMode ? dashboardInventory.rows : inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} allStockTakes={stockTakes} />}
         {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
@@ -3379,9 +3438,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 stores={visibleStores} 
                 activeStoreId={currentStoreId || ''}
                 onSetActiveStoreId={handleSwitchStore}
-                sales={sales}
-                layaways={layaways}
-                expenses={expenses}
                 incidents={incidents}
                 currentUser={currentUser!}
                 onNavigate={setCurrentView}
@@ -3466,6 +3522,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         </AppErrorBoundary>}
       </main>
+      {(isDeveloper || loginDiagnosticsEnabled) && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
       {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}

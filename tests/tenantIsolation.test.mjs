@@ -5,14 +5,24 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { build } from 'esbuild';
 
-async function withWriter(run) {
+async function withWriter(run, { yieldReads = false } = {}) {
  const dir = await mkdtemp(fileURLToPath(new URL('./.tenant-', import.meta.url)));
  try {
- const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/tenantIdentity'; export * from './services/legacyCategoryIsolation'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
- export const records=new Map(), reads=[], writes=[];
+ const bundle=await build({bundle:true,write:false,format:'esm',platform:'node',stdin:{contents:`export * from './services/tenantWrites'; export * from './services/tenantIdentity'; export * from './services/legacyCategoryIsolation'; export * from './services/companyRoles'; export * from './services/developerAccess'; export * from './services/platformDevelopers'; export { View } from './types'; export { records, reads, writes, readStats, queries } from 'firebase/firestore';`,resolveDir:process.cwd()},plugins:[{name:'fake',setup(b){b.onResolve({filter:/^firebase\/firestore$/},()=>({path:'firestore',namespace:'fake'}));b.onLoad({filter:/.*/,namespace:'fake'},()=>({contents:`
+ export const records=new Map(), reads=[], writes=[], queries=[], readStats={active:0,max:0,returned:0,failQuery:false};
  export const doc=(_,collection,id)=>({path:collection+'/'+id,id});
  const snapshot=ref=>({ref,id:ref.id,exists:()=>records.has(ref.path),data:()=>records.get(ref.path)});
- export const getDoc=async ref=>{reads.push(ref.path);return snapshot(ref)};
+ export const getDoc=async ref=>{reads.push(ref.path);readStats.active++;readStats.max=Math.max(readStats.max,readStats.active);try{${yieldReads ? 'await new Promise(resolve=>setImmediate(resolve));' : ''}return snapshot(ref)}finally{readStats.active--}};
+ export const collection=(_,name)=>({path:name});export const documentId=()=>"__name__";
+ export const where=(field,op,value)=>({field,op,value});export const query=(source,...filters)=>({...source,filters});
+ export const getDocs=async q=>{queries.push(q);readStats.active++;readStats.max=Math.max(readStats.max,readStats.active);try{
+  ${yieldReads ? 'await new Promise(resolve=>setImmediate(resolve));' : ''}
+  if(readStats.failQuery)throw Error('network failure');
+  const store=q.filters.find(f=>f.field==='storeId')?.value,category=q.filters.find(f=>f.field==='categoryId')?.value;
+  if(!store||!category)throw Error('missing category/store constraints');
+  const docs=[...records.entries()].filter(([path,data])=>path.startsWith(q.path+'/')&&data.storeId===store&&data.categoryId===category).map(([path])=>snapshot({id:path.split('/').at(-1),path}));
+  readStats.returned+=docs.length;return{docs};
+ }finally{readStats.active--}};
  export const setDoc=async(ref,data)=>{writes.push(['set',ref.path]);records.set(ref.path,data)};
  export const updateDoc=async(ref,data)=>{writes.push(['update',ref.path]);records.set(ref.path,{...records.get(ref.path),...data})};
  export const deleteDoc=async ref=>{writes.push(['delete',ref.path]);records.delete(ref.path)};
@@ -304,3 +314,50 @@ test('a repeated financial draft uses its audit receipt and cannot replay a chan
  const make=(amount=main.amount)=>{const b=writer.writeBatch();b.set(ref('financialRecords/a'),{...main,amount});b.set(ref('financialRecords/b'),{...mirror,amount:-amount});b.set(ref('financialRecordsHistory/receipt-a'),{recordId:'a',action:'create',storeId:main.storeId,newState:{...main,amount}});b.set(ref('financialRecordsHistory/receipt-b'),{recordId:'b',action:'create',storeId:mirror.storeId,newState:{...mirror,amount:-amount}});return b};
  await make().commit();writes.length=0;await make().commit();assert.equal(writes.length,0);await assert.rejects(make(-100).commit(),/ya fue registrado/);assert.equal(writes.length,0);assert.equal(records.get('financialRecords/a').amount,-50);
 }));
+
+
+test('detailed draft validates 150 products with one store/category query shared by draft/history and preserves both documents',()=>withWriter(async({createTenantWriter,records,reads,writes,readStats,queries})=>{
+ const writer=createTenantWriter({},scope),batch=writer.writeBatch();
+ records.set('categories/c',{companyId:'mayla',name:'Category'});
+ const counts={},systemSnapshot={};
+ for(let i=0;i<150;i++){records.set('inventory/p'+i,{companyId:'mayla',storeId:'mayla-1',categoryId:'c',stock:7});counts['p'+i]=i%4;systemSnapshot['p'+i]=7;}
+ records.set('inventory/outside-category',{companyId:'mayla',storeId:'mayla-1',categoryId:'other'});
+ records.set('inventory/outside-store',{companyId:'mayla',storeId:'mayla-2',categoryId:'c'});
+ delete records.get('inventory/p0').companyId; // Legacy own-store products remain valid.
+ const draft={categoryId:'c',storeId:'mayla-1',counts,systemSnapshot,lastUpdatedBy:'Admin'};
+ const history=ref('detailedVerificationHistory/h');writer.registerNew(history);
+ batch.set(ref('pendingDetailedVerifications/c_mayla-1'),draft);
+ batch.set(history,{...draft,counts:Object.fromEntries(Object.entries(counts).map(([id,physical])=>[id,{physical,system:7}]))});
+ await batch.commit();
+ assert.equal(readStats.max,1,'a single category query replaces the product request fan-out');
+ assert.equal(reads.filter(p=>p.startsWith('inventory/')).length,0,'no individual product requests');
+ assert.equal(queries.length,1);assert.equal(readStats.returned,150,'same product coverage, shared across draft/history');
+ assert.equal(writes.length,2);assert.deepEqual(records.get('pendingDetailedVerifications/c_mayla-1').counts,counts);
+ assert.deepEqual(records.get('detailedVerificationHistory/h').counts.p7,{physical:3,system:7});
+ assert.equal(records.get('inventory/p7').stock,7,'saving a draft must not apply counts to stock');
+}, {yieldReads:true}));
+
+test('parallel detailed-draft validation still rejects missing, foreign-company, foreign-store and wrong-category products atomically',()=>withWriter(async({createTenantWriter,records,writes})=>{
+ records.set('categories/c',{companyId:'mayla',name:'Category'});
+ const variants=[null,{companyId:'bombon',storeId:'metro',categoryId:'c'},{companyId:'mayla',storeId:'mayla-2',categoryId:'c'},{companyId:'mayla',storeId:'mayla-1',categoryId:'other'}];
+ for(const invalid of variants){
+  const writer=createTenantWriter({},scope),batch=writer.writeBatch();
+  records.set('inventory/good',{companyId:'mayla',storeId:'mayla-1',categoryId:'c'});
+  if(invalid)records.set('inventory/bad',invalid);else records.delete('inventory/bad');
+  const data={categoryId:'c',storeId:'mayla-1',counts:{good:1,bad:2},systemSnapshot:{good:3,bad:4}};
+  const history=ref('detailedVerificationHistory/h');writer.registerNew(history);
+  batch.set(ref('pendingDetailedVerifications/c_mayla-1'),data);batch.set(history,data);
+  await assert.rejects(batch.commit());assert.equal(writes.length,0,'neither draft nor history is written on validation failure');
+ }
+}, {yieldReads:true}));
+
+
+test('detailed-draft query failure writes nothing, while transactions retain transaction-bound product reads',()=>withWriter(async({createTenantWriter,records,queries,reads,writes,readStats})=>{
+ records.set('categories/c',{companyId:'mayla',name:'Category'});records.set('inventory/p',{companyId:'mayla',storeId:'mayla-1',categoryId:'c',stock:5});
+ const data={categoryId:'c',storeId:'mayla-1',counts:{p:3},systemSnapshot:{p:5}};
+ const writer=createTenantWriter({},scope),batch=writer.writeBatch();batch.set(ref('pendingDetailedVerifications/d'),data);
+ readStats.failQuery=true;await assert.rejects(batch.commit(),/network failure/);assert.equal(writes.length,0);
+ const queryCount=queries.length;readStats.failQuery=false;
+ await writer.runTransaction({},async tx=>tx.set(ref('pendingDetailedVerifications/d'),data));
+ assert.equal(queries.length,queryCount,'transaction validation never uses independent queries');assert.ok(reads.includes('inventory/p'));assert.equal(records.get('pendingDetailedVerifications/d').counts.p,3);
+}, {yieldReads:true}));

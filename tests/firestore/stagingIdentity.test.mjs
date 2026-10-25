@@ -28,6 +28,7 @@ test('verified staging login, user management and tenant rules',async t=>{
   const encoded=await hashPassword(password);
   const fixtures={
     'companies/a':{name:'A',status:'active',maxAdmins:3,maxSellers:5}, 'companies/b':{name:'B',status:'active'},
+    'categories/c':{companyId:'a',name:'Category'},
     'stores/a1':{companyId:'a',name:'A1',nextInvoiceNumber:1}, 'stores/a2':{companyId:'a',name:'A2'}, 'stores/b1':{companyId:'b',name:'B1'},
     'roles/admin':{companyId:'a',name:'Administrator',userType:'admin',permissions:['sellers','role_manager','financial_reconciliation','pos','settings','inventory','dashboard','payroll']},
     'roles/seller':{companyId:'a',name:'Vendedor',userType:'seller',permissions:['pos','inventory','financial_reconciliation']},
@@ -49,6 +50,7 @@ test('verified staging login, user management and tenant rules',async t=>{
     'financialLedgerCompanies/b/stores/b1':{companyId:'b',storeId:'b1',ready:true,accounts:{cash:100}}
   };
   try {
+    for(let i=0;i<30;i++)fixtures['inventory/draft'+i]={id:'draft'+i,...(i?{companyId:'a'}:{}),storeId:'a1',categoryId:'c',stock:2};
     const batch=db.batch();for(const[path,data]of Object.entries(fixtures))batch.set(db.doc(path),data);await batch.commit();
     await t.test('existing case-insensitive username/name login remains valid without returning password/hash',async()=>{
       for(const identifier of [' mixed.LEGACY ','ADMIN NAME']){
@@ -67,6 +69,32 @@ test('verified staging login, user management and tenant rules',async t=>{
       for(const path of ['companies/b','stores/b1','sellers/foreign','financialRecords/foreign','authCredentials/admin','authLoginIndex/'+loginIndexId('mixed.legacy')])await assertFails(getDoc(doc(client,path)));
       await assertFails(getDoc(doc(env.authenticatedContext('anonymous',{firebase:{sign_in_provider:'anonymous'}}).firestore(),'sellers/admin')));
       await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'inventory/p1')));
+    });
+    await t.test('category draft queries read only the selected store and category for administrators and sellers',async()=>{
+      for(const seller of [false,true]){
+        const claims=seller?{...baseClaims,sellerId:'seller',roleId:'seller'}:baseClaims;
+        const client=env.authenticatedContext(identityUid(seller?'seller':'admin'),{...claims,firebase:{sign_in_provider:'custom'}}).firestore();
+        const result=await assertSucceeds(getDocs(query(collection(client,'inventory'),where('storeId','==','a1'),where('categoryId','==','c'))));
+        assert.equal(result.size,30);
+        await assertFails(getDocs(query(collection(client,'inventory'),where('storeId','==','b1'),where('categoryId','==','c'))));
+        if(seller)await assertFails(getDocs(query(collection(client,'inventory'),where('storeId','==','a2'),where('categoryId','==','c'))));
+        const dir=await mkdtemp(fileURLToPath(new URL('../.draft-query-',import.meta.url)));
+        try {
+          const path=join(dir,'writer.mjs');await build({entryPoints:['services/tenantWrites.ts'],outfile:path,bundle:true,format:'esm',platform:'node',external:['firebase/firestore']});
+          const {createTenantWriter}=await import(pathToFileURL(path).href);
+          const writer=createTenantWriter(client,{companyId:'a',storeIds:new Set(seller?['a1']:['a1','a2'])});
+          const counts=Object.fromEntries(Array.from({length:30},(_,i)=>['draft'+i,1]));
+          const systemSnapshot=Object.fromEntries(Object.keys(counts).map(id=>[id,2]));
+          const data={categoryId:'c',storeId:'a1',counts,systemSnapshot,lastUpdatedBy:'Test'};
+          const draft=doc(client,'pendingDetailedVerifications','c_a1'),history=doc(collection(client,'detailedVerificationHistory'));
+          writer.registerNew(history);const batch=writer.writeBatch();batch.set(draft,data);batch.set(history,{...data,counts:Object.fromEntries(Object.keys(counts).map(id=>[id,{physical:1,system:2}]))});
+          await assertSucceeds(batch.commit());
+          assert.deepEqual((await getDoc(draft)).data().counts,counts);
+          assert.deepEqual((await getDoc(history)).data().counts.draft0,{physical:1,system:2});
+          assert.equal((await getDoc(doc(client,'inventory/draft0'))).data().stock,2);
+        } finally {await rm(dir,{recursive:true,force:true});}
+
+      }
     });
     await t.test('business summaries preserve company/store permissions and remain server owned',async()=>{
       const client=env.authenticatedContext(auth.uid,{...baseClaims,firebase:{sign_in_provider:'custom'}}).firestore();
@@ -134,6 +162,38 @@ test('verified staging login, user management and tenant rules',async t=>{
       await manageStagingRole(db,auth,{action:'update',id:role.id,name:'Limited Updated',userType:'seller',permissions:['pos','inventory']});
       await assert.rejects(manageStagingRole(db,auth,{action:'update',id:'admin',name:'Own',userType:'admin',permissions:['pos']}),{code:'permission-denied'});
       await assert.rejects(manageStagingRole(db,auth,{action:'create',name:'Developer',userType:'admin',permissions:['developer_center']}),{code:'invalid-argument'});
+    });
+    await t.test('granted developer creates a UI-shaped cross after switching to the synthetic company',async()=>{
+      const companyId='load_reads_20261023_company';
+      const storeIds=['load_reads_20261023_store_1','load_reads_20261023_store_2'];
+      await db.doc('companies/'+companyId).set({name:'Load test',status:'active'});
+      for(const id of storeIds)await db.doc('stores/'+id).set({companyId,name:id});
+      await db.doc('platformDevelopers/admin').set({userId:'admin',role:'developer',active:true,grantedBy:'-OYqLOlA2gyy_TrUtzf2'});
+      const dir=await mkdtemp(fileURLToPath(new URL('../.developer-cross-',import.meta.url)));
+      try {
+        const path=join(dir,'writer.mjs');await build({entryPoints:['services/tenantWrites.ts'],outfile:path,bundle:true,format:'esm',platform:'node',external:['firebase/firestore']});
+        const {createTenantWriter}=await import(pathToFileURL(path).href);
+        const client=env.authenticatedContext(auth.uid,{...baseClaims,platformDeveloper:true,firebase:{sign_in_provider:'custom'}}).firestore();
+        const writer=createTenantWriter(client,{companyId,storeIds:new Set(storeIds)});
+        const base='fin_'+companyId+'_'+storeIds[0]+'_00000000-0000-4000-8000-000000000001';
+        const left={...record(base+'_main',storeIds[0]),relatedRecordId:base+'_mirror',debtStoreId:storeIds[1],affectsCashBalance:true,isConfirmed:true,subCategory:'Cruce Sedes'};
+        delete left.companyId;
+        const right={...left,id:base+'_mirror',relatedRecordId:base+'_main',storeId:storeIds[1],debtStoreId:storeIds[0],amount:-100,type:'expense',affectsCashBalance:false};
+        const batch=writer.writeBatch();
+        for(const row of [left,right]){
+          batch.set(doc(client,'financialRecords/'+row.id),row);
+          batch.set(doc(client,'financialRecordsHistory/'+row.id+'_audit'),{id:row.id+'_audit',recordId:row.id,action:'create',timestamp:'2026-10-23T21:11:00-05:00',changedBy:'Staging Admin',newState:row,storeId:row.storeId,accountType:row.accountType});
+        }
+        await assertSucceeds(batch.commit());
+        for(const row of [left,right])assert.equal((await getDoc(doc(client,'financialRecords/'+row.id))).data().companyId,companyId);
+        // The optimization must not permit a missing/foreign mate or survive
+        // revocation of the live grant, even while the signed token is stale.
+        await assertFails(setDoc(doc(client,'financialRecords/invalid_developer_pair'),{...left,id:'invalid_developer_pair',companyId,relatedRecordId:'foreign'}));
+        await db.doc('platformDevelopers/admin').update({active:false});
+        await assertFails(getDoc(doc(client,'financialRecords/'+left.id)));
+        await assertFails(setDoc(doc(client,'financialRecords/revoked_developer'),{...record('revoked_developer',storeIds[0]),companyId}));
+        await db.doc('platformDevelopers/admin').update({active:true});
+      }finally{await rm(dir,{recursive:true,force:true});}
     });
     await t.test('paired tenant writer works with strict rules; direct partial changes are rejected',async()=>{
       const dir=await mkdtemp(fileURLToPath(new URL('../.identity-writer-',import.meta.url)));

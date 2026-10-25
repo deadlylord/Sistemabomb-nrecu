@@ -1,5 +1,5 @@
-import { doc, runTransaction } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
+import { doc, runTransaction } from './measuredFirestore';
+import type { Firestore } from './measuredFirestore';
 import { Seller, View } from '../types';
 import { assertPlatformOwnerAction, PLATFORM_OWNER_USER_ID } from './developerAccess';
 

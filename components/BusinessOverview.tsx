@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import type { Store } from "../types";
 import { useBusinessSummary } from "../services/useBusinessSummary";
 import { summaryName } from "../functions/src/businessSummary.mjs";
@@ -6,6 +6,7 @@ import { bogotaDateKey, completeChartYear } from "../services/incomeChart";
 import { previousPeriod } from "../services/previousPeriod";
 import { useViewFilter } from "../services/viewFilters";
 import VestikaLoader from "./VestikaLoader";
+import { COMMISSION_RATES } from "../constants";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 const SalesHistoryChart = lazy(() => import("./SalesHistoryChart"));
 const cop = (value: number) =>
@@ -53,6 +54,7 @@ export default function BusinessOverview({
   scope,
   onOpenDetails,
   onOpenVerification,
+  onSummaryUnavailable,
 }: {
   companyId: string;
   store?: Store;
@@ -60,6 +62,7 @@ export default function BusinessOverview({
   scope: string;
   onOpenDetails: (section?: string) => void;
   onOpenVerification: () => void;
+  onSummaryUnavailable?: () => void;
 }) {
   const today = bogotaDateKey(new Date());
   const [start, setStart] = useViewFilter("DashboardView:startDate", today);
@@ -74,6 +77,7 @@ export default function BusinessOverview({
   const [year, setYear] = useState(Number(today.slice(0, 4)));
   const [metric, setMetric] = useState<"income" | "sales">("income");
   const [mode, setMode] = useState<"daily" | "monthly">("monthly");
+  const [chartOpen, setChartOpen] = useState(false);
   const [compare, setCompare] = useState(false),
     [sellerUnits, setSellerUnits] = useState(false);
   const result = useBusinessSummary(
@@ -81,9 +85,12 @@ export default function BusinessOverview({
     store?.id || "",
     previousStart < rangeStart ? previousStart : rangeStart,
     rangeEnd,
-    year,
+    chartOpen && mode === "monthly" ? year : null,
     scope,
   );
+  useEffect(() => {
+    if (!result.loading && !result.error && !result.ready) onSummaryUnavailable?.();
+  }, [result.loading, result.error, result.ready, onSummaryUnavailable]);
   const values = result.total(rangeStart, rangeEnd),
     before = result.total(previousStart, previousEnd);
   const dates = (a: string, b: string) => {
@@ -168,7 +175,7 @@ export default function BusinessOverview({
           <button onClick={() => scrollToSection('payment-report')} className="px-2 py-1 text-[11px] font-semibold text-accent">Pagos</button>
           <button onClick={() => onOpenDetails('price-analysis')} className="px-2 py-1 text-[11px] font-semibold text-accent">Precios</button>
           <button onClick={() => onOpenDetails('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
-          <button onClick={() => scrollToSection('sales-chart')} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
+          <button onClick={() => { setChartOpen(true); scrollToSection('sales-chart'); }} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
           <button onClick={onOpenVerification} className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">Inventario</button>
         </div>
       </div>
@@ -315,9 +322,10 @@ export default function BusinessOverview({
               {Object.entries(values.methods).map(([method, amount]) => (
                 <div key={method}>
                   <p className="text-xs text-slate-500">
-                    {summaryName(method)}
+                    {summaryName(method) === "Efectivo" ? "Efectivo (ingresos)" : summaryName(method)}
                   </p>
                   <strong className="text-sm">{cop(amount)}</strong>
+                  {(COMMISSION_RATES[summaryName(method)] || 0) > 0 && <p className="text-[10px] text-slate-500">Descuento {(COMMISSION_RATES[summaryName(method)] * 100).toLocaleString("es-CO", { maximumFractionDigits: 2 })}%: -{cop(amount * COMMISSION_RATES[summaryName(method)])}</p>}
                 </div>
               ))}
             </div>
@@ -329,6 +337,8 @@ export default function BusinessOverview({
             </button>
           </div>
           <div id="sales-chart" className={tile}>
+            <button type="button" onClick={() => setChartOpen(!chartOpen)} aria-expanded={chartOpen} className="font-bold text-accent">{chartOpen ? "Cerrar gráfico" : "Mostrar gráfico"}</button>
+            {chartOpen && <>
             <div className="flex flex-wrap gap-2 items-center mb-4">
               <h2 className="font-bold mr-auto">Evolución del negocio</h2>
               <select
@@ -364,17 +374,22 @@ export default function BusinessOverview({
                 />
               )}
             </div>
-            <Suspense fallback={<VestikaLoader />}>
+            {result.chartLoading ? <VestikaLoader /> : <Suspense fallback={<VestikaLoader />}>
               <SalesHistoryChart
                 data={chartData}
                 viewMode={mode}
                 seriesLabel={metric === "income" ? "Ingresos" : "Ventas"}
                 showPartial={mode === "monthly"}
               />
-            </Suspense>
+            </Suspense>}
+            </>}
           </div>
         </>
       )}
+      <div className={tile}>
+        <h2 className="font-bold mb-2">Historial y herramientas</h2>
+        <div className="flex flex-wrap gap-3 text-sm font-semibold text-accent">{[["Historial de ventas y abonos", "sales-history"], ["Análisis de precios", "price-analysis"], ["Top productos y categorías", "top-products"], ["Pagos detallados", "payment-report"]].map(([label, section]) => <button type="button" key={section} onClick={() => onOpenDetails(section)}>{label}</button>)}<button type="button" onClick={onOpenVerification}>Verificar inventario</button></div>
+      </div>
       <div className={tile}>
         <button
           className="text-accent font-bold"

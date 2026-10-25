@@ -6,9 +6,10 @@ import { APP_VERSION } from '../services/appVersion';
 interface LoginViewProps {
   onLogin: (username: string, password: string) => void;
   isAppReady: boolean;
+  onPrepareLogin?: () => void;
 }
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onPrepareLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -45,6 +46,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         <div className="relative">
           <MailIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-text-dark" />
           <input
+            onFocus={onPrepareLogin}
             id="username"
             type="text"
             value={username}
@@ -59,6 +61,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady }) => {
         <div className="relative">
           <LockIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-text-dark" />
           <input
+            onFocus={onPrepareLogin}
             id="password"
             type={showPassword ? 'text' : 'password'}
             value={password}

@@ -1,4 +1,4 @@
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from './measuredFirestore';
 import { db } from '../firebase';
 
 const subscriptions = new Map<string, { listeners: Set<(rows: any[]) => void>; rows?: any[]; unsubscribe: () => void; active: boolean }>();

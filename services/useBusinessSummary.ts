@@ -7,7 +7,7 @@ import {
   orderBy,
   query,
   where,
-} from "firebase/firestore";
+} from "./measuredFirestore";
 import { db } from "../firebase";
 import {
   businessRoot,
@@ -38,6 +38,7 @@ export function useBusinessSummary(
   end: string,
   year: number | null,
   scope: string,
+  enabled = true,
 ) {
   const key = `${scope}:${companyId}:${storeId}`;
   const [metadata, setMetadata] = useState<{
@@ -66,11 +67,16 @@ export function useBusinessSummary(
   const rangeKey = `${key}:${start}:${end}`;
   const monthKey = `${key}:${year}`;
   useEffect(() => {
-    if (!companyId || !storeId) return;
+    if (!enabled || !companyId || !storeId) return;
+    let active = true;
     setFailure(null);
-    return onSnapshot(
+    const stop = onSnapshot(
       doc(db, root),
+      { includeMetadataChanges: true },
       (s) => {
+        if (!active) return;
+        const fromCache = s.metadata.fromCache;
+        if (!s.exists() && fromCache) return;
         const value = s.exists() ? (s.data() as BusinessRoot) : null;
         if (
           value &&
@@ -84,16 +90,18 @@ export function useBusinessSummary(
         }
         setMetadata({ key, value });
       },
-      () =>
+      () => active &&
         setFailure({
           key,
           message:
             "No se pudo cargar el resumen. Revisa la conexión y vuelve a abrir esta vista.",
         }),
     );
-  }, [key]);
+    return () => { active = false; stop(); };
+  }, [key, enabled]);
   useEffect(() => {
-    if (!ready) return;
+    if (!enabled || !ready) return;
+    let active = true;
     const stops = [
       onSnapshot(
         query(
@@ -102,14 +110,16 @@ export function useBusinessSummary(
           where(documentId(), "<=", end),
         ),
         (s) => {
+          if (!active) return;
           const rows = s.docs.map(
             (d) => ({ ...d.data(), date: d.id }) as SummaryDay,
           );
+          if (rows.some(row => (row as any).companyId !== companyId || (row as any).storeId !== storeId)) { setFailure({ key: rangeKey, message: "No se pudo verificar la sede del período." }); return; }
           setDays({ key: rangeKey, rows });
         },
-        () =>
+        () => active &&
           setFailure({
-            key,
+            key: rangeKey,
             message: "No se pudo consultar el período. Intenta nuevamente.",
           }),
       ),
@@ -124,35 +134,42 @@ export function useBusinessSummary(
             orderBy("lastDay"),
             orderBy("firstDay"),
           ),
-          (s) =>
-            setRepeats({ key: rangeKey, rows: s.docs.map((d) => d.data()) }),
-          () =>
+          (s) => {
+            if (!active) return;
+            const rows = s.docs.map(d => d.data());
+            if (rows.some(row => row.companyId !== companyId || row.storeId !== storeId)) { setFailure({ key: rangeKey, message: "No se pudo verificar el conteo de ventas." }); return; }
+            setRepeats({ key: rangeKey, rows });
+          },
+          () => active &&
             setFailure({
-              key,
+              key: rangeKey,
               message: "No se pudo verificar el número de ventas del período.",
             }),
         ),
       );
     else setRepeats({ key: rangeKey, rows: [] });
-    return () => stops.forEach((stop) => stop());
-  }, [rangeKey, ready]);
+    return () => { active = false; stops.forEach((stop) => stop()); };
+  }, [rangeKey, ready, enabled]);
   useEffect(() => {
-    if (!ready || year === null) return;
-    return onSnapshot(
+    if (!enabled || !ready || year === null) return;
+    let active = true;
+    const stop = onSnapshot(
       query(
         collection(db, root + "/months"),
         where(documentId(), ">=", `${year}-01`),
         where(documentId(), "<=", `${year}-12`),
       ),
-      (s) =>
-        setMonths({
-          key: monthKey,
-          rows: s.docs.map((d) => ({ ...d.data(), month: d.id })),
-        }),
-      () =>
-        setFailure({ key, message: "No se pudo cargar el gráfico del año." }),
+      (s) => {
+        if (!active) return;
+        const rows = s.docs.map(d => ({ ...d.data(), month: d.id }));
+        if (rows.some((row: any) => row.companyId !== companyId || row.storeId !== storeId)) { setFailure({ key: monthKey, message: "No se pudo verificar la sede del gráfico." }); return; }
+        setMonths({ key: monthKey, rows });
+      },
+      () => active &&
+        setFailure({ key: monthKey, message: "No se pudo cargar el gráfico del año." }),
     );
-  }, [monthKey, ready]);
+    return () => { active = false; stop(); };
+  }, [monthKey, ready, enabled]);
   const rows = days.key === rangeKey ? days.rows : [];
   function total(from: string, to: string): SummaryDay {
     const value = emptyBusinessDay() as SummaryDay;
@@ -170,16 +187,17 @@ export function useBusinessSummary(
   }
   return {
     meta,
+    metadataLoaded: metadata.key === key,
     ready,
     total,
     days: rows,
     months: months.key === monthKey ? months.rows : [],
+    chartLoading: ready && year !== null && months.key !== monthKey,
     loading:
       metadata.key !== key ||
       (ready &&
         (days.key !== rangeKey ||
-          repeats.key !== rangeKey ||
-          (year !== null && months.key !== monthKey))),
-    error: failure?.key === key ? failure.message : null,
+          repeats.key !== rangeKey)),
+    error: failure && [key, rangeKey, monthKey].includes(failure.key) ? failure.message : null,
   };
 }

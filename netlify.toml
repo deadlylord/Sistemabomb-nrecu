@@ -4,6 +4,12 @@
 
 # Existing public production config remains the fallback; UI overrides are supported.
 [context.production.environment]
+  # Preserve the original dashboard and historical payment coverage until
+  # production aggregates and their server-only rules are verified.
+  VITE_DASHBOARD_SUMMARY = "false"
+  VITE_DASHBOARD_MONTHLY_SALES = "false"
+  VITE_DASHBOARD_MONTHLY_CHART = "false"
+  VITE_DASHBOARD_INVENTORY_SUMMARY = "false"
   VITE_VERIFIED_IDENTITY = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
   VITE_STORE_SCOPED_LOADING = "true"
@@ -31,6 +37,12 @@
 
 # Staging retains its separately verified identity and ledger processors.
 [context.staging.environment]
+  # Keep the original dashboard layout; monthly chart uses verified summaries.
+  VITE_DASHBOARD_SUMMARY = "false"
+  # Month-scoped sales index verified READY in vestika-staging.
+  VITE_DASHBOARD_MONTHLY_SALES = "true"
+  VITE_DASHBOARD_MONTHLY_CHART = "true"
+  VITE_DASHBOARD_INVENTORY_SUMMARY = "true"
   VITE_VERIFIED_IDENTITY = "true"
   VITE_APP_ENV = "staging"
   VITE_USE_FIREBASE_EMULATORS = "false"

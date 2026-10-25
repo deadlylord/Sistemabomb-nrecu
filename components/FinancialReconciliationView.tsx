@@ -1,3 +1,6 @@
+import ManualEntryModalShell from './ManualEntryModalShell';
+import { useReconciliationSources } from '../services/useReconciliationSources';
+import { beginDiagnosticPhase, finishDiagnosticPhase, safeDiagnosticErrorCode } from '../services/readDiagnostics';
 import { useFinancialDraft } from '../services/useFinancialDraft';
 import { useFinancialLedger, LEDGER_PAGE_SIZE } from '../services/useFinancialLedger';
 import { useViewFilter } from '../services/viewFilters';
@@ -6,11 +9,11 @@ import { createTenantWriter } from '../services/tenantWrites';
 import { useCompanyCollection } from '../services/useCompanyCollection';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { DEFAULT_COMPANY_ID, FinancialRecord, Store, Sale, Layaway, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
+import { DEFAULT_COMPANY_ID, FinancialRecord, Store, PaymentMethod, Payment, Seller, Expense, Incident, IncidentType, View, CartItem } from '../types';
 import { formatCOP } from '../constants';
 import { DollarIcon, BuildingStorefrontIcon, PlusCircleIcon, TrashIcon, CheckIcon, CrossIcon, SearchIcon, HistoryIcon, ChartBarIcon, PlusIcon, SparklesIcon, AlertTriangleIcon, SwapIcon, TagIcon, EditIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, SettingsIcon, EyeIcon, CopyIcon, ArrowPathIcon, DownloadIcon } from './Icons';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc as nativeDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc as nativeDoc } from '../services/measuredFirestore';
 
 interface FinancialReconciliationViewProps {
   companyId: string;
@@ -18,9 +21,6 @@ interface FinancialReconciliationViewProps {
   stores: Store[];
   activeStoreId?: string;
   onSetActiveStoreId?: (id: string) => void;
-  sales: Sale[];
-  layaways: Layaway[];
-  expenses: Expense[];
   incidents: Incident[];
   currentUser: Seller;
   onNavigate?: (view: View) => void;
@@ -101,12 +101,9 @@ const cleanObject = (obj: any) => {
   return newObj;
 };
 
-const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores: rawStores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, incidents: rawIncidents, currentUser, onNavigate, onAddExpense }) => {
+const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = ({ companyId, isAdmin, stores: rawStores, activeStoreId: propsActiveStoreId, onSetActiveStoreId, incidents: rawIncidents, currentUser, onNavigate, onAddExpense }) => {
   const stores = useMemo(() => rawStores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === companyId), [companyId, rawStores]);
   const scope = useMemo(() => analyticsScope(companyId, stores), [companyId, stores]);
-  const sales = useMemo(() => selectAnalyticsRows<Sale>('sales', rawSales, scope), [rawSales, scope]);
-  const layaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawLayaways, scope), [rawLayaways, scope]);
-  const expenses = useMemo(() => selectAnalyticsRows<Expense>('expenses', rawExpenses, scope), [rawExpenses, scope]);
   const incidents = useMemo(() => selectAnalyticsRows<Incident>('incidents', rawIncidents, scope), [rawIncidents, scope]);
   const storeKey = JSON.stringify(stores.map(store => store.id).sort());
   const writer = useMemo(() => createTenantWriter(db, { companyId, storeIds: new Set<string>(JSON.parse(storeKey)) }), [companyId, storeKey]);
@@ -123,8 +120,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const [rawAllRecords, setAllRecords] = useState<FinancialRecord[]>([]);
   const allRecords = useMemo(() => selectAnalyticsRows<FinancialRecord>('financialRecords', rawAllRecords, scope), [rawAllRecords, scope]);
   const records = useMemo(() => allRecords.filter(record => record.storeId === activeStoreId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id)), [allRecords, activeStoreId]);
-  const [activeTab, setActiveTab] = useState<AccountType>('cash');
-  const [closuresActiveTab, setClosuresActiveTab] = useState<AccountType>('cash');
+  const [activeTab, setActiveTab] = useViewFilter<AccountType>('FinancialReconciliationView:activeTab', 'cash');
+  const [closuresActiveTab, setClosuresActiveTab] = useViewFilter<AccountType>('FinancialReconciliationView:closuresActiveTab', 'cash');
   const [sisteRangeStart, setSisteRangeStart] = useViewFilter('FinancialReconciliationView:sisteRangeStart', '');
   const [sisteRangeEnd, setSisteRangeEnd] = useViewFilter('FinancialReconciliationView:sisteRangeEnd', '');
   const [searchTerm, setSearchTerm] = useViewFilter('FinancialReconciliationView:searchTerm', '');
@@ -140,9 +137,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useViewFilter('FinancialReconciliationView:selectedMonth', now.getMonth());
   const [selectedYear, setSelectedYear] = useViewFilter('FinancialReconciliationView:selectedYear', now.getFullYear());
-  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useState(false);
+  const [isSystemLoadsOpen, setIsSystemLoadsOpen] = useViewFilter('FinancialReconciliationView:isSystemLoadsOpen', false);
   const [isDebtsSectionOpen, setIsDebtsSectionOpen] = useState(true);
-  const [showBothClosures, setShowBothClosures] = useState(false);
+  const [showBothClosures, setShowBothClosures] = useViewFilter('FinancialReconciliationView:showBothClosures', false);
   const [showGlobalSummary, setShowGlobalSummary] = useState(false);
   const [showInterStoreModal, setShowInterStoreModal] = useState(false);
   const [interStoreFilterStoreId, setInterStoreFilterStoreId] = useState<string>('all');
@@ -203,6 +200,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
   }, [saveStatus.state]);
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  const closureSources = useReconciliationSources(companyId, activeStoreId, `${currentUser.id}:${companyId}`, isSystemLoadsOpen && scope.storeIds.has(activeStoreId));
+  const sales = closureSources.sales;
+  const layaways = closureSources.layaways;
 
   const ledger = useFinancialLedger({ companyId, storeId: activeStoreId, storeIds: stores.map(store => store.id), scopeKey: `${currentUser.id}:${companyId}`,
     accountType: activeTab, month: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`, showGlobal: showGlobalSummary, showClosures: isSystemLoadsOpen,
@@ -1322,6 +1323,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       (entry.debtStoreId && entry.physicalStoreId !== activeStoreId && entry.physicalStoreId !== entry.debtStoreId));
     if (invalid) { alert('Revisa el monto, la fecha y las dos sedes del cruce.'); return; }
     if (manualEntries.length > 60) { alert('Procesa máximo 60 filas por lote.'); return; }
+    const saveTiming = beginDiagnosticPhase('Guardar conciliación: hasta confirmación en cliente');
+    let saveFailed = true;
+    let saveError: unknown;
     saveInFlightRef.current = true;
     setIsSavingReconciliation(true);
     setSaveStatus({ state: 'saving', message: 'Guardando movimientos…' });
@@ -1451,11 +1455,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
       setShowAddModal(false);
       setManualEntries([]);
       setSaveStatus({ state: 'saved', message: 'Movimientos confirmados.' });
+      saveFailed = false;
     } catch (error) {
       setShowAddModal(true);
+      saveError = error;
       console.error('Error saving reconciliation entries:', error);
-      setSaveStatus({ state: 'error', message: error instanceof Error ? error.message : 'No se confirmó el guardado. Conservamos el borrador para reintentarlo.' });
+      setSaveStatus({ state: 'error', message: `${error instanceof Error ? error.message : 'No se confirmó el guardado.'}${safeDiagnosticErrorCode(error) ? ` (Código: ${safeDiagnosticErrorCode(error)})` : ''} Conservamos el borrador para revisarlo o reintentarlo.` });
     } finally {
+      finishDiagnosticPhase(saveTiming, saveFailed, saveError);
       saveInFlightRef.current = false;
       setIsSavingReconciliation(false);
     }
@@ -2634,7 +2641,9 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
-            {isSystemLoadsOpen && (ledger.closuresLoading ? (
+            {isSystemLoadsOpen && (closureSources.error ? (
+                <div role="alert" className="lg:col-span-4 p-5 rounded-2xl bg-red-50 text-red-800"><p>{closureSources.error}</p><button type="button" onClick={() => setIsSystemLoadsOpen(false)} className="mt-3 underline">Cerrar cierres</button></div>
+            ) : ledger.closuresLoading || closureSources.loading ? (
                 <div role="status" className="lg:col-span-4 p-5 rounded-2xl bg-white dark:bg-secondary">
                     <p>Cargando cierres del mes…</p>
                     <button type="button" onClick={() => setIsSystemLoadsOpen(false)} className="mt-3 text-accent">Ocultar cierres</button>
@@ -2693,7 +2702,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block pl-1">Seleccionar Cuenta</span>
                                <div className="grid grid-cols-2 gap-1.5">
                                    <button 
-                                     onClick={() => setClosuresActiveTab('cash')} 
+                                     aria-label="Cuenta de cierres: cash" aria-pressed={closuresActiveTab === 'cash'} onClick={() => setClosuresActiveTab('cash')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'cash' 
                                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/15' 
@@ -2702,7 +2711,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">💵</span> Efectivo
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('qr')} 
+                                     aria-label="Cuenta de cierres: qr" aria-pressed={closuresActiveTab === 'qr'} onClick={() => setClosuresActiveTab('qr')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'qr' 
                                          ? 'bg-blue-500 border-blue-500 text-white shadow-md shadow-blue-500/15' 
@@ -2711,7 +2720,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">📱</span> Pago QR
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('addi')} 
+                                     aria-label="Cuenta de cierres: addi" aria-pressed={closuresActiveTab === 'addi'} onClick={() => setClosuresActiveTab('addi')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'addi' 
                                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/15' 
@@ -2720,7 +2729,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                      <span className="text-xs">💎</span> Addi
                                    </button>
                                    <button 
-                                     onClick={() => setClosuresActiveTab('sistecredito')} 
+                                     aria-label="Cuenta de cierres: sistecredito" aria-pressed={closuresActiveTab === 'sistecredito'} onClick={() => setClosuresActiveTab('sistecredito')}
                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border
                                        ${closuresActiveTab === 'sistecredito' 
                                          ? 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/15' 
@@ -3086,8 +3095,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 <span className="text-[10px] font-black uppercase hidden sm:inline">Cierres</span>
                             </button>
                         )}
-                        <button onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
-                        <button onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
+                        <button aria-label="Cuenta del libro: cash" aria-pressed={activeTab === 'cash'} onClick={() => setActiveTab('cash')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'cash' ? 'bg-accent text-white shadow-lg' : 'text-gray-400'}`}><DollarIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('cash')}</button>
+                        <button aria-label="Cuenta del libro: qr" aria-pressed={activeTab === 'qr'} onClick={() => setActiveTab('qr')} className={`flex-1 py-2 sm:py-3 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1.5 ${activeTab === 'qr' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400'}`}><BuildingStorefrontIcon className="w-4 h-4 sm:w-5 h-5" /> {getAccountName('qr')}</button>
                     </div>
                 </div>
 
@@ -3387,22 +3396,22 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
 
         {/* MODAL INGRESOS MANUALES */}
         {showAddModal && (
-            <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-2 sm:p-4 animate-fade-in backdrop-blur-sm">
-                <div className="bg-white dark:bg-secondary rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-6xl overflow-hidden border border-accent/20 flex flex-col max-h-[95vh]">
-                    <div className="p-4 sm:p-6 bg-accent text-white flex justify-between items-center shrink-0"><div className="flex items-center gap-2 sm:gap-3"><PlusCircleIcon className="w-6 h-6 sm:w-8 sm:h-8" /><h3 className="text-lg sm:text-2xl font-black uppercase tracking-widest">Ingresar Lote</h3></div><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="p-1 hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
-                    <div className="p-3 sm:p-4 bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-700 flex justify-center items-center gap-4 sm:gap-6 shadow-inner shrink-0"><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">SEDE:</p><p className="text-sm sm:text-xl font-black text-accent uppercase tracking-tighter">{activeStore?.name}</p></div><div className="h-6 sm:h-8 w-px bg-gray-300 dark:bg-gray-600"></div><div className="text-center"><p className="text-[7px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest">CUENTA:</p><p className="text-sm sm:text-xl font-black text-gray-700 dark:text-white uppercase">{activeTab.toUpperCase()}</p></div></div>
-                    <div className="flex-grow overflow-y-auto p-3 sm:p-6 bg-gray-50/50 dark:bg-gray-900/50"><fieldset disabled={isSavingReconciliation} className="contents">
-                        <div className="space-y-4">
+            <ManualEntryModalShell saving={isSavingReconciliation} onClose={() => setShowAddModal(false)}>
+                    <div className="px-3 py-2 sm:p-5 bg-accent text-white flex justify-between items-center gap-2 shrink-0"><div className="flex min-w-0 items-center gap-2 pr-32 sm:pr-0"><PlusCircleIcon className="w-5 h-5 shrink-0" /><h3 id="manual-entry-title" className="text-sm sm:text-xl font-bold truncate">Ingresar Lote <span className="font-normal">({manualEntries.length})</span></h3></div><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} aria-label="Cerrar ingreso de movimientos" className="flex h-10 w-10 shrink-0 items-center justify-center hover:bg-white/20 rounded-full transition-all"><CrossIcon className="w-6 h-6 sm:w-8 sm:h-8" /></button></div>
+                    <div className="px-3 py-1.5 sm:px-5 sm:py-2 bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 flex items-center justify-between gap-3 shrink-0 text-xs"><span className="min-w-0 truncate font-bold text-accent">{activeStore?.name}</span><span className="shrink-0 text-gray-600 dark:text-gray-300">{getAccountName(activeTab)}</span></div>
+                    {saveStatus.message && (saveStatus.state === 'error' || saveStatus.state === 'saving') && <div data-testid="manual-entry-save-feedback" role={saveStatus.state === 'error' ? 'alert' : 'status'} aria-live={saveStatus.state === 'error' ? 'assertive' : 'polite'} className={`shrink-0 border-b px-4 py-3 text-sm font-semibold ${saveStatus.state === 'error' ? 'bg-red-50 text-red-800 border-red-200' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>{saveStatus.message}</div>}
+                    <div data-testid="manual-entry-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 sm:p-5 bg-gray-50/50 dark:bg-gray-900/50"><fieldset disabled={isSavingReconciliation} className="contents">
+                        <div className="space-y-2 sm:space-y-3">
                             <div className="hidden md:grid grid-cols-12 gap-3 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest"><div className="col-span-2">Fecha y Hora</div><div className="col-span-1">Cuenta</div><div className="col-span-2">Descripción</div><div className="col-span-2">Categoría</div><div className="col-span-1 text-right">Monto $</div><div className="col-span-3 text-center border-l border-gray-300 dark:border-gray-600">Conf. Cruzada</div><div className="col-span-1"></div></div>
                             {manualEntries.map((entry) => {
                                 const amountVal = parseFloat(entry.amount); const isExpense = amountVal < 0;
                                 return (
-                                <div key={entry.tempId} className={`grid grid-cols-2 md:grid-cols-12 gap-2 md:gap-3 items-center bg-white dark:bg-gray-800 p-3 md:p-4 rounded-2xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
-                                    <div className="col-span-2 md:hidden flex justify-between items-center mb-1 pb-1 border-b border-gray-100 dark:border-gray-700">
+                                <div key={entry.tempId} className={`grid grid-cols-2 md:grid-cols-12 gap-x-2 gap-y-1.5 md:gap-3 items-center bg-white dark:bg-gray-800 p-2 md:p-4 rounded-xl border transition-all ${entry.debtStoreId ? 'border-yellow-500 shadow-md ring-2 ring-yellow-500/10' : 'border-gray-200 dark:border-gray-700'} animate-fade-in relative group`}>
+                                    <div className="col-span-2 md:hidden flex justify-between items-center pb-1 border-b border-gray-100 dark:border-gray-700">
                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Movimiento #{manualEntries.indexOf(entry) + 1}</span>
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => handleDuplicateRow(entry.tempId)} className="p-1.5 bg-accent/10 text-accent rounded-xl" title="Duplicar"><CopyIcon className="w-4 h-4" /></button>
-                                            <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="p-1.5 bg-red-50 text-red-500 rounded-xl"><TrashIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDuplicateRow(entry.tempId)} className="h-9 w-9 flex items-center justify-center bg-accent/10 text-accent rounded-xl" title="Duplicar"><CopyIcon className="w-4 h-4" /></button>
+                                            <button onClick={() => setManualEntries(manualEntries.filter(m => m.tempId !== entry.tempId))} className="h-9 w-9 flex items-center justify-center bg-red-50 text-red-500 rounded-xl"><TrashIcon className="w-4 h-4" /></button>
                                         </div>
                                     </div>
                                     
@@ -3416,7 +3425,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     </div>
 
                                     <div className="col-span-1 md:col-span-1 w-full">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Cuenta</label>
+                                        <label className="md:hidden text-[9px] font-bold uppercase text-gray-400 ml-1">Cuenta</label>
                                         <select value={entry.accountType} onChange={e => handleUpdateEntryField(entry.tempId, 'accountType', e.target.value as any)} className="w-full bg-gray-100 dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 font-bold text-sm uppercase outline-none focus:border-accent">
                                             <option value="cash">Efec</option>
                                             <option value="qr">QR</option>
@@ -3425,17 +3434,17 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     </div>
 
                                     <div className="col-span-1 md:hidden w-full">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Valor</label>
+                                        <label className="md:hidden text-[9px] font-bold uppercase text-gray-400 ml-1">Valor</label>
                                         <input type="text" inputMode="decimal" value={formatInputDisplay(entry.amount)} onChange={e => handleUpdateEntryField(entry.tempId, 'amount', e.target.value)} placeholder="Monto $" className={`w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-black text-[11px] text-right ${isExpense ? 'text-red-500' : 'text-green-600'}`} />
                                     </div>
 
-                                    <div className="col-span-2 md:col-span-2 w-full">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Descripción</label>
+                                    <div className="col-span-1 md:col-span-2 min-w-0 w-full">
+                                        <label className="md:hidden text-[9px] font-bold uppercase text-gray-400 ml-1">Descripción</label>
                                         <input type="text" value={entry.description} onChange={e => handleUpdateEntryField(entry.tempId, 'description', e.target.value)} placeholder="Concepto..." className="w-full bg-gray-50 dark:bg-gray-900 p-2 rounded-xl border border-gray-100 dark:border-gray-700 outline-none font-bold text-[11px] focus:border-accent" />
                                     </div>
 
-                                    <div className="col-span-2 md:col-span-2 w-full">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1">Categoría</label>
+                                    <div className="col-span-1 md:col-span-2 min-w-0 w-full">
+                                        <label className="md:hidden text-[9px] font-bold uppercase text-gray-400 ml-1">Categoría</label>
                                         <input type="text" value={entry.subCategory} onChange={e => handleUpdateEntryField(entry.tempId, 'subCategory', e.target.value)} placeholder="Ej: Servicios..." className="w-full bg-accent/5 dark:bg-accent/10 p-2 rounded-xl border border-accent/20 outline-none font-black text-[10px] uppercase text-accent" />
                                     </div>
 
@@ -3444,15 +3453,15 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                     </div>
 
                                     <div className="col-span-2 md:col-span-3 w-full border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-700 pt-2 md:pt-0 md:pl-4">
-                                        <label className="md:hidden text-[7px] font-black uppercase text-gray-400 ml-1 mb-0.5 block">¿Pago por otro local?</label>
+                                        <label className="md:hidden text-[9px] font-bold uppercase text-gray-400 ml-1 mb-0.5 block">¿Pago por otro local?</label>
                                         <select value={entry.debtStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'debtStoreId', e.target.value)} className="w-full bg-yellow-50 dark:bg-yellow-900/10 p-1.5 rounded-xl border border-yellow-200 dark:border-yellow-900/50 outline-none font-bold text-[9px] uppercase text-yellow-700 dark:text-yellow-400">
                                             <option value="">No es préstamo</option>
                                             {stores.filter(s => s.id !== activeStoreId && !(s.name || '').toLowerCase().includes('training')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                         {entry.debtStoreId && (
-                                            <div className="mt-1.5 space-y-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-2 rounded-xl border border-yellow-100">
-                                                <div className="flex flex-col gap-1">
-                                                    <p className="text-[7px] font-black uppercase text-gray-500 leading-tight">Valor que es Cruce $</p>
+                                            <div className="mt-1 grid grid-cols-2 gap-2 bg-yellow-100/30 dark:bg-yellow-900/5 p-1.5 rounded-lg border border-yellow-100">
+                                                <div className="min-w-0 flex flex-col gap-1">
+                                                    <p className="text-[9px] font-bold uppercase text-gray-500 leading-tight">Valor que es Cruce $</p>
                                                     <input 
                                                         type="text" 
                                                         inputMode="decimal" 
@@ -3461,10 +3470,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                         placeholder="Monto Cruce $" 
                                                         className="w-full bg-white dark:bg-gray-800 p-1.5 rounded border border-yellow-200 outline-none font-black text-[10px] text-right text-yellow-700 dark:text-yellow-400" 
                                                     />
-                                                    <p className="text-[6px] text-gray-400 italic">Si se deja vacío, se asume el total.</p>
+                                                    <p className="text-[9px] text-gray-400">Si se deja vacío, se asume el total.</p>
                                                 </div>
-                                                <div className="flex flex-col gap-1">
-                                                    <p className="text-[7px] font-black uppercase text-gray-500 leading-tight">¿De qué caja física salió/entró?</p>
+                                                <div className="min-w-0 flex flex-col gap-1">
+                                                    <p className="text-[9px] font-bold uppercase text-gray-500 leading-tight">Caja física del movimiento</p>
                                                     <select value={entry.physicalStoreId || activeStoreId} onChange={e => handleUpdateEntryField(entry.tempId, 'physicalStoreId', e.target.value)} className="w-full bg-white dark:bg-gray-800 p-1 rounded border border-yellow-200 outline-none font-bold text-[8px] uppercase text-gray-700 dark:text-gray-300">
                                                         <option value={activeStoreId}>{activeStore?.name || 'Local Actual'}</option>
                                                         <option value={entry.debtStoreId}>{stores.find(s => s.id === entry.debtStoreId)?.name || 'Otra Sede'}</option>
@@ -3481,11 +3490,14 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                 </div>
                                 )})}
                         </div>
-                        <button onClick={handleAddRow} className="w-full mt-4 py-4 sm:py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
+                        <button onClick={handleAddRow} className="w-full mt-2 py-2.5 sm:py-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl flex items-center justify-center gap-2 text-gray-400 hover:text-accent hover:border-accent transition-all font-black uppercase tracking-widest text-[10px] sm:text-xs"><PlusIcon className="w-5 h-5 sm:w-6 h-6" /> Añadir otro movimiento</button>
                     </fieldset></div>
-                    <div className="p-4 sm:p-6 bg-gray-5 dark:bg-gray-900 border-t dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0"><div className="text-[8px] sm:text-[10px] font-bold text-gray-400 italic text-center sm:text-left max-w-sm hidden sm:block">💡 Tip: Usa la "Configuración Cruzada" para pagar facturas de otros locales sin descuadrar tu propio arqueo final.</div><div className="flex gap-2 w-full sm:w-auto"><button disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="flex-1 sm:flex-none px-6 py-3.5 text-gray-500 font-black uppercase text-[10px] sm:text-xs">Cancelar</button><button onClick={handleSaveManualEntries} disabled={isSavingReconciliation} className="flex-[2] sm:flex-none bg-accent text-white font-black py-3.5 px-8 sm:px-12 rounded-2xl shadow-xl hover:bg-accent-hover transition-all active:scale-95 uppercase text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'GUARDANDO...' : 'PROCESAR LOTE'}</button></div></div>
-                </div>
-            </div>
+                    <div data-testid="manual-entry-footer" className="shrink-0 border-t dark:border-slate-800 bg-white dark:bg-gray-900 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4 flex items-center gap-2">
+                        <span className="hidden sm:block mr-auto text-xs text-gray-500">{manualEntries.length} movimiento(s) · Revisa la sede y los montos antes de guardar.</span>
+                        <button type="button" disabled={isSavingReconciliation} onClick={() => setShowAddModal(false)} className="min-h-11 px-3 text-gray-500 font-bold text-xs">Cancelar</button>
+                        <button type="button" onClick={handleSaveManualEntries} disabled={isSavingReconciliation} className="min-h-11 flex-1 sm:flex-none bg-accent text-white font-bold py-3 px-5 sm:px-8 rounded-xl shadow-sm hover:bg-accent-hover text-sm disabled:opacity-50 disabled:cursor-not-allowed">{isSavingReconciliation ? 'GUARDANDO...' : 'PROCESAR LOTE'}</button>
+                    </div>
+            </ManualEntryModalShell>
         )}
         
         {editingRecord && (

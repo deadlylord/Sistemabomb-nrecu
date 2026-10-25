@@ -1,5 +1,5 @@
-import { doc, runTransaction } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
+import { doc, runTransaction } from './measuredFirestore';
+import type { Firestore } from './measuredFirestore';
 import { DEFAULT_COMPANY_ID } from '../types';
 import type { Category, Product } from '../types';
 import { belongsToCompany, isolatedCategoryId } from './companyCategories';

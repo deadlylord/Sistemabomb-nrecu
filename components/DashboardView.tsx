@@ -1,3 +1,6 @@
+import type { DashboardInventoryRequest } from '../services/useDashboardInventory';
+import { dashboardSalesRanges, type SalesRange } from '../services/dashboardSalesRange';
+import type { useBusinessSummary } from '../services/useBusinessSummary';
 import { sumCashCollections } from '../services/cashCollections';
 import SalesHistoryChart from './SalesHistoryChart';
 import { buildIncomeChart, isPeriodIncome, bogotaDateKey, completeChartYear } from '../services/incomeChart';
@@ -7,7 +10,7 @@ import { previousPeriod } from '../services/previousPeriod';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, StockTake, Expense } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
 import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
@@ -17,6 +20,13 @@ import { analyzeSalesData } from '../services/geminiService';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 interface DashboardViewProps {
+  initialSection?: string;
+  inventorySummary?: { value: number | null };
+  onInventoryRequest?: (request: DashboardInventoryRequest) => void;
+  inventoryStatus?: { loading: boolean; error: string; editReady: boolean };
+  monthlySummary?: ReturnType<typeof useBusinessSummary>;
+  onSummaryRangeChange?: (value: { start: string; end: string; year: number }) => void;
+  onSalesRangesChange?: (ranges: SalesRange[]) => void;
   companyId: string;
   stores: Store[];
   allLayaways: Layaway[];
@@ -171,11 +181,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     } : null;
   }, [allStockTakes, currentStore?.id, allIncidents]);
 
+  useEffect(() => { if (props.initialSection) document.getElementById(props.initialSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [props.initialSection]);
   const today = new Date();
   const [startDate, setStartDate] = useViewFilter('DashboardView:startDate', toYYYYMMDD(today));
   const [endDate, setEndDate] = useViewFilter('DashboardView:endDate', toYYYYMMDD(today));
   const [paymentMethodFilter, setPaymentMethodFilter] = useViewFilter<string[]>('DashboardView:paymentMethodFilter', []);
-  const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(false);
+  const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(props.initialSection === 'price-analysis');
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
   const [isUnitsSoldExpanded, setIsUnitsSoldExpanded] = useState(false);
   const [isSalesHistoryVisible, setIsSalesHistoryVisible] = useState(true);
@@ -196,6 +207,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [chartYear, setChartYear] = useState(() => Number(bogotaDateKey(new Date()).slice(0, 4)));
   const [chartMetric, setChartMetric] = useState<'income' | 'sales'>('income');
   const [chartViewMode, setChartViewMode] = useState<'daily' | 'monthly' | 'all-months'>('monthly');
+  const salesRangesKey = JSON.stringify(dashboardSalesRanges(startDate, endDate, salesMonthFilter, salesHistoryStartDate, salesHistoryEndDate));
+  useEffect(() => { props.onSalesRangesChange?.(JSON.parse(salesRangesKey)); }, [salesRangesKey, props.onSalesRangesChange]);
+  useEffect(() => {
+    const previous = previousPeriod(startDate, endDate);
+    props.onSummaryRangeChange?.({ start: previous ? toYYYYMMDD(previous.start) : startDate || '1900-01-01', end: endDate || bogotaDateKey(new Date()), year: chartYear });
+  }, [startDate, endDate, chartYear, props.onSummaryRangeChange]);
   const [activeInsightId, setActiveInsightId] = useState<string | null>(null);
   const [isAIExpanded, setIsAIExpanded] = useState(false);
   const [activeAITab, setActiveAITab] = useState<'insights' | 'forecast' | 'clients' | 'query'>('insights');
@@ -259,6 +276,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       return date.getTime() >= start.getTime() && date.getTime() <= end.getTime();
     };
   }, [startDate, endDate]);
+
+  const dashboardProductIdsKey = JSON.stringify([...new Set([...sales, ...layaways].filter(t => isWithinRange(t.createdAt)).flatMap(t => (Array.isArray(t.items) ? t.items : Object.values(t.items || {})).filter(Boolean).map(item => item.id)).filter(Boolean))].sort());
+  const needsEditInventory = !!editingSale || !!editingLayaway;
+  useEffect(() => { props.onInventoryRequest?.({ productIds: JSON.parse(dashboardProductIdsKey), full: needsEditInventory }); }, [dashboardProductIdsKey, needsEditInventory, props.onInventoryRequest]);
+  const inventoryReportsPending = !!props.inventoryStatus && (props.inventoryStatus.loading || !!props.inventoryStatus.error);
+  const inventoryReportMessage = props.inventoryStatus?.error || 'Cargando productos…';
+  const inventoryEditReady = !props.onInventoryRequest || !!props.inventoryStatus?.editReady;
 
   const handleCustomAIQuery = async () => {
     if (!customAIQuery.trim() || isAiQueryLoading) return;
@@ -666,6 +690,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     const range = previousPeriod(startDate, endDate);
     if (!range) return null;
     const { start: previousStart, end: previousEnd } = range;
+    if (props.monthlySummary?.ready && !props.monthlySummary.loading && !props.monthlySummary.error) return { total: props.monthlySummary.total(toYYYYMMDD(previousStart), toYYYYMMDD(previousEnd)).income, start: previousStart.toLocaleDateString("es-CO"), end: previousEnd.toLocaleDateString("es-CO") };
     const inPrevious = (date: string) => {
       const time = new Date(date).getTime();
       return time >= previousStart.getTime() && time <= previousEnd.getTime();
@@ -691,7 +716,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
       if (valid && (incident.type === IncidentType.RECAUDO || (incident.paymentMethod && isPeriodIncome(incident.paymentMethod))) && (incident.adjustmentAmount || 0) > 0) total += Number(incident.adjustmentAmount) || 0;
     }
     return { total, start: previousStart.toLocaleDateString('es-CO'), end: previousEnd.toLocaleDateString('es-CO') };
-  }, [startDate, endDate, sales, layaways, allIncidents, currentStore?.id]);
+  }, [startDate, endDate, sales, layaways, allIncidents, currentStore?.id, props.monthlySummary]);
 
   const togglePaymentMethodFilter = (method: string) => {
     setPaymentMethodFilter(prev => 
@@ -904,6 +929,13 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   }, [sales, layaways]);
 
   const salesChartData = useMemo(() => {
+    if (props.monthlySummary) {
+      const summary = props.monthlySummary;
+      const field = chartMetric === 'income' ? 'income' : 'sales';
+      if (chartViewMode === 'daily') return summary.days.filter(d => d.date! >= startDate && d.date! <= endDate).map(d => ({ label: d.date!, total: d[field], partialTotal: d[field] }));
+      const cutoff = Number(bogotaDateKey(new Date()).slice(-2));
+      return completeChartYear(summary.months.map(month => ({ label: month.month, total: Object.values(month.days).reduce((sum: number, day: any) => sum + (day[field] || 0), 0) as number, partialTotal: Object.entries(month.days).reduce((sum, [date, day]: [string, any]) => sum + (Number(date.slice(-2)) <= cutoff ? day[field] || 0 : 0), 0) })), chartYear);
+    }
     if (chartMetric === 'income') {
       if (chartViewMode === 'daily') return buildIncomeChart(detailedReportData.allPayments, 'daily');
       return completeChartYear(buildIncomeChart(loadedPaymentLedger, 'monthly'), chartYear);
@@ -923,7 +955,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
     });
     const points = Array.from(dataMap.entries()).map(([label, { total, partialTotal }]) => ({ label, total, partialTotal })).sort((a, b) => a.label.localeCompare(b.label));
     return chartViewMode === 'daily' ? points : completeChartYear(points, chartYear);
-  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments, loadedPaymentLedger, chartYear]);
+  }, [sales, layaways, chartViewMode, chartMetric, detailedReportData.allPayments, loadedPaymentLedger, chartYear, props.monthlySummary, startDate, endDate]);
 
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -935,6 +967,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         monthsSet.add(ym);
       }
     };
+    if (props.onSalesRangesChange) { const now = new Date(); for (let i=0;i<24;i++) addDate(new Date(now.getFullYear(),now.getMonth()-i,15).toISOString()); }
     sales.forEach(s => addDate(s.createdAt));
     layaways.forEach(l => addDate(l.createdAt));
 
@@ -954,7 +987,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           label: `${monthName} ${year}`
         };
       });
-  }, [sales, layaways]);
+  }, [sales, layaways, props.onSalesRangesChange]);
 
   const managedSales = useMemo(() => {
     const layawayIds = new Set(layaways.map(l => l.id));
@@ -1290,7 +1323,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ticket promedio</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.averageTicketSize)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Prendas por venta</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.unitsPerTransaction.toFixed(2)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Margen bruto estimado</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricsForCurrentStore.grossMarginPercent.toFixed(1)}%</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Según costos asociados a los pagos</p></div>
-                    <div className="min-w-0 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Valor del inventario</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight break-words">{formatCOP(metricsForCurrentStore.totalInventoryValue)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Actual · a costo</p></div>
+                    <div className="min-w-0 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Valor del inventario</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight break-words">{props.inventorySummary ? props.inventorySummary.value === null ? 'Cargando…' : formatCOP(props.inventorySummary.value) : formatCOP(metricsForCurrentStore.totalInventoryValue)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Actual · a costo</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilidad estimada</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{formatCOP(metricsForCurrentStore.netProfit)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Después de gastos operativos</p></div>
                  </div>
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
@@ -1300,7 +1333,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
 
       <div id="price-analysis" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <div onClick={() => setIsPriceAnalysisVisible(!isPriceAnalysisVisible)} className="cursor-pointer flex justify-between items-center"><h2 className="text-2xl font-bold text-accent">Análisis de Precios y Diferencias</h2><ChevronDownIcon className={`w-6 h-6 transition-transform ${isPriceAnalysisVisible ? 'rotate-180' : ''}`} /></div>
-        {isPriceAnalysisVisible && (
+        {isPriceAnalysisVisible && (<> {inventoryReportsPending ? <p role={props.inventoryStatus?.error ? "alert" : "status"} className="py-4 text-sm">{inventoryReportMessage}</p> : (
             <div className="mt-4 pt-4 border-t-2 border-accent/30 animate-fade-in"><div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6"><div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-lg border-l-4 border-green-500"><p className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase">Total Valorización (Markups)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalMarkup)}</p></div><div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-l-4 border-red-500"><p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase">Total Descuentos (Discounts)</p><p className="text-2xl font-extrabold text-green-600 dark:text-green-400">{formatCOP(priceVariationReportData.summary.totalDiscount)}</p></div><div className={`p-4 rounded-lg border-l-4 ${priceVariationReportData.summary.netDifference >= 0 ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500' : 'bg-orange-100 dark:bg-orange-900/30 border-orange-500'}`}><p className="text-sm font-semibold uppercase">Diferencia Neta</p><p className={`text-2xl font-extrabold ${priceVariationReportData.summary.netDifference >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>{formatCOP(priceVariationReportData.summary.netDifference)}</p></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
     <div className="space-y-2">
         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Filtrar por Vendedores</label>
@@ -1337,7 +1370,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         </div>
     </div>
 </div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-2 font-semibold">Fecha/Factura</th><th className="p-2 font-semibold">Producto</th><th className="p-2 font-semibold">Vendedor</th><th className="p-2 font-semibold text-right">P. Sistema</th><th className="p-2 font-semibold text-right">P. Venta</th><th className="p-2 font-semibold text-right">Dif. Unit</th><th className="p-2 font-semibold text-right">Dif. Total</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{priceVariationReportData.items.map(item => (<tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"><td className="p-2"><p className="font-mono text-xs">{new Date(item.date).toLocaleDateString()}</p><p className="text-accent font-bold">#{item.invoiceNumber}</p></td><td className="p-2 font-medium">{item.productName} <span className="text-gray-400">(x{item.quantity})</span></td><td className="p-2">{item.seller}</td><td className="p-2 text-right text-gray-500">{formatCOP(item.currentPrice)}</td><td className="p-2 text-right font-bold">{formatCOP(item.soldPrice)}</td><td className={`p-2 text-right font-bold ${item.variation > 0 ? 'text-green-500' : item.variation < 0 ? 'text-red-500' : ''}`}>{item.variation > 0 ? `+${formatCOP(item.variation)}` : formatCOP(item.variation)}</td><td className={`p-2 text-right font-bold ${item.totalVariation > 0 ? 'text-green-500' : item.totalVariation < 0 ? 'text-red-500' : ''}`}>{item.totalVariation > 0 ? `+${formatCOP(item.totalVariation)}` : formatCOP(item.totalVariation)}</td></tr>))}</tbody></table>{priceVariationReportData.items.length === 0 && <p className="text-center py-6 text-gray-500">Sin variaciones registradas.</p>}</div></div>
-        )}
+        )}</>)}
       </div>
 
       <div id="sales-history" className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
@@ -1421,7 +1454,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
               </button>
             </div>{managedSales.length > 0 ? (<div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-100 dark:bg-gray-800"><tr><th className="p-3 text-sm font-semibold">Factura</th><th className="p-3 text-sm font-semibold">Fecha y Hora</th><th className="p-3 text-sm font-semibold">Cliente</th><th className="p-3 text-sm font-semibold text-right">Total</th><th className="p-3 text-sm font-semibold text-right">Ganancia</th><th className="p-3 text-sm font-semibold">Medio Pago</th><th className="p-3 text-sm font-semibold">Vendedor</th><th className="p-3 text-sm font-semibold text-center">Acciones</th></tr></thead><tbody className="divide-y divide-gray-200 dark:divide-gray-700">{managedSales.map((transaction) => { const profit = calculateSaleProfit(transaction); const isExpanded = expandedSaleId === transaction.id; const itemsArray: CartItem[] = (Array.isArray(transaction.items) ? transaction.items : Object.values(transaction.items || {})).filter(Boolean) as CartItem[]; return (<React.Fragment key={transaction.id}><tr className={`hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${isExpanded ? 'bg-accent/5' : ''}`} onClick={() => setExpandedSaleId(isExpanded ? null : transaction.id)}><td className="p-3 font-mono text-accent"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} /><span>#{transaction.invoiceNumber}</span>{transaction.transactionType === 'layaway' && (<span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-blue-500/20 text-blue-600 dark:text-blue-400">ABONO</span>)}</div></td><td className="p-3 text-sm whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td><td className="p-3"><p className="font-medium text-sm">{transaction.customerName}</p><p className="text-[10px] text-gray-500">{transaction.customerPhone}</p></td><td className="p-3 text-right font-semibold">{formatCOP(transaction.totalAmount)}</td><td className={`p-3 text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatCOP(profit)}</td><td className="p-3 text-sm">{renderPaymentMethods(transaction)}</td><td className="p-3 text-sm font-medium">{transaction.seller}</td><td className="p-3 text-center"><div className="flex items-center justify-center gap-1"><button onClick={(e) => { e.stopPropagation(); onReprintSale(transaction as Sale); }} className="text-gray-500 hover:text-blue-500 p-1.5 rounded-full hover:bg-blue-100 transition-colors" title="Reimprimir Factura"><PrintIcon className="w-4 h-4" /></button><button onClick={(e) => { e.stopPropagation(); if (transaction.transactionType === 'layaway') { setEditingLayaway(transaction as unknown as Layaway); } else { setEditingSale(transaction as Sale); } }} className="text-gray-500 hover:text-accent p-1.5 rounded-full hover:bg-accent/10 transition-colors" title="Editar"><EditIcon className="w-4 h-4"/></button>{isAdmin && transaction.transactionType === 'sale' && (<button onClick={(e) => { e.stopPropagation(); setSaleToDelete(transaction as Sale); }} className="text-gray-500 hover:text-red-500 p-1.5 rounded-full hover:bg-red-100 transition-colors" title="Eliminar Venta"><TrashIcon className="w-4 h-4" /></button>)}</div></td></tr>{isExpanded && (<tr className="bg-gray-50 dark:bg-gray-800/40"><td colSpan={8} className="p-4 pt-0"><div className="bg-white dark:bg-secondary border border-accent/20 rounded-lg p-3 shadow-inner"><h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Productos en esta venta</h4><div className="space-y-2">{itemsArray.map((item, idx) => { const isPromo = (item.discountPrice !== undefined && item.discountPrice === item.price) || (item.basePrice !== undefined && item.basePrice > item.price); return (<div key={idx} className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-1 last:border-0"><div><span className="font-bold text-accent">{item.quantity}x</span> {item.name}{isPromo && (<span className="ml-2 px-1.5 py-0.5 text-[9px] font-black rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 uppercase">🏷️ Promoción</span>)}<p className="text-[10px] text-gray-400">{item.supplier || 'N/A'}</p></div><div className="text-right"><p className="font-semibold">{formatCOP(item.price * item.quantity)}</p><p className="text-[10px] text-gray-400">{formatCOP(item.price)} c/u{item.basePrice && item.basePrice > item.price && (<span className="line-through text-gray-400 ml-1">{formatCOP(item.basePrice)}</span>)}</p></div></div>); })}</div><div className="mt-3 pt-2 border-t border-dashed flex justify-between items-center"><p className="text-xs text-gray-500">Vendedor responsable: <span className="font-bold">{transaction.seller}</span></p><div className="flex gap-2">{renderPaymentMethods(transaction)}</div></div></div></td></tr>)}</React.Fragment>);})}</tbody></table></div>) : <p className="text-center text-gray-500 py-8">Sin resultados.</p>}</div>)}</div>
 
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div className="flex items-center gap-2 mb-4"><h3 className="text-xl font-bold text-accent">Ventas por Categoría</h3><button type="button" onClick={() => setIsCategoryChartVisible(value => !value)} aria-expanded={isCategoryChartVisible} aria-controls="category-sales-chart" aria-label={isCategoryChartVisible ? 'Ocultar gráfico circular de categorías' : 'Mostrar gráfico circular de categorías'} title="Gráfico circular" className={`shrink-0 p-2 rounded-lg text-accent hover:bg-accent/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${isCategoryChartVisible ? 'bg-accent/10' : ''}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5" aria-hidden="true"><path d="M11 3a9 9 0 1 0 10 10H11V3Z" /><path d="M15 3.5V9h5.5A9 9 0 0 0 15 3.5Z" /></svg></button></div>{isCategoryChartVisible && <div id="category-sales-chart"><CategorySalesChart scopeKey={`${companyId}:${currentStore?.id}`} data={categoryReport} /></div>}<div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3><div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div></div></div>
+       <div id="top-products" className="grid grid-cols-1 lg:grid-cols-2 gap-8"><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><div className="flex items-center gap-2 mb-4"><h3 className="text-xl font-bold text-accent">Ventas por Categoría</h3><button type="button" onClick={() => setIsCategoryChartVisible(value => !value)} aria-expanded={isCategoryChartVisible} aria-controls="category-sales-chart" aria-label={isCategoryChartVisible ? 'Ocultar gráfico circular de categorías' : 'Mostrar gráfico circular de categorías'} title="Gráfico circular" className={`shrink-0 p-2 rounded-lg text-accent hover:bg-accent/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${isCategoryChartVisible ? 'bg-accent/10' : ''}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5" aria-hidden="true"><path d="M11 3a9 9 0 1 0 10 10H11V3Z" /><path d="M15 3.5V9h5.5A9 9 0 0 0 15 3.5Z" /></svg></button></div>{isCategoryChartVisible && <div id="category-sales-chart"><CategorySalesChart scopeKey={`${companyId}:${currentStore?.id}`} data={categoryReport} /></div>}<div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">{categoryReport.map(cat => (<div key={cat.categoryId} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden"><div onClick={() => setExpandedCategoryId(expandedCategoryId === cat.categoryId ? null : cat.categoryId)} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 cursor-pointer hover:bg-accent/5 transition-colors"><div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${expandedCategoryId === cat.categoryId ? 'rotate-180' : ''}`} /><div><p className="font-bold">{cat.categoryName}</p><p className="text-xs text-gray-500">{cat.totalUnits} uds vendidas</p></div></div><p className="text-lg font-bold text-accent">{formatCOP(cat.totalSales)}</p></div>{expandedCategoryId === cat.categoryId && (<div className="p-3 bg-white dark:bg-secondary animate-fade-in"><div className="space-y-2">{cat.productList.map((prod, pidx) => (<div key={pidx} className="flex justify-between items-center text-sm p-2 border-b border-gray-50 dark:border-gray-800 last:border-0"><div className="flex items-center gap-3"><span className="bg-accent/10 text-accent text-[10px] font-bold px-1.5 py-0.5 rounded">x{prod.qty}</span><span className="font-medium text-gray-700 dark:text-gray-300">{prod.name}</span></div><span className="font-bold text-gray-600 dark:text-gray-400">{formatCOP(prod.revenue)}</span></div>))}</div></div>)}</div>))}</div></div><div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg"><h3 className="text-xl font-bold text-accent mb-4">Top Productos</h3>{inventoryReportsPending ? <p role={props.inventoryStatus?.error ? "alert" : "status"}>{inventoryReportMessage}</p> : (<div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">{topProductsReport.map((prod, index) => (<div key={prod.productId} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"><div className="flex items-center gap-3"><span className="text-gray-400 font-bold">{index + 1}.</span><p className="font-bold">{prod.productName}</p></div><p className="text-lg font-bold text-accent">{prod.totalUnits} uds</p></div>))}</div>)}</div></div>
         <section id="sales-chart" className="min-w-0 max-w-full bg-white dark:bg-secondary p-3 sm:p-6 rounded-xl shadow-lg mt-8 scroll-mt-20">
           <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
             <h2 className="text-xl sm:text-2xl font-bold text-accent">{chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Ingresos del año') : 'Ventas históricas'}</h2>
@@ -1433,10 +1466,11 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{chartMetric === 'income' ? `${chartViewMode === 'daily' ? `${startDate} al ${endDate}` : `Enero a diciembre de ${chartYear} · Meses completos, independientes del filtro de fechas`} · Pagos recibidos, recaudos, ingresos y excedentes de cambios. Excluye bonos usados como pago. Sin aplicar filtros por medio de pago.` : `${chartViewMode === 'daily' ? 'Histórico cargado' : `Enero a diciembre de ${chartYear}`} de la sede, sin el filtro de fechas. Valor completo de ventas y apartados activos o completados, según su creación; incluye saldos pendientes de pago.`}</p>
           {chartMetric === 'income' && <p className="mb-3 font-bold text-accent">{chartViewMode === 'daily' ? 'Total del período' : `Total ${chartYear}`}: {formatCOP(salesChartData.reduce((sum, point) => sum + point.total, 0))}</p>}
-          <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${chartYear}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Dinero recibido por mes') : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartViewMode !== 'daily'} />
+          {props.monthlySummary && (props.monthlySummary.loading || props.monthlySummary.chartLoading || props.monthlySummary.error || !props.monthlySummary.ready) ? <p role="status" className="text-sm text-accent">{props.monthlySummary.error || (props.monthlySummary.loading || props.monthlySummary.chartLoading ? "Cargando gráfico…" : "El resumen del gráfico no está verificado para esta sede.")}</p> : <SalesHistoryChart key={`${chartMetric}:${chartViewMode}:${chartYear}:${currentStore?.id}:${startDate}:${endDate}`} data={salesChartData} viewMode={chartViewMode} seriesLabel={chartMetric === 'income' ? (chartViewMode === 'daily' ? 'Ingresos del período' : 'Dinero recibido por mes') : chartViewMode === 'daily' ? 'Ventas del día' : 'Ventas del mes completo'} showPartial={chartViewMode !== 'daily'} />}
         </section>
-        {editingSale && (<EditSaleModal isOpen={!!editingSale} onClose={() => setEditingSale(null)} sale={editingSale} sellers={sellers} inventory={inventory} onUpdateSale={onUpdateSale} />)}
-        {editingLayaway && (<EditLayawayModal isOpen={!!editingLayaway} onClose={() => setEditingLayaway(null)} layaway={editingLayaway} sellers={sellers} inventory={inventory} onUpdateLayaway={onUpdateLayaway || (() => {})} />)}
+        {needsEditInventory && !inventoryEditReady && <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/60 p-4"><div className="rounded-xl bg-white dark:bg-secondary p-6"><p role={props.inventoryStatus?.error ? "alert" : "status"}>{props.inventoryStatus?.error || 'Cargando productos para editar…'}</p><button type="button" className="mt-4 font-bold text-accent" onClick={() => { setEditingSale(null); setEditingLayaway(null); }}>Cancelar</button></div></div>}
+        {editingSale && inventoryEditReady && (<EditSaleModal isOpen={!!editingSale} onClose={() => setEditingSale(null)} sale={editingSale} sellers={sellers} inventory={inventory} onUpdateSale={onUpdateSale} />)}
+        {editingLayaway && inventoryEditReady && (<EditLayawayModal isOpen={!!editingLayaway} onClose={() => setEditingLayaway(null)} layaway={editingLayaway} sellers={sellers} inventory={inventory} onUpdateLayaway={onUpdateLayaway || (() => {})} />)}
 
         <DeleteConfirmationModal
             isOpen={!!saleToDelete}

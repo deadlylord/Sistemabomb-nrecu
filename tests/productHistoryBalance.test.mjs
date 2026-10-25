@@ -41,7 +41,7 @@ test('editing a sale records one signed stock movement per changed product', asy
   const writes = [];
   let nextId = 0;
   const scope = {
-    currentUser: { name: 'Admin' }, inventory: [{ id: 'p' }, { id: 'q' }], globalInventoryForSearch: [], giftVouchers: [],
+    summaryInventoryMode: false, currentUser: { name: 'Admin' }, inventory: [{ id: 'p' }, { id: 'q' }], globalInventoryForSearch: [], giftVouchers: [],
     ProductChangeType: T, PaymentMethod: {}, cleanObject: value => value, increment: value => ({ increment: value }),
     db: {}, collection: (_, name) => name,
     doc: (...args) => args.length === 1 ? { path: `${args[0]}/log-${++nextId}`, id: `log-${nextId}` } : { path: `${args[1]}/${args[2]}`, id: args[2] },
