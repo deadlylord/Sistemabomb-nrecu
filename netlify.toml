@@ -11,8 +11,8 @@
   VITE_DASHBOARD_MONTHLY_CHART = "true"
   VITE_DASHBOARD_INVENTORY_SUMMARY = "true"
   VITE_DASHBOARD_PAYMENT_INDEX = "true"
-  # Pending explicit authorization for runtime token-signing IAM.
-  VITE_VERIFIED_IDENTITY = "false"
+  # Production identity: private credential rules and migrated accounts verified before activation.
+  VITE_VERIFIED_IDENTITY = "true"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
   VITE_STORE_SCOPED_LOADING = "true"
   VITE_FIREBASE_API_KEY = "AIzaSyCsEfJKMRzfOirlzpzPag8hwIyDzEwXicU"
