@@ -28,6 +28,8 @@ export type BusinessRoot = {
   schemaVersion: number;
   ready: boolean;
   paymentIndexVersion?: number;
+  dashboardActivityVersion?: number;
+  dashboardActivityMonths?: Record<string,number>;
   inventoryValue: number;
   inventoryUnits: number;
   updatedAt?: string;

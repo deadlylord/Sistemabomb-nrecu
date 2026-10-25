@@ -11,6 +11,7 @@
   VITE_DASHBOARD_MONTHLY_CHART = "true"
   VITE_DASHBOARD_INVENTORY_SUMMARY = "true"
   VITE_DASHBOARD_PAYMENT_INDEX = "true"
+  VITE_DASHBOARD_ACTIVITY_SUMMARY = "true"
   # Production identity: private credential rules and migrated accounts verified before activation.
   VITE_VERIFIED_IDENTITY = "true"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"

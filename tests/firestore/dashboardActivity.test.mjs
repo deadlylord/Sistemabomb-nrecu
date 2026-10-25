@@ -1,0 +1,22 @@
+import {verifyActivity} from '../../functions/scripts/verifyDashboardActivity.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {createRequire} from 'node:module';
+import {activityRoot,activityBucket,activityProjection,buildDashboardActivity,verifyDashboardActivity,projectDashboardActivity} from '../../functions/src/dashboardActivity.mjs';
+if(!/^(localhost|127\.0\.0\.1):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST||''))throw Error('Local emulator required');
+const require=createRequire(new URL('../../functions/package.json',import.meta.url)),{Firestore}=require('@google-cloud/firestore');const db=new Firestore({projectId:'demo-dashboard-activity'});
+test('activity transactions preserve old payments, pending work, source documents, idempotence, edits, moves and deletions',async()=>{
+ const companyId='a',storeId='s',root=activityRoot(companyId,storeId);await db.doc('stores/s').set({companyId});await db.doc(root).set({companyId,storeId,ready:true});
+ const old={companyId,storeId,createdAt:'2020-01-02T12:00:00Z',status:'active',items:[{id:'p',quantity:1,price:100,cost:30}],totalAmount:100,payments:[{date:'2026-10-02T12:00:00Z',amount:40,method:'QR'}],notes:'Only original editor needs these notes'};
+ await db.doc('layaways/old').set(old);await db.doc('incidents/pending').set({companyId,storeId,createdAt:'2020-01-01',type:'Garantía',status:'Garantía Activa'});await db.doc('incidents/closed').set({companyId,storeId,createdAt:'2020-01-01',type:'Prenda Dañada',status:'Devuelto y Resuelto'});
+ const built=await buildDashboardActivity(db,{storeId});assert.equal(built.sources,3);let result=await verifyDashboardActivity(db,{companyId,storeId,activate:true,assertReady:async()=>true});assert.equal(result.activated,true);assert.equal((await verifyActivity(db,{companyId,storeId})).sources,3);
+ const path=root+'/dashboardActivity/'+activityBucket('layaways','old','2026-10');assert.equal(JSON.parse((await db.doc(path).get()).data().payload).old.data.payments[0].amount,40);
+ assert.equal(activityProjection('incidents',{...old,type:'Prenda Dañada',status:'Devuelto y Resuelto'}).months.length,0);
+ assert.deepEqual((await db.doc('layaways/old').get()).data(),old,'building never rewrites authoritative sources');
+ const revision=(await db.doc(root).get()).data().dashboardActivityRevision;await projectDashboardActivity(db,'layaways','old');assert.equal((await db.doc(root).get()).data().dashboardActivityRevision,revision);
+ await db.doc('layaways/old').update({payments:[{date:'2026-11-02T12:00:00Z',amount:70,method:'Efectivo'}]});await assert.rejects(verifyDashboardActivity(db,{companyId,storeId}),/state/);
+ await projectDashboardActivity(db,'layaways','old');assert.equal((await db.doc(path).get()).exists,false);await verifyDashboardActivity(db,{companyId,storeId});
+ await db.doc('layaways/old').delete();await projectDashboardActivity(db,'layaways','old');result=await verifyDashboardActivity(db,{companyId,storeId});assert.equal(result.sources,2);assert.deepEqual((await db.doc(root).get()).data().dashboardActivityMonths,{});
+ await db.doc('incidents/pending').update({status:'Garantía Devuelta'});await projectDashboardActivity(db,'incidents','pending');result=await verifyDashboardActivity(db,{companyId,storeId});assert.equal(result.groups,0);
+ await db.doc('incidents/foreign').set({companyId:'other',storeId,type:'Recaudo',createdAt:'2026-10-01'});await assert.rejects(projectDashboardActivity(db,'incidents','foreign'),/company/);await db.doc('incidents/foreign').delete();
+ await assert.rejects(verifyDashboardActivity(db,{companyId,storeId,activate:true}),/deployment/);
+ await db.terminate();
+});

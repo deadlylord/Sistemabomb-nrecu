@@ -1,3 +1,4 @@
+import {activityProjection,activityMonth} from '../functions/src/dashboardActivity.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -77,6 +78,35 @@ test('original dashboard retains payment breakdown, editable history, price diff
     assert.equal(optimizedPriceRows,originalPriceRows,'current product prices and discount differences remain identical');
     await act(async()=>renderer.root.findByProps({screen:'EditSaleModal'}).props.onClose());
     assert.equal(inventoryRequests.at(-1).full,false,'closing editor releases full catalog request without another user action');
+    const extraLayaways=[
+      {id:'current-layaway',companyId:'a',storeId:'a1',createdAt:day.toISOString(),invoiceNumber:202,seller:'Ana',status:'active',customerName:'Abono de prueba',customerPhone:'300',items:[{...product,quantity:1,price:40000}],totalAmount:40000,discountAmount:1000,payments:[{date:day.toISOString(),method:PaymentMethod.QR,amount:15000,seller:'Ana'}],notes:'ORIGINAL NOTES'},
+      {id:'old-payment',companyId:'a',storeId:'a1',createdAt:'2020-01-02T12:00:00Z',invoiceNumber:203,seller:'Ana',status:'cancelled',items:[],totalAmount:10000,payments:[{date:day.toISOString(),method:PaymentMethod.Efectivo,amount:5000,seller:'Ana'}]},
+      {id:'old-unused',companyId:'a',storeId:'a1',createdAt:'2016-01-02T12:00:00Z',invoiceNumber:204,seller:'Ana',status:'completed',items:[],totalAmount:10000,payments:[]}
+    ];
+    const extraIncidents=[...props.allIncidents,{id:'cash',companyId:'a',storeId:'a1',createdAt:day.toISOString(),type:'Recaudo',status:'Registrado',adjustmentAmount:7000,description:'Recaudo prueba',originalSaleInvoiceNumber:99,sellerName:'Ana',customerName:'Cliente recaudo'}];
+    const complete={...props,layaways:extraLayaways,allIncidents:extraIncidents};
+    await act(async()=>renderer.update(React.createElement(Dashboard,complete)));
+    const originalTree=JSON.stringify(renderer.toJSON()),month=activityMonth(day.toISOString());
+    const projected=(kind,rows)=>rows.filter(row=>activityProjection(kind,row).months.some(m=>m===month||m==='pending')).map(row=>({...activityProjection(kind,row).record,id:row.id}));
+    const compact={...complete,layaways:projected('layaways',extraLayaways),allIncidents:projected('incidents',extraIncidents),activityMonths:extraLayaways.map(v=>activityMonth(v.createdAt))};
+    await act(async()=>renderer.update(React.createElement(Dashboard,compact)));
+    assert.equal(JSON.stringify(renderer.toJSON()),originalTree,'all visible figures, payment references, categories, prices, history and available months stay identical with compact monthly data');
+    await act(async()=>renderer.update(React.createElement(Dashboard,{...compact,activityLoading:true})));
+    const incomeLabel=renderer.root.findAllByType('p').find(p=>p.children.join('')==='Ingresos del período');assert.equal(incomeLabel.parent.findAllByType('p')[1].children.join(''),'Cargando…','pending sources must not be presented as zero income');
+    await act(async()=>renderer.update(React.createElement(Dashboard,compact)));
+    const fresh={...extraLayaways[0],notes:'FRESH ORIGINAL NOTES',totalAmount:41000};let resolve;
+    await act(async()=>renderer.update(React.createElement(Dashboard,{...compact,onResolveLayaway:()=>new Promise(r=>resolve=r)})));
+    const editButtons=renderer.root.findAllByType('button').filter(n=>n.props.title==='Editar');
+    const layawayButton=editButtons.find(n=>{let row=n;while(row&&row.type!=='tr')row=row.parent;return row?.findAllByType('p').some(p=>p.children.join('')==='Abono de prueba');});
+    assert.ok(layawayButton);await act(async()=>layawayButton.props.onClick({stopPropagation(){}}));
+    assert.equal(renderer.root.findAllByProps({screen:'EditLayawayModal'}).length,0,'the compact read model never enters the editor as the authoritative original');
+    await act(async()=>resolve(fresh));assert.equal(renderer.root.findByProps({screen:'EditLayawayModal'}).props.layaway.notes,'FRESH ORIGINAL NOTES');
+    await act(async()=>renderer.root.findByProps({screen:'EditLayawayModal'}).props.onClose());
+    let receipt;await act(async()=>renderer.update(React.createElement(Dashboard,{...compact,onResolveLayaway:async()=>fresh,onReprintSale:value=>{receipt=value;}})));
+    let printRow=renderer.root.findAllByType('tr').find(row=>row.findAllByType('p').some(p=>p.children.join('')==='Abono de prueba'));
+    await act(async()=>printRow.findAllByType('button').find(b=>b.props.title==='Reimprimir Factura').props.onClick({stopPropagation(){}}));
+    assert.equal(receipt.notes,'FRESH ORIGINAL NOTES','reprinting also reads the full original');
+
 
   } finally {
     if(renderer)await act(async()=>renderer.unmount());
