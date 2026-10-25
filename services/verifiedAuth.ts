@@ -2,26 +2,26 @@ import { prepareLoginModules } from './loginModules';
 import { measureDiagnosticPhase, beginDiagnosticPhase, finishDiagnosticPhase, attachServerLoginTiming } from './readDiagnostics';
 import { auth, db } from '../firebase';
 import { doc, onSnapshot, addDoc, collection } from './measuredFirestore';
-import { verifiedIdentityEnabled } from './identityConfig';
+import { verifiedServiceTarget } from './identityConfig';
 import type { Seller, Store, Role, Company } from '../types';
 
 function assertTarget() {
-  if (!verifiedIdentityEnabled || auth.app.options.projectId !== 'vestika-staging') throw new Error('La identidad de prueba solo está disponible en staging.');
+  return verifiedServiceTarget(auth.app.options.projectId);
 }
-async function call<T>(name: string, data: unknown): Promise<T> {
-  assertTarget();
+async function call<T>(name: 'users' | 'roles' | 'platform', data: unknown): Promise<T> {
+  const target = assertTarget();
   const sdk = await import('firebase/functions');
-  return (await sdk.httpsCallable<unknown, T>(sdk.getFunctions(auth.app, 'southamerica-east1'), name)(data)).data;
+  return (await sdk.httpsCallable<unknown, T>(sdk.getFunctions(auth.app, target.region), target[name])(data)).data;
 }
 export async function loginVerified(identifier: string, password: string) {
-  assertTarget();
+  const target = assertTarget();
   const [sdk, functions] = await measureDiagnosticPhase('Login: preparar Firebase', prepareLoginModules);
   await measureDiagnosticPhase('Login: restaurar estado de sesión', () => auth.authStateReady());
   await measureDiagnosticPhase('Login: cerrar sesión previa', () => sdk.signOut(auth));
   const serviceTicket = beginDiagnosticPhase('Login: servicio de identidad');
   let result: { customToken: string; user: Seller; store: Store; role: Role; company: Company; loginDiagnostics?: unknown };
   try {
-    result = (await functions.httpsCallable<unknown, typeof result>(functions.getFunctions(auth.app, 'southamerica-east1'), 'vestikaStagingLogin')({ identifier, password, ...(serviceTicket ? { diagnostics: true } : {}) })).data;
+    result = (await functions.httpsCallable<unknown, typeof result>(functions.getFunctions(auth.app, target.region), target.login)({ identifier, password, ...(serviceTicket ? { diagnostics: true } : {}) })).data;
     finishDiagnosticPhase(serviceTicket);
     attachServerLoginTiming(serviceTicket, result.loginDiagnostics);
   } catch (error) {
@@ -35,8 +35,9 @@ export async function loginVerified(identifier: string, password: string) {
   }
   return { user: result.user, store: result.store, role: result.role, company: result.company };
 }
-export const manageVerifiedUser = (data: Record<string, unknown>) => call('vestikaStagingUsers', data);
-export const manageVerifiedRole = (data: Record<string, unknown>) => call('vestikaStagingRoles', data);
+export const manageVerifiedUser = (data: Record<string, unknown>) => call('users', data);
+export const manageVerifiedRole = (data: Record<string, unknown>) => call('roles', data);
+export const manageVerifiedPlatform = (data: Record<string, unknown>) => call('platform', data);
 export function recordVerifiedLogin(user: Seller) {
   addDoc(collection(db, 'loginHistory'), { sellerId:user.id, sellerName:user.name, companyId:user.companyId, storeId:user.storeId, date:new Date().toISOString() }).catch(() => console.warn('No se pudo registrar el historial de ingreso.'));
 }

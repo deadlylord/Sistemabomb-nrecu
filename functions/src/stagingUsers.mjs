@@ -21,12 +21,12 @@ export async function verifiedActor(auth, read) {
 
 // This operation owns both the public seller profile and private credentials /
 // aliases. No browser writes these documents directly in verified staging.
-export async function manageStagingUser(db, auth, input) {
+export async function manageStagingUser(db, auth, input, options = {}) {
   if (auth?.token?.identityVersion !== 1 || auth.uid !== identityUid(auth.token.sellerId || '')) fail();
   if (!input || !['create', 'update', 'toggle', 'delete'].includes(input.action)) throw new IdentityError('invalid-argument', 'Acción inválida.');
   const id = input.action === 'create' ? db.collection('sellers').doc().id : input.id;
   if (typeof id !== 'string' || !id || id.includes('/') || id.length > 128) throw new IdentityError('invalid-argument', 'Usuario inválido.');
-  if (id === OWNER_ID) fail('La cuenta del propietario no se modifica desde esta prueba.');
+  if (id === OWNER_ID && !(options.allowOwnerUpdate && auth.token.sellerId === OWNER_ID && input.action === 'update')) fail('La cuenta del propietario no se modifica desde esta operación.');
   const password = input.password;
   if (password !== undefined && (typeof password !== 'string' || password.length > 256)) throw new IdentityError('invalid-argument', 'Contraseña inválida.');
   const encoded = password?.trim() ? await hashPassword(password) : null;
@@ -55,7 +55,7 @@ export async function manageStagingUser(db, auth, input) {
     const [store, role, company, credential] = await Promise.all([read('stores', next.storeId), read('roles', next.roleId), read('companies', companyId), read('authCredentials', id)]);
     if (!store || store.companyId !== companyId || !role || role.companyId !== companyId || role.userType === 'developer' || ['developer', 'desarrollador'].includes(String(role.name || '').toLowerCase()) || role.permissions?.includes('developer_center') || !company) fail('La sede o el rol no pertenecen a esta empresa.');
     if (!encoded && input.action !== 'delete' && !credential?.passwordHash) throw new IdentityError('failed-precondition', 'El usuario requiere una contraseña nueva.');
-    if (id === actor.id && (next.roleId !== before.roleId || next.storeId !== before.storeId)) fail('Otro administrador debe cambiar tu rol o sede.');
+    if (id === actor.id && !(options.allowOwnerUpdate && actor.owner) && (next.roleId !== before.roleId || next.storeId !== before.storeId)) fail('Otro administrador debe cambiar tu rol o sede.');
     const oldAliases = aliases(before), newAliases = input.action === 'delete' ? [] : aliases(next);
     const indexes = new Map();
     for (const alias of new Set([...oldAliases, ...newAliases])) {
@@ -71,7 +71,7 @@ export async function manageStagingUser(db, auth, input) {
       const roleMap = new Map();
       for (const roleId of roleIds) roleMap.set(roleId, await read('roles', roleId));
       const type = roleType(role), configured = type === 'admin' ? company.maxAdmins : company.maxSellers;
-      const count = all.docs.filter(d => d.id !== id && !d.data().isDisabled && roleType(roleMap.get(d.data().roleId)) === type).length;
+      const count = all.docs.filter(d => d.id !== id && !d.data().isDisabled && !(options.excludePlatformUsers && (d.id === OWNER_ID || d.data().platformRole === 'developer')) && roleType(roleMap.get(d.data().roleId)) === type).length;
       if (Number.isFinite(configured) && count >= configured) throw new IdentityError('resource-exhausted', 'Se alcanzó el límite de usuarios de esta empresa.');
     }
     for (const [alias, { key, index }] of indexes) {
@@ -82,7 +82,9 @@ export async function manageStagingUser(db, auth, input) {
     if (input.action === 'delete') {
       tx.delete(db.collection('sellers').doc(id)); tx.delete(db.collection('authCredentials').doc(id));
     } else {
-      tx.set(db.collection('sellers').doc(id), publicSeller(id, next));
+      const profile = options.preserveProfile ? { ...next, ...publicSeller(id, next) } : publicSeller(id, next);
+      delete profile.password; delete profile.passwordHash;
+      tx.set(db.collection('sellers').doc(id), profile);
       tx.set(db.collection('authCredentials').doc(id), { passwordHash: encoded || credential.passwordHash, disabled: next.isDisabled });
     }
     tx.update(companyRef, { identityRevision: (company.identityRevision || 0) + 1 });

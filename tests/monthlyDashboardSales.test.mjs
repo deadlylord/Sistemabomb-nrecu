@@ -31,3 +31,48 @@ test('original dashboard loads monthly sales, retains old layaway payments, and 
  await act(async()=>r.root.findByType(m.Header).props.setCurrentView(m.View.POS));assert.equal(sales()[0].q.filters.some(f=>f.field==='createdAt'),false,'POS keeps its full operational source');
  }finally{if(r)await act(async()=>r.unmount());await m.cleanup();restore()}
 });
+
+test('month-scoped dashboard includes current payments on older ordinary sales and cleans their listeners on store change',async()=>{
+ const restore=browserGlobals();const m=await developerSession({summaries:true,verified:true,monthlySales:true});let r;
+ try{
+ const company={id:'a'},store={id:'one',companyId:'a',name:'One',accentColorsUpdated:true},role={id:'r',companyId:'a',name:'Administrador',userType:'admin',permissions:Object.values(m.View).filter(v=>v!==m.View.DEVELOPER_CENTER)},user={id:'u',companyId:'a',storeId:'one',roleId:'r',name:'User'};
+ const date=new Date(),month=date.toISOString().slice(0,7),payment={date:date.toISOString(),amount:1234,method:'QR'};
+ const sale={id:'older-sale',companyId:'a',storeId:'one',createdAt:'2020-01-02',payments:[payment]};
+ for(const [name,rows]of Object.entries({companies:[company],stores:[store,{...store,id:'two'}],roles:[role],sellers:[user],inventory:[],sales:[sale],layaways:[]}))m.records.set(name,rows);
+ m.records.set('businessSummaryCompanies/a/stores/one/paymentSalesByMonth',[{id:month+'__older-sale',companyId:'a',storeId:'one',month,saleId:sale.id}]);
+ await act(async()=>{r=create(React.createElement(m.App,{initialSession:{user,role,company,store}}))});
+ const screen=()=>r.root.findByProps({screen:'DashboardView'});
+ assert.deepEqual(screen().props.sales.map(s=>s.id),['older-sale']);assert.equal(screen().props.sales[0].payments[0].amount,1234);
+ const point=m.connections.find(c=>!c.closed&&c.q.name==='sales'&&c.q.id==='older-sale');assert.ok(point);
+ await act(async()=>r.root.findByType(m.Header).props.onSwitchStore('two'));
+ assert.equal(point.closed,true);assert.deepEqual(screen().props.sales,[]);
+ point.apply({exists:()=>true,data:()=>sale});await act(async()=>{});assert.deepEqual(screen().props.sales,[]);
+ }finally{if(r)await act(async()=>r.unmount());await m.cleanup();restore()}
+});
+
+test('production month filtering falls back to full sales until its historical-payment index is verified',async()=>{
+ const restore=browserGlobals();const m=await developerSession({summaries:true,verified:true,monthlySales:true,paymentIndex:true});let r;
+ try{
+ const company={id:'a'},store={id:'one',companyId:'a',name:'One',accentColorsUpdated:true},role={id:'r',companyId:'a',name:'Administrador',userType:'admin',permissions:Object.values(m.View).filter(v=>v!==m.View.DEVELOPER_CENTER)},user={id:'u',companyId:'a',storeId:'one',roleId:'r',name:'User'};
+ for(const [name,rows]of Object.entries({companies:[company],stores:[store],roles:[role],sellers:[user],inventory:[],sales:[{id:'older-sale',companyId:'a',storeId:'one',createdAt:'2020-01-02',payments:[{date:new Date().toISOString(),amount:1234,method:'QR'}]}],layaways:[]}))m.records.set(name,rows);
+ await act(async()=>{r=create(React.createElement(m.App,{initialSession:{user,role,company,store}}))});
+ const screen=r.root.findByProps({screen:'DashboardView'});
+ assert.deepEqual(screen.props.sales.map(s=>s.id),['older-sale']);
+ const q=m.connections.find(c=>!c.closed&&c.q.name==='sales'&&!c.q.id);assert.ok(q);assert.equal(q.q.filters.some(f=>f.field==='createdAt'),false);
+ }finally{if(r)await act(async()=>r.unmount());await m.cleanup();restore()}
+});
+
+
+test('production waits for summary metadata without opening a full-history sales listener',async()=>{
+ const restore=browserGlobals();const m=await developerSession({summaries:true,verified:true,monthlySales:true,paymentIndex:true});let r;
+ try{
+ const company={id:'a'},store={id:'one',companyId:'a',name:'One',accentColorsUpdated:true},role={id:'r',companyId:'a',name:'Administrador',userType:'admin',permissions:Object.values(m.View).filter(v=>v!==m.View.DEVELOPER_CENTER)},user={id:'u',companyId:'a',storeId:'one',roleId:'r',name:'User'};
+ for(const [name,rows]of Object.entries({companies:[company],stores:[store],roles:[role],sellers:[user],inventory:[],sales:[],layaways:[]}))m.records.set(name,rows);
+ const root='businessSummaryCompanies/a/stores/one';m.deferredSnapshots.add(root);
+ await act(async()=>{r=create(React.createElement(m.App,{initialSession:{user,role,company,store}}))});
+ assert.equal(m.connections.some(c=>c.q.name==='sales'),false,'pending metadata must not download the entire sales history');
+ const metadata=m.connections.find(c=>c.q.name===root);assert.ok(metadata);
+ await act(async()=>metadata.apply({exists:()=>true,data:()=>({companyId:'a',storeId:'one',schemaVersion:1,ready:true,paymentIndexVersion:1}),metadata:{fromCache:false}}));
+ const sales=m.connections.filter(c=>c.q.name==='sales'&&!c.q.id);assert.ok(sales.length);assert.ok(sales.every(c=>c.q.filters.some(f=>f.field==='createdAt')),'verified summaries start only range-filtered sales');
+ }finally{if(r)await act(async()=>r.unmount());await m.cleanup();restore()}
+});

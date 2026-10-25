@@ -4,12 +4,14 @@
 
 # Existing public production config remains the fallback; UI overrides are supported.
 [context.production.environment]
-  # Preserve the original dashboard and historical payment coverage until
-  # production aggregates and their server-only rules are verified.
+  # Preserve the original dashboard. Use only verified production aggregates;
+  # each store falls back to full sources until its payment index is ready.
   VITE_DASHBOARD_SUMMARY = "false"
-  VITE_DASHBOARD_MONTHLY_SALES = "false"
-  VITE_DASHBOARD_MONTHLY_CHART = "false"
-  VITE_DASHBOARD_INVENTORY_SUMMARY = "false"
+  VITE_DASHBOARD_MONTHLY_SALES = "true"
+  VITE_DASHBOARD_MONTHLY_CHART = "true"
+  VITE_DASHBOARD_INVENTORY_SUMMARY = "true"
+  VITE_DASHBOARD_PAYMENT_INDEX = "true"
+  # Pending explicit authorization for runtime token-signing IAM.
   VITE_VERIFIED_IDENTITY = "false"
   VITE_FINANCIAL_LEDGER_INDEXED = "true"
   VITE_STORE_SCOPED_LOADING = "true"

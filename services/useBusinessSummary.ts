@@ -27,6 +27,7 @@ export type BusinessRoot = {
   storeId: string;
   schemaVersion: number;
   ready: boolean;
+  paymentIndexVersion?: number;
   inventoryValue: number;
   inventoryUnits: number;
   updatedAt?: string;
