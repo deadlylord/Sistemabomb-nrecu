@@ -1,3 +1,4 @@
+import MeasurementSettings from './MeasurementSettings';
 import VersionHistoryModal from './VersionHistoryModal';
 import PlatformDevelopersPanel from './PlatformDevelopersPanel';
 import { PLATFORM_OWNER_USER_ID, type PlatformDeveloperGrant } from '../services/developerAccess';
@@ -524,6 +525,7 @@ const DeveloperCompanyContent: React.FC<DeveloperCenterViewProps & {
     <div className="space-y-6 animate-fade-in">
       <VersionHistoryModal isOpen={isVersionHistoryOpen} onClose={() => setIsVersionHistoryOpen(false)} />
       {isOwner && <PlatformDevelopersPanel sellers={sellers} stores={stores} grants={developerGrants} onAssign={onSetPlatformDeveloper} onCreate={onCreatePlatformDeveloper} />}
+      <MeasurementSettings />
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

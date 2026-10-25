@@ -92,7 +92,7 @@ test('original dashboard retains payment breakdown, editable history, price diff
     await act(async()=>renderer.update(React.createElement(Dashboard,compact)));
     assert.equal(JSON.stringify(renderer.toJSON()),originalTree,'all visible figures, payment references, categories, prices, history and available months stay identical with compact monthly data');
     await act(async()=>renderer.update(React.createElement(Dashboard,{...compact,activityLoading:true})));
-    const incomeLabel=renderer.root.findAllByType('p').find(p=>p.children.join('')==='Ingresos del período');assert.equal(incomeLabel.parent.findAllByType('p')[1].children.join(''),'Cargando…','pending sources must not be presented as zero income');
+    const incomeLabel=renderer.root.findAllByType('p').find(p=>p.children.join('')==='Ingresos del período');assert.equal(incomeLabel.parent.findAllByType('p')[1].children.join(''),'—','pending sources must not be presented as zero income');
     await act(async()=>renderer.update(React.createElement(Dashboard,compact)));
     const fresh={...extraLayaways[0],notes:'FRESH ORIGINAL NOTES',totalAmount:41000};let resolve;
     await act(async()=>renderer.update(React.createElement(Dashboard,{...compact,onResolveLayaway:()=>new Promise(r=>resolve=r)})));

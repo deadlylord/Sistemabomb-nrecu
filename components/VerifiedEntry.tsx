@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState } from "react";
 import { prepareLoginModules } from '../services/loginModules';
 import LoginView from "./LoginView";
-import { loginDiagnosticsEnabled } from "../services/identityConfig";
+import { useMeasurementVisibility } from "../services/diagnosticsVisibility";
 import { beginDiagnosticPhase, finishDiagnosticPhase, measureDiagnosticPhase } from "../services/readDiagnostics";
 const ReadDiagnosticsPanel = lazy(() => import("./ReadDiagnosticsPanel"));
 import type { loginVerified } from "../services/verifiedAuth";
@@ -11,6 +11,7 @@ export type VerifiedSession = Awaited<ReturnType<typeof loginVerified>>;
 // No operational component is imported until the user actually submits login.
 // Load its code concurrently with authentication, but mount only after success.
 export default function VerifiedEntry() {
+  const measurementVisible = useMeasurementVisibility();
   const [session, setSession] = useState<VerifiedSession | null>(null);
   const [App, setApp] = useState<React.ComponentType<{
     initialSession?: VerifiedSession;
@@ -44,6 +45,6 @@ export default function VerifiedEntry() {
   return (
     <><div className="min-h-screen flex items-center justify-center p-4">
       <LoginView onLogin={login} isAppReady onPrepareLogin={() => { prepareLoginModules().catch(() => {}); }} />
-    </div>{loginDiagnosticsEnabled && <Suspense fallback={null}><ReadDiagnosticsPanel available loginMode /></Suspense>}</>
+    </div>{measurementVisible && <Suspense fallback={null}><ReadDiagnosticsPanel available loginMode /></Suspense>}</>
   );
 }
