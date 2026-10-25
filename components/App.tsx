@@ -401,6 +401,17 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     setCeoSales([]); setCeoLayaways([]); setCeoPurchases([]); setCeoExpenses([]);
     setIsCeoCenterActivated(false); setCeoSelectedStoreId('all'); setIsReportsModalOpen(false);
     setAllSales([]); setAllLayaways([]); setAllIncidents([]); setGlobalInventoryForSearch([]);
+  }, [dataScope]);
+  // Store metadata may arrive after the active catalog. Keep authorized rows;
+  // the seller listener stays connected and will not resend an unchanged snapshot.
+  useEffect(() => {
+    for (const id of inventoryByStoreRef.current.keys()) {
+      if (!visibleStoreIds.has(id)) inventoryByStoreRef.current.delete(id);
+    }
+    setGlobalInventoryForSearch(previous => {
+      const next = previous.filter(product => visibleStoreIds.has(product.storeId));
+      return next.length === previous.length ? previous : next;
+    });
   }, [dataScope, companyStoreKey]);
   const readMeasurementUser = useRef(currentUser?.id);
   useEffect(() => {
@@ -599,7 +610,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       if (currentStoreIdRef.current === storeId) setInventory(storeInventory);
     }, error => console.error(`Error loading inventory for store ${storeId}:`, error)));
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
-  }, [isOperationalView, isAdmin, currentUser?.id, inventoryStoreKey, dataScope, isAuthReady, companyStoreKey]);
+  }, [isOperationalView, isAdmin, currentUser?.id, inventoryStoreKey, dataScope, isAuthReady]);
 
 
   const liveAnalytics = !!currentUser && isAdmin && (isReportsModalOpen || !scopedStoreLoadingEnabled && currentView === View.DASHBOARD && !summaryOnly);

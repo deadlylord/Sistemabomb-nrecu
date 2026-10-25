@@ -28,7 +28,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, isAppReady, onPrepareLog
   };
 
   return (
-    <div className="bg-white/10 dark:bg-slate-900/50 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl shadow-black/20 w-full max-w-sm text-center animate-fade-in border border-white/20 dark:border-slate-800">
+    <div className="vestika-login-panel bg-white/10 dark:bg-slate-900/50 backdrop-blur-2xl p-8 rounded-3xl shadow-2xl shadow-black/20 w-full max-w-sm text-center animate-fade-in border border-white/20 dark:border-slate-800">
       <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-slate-900/60 shadow-2xl ring-1 ring-white/10 p-2 overflow-hidden">
         <img 
           src="/assets/vestika.png?v=1.1.107" 

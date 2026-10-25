@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep the touch login painted without a retained opacity/blur layer.
+   No business view, desktop animation or form control changes. */
+@media (hover: none) and (pointer: coarse) {
+  .vestika-login-panel.animate-fade-in {
+    animation: none;
+    opacity: 1;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* Existing application and print overrides. */
     :root {
       --color-accent: 255 0 127;
