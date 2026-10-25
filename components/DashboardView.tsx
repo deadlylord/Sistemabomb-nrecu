@@ -11,9 +11,9 @@ import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, StockTake, Expense } from '../types';
+import { Store, Product, Sale, Layaway, Seller, Role, View, Category, PaymentMethod, DailyNote, Incident, IncidentStatus, IncidentType, Payment, CartItem, Purchase, Expense } from '../types';
 import { formatCOP, COMMISSION_RATES } from '../constants';
-import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, AlertTriangleIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
+import { DollarIcon, PackageIcon, ShareIcon, SwapIcon, CrossIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, EditIcon, TrashIcon, PrintIcon, TruckIcon, SparklesIcon, ChartBarIcon, ReceiptIcon, TagIcon, UsersIcon, ClipboardListIcon, TagIcon as PriceIcon } from './Icons';
 import { EditSaleModal } from './EditSaleModal';
 import EditLayawayModal from './EditLayawayModal';
 import { analyzeSalesData } from '../services/geminiService';
@@ -52,7 +52,6 @@ interface DashboardViewProps {
   purchases: Purchase[];
   allSales: Sale[];
   allInventory: Product[];
-  allStockTakes: StockTake[];
 }
 
 interface UnifiedTransaction {
@@ -109,7 +108,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const {
     companyId, stores, allLayaways: rawAllLayaways, allIncidents: rawAllIncidents, currentUser, roles, onSwitchStore, onNavigate, onOpenReports,
     sales: rawSales, layaways: rawLayaways, expenses: rawExpenses, inventory: rawInventory, currentStore, sellers, onUpdateSale, onUpdateLayaway, onDeleteSale, onReprintSale,
-    onOpenVerification, purchases: rawPurchases, allSales: rawAllSales, allInventory: rawAllInventory, categories: rawCategories, allStockTakes: rawAllStockTakes
+    onOpenVerification, purchases: rawPurchases, allSales: rawAllSales, allInventory: rawAllInventory, categories: rawCategories
   } = props;
   const scope = useMemo(() => analyticsScope(companyId, stores), [companyId, stores]);
   const storeScope = useMemo(() => ({ companyId, storeIds: new Set(currentStore && scope.storeIds.has(currentStore.id) ? [currentStore.id] : []) }), [companyId, currentStore?.id, scope]);
@@ -123,63 +122,12 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const categories = useMemo(() => selectAnalyticsRows<Category>('categories', rawCategories, scope), [rawCategories, scope]);
   const allLayaways = useMemo(() => selectAnalyticsRows<Layaway>('layaways', rawAllLayaways, scope), [rawAllLayaways, scope]);
   const allIncidents = useMemo(() => selectAnalyticsRows<Incident>('incidents', rawAllIncidents, scope), [rawAllIncidents, scope]);
-  const allStockTakes = useMemo(() => selectAnalyticsRows<StockTake>('stockTakes', rawAllStockTakes, scope), [rawAllStockTakes, scope]);
 
 
   const isAdmin = useMemo(() => {
     const adminRole = roles.find(r => (r.name || '').toLowerCase() === 'administrator' || (r.name || '').toLowerCase() === 'administrador');
     return currentUser.roleId === adminRole?.id || currentUser.roleId === '1';
   }, [currentUser, roles]);
-
-  const latestStockTakeInconsistency = useMemo(() => {
-    const pendingIncidents = allIncidents.filter(i => 
-        i.type === IncidentType.INVENTORY_INCONSISTENCY && 
-        i.status === IncidentStatus.REGISTRADO &&
-        i.storeId === currentStore?.id
-    );
-
-    if (!allStockTakes || allStockTakes.length === 0) {
-        // Fallback to incidents if no stock takes are loaded yet
-        if (pendingIncidents.length > 0) {
-            return {
-                count: pendingIncidents.length,
-                date: pendingIncidents[0].createdAt,
-                seller: pendingIncidents[0].sellerName,
-                isFromIncident: true
-            };
-        }
-        return null;
-    }
-    
-    // Filter by current store and sort by date
-    const storeStockTakes = [...allStockTakes]
-        .filter(st => st.storeId === currentStore?.id)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    if (storeStockTakes.length === 0) {
-        if (pendingIncidents.length > 0) {
-            return {
-                count: pendingIncidents.length,
-                date: pendingIncidents[0].createdAt,
-                seller: pendingIncidents[0].sellerName,
-                isFromIncident: true
-            };
-        }
-        return null;
-    }
-    
-    const latest = storeStockTakes[0];
-    const inconsistencies = latest.verification.filter(v => v.difference !== 0);
-    
-    // If the latest stock take is clean, we don't show the alert even if there are old incidents
-    // as requested: "solo tenga en cuenta el último conteo"
-    return inconsistencies.length > 0 ? {
-        count: inconsistencies.length,
-        date: latest.createdAt,
-        seller: latest.seller,
-        isFromIncident: false
-    } : null;
-  }, [allStockTakes, currentStore?.id, allIncidents]);
 
   useEffect(() => { if (props.initialSection) document.getElementById(props.initialSection)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [props.initialSection]);
   const today = new Date();
@@ -1265,7 +1213,6 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
           <button onClick={() => scrollToSection('sales-history')} className="px-2 py-1 text-[11px] font-semibold text-accent">Historial</button>
           <button onClick={() => scrollToSection('sales-chart')} className="px-2 py-1 text-[11px] font-semibold text-accent">Gráficos</button>
           <button onClick={onOpenVerification} className="px-2 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">Inventario</button>
-          {isAdmin && latestStockTakeInconsistency && <button onClick={() => onNavigate(View.STOCK_TAKE_HISTORY)} className="px-1 py-1 text-[11px] font-bold text-red-600">Descuadre</button>}
         </div>
       </div>
       {/* Top Control Panel */}
@@ -1290,16 +1237,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                         <span>Verificar Inventario</span>
                     </button>
 
-                    {isAdmin && latestStockTakeInconsistency && (
-                        <div 
-                            onClick={() => onNavigate(View.STOCK_TAKE_HISTORY)}
-                            className="flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-red-600 transition-all animate-pulse shadow-lg shadow-red-500/30"
-                            title={`Último conteo por ${latestStockTakeInconsistency.seller} tiene descuadres`}
-                        >
-                            <AlertTriangleIcon className="w-4 h-4" />
-                            <span className="text-xs font-black uppercase tracking-tighter">Descuadre Detectado</span>
-                        </div>
-                    )}
+
                 </div>
             </div>
             <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 min-w-0 w-full lg:w-auto rounded-xl bg-gray-50 dark:bg-gray-800/50 p-1.5"><button onClick={handlePreviousDay} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"><ChevronLeftIcon className="w-4 h-4" /></button><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none min-w-0 w-full sm:w-32 text-center"/><span className="text-gray-400">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm border-b border-gray-300 dark:border-gray-700 focus:border-accent outline-none w-32"/><button onClick={handleNextDay} disabled={isNextDayDisabled} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button></div>

@@ -16,7 +16,7 @@ test('summary entry avoids sales and inventory, opens full tools on demand, and 
  assert.equal(screen('BusinessOverview').props.store.id,'small');assert.equal(r.root.findAllByProps({screen:'DashboardView'}).length,0);
  for(const name of ['inventory','sales','expenses','stockTakes','purchases'])assert.equal(live(name).length,0,name);
  await act(async()=>screen('BusinessOverview').props.onOpenDetails('price-analysis'));
- assert.equal(screen('DashboardView').props.initialSection,'price-analysis');for(const name of ['inventory','sales','expenses','stockTakes'])assert.equal(live(name).length,1);
+ assert.equal(screen('DashboardView').props.initialSection,'price-analysis');for(const name of ['inventory','sales','expenses'])assert.equal(live(name).length,1);assert.equal(live('stockTakes').length,0);
  assert.equal(screen('DashboardView').props.sales[0].id,'sale');
  await act(async()=>r.root.findAllByType('button').find(b=>b.children.join('')==='Volver al resumen').props.onClick());
  assert.ok(screen('BusinessOverview'));assert.equal(live('inventory').length,0);assert.equal(live('sales').length,0);
