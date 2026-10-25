@@ -1,6 +1,6 @@
 import { resolveFirebaseConfig } from './services/firebaseConfig';
 import { initializeApp } from "firebase/app";
-import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectAuthEmulator, getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence } from "firebase/auth";
 import {
   connectFirestoreEmulator,
   clearIndexedDbPersistence,
@@ -30,7 +30,13 @@ if (import.meta.env.VITE_VERIFIED_IDENTITY === 'true') {
   clearIndexedDbPersistence(db).catch(() => console.warn('Cierra otras pestañas antiguas de staging para limpiar su caché anterior.'));
 }
 
-export const auth = getAuth(app);
+// Verified staging uses custom tokens only. Keep getAuth's persistence order,
+// but avoid its proactive popup/redirect iframe on mobile and Safari.
+// Session restoration, token refresh and cross-tab synchronization remain on.
+const customTokenOnly = appEnv === 'staging' && firebaseConfig.projectId === 'vestika-staging' && import.meta.env.VITE_VERIFIED_IDENTITY === 'true';
+export const auth = customTokenOnly ? initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence]
+}) : getAuth(app);
 export const storage = getStorage(app);
 
 if (useEmulators) {
