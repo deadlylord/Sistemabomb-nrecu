@@ -2,6 +2,15 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Cambio local 2026-10-27 — cruces entre sedes, versión 1.1.196
+
+- Preparado en `staging`; Carlos autorizó publicar en staging. Subida a GitHub autorizada; despliegue y versión servida pendientes de verificación (el acceso al sitio y API de Netlify devuelve HTTP 403 desde este entorno). Solo presentación del libro de caja/conciliación: sede relacionada visible, pagos identificados por dirección y préstamos cuando el concepto los identifica expresamente. Los cruces ambiguos dicen «Cruce con [sede]»; no se infiere un préstamo solo por el signo del importe.
+- Los pagos generados por la aplicación muestran una descripción corta y «Ver detalle del pago» con el concepto original completo. En la confirmación, las fechas quedan en «Ver deudas incluidas en el pago». Se conserva texto libre, registros históricos, referencias, exportaciones, saldos y lógica de guardado. No se añaden lecturas Firestore.
+- Nuevos archivos: `services/financialRecordPresentation.ts`, `components/FinancialRecordConcept.tsx` y `tests/financialRecordPresentation.test.mjs`. Integración en `FinancialReconciliationView.tsx`; versión, historial y caché actualizados.
+- Verificaciones con `TZ=America/Bogota`: suite completa 248/250 aprobadas; persisten los dos fallos de baseline (dependencia Functions `@google-cloud/firestore` ausente y empaquetado ESM de React en `sharedRecordAccess`). Las cinco pruebas nuevas aprueban. Build y `git diff --check` aprobados.
+- Typecheck conserva exactamente tres errores previos en `AppErrorBoundary.tsx` (`setState`/`props`), comprobados también sobre la copia sin cambios; no se modificó ese componente.
+- Sin cambios en Firebase, reglas, permisos, datos ni cálculos. Pendiente validación visual en móvil y PC tras publicar en staging: revisar cruces existentes, pagos salientes/entrantes, préstamos explícitos y abrir detalle sin seleccionar accidentalmente la fila. No se afirma una comprobación visual de navegador.
+
 ## Decisiones vigentes
 - Repositorio principal: https://github.com/deadlylord/Sistemabomb-nrecu (conservar nombre actual).
 - Aplicación Android en repositorio separado `deadlylord/Vestika-Android`.

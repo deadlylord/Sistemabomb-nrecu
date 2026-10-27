@@ -1,3 +1,4 @@
+import FinancialRecordConcept from './FinancialRecordConcept';
 import ManualEntryModalShell from './ManualEntryModalShell';
 import { useReconciliationSources } from '../services/useReconciliationSources';
 import { beginDiagnosticPhase, finishDiagnosticPhase, safeDiagnosticErrorCode } from '../services/readDiagnostics';
@@ -2107,8 +2108,8 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                                     {methodLabel}
                                                                 </span>
                                                             </td>
-                                                            <td className="p-2 sm:p-3 font-semibold text-gray-800 dark:text-gray-200 max-w-[200px] sm:max-w-xs truncate" title={record.description}>
-                                                                {record.description}
+                                                            <td className="p-2 sm:p-3 text-xs max-w-[200px] sm:max-w-xs">
+                                                                <FinancialRecordConcept record={record} stores={filteredStores} />
                                                             </td>
                                                             <td className="p-2 sm:p-3 whitespace-nowrap">
                                                                 <span className="text-[8px] sm:text-[9px] font-black text-accent uppercase bg-accent/5 px-2 py-0.5 rounded">
@@ -2502,7 +2503,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                                                 </div>
                                                                 <span className={`text-[7px] font-black uppercase px-1 border border-current rounded ${methodColor}`}>{methodLabel}</span>
                                                             </div>
-                                                            <span className="text-gray-600 dark:text-gray-400 truncate font-bold">{record.description}</span>
+                                                            <FinancialRecordConcept record={record} stores={filteredStores} />
                                                             {record.subCategory && <span className="text-[7px] text-accent uppercase font-black">{record.subCategory}</span>}
                                                         </div>
                                                         <div className="flex flex-col items-end shrink-0">
@@ -3223,14 +3224,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                                             </td>
                                             <td className="p-3 sm:p-4 min-w-[120px] sm:min-w-[200px]">
                                                 <div className="flex flex-col gap-1">
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <p className="font-bold text-gray-800 dark:text-gray-200 uppercase text-[9px] sm:text-[11px] leading-snug break-words flex-grow">{record.description}</p>
-                                                        {record.debtStoreId && (
-                                                            <span className="px-1.5 py-0.5 bg-yellow-500 text-white font-black text-[7px] rounded uppercase shrink-0 whitespace-nowrap">
-                                                                CRUCE {filteredStores.find(s => s.id === record.debtStoreId)?.name || 'SEDE'}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                    <FinancialRecordConcept record={record} stores={filteredStores} />
                                                     <p className="text-[8px] text-gray-400">Por: {record.registeredBy}</p>
                                                 </div>
                                             </td>
@@ -3585,7 +3579,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
                              </div>
                              
                              <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl space-y-1">
-                                 <p className="text-[9px] font-black text-gray-400 uppercase">Referencia de deuda: <span className="text-accent">{paymentSummary.debtReferenceDates}</span></p>
+                                 <details>
+                                     <summary className="cursor-pointer text-xs font-bold text-accent py-1">Ver deudas incluidas en el pago</summary>
+                                     <p className="text-xs text-gray-600 dark:text-gray-300 break-words mt-1">{paymentSummary.debtReferenceDates}</p>
+                                 </details>
                              </div>
                          </div>
                          
