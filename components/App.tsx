@@ -1457,38 +1457,48 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       }
       return;
     }
-    const batch = writeBatch(db);
-    const incidentRef = doc(db, 'incidents', incidentId);
-    let newStatus: IncidentStatus;
-    try {
-        switch (incident.type) {
-          case IncidentType.DAMAGED:
-            if (incident.status !== IncidentStatus.DAÑADO_REPORTADO) return;
-            newStatus = IncidentStatus.EN_ARREGLO_CAMBIO;
-            if (!incident.productId) throw new Error('No se especificó un producto.');
-            const productToDamageRef = doc(db, 'inventory', incident.productId);
-            batch.update(productToDamageRef, { stock: increment(-1) });
-
-            const damageLogRef = doc(collection(db, 'productHistory'));
-            const damageLog: ProductHistoryLog = {
-                id: damageLogRef.id,
-                productId: incident.productId,
-                productName: incident.productName || 'Producto',
-                storeId: incident.storeId,
-                changedBy: currentUser.name,
-                timestamp: new Date().toISOString(),
-                changeType: ProductChangeType.DAMAGED,
-                stockDelta: -1,
-                details: `Prenda reportada como dañada. Stock rebajado: -1.`
-            };
-            batch.set(damageLogRef, damageLog);
-            break;
-          case IncidentType.PRODUCT_EXCHANGE:
-            if (incident.status !== IncidentStatus.CAMBIO_SOLICITADO) return;
-            newStatus = IncidentStatus.CAMBIO_PROCESADO;
-            
-            incident.returnedItems?.forEach(item => { 
-                batch.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) }); 
+    if (incident.type === IncidentType.PRODUCT_EXCHANGE) {
+      try {
+        if (recordReadOnly || (!isAdmin && !isDeveloper)) throw new Error('No tienes permiso para aprobar cambios.');
+        const approvalContext = operationContextRef.current;
+        const incidentRef = doc(db, 'incidents', incidentId);
+        await runTransaction(db, async transaction => {
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+          const snapshot = await transaction.get(incidentRef);
+          if (!snapshot.exists()) throw new Error('La novedad ya no existe.');
+          // The persisted state is the receipt: transaction conflicts retry against
+          // the committed status, so another device cannot process it again.
+          const incident = { ...snapshot.data(), id: incidentId } as Incident;
+          const scope = { companyId: operationalCompanyId, storeIds: new Set([currentStoreId!]) };
+          assertTenantData('incidents', incident, scope);
+          if (incident.type !== IncidentType.PRODUCT_EXCHANGE || incident.status !== IncidentStatus.CAMBIO_SOLICITADO) return;
+          const deltas = new Map<string, number>();
+          for (const [items, sign] of [[incident.returnedItems || [], 1], [incident.takenItems || [], -1]] as const) {
+            for (const item of items) {
+              if (!item.productId || !Number.isSafeInteger(item.quantity) || item.quantity <= 0) throw new Error('Revisa las cantidades del cambio.');
+              deltas.set(item.productId, (deltas.get(item.productId) || 0) + sign * item.quantity);
+            }
+          }
+          if (!deltas.size) throw new Error('El cambio no contiene prendas.');
+          for (const [id, delta] of deltas) {
+            const productSnapshot = await transaction.get(doc(db, 'inventory', id));
+            if (!productSnapshot.exists()) throw new Error('No se encontró una prenda del cambio.');
+            const product = productSnapshot.data();
+            assertTenantData('inventory', product, scope);
+            if (product.storeId !== incident.storeId) throw new Error('La prenda pertenece a otra sede.');
+            if (!Number.isFinite(product.stock) || product.stock + delta < 0) throw new Error('No hay stock suficiente para aprobar el cambio.');
+          }
+          let savedSale: Sale | undefined;
+          if (incident.originalSaleId) {
+            const saleSnapshot = await transaction.get(doc(db, 'sales', incident.originalSaleId));
+            if (!saleSnapshot.exists()) throw new Error('No se encontró la venta original del cambio.');
+            savedSale = { ...saleSnapshot.data(), id: incident.originalSaleId } as Sale;
+            assertTenantData('sales', savedSale, scope);
+            if (savedSale.storeId !== incident.storeId) throw new Error('La venta pertenece a otra sede.');
+          }
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+            incident.returnedItems?.forEach(item => {
+                transaction.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) });
                 const exchangeInLogRef = doc(collection(db, 'productHistory'));
                 const exchangeInLog: ProductHistoryLog = {
                     id: exchangeInLogRef.id,
@@ -1501,10 +1511,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                     stockDelta: item.quantity,
                     details: `Devolución por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: +${item.quantity}`
                 };
-                batch.set(exchangeInLogRef, exchangeInLog);
+                transaction.set(exchangeInLogRef, exchangeInLog);
             });
-            incident.takenItems?.forEach(item => { 
-                batch.update(doc(db, 'inventory', item.productId), { stock: increment(-item.quantity) }); 
+            incident.takenItems?.forEach(item => {
+                transaction.update(doc(db, 'inventory', item.productId), { stock: increment(-item.quantity) });
                 const exchangeOutLogRef = doc(collection(db, 'productHistory'));
                 const exchangeOutLog: ProductHistoryLog = {
                     id: exchangeOutLogRef.id,
@@ -1517,15 +1527,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                     stockDelta: -item.quantity,
                     details: `Salida por cambio (Factura #${incident.originalSaleInvoiceNumber}). Stock: -${item.quantity}`
                 };
-                batch.set(exchangeOutLogRef, exchangeOutLog);
+                transaction.set(exchangeOutLogRef, exchangeOutLog);
             });
 
             if (incident.originalSaleId) {
-                const originalSale = allSales.find(s => s.id === incident.originalSaleId) || sales.find(s => s.id === incident.originalSaleId);
+                const originalSale = savedSale;
                 if (originalSale) {
                     const saleRef = doc(db, 'sales', originalSale.id);
                     let updatedItems = [...originalSale.items];
-                    
+
                     incident.returnedItems?.forEach(ret => {
                         const idx = updatedItems.findIndex(i => i.id === ret.productId);
                         if (idx !== -1) {
@@ -1555,9 +1565,47 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                     });
 
                     const newTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-                    batch.update(saleRef, { items: updatedItems, totalAmount: newTotal });
+                    transaction.update(saleRef, { items: updatedItems, totalAmount: newTotal });
                 }
             }
+
+          const now = new Date().toISOString();
+          transaction.update(incidentRef, {
+            status: IncidentStatus.CAMBIO_PROCESADO, resolutionDate: now,
+            history: [...(incident.history || []), { status: IncidentStatus.CAMBIO_PROCESADO, changedBy: currentUser.name, timestamp: now, notes: 'Novedad aprobada y procesada' }]
+          });
+        });
+      } catch (error: any) {
+        console.error('Error approving exchange incident:', error);
+        alert(`Error al aprobar: ${error.message}`);
+      }
+      return;
+    }
+    const batch = writeBatch(db);
+    const incidentRef = doc(db, 'incidents', incidentId);
+    let newStatus: IncidentStatus;
+    try {
+        switch (incident.type) {
+          case IncidentType.DAMAGED:
+            if (incident.status !== IncidentStatus.DAÑADO_REPORTADO) return;
+            newStatus = IncidentStatus.EN_ARREGLO_CAMBIO;
+            if (!incident.productId) throw new Error('No se especificó un producto.');
+            const productToDamageRef = doc(db, 'inventory', incident.productId);
+            batch.update(productToDamageRef, { stock: increment(-1) });
+
+            const damageLogRef = doc(collection(db, 'productHistory'));
+            const damageLog: ProductHistoryLog = {
+                id: damageLogRef.id,
+                productId: incident.productId,
+                productName: incident.productName || 'Producto',
+                storeId: incident.storeId,
+                changedBy: currentUser.name,
+                timestamp: new Date().toISOString(),
+                changeType: ProductChangeType.DAMAGED,
+                stockDelta: -1,
+                details: `Prenda reportada como dañada. Stock rebajado: -1.`
+            };
+            batch.set(damageLogRef, damageLog);
             break;
           case IncidentType.INVENTORY_TRANSFER_REQUEST:
             if (incident.status !== IncidentStatus.TRASLADO_SOLICITADO) return;

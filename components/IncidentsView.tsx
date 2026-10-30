@@ -3,7 +3,7 @@ import { isPlatformOwner } from '../services/developerAccess';
 import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
 import { PlusCircleIcon, CheckIcon, SwapIcon, SearchIcon, EditIcon, TrashIcon, CrossIcon, HistoryIcon } from './Icons';
@@ -25,13 +25,23 @@ interface IncidentsViewProps {
   // FIX: Added 'customers' prop to pass customer data down to child components.
   customers: Customer[];
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
-  onApproveIncident: (incidentId: string) => void;
+  onApproveIncident: (incidentId: string) => void | Promise<void>;
   onResolveIncident: (incidentId: string, receivedProductId?: string) => Promise<void>;
   onUpdateIncident: (incident: Incident) => void;
   onDeleteIncident: (incidentId: string) => void;
 }
 
 const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
+  const approvalsInFlight = useRef(new Set<string>());
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+  const approveIncident = async (id: string) => {
+    if (readOnly || approvalsInFlight.current.has(id)) return;
+    approvalsInFlight.current.add(id);
+    setApprovingIds(new Set(approvalsInFlight.current));
+    try { await onApproveIncident(id); }
+    catch (error) { alert(error instanceof Error ? error.message : 'No se pudo aprobar la novedad.'); }
+    finally { approvalsInFlight.current.delete(id); setApprovingIds(new Set(approvalsInFlight.current)); }
+  };
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
   const incidents = selectAnalyticsRows<Incident>('incidents', rawIncidents, scope).filter(incident =>
@@ -272,7 +282,7 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
                     <td className="p-3 text-center">
                       <div className="flex justify-center items-center space-x-1">
                         {canBeApproved && (
-                           <button onClick={() => onApproveIncident(incident.id)} className="text-green-500 hover:text-green-400 p-2 rounded-full hover:bg-green-500/10 transition-colors" title="Aprobar y Procesar">
+                           <button disabled={approvingIds.has(incident.id)} aria-busy={approvingIds.has(incident.id)} onClick={() => approveIncident(incident.id)} className="text-green-500 hover:text-green-400 p-2 rounded-full hover:bg-green-500/10 transition-colors" title={approvingIds.has(incident.id) ? "Guardando cambio…" : "Aprobar y Procesar"}>
                               <CheckIcon />
                             </button>
                         )}
