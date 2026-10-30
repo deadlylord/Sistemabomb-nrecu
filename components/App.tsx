@@ -1,3 +1,4 @@
+import { pendingTransferId, completeTransferId } from '../services/transferCheckout';
 import { pendingSaleId, completeSaleId, saleFingerprint } from '../services/saleCheckout';
 import { useMeasurementVisibility } from '../services/diagnosticsVisibility';
 import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext, measureDiagnosticPhase } from '../services/readDiagnostics';
@@ -178,6 +179,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
+  const transfersInFlight = useRef(new Set<string>());
   const salesInFlight = useRef(new Set<string>());
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
@@ -1249,41 +1251,71 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       }
   };
 
-  const handleInventoryTransfer = async (data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }, existingBatch?: WriteBatch) => {
-    if (!currentUser) return;
-    const batch = existingBatch || writeBatch(db);
+  // Used by both direct transfers and approved requests. The transaction reads
+  // both products again; an intervening sale/transfer forces a fresh stock check.
+  const applyInventoryTransfer = async (transaction: any, data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string }, transferRef: any) => {
+    const { fromStoreId, toStoreId, productId, quantity, sellerName } = data;
+    if (!currentUser || (!isAdmin && !isDeveloper) || recordReadOnly) throw new Error('No tienes permiso para realizar traslados.');
+    if (!visibleStoreIds.has(fromStoreId) || !visibleStoreIds.has(toStoreId) || fromStoreId === toStoreId) throw new Error('Origen y destino deben ser sedes distintas de la empresa activa.');
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new Error('La cantidad debe ser un número entero positivo.');
+    const scope = { companyId: operationalCompanyId, storeIds: visibleStoreIds };
+    const receipt = await transaction.get(transferRef);
+    if (receipt.exists()) {
+      const saved = receipt.data();
+      assertTenantData('inventoryTransfers', saved, scope);
+      if (saved.processedByUserId !== currentUser.id) throw new Error('Este traslado pertenece a otra operación.');
+      return saved.fromStoreId === fromStoreId && saved.toStoreId === toStoreId && saved.productId === productId && saved.quantity === quantity;
+    }
+    const fromRef = doc(db, 'inventory', productId);
+    const fromSnapshot = await transaction.get(fromRef);
+    if (!fromSnapshot.exists()) throw new Error('No se encontró el producto de origen.');
+    const fromProduct = { ...fromSnapshot.data(), id: fromSnapshot.id } as Product;
+    assertTenantData('inventory', fromProduct, scope);
+    if (fromProduct.storeId !== fromStoreId) throw new Error('El producto no pertenece a la sede de origen.');
+    if (!Number.isFinite(fromProduct.stock) || fromProduct.stock < quantity) throw new Error('Stock insuficiente. Otra operación pudo cambiar las existencias.');
+    // Web transactions read documents, not queries. Resolve the legacy name link
+    // then re-read and validate that destination within the transaction.
+    const matches = await getDocs(query(collection(db, 'inventory'), where('name', '==', fromProduct.name), where('storeId', '==', toStoreId), limit(2)));
+    if (matches.docs.length !== 1) throw new Error(matches.empty ? 'El producto debe existir en la sede de destino.' : 'Hay varios productos con ese nombre en destino. Revisa cuál corresponde antes de trasladar.');
+    const toRef = doc(db, 'inventory', matches.docs[0].id);
+    const toSnapshot = await transaction.get(toRef);
+    if (!toSnapshot.exists()) throw new Error('El producto de destino ya no existe.');
+    const toProduct = { ...toSnapshot.data(), id: toSnapshot.id } as Product;
+    assertTenantData('inventory', toProduct, scope);
+    if (toProduct.storeId !== toStoreId || toProduct.name !== fromProduct.name || !Number.isFinite(toProduct.stock)) throw new Error('El producto de destino cambió o no pertenece a la sede indicada.');
+    transaction.update(fromRef, { stock: increment(-quantity) });
+    transaction.update(toRef, { stock: increment(quantity), ...(toProduct.isDisabled ? { isDisabled: false } : {}) });
+    transaction.set(transferRef, {
+      id: transferRef.id, companyId: operationalCompanyId, fromStoreId, toStoreId, productId, toProductId: toProduct.id,
+      productName: fromProduct.name, quantity, productCost: fromProduct.cost, totalCost: fromProduct.cost * quantity,
+      createdAt: new Date().toISOString(), sellerName, processedByUserId: currentUser.id, settled: false
+    });
+    const outLog = createProductHistoryLog(fromProduct, sellerName, ProductChangeType.TRANSFER_OUT, `-${quantity} a ${getStoreName(toStoreId)} (antes: ${fromProduct.stock})`, -quantity);
+    const inLog = createProductHistoryLog(toProduct, sellerName, ProductChangeType.TRANSFER_IN, `+${quantity} desde ${getStoreName(fromStoreId)} (antes: ${toProduct.stock})`, quantity);
+    transaction.set(doc(db, 'productHistory', outLog.id), { ...outLog, transferId: transferRef.id });
+    transaction.set(doc(db, 'productHistory', inLog.id), { ...inLog, transferId: transferRef.id });
+    return true;
+  };
+
+  const handleInventoryTransfer = async (data: { operationId?: string; fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string }) => {
+    if (operationContextRef.current !== contextAtRender || !currentUser) throw new Error('La sesión o sede cambió. Vuelve a abrir el traslado.');
+    const startedContext = operationContextRef.current;
+    const scope = JSON.stringify([currentUser.id, operationalCompanyId, data.fromStoreId, data.toStoreId]);
+    if (transfersInFlight.current.has(scope)) throw new Error('El traslado se está guardando. Espera la confirmación.');
+    transfersInFlight.current.add(scope);
     try {
-      const { fromStoreId, toStoreId, productId, quantity, sellerName } = data;
-      if (!visibleStoreIds.has(fromStoreId) || !visibleStoreIds.has(toStoreId)) {
-        throw new Error('Traslado bloqueado: origen y destino deben pertenecer a la empresa activa.');
-      }
-      const fromProductRef = doc(db, 'inventory', productId);
-      const fromProductDoc = await getDoc(fromProductRef);
-      if (!fromProductDoc.exists()) throw new Error("Producto no encontrado en la tienda de origen.");
-      const fromProduct = { id: fromProductDoc.id, ...fromProductDoc.data() } as Product;
-      if (!isOwnInventory(fromProduct) || fromProduct.storeId !== fromStoreId) throw new Error('El producto no pertenece a la sede de origen.');
-      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('La cantidad debe ser positiva.');
-      if (fromProduct.stock < quantity) throw new Error("Stock insuficiente.");
-      const toProductQuery = query(collection(db, 'inventory'), where('name', '==', fromProduct.name), where('storeId', '==', toStoreId), limit(1));
-      const toProductSnapshot = await getDocs(toProductQuery);
-      if (toProductSnapshot.empty) throw new Error(`Producto "${fromProduct.name}" debe existir en la tienda de destino antes de hacer el traslado.`);
-      const toProductDoc = toProductSnapshot.docs[0];
-      const toProduct = { id: toProductDoc.id, ...toProductDoc.data() } as Product;
-      if (!isOwnInventory(toProduct) || toProduct.storeId !== toStoreId) throw new Error('Producto destino no autorizado.');
-      const toProductRef = toProductDoc.ref;
-      batch.update(fromProductRef, { stock: increment(-quantity) });
-      const updateData: { [key: string]: any } = { stock: increment(quantity) };
-      if (toProduct.isDisabled) updateData.isDisabled = false;
-      batch.update(toProductRef, updateData);
-      const newTransferRef = doc(collection(db, 'inventoryTransfers'));
-      const newTransfer: Omit<InventoryTransfer, 'id'> = { fromStoreId, toStoreId, productId, productName: fromProduct.name, quantity, productCost: fromProduct.cost, totalCost: fromProduct.cost * quantity, createdAt: new Date().toISOString(), sellerName, settled: false };
-      batch.set(newTransferRef, newTransfer);
-      const outLog = createProductHistoryLog(fromProduct, sellerName, ProductChangeType.TRANSFER_OUT, `-${quantity} a ${getStoreName(toStoreId)} (antes: ${fromProduct.stock})`, -quantity);
-      batch.set(doc(db, 'productHistory', outLog.id), outLog);
-      const inLog = createProductHistoryLog(toProduct, sellerName, ProductChangeType.TRANSFER_IN, `+${quantity} desde ${getStoreName(fromStoreId)} (antes: ${toProduct.stock})`, quantity);
-      batch.set(doc(db, 'productHistory', inLog.id), inLog);
-      if (!existingBatch) { await batch.commit(); alert('Traslado realizado con éxito.'); }
-    } catch (error: any) { console.error("Error durante el traslado de inventario:", error); throw error; }
+      const operationId = pendingTransferId(scope, data.operationId);
+      const transferRef = doc(db, 'inventoryTransfers', `transfer_${operationId}`);
+      const matches = await runTransaction(db, async transaction => {
+        if (operationContextRef.current !== startedContext) throw new Error('La sede cambió. Vuelve a abrir el traslado.');
+        const result = await applyInventoryTransfer(transaction, data, transferRef);
+        if (operationContextRef.current !== startedContext) throw new Error('La sede cambió. Vuelve a abrir el traslado.');
+        return result;
+      });
+      completeTransferId(scope, operationId);
+      if (!matches) throw new Error('El traslado anterior ya se registró con otros datos. Revisa el historial antes de crear otro.');
+      if (operationContextRef.current === startedContext) alert('Traslado confirmado.');
+    } finally { transfersInFlight.current.delete(scope); }
   };
 
   const handleDeleteTransfer = async (transferId: string) => {
@@ -1611,6 +1643,37 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       }
       return;
     }
+    if (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST) {
+      try {
+        const approvalContext = operationContextRef.current;
+        const incidentRef = doc(db, 'incidents', incidentId);
+        await runTransaction(db, async transaction => {
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+          const snapshot = await transaction.get(incidentRef);
+          if (!snapshot.exists()) throw new Error('La solicitud ya no existe.');
+          const saved = { ...snapshot.data(), id: incidentId } as Incident;
+          assertTenantData('incidents', saved, { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+          if (saved.storeId !== currentStoreId) throw new Error('La solicitud pertenece a otra sede.');
+          if (saved.type !== IncidentType.INVENTORY_TRANSFER_REQUEST || saved.status !== IncidentStatus.TRASLADO_SOLICITADO) return;
+          if (!saved.fromStoreId || !saved.toStoreId || !saved.productId || !saved.quantity) throw new Error('La solicitud de traslado está incompleta.');
+          const matches = await applyInventoryTransfer(transaction, {
+            fromStoreId: saved.fromStoreId, toStoreId: saved.toStoreId, productId: saved.productId,
+            quantity: saved.quantity, sellerName: saved.sellerName
+          }, doc(db, 'inventoryTransfers', `request_${incidentId}`));
+          if (!matches) throw new Error('La solicitud ya tiene un traslado registrado con otros datos.');
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
+          const now = new Date().toISOString();
+          transaction.update(incidentRef, {
+            status: IncidentStatus.TRASLADO_COMPLETADO, resolutionDate: now,
+            history: [...(saved.history || []), { status: IncidentStatus.TRASLADO_COMPLETADO, changedBy: currentUser.name, timestamp: now, notes: 'Novedad aprobada y procesada' }]
+          });
+        });
+      } catch (error: any) {
+        console.error('Error approving transfer request:', error);
+        alert(`Error al aprobar: ${error.message}`);
+      }
+      return;
+    }
     const batch = writeBatch(db);
     const incidentRef = doc(db, 'incidents', incidentId);
     let newStatus: IncidentStatus;
@@ -1636,13 +1699,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 details: `Prenda reportada como dañada. Stock rebajado: -1.`
             };
             batch.set(damageLogRef, damageLog);
-            break;
-          case IncidentType.INVENTORY_TRANSFER_REQUEST:
-            if (incident.status !== IncidentStatus.TRASLADO_SOLICITADO) return;
-            newStatus = IncidentStatus.TRASLADO_COMPLETADO;
-            if (incident.fromStoreId && incident.toStoreId && incident.productId && incident.quantity) {
-                await handleInventoryTransfer({ fromStoreId: incident.fromStoreId, toStoreId: incident.toStoreId, productId: incident.productId, quantity: incident.quantity, sellerName: incident.sellerName }, batch);
-            }
             break;
           case IncidentType.CASH_ADJUSTMENT:
             if (incident.status !== IncidentStatus.PENDIENTE_APROBACION) return;

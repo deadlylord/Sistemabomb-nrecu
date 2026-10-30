@@ -1,0 +1,14 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{mkdtemp,writeFile,rm}from'node:fs/promises';import{join}from'node:path';import{pathToFileURL}from'node:url';import{build}from'esbuild';import React from'react';import{create,act}from'react-test-renderer';
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+test('transfer form waits for confirmation, blocks double submit and keeps product, quantity and operation ID on error',async()=>{
+ const dir=await mkdtemp(join(process.cwd(),'tests/.transfer-save-'));let r;
+ try{const b=await build({entryPoints:['components/InventoryTransferView.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react']});const path=join(dir,'view.mjs');await writeFile(path,b.outputFiles[0].text);const{InventoryTransferView}=await import(pathToFileURL(path).href);
+ const calls=[];let resolve,reject;const props={stores:[{id:'origin',name:'Origin',companyId:'a'},{id:'destination',name:'Destination',companyId:'a'}],currentUser:{id:'admin',name:'Admin',storeId:'origin'},inventory:[{id:'p',storeId:'origin',companyId:'a',name:'Test',stock:1,price:10,cost:5}],transfers:[],onTransfer:data=>{calls.push(data);return new Promise((yes,no)=>{resolve=yes;reject=no})},onResetBalances:()=>{}};
+ await act(async()=>{r=create(React.createElement(InventoryTransferView,props))});
+ await act(async()=>r.root.findByProps({id:'toStore'}).props.onChange({target:{value:'destination'}}));await act(async()=>{r.root.findByProps({id:'product'}).props.onChange({target:{value:'Test'}});r.root.findByProps({id:'product'}).props.onFocus()});await act(async()=>r.root.findByType('li').props.onMouseDown());await act(async()=>r.root.findByProps({id:'quantity'}).props.onChange({target:{value:'1'}}));
+ let pending;await act(async()=>{pending=r.root.findByType('form').props.onSubmit({preventDefault(){}});r.root.findByType('form').props.onSubmit({preventDefault(){}})});
+ assert.equal(calls.length,1);assert.equal(r.root.findByProps({type:'submit'}).props.disabled,true);assert.equal(r.root.findByType('fieldset').props.disabled,true);assert.equal(r.root.findByProps({id:'quantity'}).props.value,'1');
+ await act(async()=>{reject(Error('Sin conexión'));await pending});assert.ok(JSON.stringify(r.toJSON()).includes('Sin conexión'));assert.equal(r.root.findByProps({id:'product'}).props.value,'Test');assert.equal(r.root.findByProps({id:'quantity'}).props.value,'1');
+ await act(async()=>{pending=r.root.findByType('form').props.onSubmit({preventDefault(){}})});assert.equal(calls[1].operationId,calls[0].operationId);await act(async()=>{resolve();await pending});assert.equal(r.root.findByProps({id:'quantity'}).props.value,'');assert.equal(r.root.findByProps({id:'product'}).props.value,'');
+ }finally{if(r)await act(async()=>r.unmount());await rm(dir,{recursive:true,force:true})}
+});

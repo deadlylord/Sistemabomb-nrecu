@@ -203,6 +203,7 @@ export interface PendingDetailedVerification {
 }
 
 export interface ProductHistoryLog {
+  transferId?: string;
   id: string;
   companyId?: string;
   productId: string;
@@ -278,6 +279,8 @@ export interface Store {
 }
 
 export interface InventoryTransfer {
+  toProductId?: string;
+  processedByUserId?: string;
   id: string;
   companyId?: string;
   fromStoreId: string;

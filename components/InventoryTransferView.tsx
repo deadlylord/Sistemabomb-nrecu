@@ -1,6 +1,6 @@
 import { useViewFilter } from '../services/viewFilters';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { InventoryTransfer, Product, Store, Seller } from '../types';
 import { SwapIcon, SearchIcon, DollarIcon, TrashIcon } from './Icons';
 import { formatCOP, normalizeText } from '../constants';
@@ -11,12 +11,16 @@ interface InventoryTransferViewProps {
   stores: Store[];
   currentUser: Seller;
   transfers: InventoryTransfer[];
-  onTransfer: (data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }) => void;
+  onTransfer: (data: { operationId?: string; fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string; }) => Promise<void>;
   onDeleteTransfer?: (transferId: string) => void;
   onResetBalances: () => void;
 }
 
 export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ readOnly = false, inventory, stores, currentUser, transfers, onTransfer, onDeleteTransfer, onResetBalances }) => {
+  const submitting = useRef(false);
+  const operationId = useRef<string | undefined>(undefined);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [fromStoreId, setFromStoreId] = useState<string | ''>(currentUser.storeId);
   const [toStoreId, setToStoreId] = useState<string | ''>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -72,11 +76,12 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
     setShowSuggestions(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (readOnly) return;
-    const qty = parseInt(quantity, 10);
-    if (!fromStoreId || !toStoreId || !selectedProduct || !qty || qty <= 0) {
+    if (readOnly || submitting.current) return;
+    setSaveError('');
+    const qty = Number(quantity);
+    if (!fromStoreId || !toStoreId || !selectedProduct || !Number.isSafeInteger(qty) || qty <= 0) {
       alert('Por favor, completa todos los campos con valores válidos.');
       return;
     }
@@ -89,7 +94,11 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
         return;
     }
 
-    onTransfer({
+    submitting.current = true; setIsSaving(true);
+    try {
+    operationId.current ||= crypto.randomUUID();
+    await onTransfer({
+      operationId: operationId.current,
       fromStoreId,
       toStoreId,
       productId: selectedProduct.id,
@@ -100,6 +109,9 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
     setSelectedProduct(null);
     setProductSearch('');
     setQuantity('');
+    operationId.current = undefined;
+    } catch (error) { setSaveError(error instanceof Error ? error.message : 'No se pudo guardar el traslado. Reintenta.'); }
+    finally { submitting.current = false; setIsSaving(false); }
   };
 
   const getStoreName = (storeId: string) => stores.find(s => s.id === storeId)?.name || 'Desconocida';
@@ -151,6 +163,8 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
       <div hidden={readOnly} className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
         <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Realizar Traslado de Inventario</h2>
         <form hidden={readOnly} onSubmit={handleSubmit} className="space-y-4">
+          {saveError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{saveError}</p>}
+          <fieldset disabled={isSaving} className="contents">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
               <label htmlFor="fromStore" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Desde Tienda</label>
@@ -206,11 +220,12 @@ export const InventoryTransferView: React.FC<InventoryTransferViewProps> = ({ re
             </div>
           </div>
           <div className="flex justify-end pt-2">
-            <button type="submit" className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 hover:bg-accent-hover">
+            <button type="submit" disabled={isSaving} aria-busy={isSaving} className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center space-x-2 hover:bg-accent-hover">
                 <SwapIcon />
-                <span>Confirmar Traslado</span>
+                <span>{isSaving ? 'Guardando traslado…' : 'Confirmar Traslado'}</span>
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
 
