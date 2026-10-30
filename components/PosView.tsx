@@ -29,7 +29,7 @@ interface PosViewProps {
   onUpdateCartItemPrice: (productId: string, newPrice: number) => void;
   onRemoveFromCart: (productId: string) => void;
   onClearCart: () => void;
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, saleDate: Date) => Promise<void>;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
   onResumeSale: (heldCartId: string) => void;
   onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => Promise<void>;
@@ -235,10 +235,10 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setCustomerInfo(null);
   };
 
-  const handleProcessSaleTransaction = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, selectedDate: Date) => {
+  const handleProcessSaleTransaction = async (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number;  paymentSurchargeAmount?: number; }, selectedDate: Date) => {
     const now = new Date();
     const finalDate = (selectedDate.toDateString() === now.toDateString()) ? now : selectedDate;
-    props.onProcessSale(saleData, finalDate);
+    await props.onProcessSale(saleData, finalDate);
     setCustomerInfo(null);
   };
 
@@ -301,8 +301,8 @@ const PosView: React.FC<PosViewProps> = (props) => {
     setIsMobileCartOpen(false);
   };
 
-  const handleProcessSaleWithClose = (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, currentSaleDate: Date) => {
-      handleProcessSaleTransaction(saleData, currentSaleDate);
+  const handleProcessSaleWithClose = async (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, currentSaleDate: Date) => {
+      await handleProcessSaleTransaction(saleData, currentSaleDate);
       setIsMobileCartOpen(false);
   };
 

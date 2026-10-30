@@ -1,3 +1,4 @@
+import { pendingSaleId, completeSaleId, saleFingerprint } from '../services/saleCheckout';
 import { useMeasurementVisibility } from '../services/diagnosticsVisibility';
 import { beginDiagnosticPhase, finishDiagnosticPhase, clearReadMeasurement, setReadContext, measureDiagnosticPhase } from '../services/readDiagnostics';
 import { verifiedIdentityEnabled, productionIdentityEnabled } from '../services/identityConfig';
@@ -177,6 +178,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allLayaways, setAllLayaways] = useState<Layaway[]>([]);
   const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
+  const salesInFlight = useRef(new Set<string>());
   const [activeCart, setActiveCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>([]);
   const [inventoryTransfers, setInventoryTransfers] = useState<InventoryTransfer[]>([]);
@@ -895,14 +897,38 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     assertCartAvailability(items, products, operationalCompanyId, storeId, requireStock, allowVouchers);
   };
 
-  const handleProcessSale = async (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => {
-    if (!currentStore || !currentStoreId || !currentUser) return;
+  const handleProcessSale = async (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string; items?: CartItem[]; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => {
+    if (!currentStore || !currentStoreId || !currentUser) throw new Error('Selecciona una sede e inicia sesión.');
     const startedContext = operationContextRef.current;
 
+    const checkoutScope = JSON.stringify([currentUser.id, operationalCompanyId, currentStoreId]);
+    if (salesInFlight.current.has(checkoutScope)) throw new Error('La venta se está guardando. Espera la confirmación.');
+    salesInFlight.current.add(checkoutScope);
     try {
+        const operationId = pendingSaleId(checkoutScope, saleData.checkoutId);
+        const saleRef = doc(db, 'sales', `checkout_${operationId}`);
+        const itemsToProcess = (saleData.items || activeCart).map(item => ({ ...item }));
+        const fingerprint = await saleFingerprint({
+          day: bogotaDateKey(saleDate), customerName: saleData.customerName, customerPhone: saleData.customerPhone, seller: saleData.seller,
+          items: itemsToProcess.map(item => ({id:item.id,quantity:item.quantity,price:item.price,cost:item.cost,basePrice:item.basePrice,discountPrice:item.discountPrice})),
+          payments: saleData.payments.map(({date, ...payment}) => payment),
+          discountPercent:saleData.discountPercent || 0, discountAmount:saleData.discountAmount || 0, paymentSurchargeAmount:saleData.paymentSurchargeAmount || 0
+        });
         let savedSale: Sale | null = null;
+        let conflictingReceipt: Sale | null = null;
 
         await runTransaction(db, async (transaction) => {
+            const receipt = await transaction.get(saleRef);
+            if (receipt.exists()) {
+              const existing = { ...receipt.data(), id: saleRef.id } as Sale;
+              assertTenantData('sales', existing, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId]) });
+              if (existing.storeId !== currentStoreId || existing.checkoutUserId !== currentUser.id) {
+                throw new Error('La venta anterior ya fue registrada con otros datos. Revisa las facturas antes de volver a cobrar.');
+              }
+              savedSale = existing;
+              if (existing.checkoutFingerprint !== fingerprint) conflictingReceipt = existing;
+              return;
+            }
             const storeRef = doc(db, 'stores', currentStoreId);
             const storeDoc = await transaction.get(storeRef);
             if (!storeDoc.exists()) {
@@ -930,8 +956,6 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 currentInvoiceNumber = 1;
             }
 
-            const saleRef = doc(collection(db, 'sales'));
-            const itemsToProcess = saleData.items || activeCart;
             await validateTransactionCart(transaction, itemsToProcess, currentStoreId, true, true);
             const subtotal = itemsToProcess.reduce((sum, item) => sum + item.price * item.quantity, 0);
             const discountPercent = saleData.discountPercent || 0;
@@ -941,6 +965,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
             const newSale: Sale = {
                 id: saleRef.id,
+                checkoutFingerprint: fingerprint,
+                checkoutUserId: currentUser.id,
                 invoiceNumber: currentInvoiceNumber,
                 customerName: saleData.customerName,
                 customerPhone: saleData.customerPhone,
@@ -1020,6 +1046,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             }
         });
 
+        completeSaleId(checkoutScope, operationId);
+        if (conflictingReceipt) throw new Error(`La factura #${conflictingReceipt.invoiceNumber} ya fue registrada con otros datos. Revisa esa factura; no se ha registrado otro cobro.`);
         if (savedSale && operationContextRef.current === startedContext) {
             setSaleForReceipt(savedSale);
             setShowReceiptModal(true);
@@ -1030,7 +1058,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
     } catch (e) {
         console.error("Transaction failed: ", e);
-        alert(e instanceof Error ? e.message : "Error procesando la venta. Por favor, intente nuevamente.");
+        throw e instanceof Error ? e : new Error('Error procesando la venta. Por favor, intente nuevamente.');
+    } finally {
+        salesInFlight.current.delete(checkoutScope);
     }
   };
 

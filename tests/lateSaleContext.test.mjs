@@ -10,11 +10,14 @@ test('the actual sale handler keeps late receipts and cart changes out of a new 
   try {
     const source = await readFile('components/App.tsx', 'utf8');
     const handler = source.slice(source.indexOf('  const validateTransactionCart = async'), source.indexOf('  const handleHoldSale = async'));
-    const fixture = `import {PaymentMethod,ProductChangeType} from './types';
+    const fixture = `import {bogotaDateKey} from './services/incomeChart';
+      import {pendingSaleId,completeSaleId,saleFingerprint} from './services/saleCheckout';
+      const assertTenantData=()=>{throw Error('unexpected existing receipt')};
+      import {PaymentMethod,ProductChangeType} from './types';
       import {assertCartAvailability} from './services/cartAvailability';
       import {operationContextKey} from './services/operationContext';
       export function makeFixture() {
-        const db={}; const currentStore={id:'mayla-1'}; const currentStoreId='mayla-1'; const currentUser={id:'carlos'}; const operationalCompanyId='mayla';
+        const salesInFlight={current:new Set()};const db={}; const currentStore={id:'mayla-1'}; const currentStoreId='mayla-1'; const currentUser={id:'carlos'}; const operationalCompanyId='mayla';
         const activeCart=[{id:'own',name:'Blusa',price:20,quantity:1}];
         const operationContextRef={current:{key:operationContextKey('carlos','mayla','mayla-1'),version:0}};
         let uiCart=[...activeCart],receipt=null,visible=false; let release,ready;
@@ -22,7 +25,7 @@ test('the actual sale handler keeps late receipts and cart changes out of a new 
         const writes=[];let sequence=0;
         const collection=(_,name)=>({name});const doc=(...args)=>({id:args[2]||'generated-'+(++sequence),path:args.length===1?args[0].name+'/generated-'+sequence:args[1]+'/'+args[2]});
         const increment=value=>value,formatCOP=value=>String(value),cleanObject=value=>value;
-        const runTransaction=async(_,callback)=>{await callback({get:async(ref)=>({exists:()=>true,data:()=>ref.path.startsWith('inventory/')?{name:'Blusa',stock:1,companyId:'mayla',storeId:'mayla-1'}:{nextInvoiceNumber:1}}),set(ref,data){writes.push({ref,data})},update(){}});ready();await pending;};
+        const runTransaction=async(_,callback)=>{await callback({get:async(ref)=>({exists:()=>!ref.path.startsWith('sales/'),data:()=>ref.path.startsWith('inventory/')?{name:'Blusa',stock:1,companyId:'mayla',storeId:'mayla-1'}:{nextInvoiceNumber:1}}),set(ref,data){writes.push({ref,data})},update(){}});ready();await pending;};
         const setSaleForReceipt=value=>{receipt=value},setShowReceiptModal=value=>{visible=value},handleClearCart=()=>{uiCart=[]},alert=message=>{throw Error(message)};
         ${handler}
         return { ready:committed, release:()=>release(), start:()=>handleProcessSale({payments:[{method:PaymentMethod.Efectivo,amount:20}],customerName:'Prueba',customerPhone:'',seller:'Carlos'},new Date()),

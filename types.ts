@@ -507,6 +507,8 @@ export interface Layaway {
 }
 
 export interface Sale {
+  checkoutFingerprint?: string;
+  checkoutUserId?: string;
   id: string;
   companyId?: string;
   invoiceNumber: number;

@@ -16,7 +16,7 @@ interface CartPanelProps {
   onUpdateCartItemPrice: (productId: string, newPrice: number) => void;
   onRemoveFromCart: (productId: string) => void;
   onClearCart: () => void;
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string;  paymentSurchargeAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string;  paymentSurchargeAmount?: number; }, saleDate: Date) => Promise<void>;
   onHoldSale: (data?: { customer?: { name: string; phone: string }; sellerName?: string; }) => void;
   onCreateLayaway: (customerName: string, customerPhone: string, invoiceNumber: string, seller: string, initialPayment: { amount: number; method: PaymentMethod; }, saleDate: Date, isPreOrder: boolean, description?: string) => Promise<void>;
   saleDate: Date;

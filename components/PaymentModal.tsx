@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PaymentMethod, Seller, Customer, Payment, Store, GiftVoucher } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { TrashIcon } from './Icons';
@@ -10,7 +10,7 @@ interface PaymentModalProps {
   total: number;
   sellers: Seller[];
   customers: Customer[];
-  onProcessSale: (saleData: { payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { checkoutId?: string; payments: Payment[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; paymentSurchargeAmount?: number; }, saleDate: Date) => Promise<void>;
   saleDate: Date;
   onHoldSale: (data: { customer: { name: string; phone: string }; sellerName: string; }) => void;
   initialCustomerInfo: {name: string, phone: string} | null;
@@ -22,6 +22,11 @@ interface PaymentModalProps {
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sellers, customers, onProcessSale, saleDate, onHoldSale, initialCustomerInfo, currentStore, giftVouchers, onUpdateGiftVoucher, discountPercent, discountAmount }) => {
+  const submitting = useRef(false);
+  const checkoutId = useRef<string | undefined>(undefined);
+  const [isSaving, setIsSaving] = useState(false);
+  useEffect(() => { if (isOpen) checkoutId.current = crypto.randomUUID(); }, [isOpen]);
+  const close = () => { if (!submitting.current) onClose(); };
   const [payments, setPayments] = useState<Omit<Payment, 'date' | 'seller'>[]>([]);
   const [amountInput, setAmountInput] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -164,7 +169,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }));
   };
 
-  const handleFinalize = () => {
+  const handleFinalize = async () => {
+    if (submitting.current) return;
     setErrorMsg(null);
     if (!isFullyPaid) {
       triggerError("Aún falta por pagar el total de la venta.");
@@ -189,7 +195,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         seller: selectedSeller,
     }));
     
-    onProcessSale({
+    submitting.current = true; setIsSaving(true);
+    try {
+    await onProcessSale({
+      checkoutId: checkoutId.current,
       payments: finalPayments,
       customerName: finalCustomerName,
       customerPhone: finalCustomerPhone,
@@ -200,9 +209,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
     }, saleDate);
     
     onClose();
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'No se pudo guardar la venta. Reintenta con los mismos datos.');
+    } finally { submitting.current = false; setIsSaving(false); }
   };
 
   const handleHold = () => {
+    if (submitting.current) return;
     setErrorMsg(null);
     const finalCustomerName = toTitleCase(customerName.trim() || 'Cliente Mostrador');
     const finalCustomerPhone = customerPhone.trim() || 'N/A';
@@ -219,7 +232,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-        onClose();
+        close();
     }
   };
   
@@ -233,6 +246,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
       <div 
         className="bg-white dark:bg-secondary rounded-2xl shadow-2xl p-4 w-full max-w-3xl max-h-[95vh] flex flex-col border border-slate-100 dark:border-slate-800"
       >
+        <fieldset disabled={isSaving} className="contents">
         {/* Header Compacto */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <div>
@@ -454,7 +468,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
         <div className="flex justify-end items-center gap-2 border-t border-slate-100 dark:border-slate-800/80 pt-2.5">
           <button 
             type="button" 
-            onClick={onClose} 
+            onClick={close}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-black text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer"
           >
             Cancelar
@@ -471,12 +485,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, total, sel
           <button 
             type="button" 
             onClick={handleFinalize} 
-            disabled={!isFullyPaid || !selectedSeller} 
+            disabled={isSaving || !isFullyPaid || !selectedSeller}
+            aria-busy={isSaving}
             className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:bg-slate-100 dark:disabled:bg-slate-800/80 disabled:text-slate-400 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 disabled:scale-100 disabled:cursor-not-allowed cursor-pointer"
           >
-            Finalizar Venta
+            {isSaving ? 'Guardando venta…' : 'Finalizar Venta'}
           </button>
         </div>
+        </fieldset>
       </div>
     </div>
   );

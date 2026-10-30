@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Seller, Customer, PaymentMethod, Store, GiftVoucher } from '../types';
 import { formatCOP, toTitleCase } from '../constants';
 import { CrossIcon } from './Icons';
@@ -11,7 +11,7 @@ interface SellVoucherModalProps {
   customers: Customer[];
   currentStore: Store | undefined;
   onCreateGiftVoucher: (voucher: Omit<GiftVoucher, 'id'>) => Promise<void>;
-  onProcessSale: (saleData: { payments: any[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => void;
+  onProcessSale: (saleData: { checkoutId?: string; payments: any[]; customerName: string; customerPhone: string; seller: string; discountPercent?: number; discountAmount?: number; }, saleDate: Date) => Promise<void>;
 }
 
 const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, sellers, customers, currentStore, onCreateGiftVoucher, onProcessSale }) => {
@@ -20,6 +20,9 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
   const [customerPhone, setCustomerPhone] = useState('');
   const [selectedSeller, setSelectedSeller] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
+  const submitting = useRef(false);
+  const operation = useRef<{id:string;code:string;date:Date} | null>(null);
+  useEffect(() => { if (isOpen) { operation.current = null; submitting.current = false; } }, [isOpen]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -50,6 +53,7 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
   };
 
   const handleConfirm = async () => {
+    if (submitting.current) return;
     setErrorMsg('');
     setSuccessMsg('');
     const amount = parseFloat(value);
@@ -70,13 +74,15 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
         return;
     }
 
+    submitting.current = true;
     setIsProcessing(true);
     try {
-      const code = generateVoucherCode();
-      const now = new Date();
+      operation.current ||= {id:crypto.randomUUID(),code:generateVoucherCode(),date:new Date()};
+      const {code,date:now,id} = operation.current;
       
       // 2. Process as a sale
       const saleData = {
+        checkoutId: id,
         payments: [{
           amount,
           method: paymentMethod as PaymentMethod,
@@ -106,6 +112,7 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
         onClose();
       }, 2500);
     } catch (error) {
+      submitting.current = false;
       console.error(error);
       setErrorMsg("Error al crear el bono.");
     } finally {
@@ -118,7 +125,7 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-pink-600">Vender Bono de Regalo</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button onClick={() => { if (!submitting.current || successMsg) onClose(); }} className="text-slate-400 hover:text-slate-600 transition-colors">
             <CrossIcon className="w-6 h-6" />
           </button>
         </div>
@@ -205,14 +212,14 @@ const SellVoucherModal: React.FC<SellVoucherModalProps> = ({ isOpen, onClose, se
 
         <div className="mt-8 flex gap-3">
           <button
-            onClick={onClose}
+            onClick={() => { if (!submitting.current || successMsg) onClose(); }}
             className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 font-bold rounded-lg hover:bg-slate-200 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleConfirm}
-            disabled={isProcessing}
+            disabled={isProcessing || !!successMsg}
             className="flex-1 py-3 bg-pink-500 text-white font-bold rounded-lg hover:bg-pink-600 shadow-lg shadow-pink-500/30 transition-all disabled:opacity-50"
           >
             {isProcessing ? 'Procesando...' : 'Confirmar Venta'}
