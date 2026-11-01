@@ -1,3 +1,4 @@
+import { useSaleExchangePayments } from '../services/useSaleExchangePayments';
 import { saleEditTotals, adjustedSalePayment, validateSaleEdit } from '../services/saleEditTotals';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
@@ -22,6 +23,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
     customerPhone: '',
     seller: '',
   });
+  const exchangePayments = useSaleExchangePayments(sale, isOpen);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [items, setItems] = useState<CartItem[]>([]);
   const [createdAt, setCreatedAt] = useState('');
@@ -107,9 +109,9 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
   const surchargeAmount = Number(surchargeInput || 0);
   const { subtotal, discountPercent, discountAmount, totalAmount } = saleEditTotals(calculationItems, discountMode, Number(discountValue || 0), surchargeAmount);
   const effectivePayments = autoBalancePayment && payments.length === 1
-    ? [adjustedSalePayment(payments[0], totalAmount, surchargeAmount)] : payments;
+    ? [adjustedSalePayment(payments[0], Math.max(0, totalAmount - exchangePayments.amount), surchargeAmount)] : payments;
   const paidAmount = effectivePayments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const remainingAmount = Math.round((totalAmount - paidAmount) * 100) / 100;
+  const remainingAmount = Math.round((totalAmount - paidAmount - exchangePayments.amount) * 100) / 100;
 
   useEffect(() => {
     if (remainingAmount > 0) {
@@ -205,7 +207,8 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
       if (editingPrice && (editingPrice.value.trim() === '' || !Number.isFinite(Number(editingPrice.value)))) throw new Error('Escribe un precio válido para el producto.');
       if (!createdAt || !Number.isFinite(new Date(createdAt).getTime())) throw new Error('Revisa la fecha de la venta.');
       if (discountMode === 'percent' && (Number(discountValue) < 0 || Number(discountValue) > 100)) throw new Error('El descuento debe estar entre 0 y 100%.');
-      validateSaleEdit(calculationItems, effectivePayments, totalAmount, discountAmount, surchargeAmount);
+      if (!exchangePayments.ready) throw new Error(exchangePayments.error || 'Espera mientras se verifican los excedentes de esta factura.');
+      validateSaleEdit(calculationItems, effectivePayments, totalAmount, discountAmount, surchargeAmount, exchangePayments.amount);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Revisa los datos de la venta.');
       return;
@@ -387,10 +390,12 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
               {/* Right side: Payments */}
               <div className="lg:w-2/5 flex flex-col lg:border-l lg:border-gray-200 lg:dark:border-gray-700 lg:pl-6 space-y-3">
                 <h3 className="text-base sm:text-lg font-bold">Registro de Pagos</h3>
+                {!exchangePayments.ready && <p role="status">{exchangePayments.error || 'Verificando excedentes de cambios…'}</p>}
+                {exchangePayments.amount > 0 && <p className="text-sm text-accent">Excedentes ya registrados en novedades: {formatCOP(exchangePayments.amount)}. Se cuentan aparte; no los incluyas otra vez en estos pagos.</p>}
                 <div className="space-y-3">
                   {payments.length === 1 && payments[0].method !== PaymentMethod.Bono && !sale.layawayId && <label className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-300">
                     <input type="checkbox" checked={autoBalancePayment} onChange={event => { setPayments(effectivePayments.map(p => ({...p}))); setAutoBalancePayment(event.target.checked); }} />
-                    Ajustar el único pago al nuevo total de la venta
+                    Ajustar el único pago al total pendiente después de los excedentes
                   </label>}
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {effectivePayments.map((p, index) => (
@@ -430,7 +435,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
                       </label>
                       {discountAmount > 0 && <div className="flex justify-between text-rose-500 font-semibold"><span>Descuento{discountMode === 'percent' ? ` (${discountPercent}%)` : ''}:</span><span>-{formatCOP(discountAmount)}</span></div>}
                       <div className="flex justify-between font-bold"><span>Nuevo Total Venta:</span> <span className="text-accent">{formatCOP(totalAmount)}</span></div>
-                      <div className="flex justify-between"><span>Total Pagado:</span> <span className="font-bold">{formatCOP(paidAmount)}</span></div>
+                      <div className="flex justify-between"><span>{exchangePayments.amount > 0 ? 'Total pagado, incluidos excedentes:' : 'Total Pagado:'}</span> <span className="font-bold">{formatCOP(paidAmount + exchangePayments.amount)}</span></div>
                       <div className={`flex justify-between font-bold ${remainingAmount > 0 ? 'text-red-500' : 'text-green-500'}`}>
                           <span>{remainingAmount > 0 ? 'Faltante por corregir:' : remainingAmount < 0 ? 'Excedente por corregir:' : 'Saldo:'}</span>
                           <span>{formatCOP(Math.abs(remainingAmount))}</span>
@@ -446,7 +451,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ isOpen, onClose, s
           {/* Sticky Footer */}
           <div data-testid="edit-sale-mobile-actions" className="px-3 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:flex sm:justify-end gap-2 sm:gap-3 shrink-0 bg-white dark:bg-secondary z-20 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:shadow-none">
             <button type="button" onClick={() => { if (!savingRef.current) onClose(); }} className="w-full sm:w-auto px-3 sm:px-5 py-3 sm:py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors">Cancelar</button>
-            <button type="submit" className="w-full sm:w-auto px-3 sm:px-7 py-3 sm:py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
+            <button type="submit" disabled={!exchangePayments.ready || isSaving} className="w-full sm:w-auto px-3 sm:px-7 py-3 sm:py-2.5 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover text-sm shadow-md transition-colors">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
           </div>
           </fieldset>
         </form>

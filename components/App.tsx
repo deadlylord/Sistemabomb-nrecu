@@ -1558,6 +1558,16 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             assertTenantData('sales', savedSale, scope);
             if (savedSale.storeId !== incident.storeId) throw new Error('La venta pertenece a otra sede.');
           }
+          const takenValue = (incident.takenItems || []).reduce((sum, item) => {
+            if (!Number.isFinite(item.price) || item.price < 0) throw new Error('Revisa el precio cobrado de las prendas a llevar.');
+            return sum + item.price * item.quantity;
+          }, 0);
+          if ((incident.adjustmentAmount || 0) > 0) {
+            const returnedValue = (incident.returnedItems || []).reduce((sum, item) => sum + item.price * item.quantity, 0);
+            if (!incident.paymentMethod || !Number.isFinite(returnedValue) || Math.abs(takenValue - returnedValue - incident.adjustmentAmount!) > 0.01) {
+              throw new Error('El excedente no coincide con los precios del cambio. Revisa la novedad antes de aprobar.');
+            }
+          }
           if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
             incident.returnedItems?.forEach(item => {
                 transaction.update(doc(db, 'inventory', item.productId), { stock: increment(item.quantity) });
@@ -1596,10 +1606,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 const originalSale = savedSale;
                 if (originalSale) {
                     const saleRef = doc(db, 'sales', originalSale.id);
-                    let updatedItems = [...originalSale.items];
+                    let updatedItems = originalSale.items.map(item => ({ ...item }));
 
                     incident.returnedItems?.forEach(ret => {
-                        const idx = updatedItems.findIndex(i => i.id === ret.productId);
+                        const idx = updatedItems.findIndex(i => i.id === ret.productId && (ret.price === undefined || i.price === ret.price));
                         if (idx !== -1) {
                             updatedItems[idx].quantity -= ret.quantity;
                             if (updatedItems[idx].quantity <= 0) updatedItems.splice(idx, 1);
@@ -1607,7 +1617,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                     });
 
                     incident.takenItems?.forEach(taken => {
-                        const idx = updatedItems.findIndex(i => i.id === taken.productId);
+                        const idx = updatedItems.findIndex(i => i.id === taken.productId && i.price === taken.price);
                         if (idx !== -1) {
                             updatedItems[idx].quantity += taken.quantity;
                         } else {
@@ -1626,8 +1636,17 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                         }
                     });
 
-                    const newTotal = updatedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-                    transaction.update(saleRef, { items: updatedItems, totalAmount: newTotal });
+                    const oldSubtotal = originalSale.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+                    const newSubtotal = updatedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+                    const newTotal = Math.round((originalSale.totalAmount + newSubtotal - oldSubtotal) * 100) / 100;
+                    // Preserve the money actually received. Legacy invoices must stop
+                    // deriving their original payment from a total changed by an exchange.
+                    const payments = (Array.isArray(originalSale.payments) ? originalSale.payments : Object.values(originalSale.payments || {})) as Payment[];
+                    const originalPayments = payments.length ? payments : originalSale.paymentMethod ? [{
+                      amount: originalSale.totalAmount, method: originalSale.paymentMethod,
+                      date: originalSale.createdAt, seller: originalSale.seller
+                    }] : [];
+                    transaction.update(saleRef, { items: updatedItems, totalAmount: newTotal, ...(originalPayments.length ? { payments: originalPayments } : {}) });
                 }
             }
 

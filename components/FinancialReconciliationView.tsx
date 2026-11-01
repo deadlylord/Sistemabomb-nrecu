@@ -36,7 +36,7 @@ interface TransactionDetail {
     time: string;
     amount: number;
     description: string;
-    type: 'Venta' | 'Abono' | 'Ajuste';
+    type: 'Venta' | 'Abono' | 'Ajuste' | 'Excedente';
 }
 
 interface DailySystemTotal {
@@ -632,7 +632,7 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
         };
     }
 
-    const processPayment = (p: Payment, type: 'Venta' | 'Abono', refId: string, customer: string, index: number) => {
+    const processPayment = (p: Payment, type: 'Venta' | 'Abono' | 'Excedente', refId: string, customer: string, index: number) => {
         const pDate = new Date(p.date);
         let reconciliationDate = new Date(pDate);
         let amount = Number(p.amount) || 0;
@@ -688,6 +688,10 @@ const FinancialReconciliationView: React.FC<FinancialReconciliationViewProps> = 
     });
 
     incidents.filter(i => i.storeId === activeStoreId && i.adjustmentAmount && i.adjustmentAmount > 0).forEach(incident => {
+        if (incident.type === IncidentType.PRODUCT_EXCHANGE) {
+            if (incident.paymentMethod) processPayment({ amount: Number(incident.adjustmentAmount), method: incident.paymentMethod, date: incident.createdAt, seller: incident.sellerName }, 'Excedente', incident.id, incident.customerName || '', 0);
+            return;
+        }
         const d = new Date(incident.createdAt);
         if (d.getTime() < startOfMonth.getTime() || d.getTime() > endOfMonth.getTime()) return;
         const dateStr = getLocalDateString(incident.createdAt);

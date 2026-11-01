@@ -31,3 +31,24 @@ test('incident form waits for confirmation, prevents duplicate submissions and p
  assert.equal(closed,1);assert.equal(calls,2);
  }finally{if(renderer)await act(async()=>renderer.unmount());await rm(dir,{recursive:true,force:true});}
 });
+
+test('exchange form persists the actual 180000 price and 55000 Sistecredito surplus instead of catalogue 170000',async()=>{
+ const dir=await mkdtemp(join(process.cwd(),'tests/.exchange-price-'));let renderer;
+ try{
+ const bundle=await build({entryPoints:['components/CreateIncidentModal.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'firebase-stub',setup(b){b.onResolve({filter:/^(firebase\/firestore|\.\.\/firebase)$/},a=>({path:a.path,namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},a=>({contents:a.path==='../firebase'?'export const db={};':'export const doc=()=>{},collection=()=>{},writeBatch=()=>{};'}));}}]});
+ const path=join(dir,'modal.mjs');await writeFile(path,bundle.outputFiles[0].text);const {default:Modal}=await import(pathToFileURL(path).href);
+ let payload;const inventory=[{id:'new',name:'Nueva',price:170000,cost:80000,stock:5,storeId:'source'}];
+ await act(async()=>{renderer=create(React.createElement(Modal,{isOpen:true,onClose(){},inventory,sales:[{id:'sale',invoiceNumber:123,customerName:'Test',items:[{id:'old',name:'Anterior',price:125000,quantity:1,cost:50000}]}],stores:[],currentUser:{id:'u',storeId:'source'},roles:[],customers:[],onCreateIncident:data=>{payload=data}}));});
+ await act(async()=>renderer.root.findAllByType('select')[0].props.onChange({target:{value:'Cambio de Producto'}}));
+ await act(async()=>renderer.root.findByProps({placeholder:'Número de Factura Original'}).props.onChange({target:{value:'123'}}));
+ await act(async()=>renderer.root.findAllByType('select').find(s=>s.props.children?.some?.(c=>Array.isArray(c))).props.onChange({target:{value:'old'}}));
+ await act(async()=>renderer.root.findByProps({placeholder:'Buscar en inventario...'}).props.onChange({target:{value:'Nueva'}}));
+ await act(async()=>renderer.root.findByProps({placeholder:'Buscar en inventario...'}).props.onFocus());
+ await act(async()=>renderer.root.findAllByType('li')[0].props.onMouseDown());
+ await act(async()=>renderer.root.findByProps({'aria-label':'Precio cobrado Nueva'}).props.onChange({target:{value:'180000'}}));
+ assert.equal(renderer.root.findByProps({id:'manualSurplus'}).props.value,'55000');
+ await act(async()=>renderer.root.findAllByType('select').at(-1).props.onChange({target:{value:'Sistecredito'}}));
+ await act(async()=>renderer.root.findByType('form').props.onSubmit({preventDefault(){}}));
+ assert.equal(payload.takenItems[0].price,180000);assert.equal(payload.returnedItems[0].price,125000);assert.equal(payload.surplusPaid,55000);assert.equal(payload.surplusPaymentMethod,'Sistecredito');assert.equal(inventory[0].price,170000);
+ }finally{if(renderer)await act(async()=>renderer.unmount());await rm(dir,{recursive:true,force:true});}
+});

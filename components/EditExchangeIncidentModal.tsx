@@ -191,6 +191,10 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
       return;
     }
 
+    if (takenItems.some(item => !Number.isFinite(item.price) || item.price < 0) || Math.abs((Number(manualSurplus) || 0) - Math.max(0, difference)) > 0.01) {
+      alert('El excedente debe coincidir con la diferencia. Ajusta el precio cobrado de las prendas a llevar.');
+      return;
+    }
     const { adjustmentAmount: oldAdjustment, paymentMethod: oldPaymentMethod, ...restOfIncident } = incident;
 
     const updatedIncident: Incident = {
@@ -337,6 +341,11 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
                                <div key={item.productId} className="flex justify-between items-center text-xs bg-green-500/10 p-1.5 rounded">
                                    <span className="truncate flex-1 pr-2">{item.productName}</span>
                                    <div className="flex items-center gap-1">
+                                       <label className="flex items-center gap-1">Precio:
+                                         <input aria-label={`Precio cobrado ${item.productName}`} type="number" min="0" step="1" required disabled={incident.status !== IncidentStatus.CAMBIO_SOLICITADO} value={item.price}
+                                           onChange={e => setTakenItems(prev => prev.map(row => row.productId === item.productId ? { ...row, price: Number(e.target.value) } : row))}
+                                           className="w-24 rounded border border-gray-400 bg-white dark:bg-primary p-1" />
+                                       </label>
                                        <span className="text-gray-400 mr-1">Cant:</span>
                                        <input 
                                          type="number" 

@@ -10,7 +10,7 @@ import { saleEditTotals, adjustedSalePayment, validateSaleEdit } from '../servic
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.document = { body: {} };
 const dir = await mkdtemp(join(process.cwd(), 'tests/.sale-edit-'));
-const bundled = await build({entryPoints:['components/EditSaleModal.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'portal-for-component-test',setup(b){b.onResolve({filter:/^react-dom$/},()=>({path:'react-dom',namespace:'portal'}));b.onLoad({filter:/.*/,namespace:'portal'},()=>({contents:'export const createPortal = children => children;'}));}}]});
+const bundled = await build({entryPoints:['components/EditSaleModal.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'portal-for-component-test',setup(b){b.onResolve({filter:/useSaleExchangePayments$/},()=>({path:'exchange',namespace:'exchange'}));b.onLoad({filter:/.*/,namespace:'exchange'},()=>({contents:'export const useSaleExchangePayments = () => globalThis.__saleExchange || ({amount:0,ready:true,error:""});'}));b.onResolve({filter:/^react-dom$/},()=>({path:'react-dom',namespace:'portal'}));b.onLoad({filter:/.*/,namespace:'portal'},()=>({contents:'export const createPortal = children => children;'}));}}]});
 const path=join(dir,'modal.mjs');await writeFile(path,bundled.outputFiles[0].text);
 const {EditSaleModal}=await import(pathToFileURL(path).href);
 const baseSale=()=>({id:'sale',invoiceNumber:1,storeId:'store',companyId:'company',customerName:'Cliente',customerPhone:'',seller:'Ana',createdAt:'2026-10-15T14:00:00.000Z',items:[{id:'p',name:'Blusa',price:100000,quantity:1,cost:30000}],payments:[{amount:100000,method:'Efectivo',date:'2026-10-15T14:00:00.000Z',seller:'Ana'}],totalAmount:100000});
@@ -94,3 +94,20 @@ test('pure totals reject invalid amounts and preserve payment metadata when corr
 });
 
 test.after(async()=>{await rm(dir,{recursive:true,force:true})});
+
+test('editing historical invoice with 55000 exchange surplus saves original payment 310000 and keeps invoice 365000',async()=>{
+ globalThis.__saleExchange={amount:55000,ready:true,error:''};let f;
+ try{const sale=baseSale();sale.items=[{...sale.items[0],price:365000}];sale.totalAmount=365000;sale.payments=[{...sale.payments[0],amount:365000,method:'Sistecredito'}];let saved;
+ f=await mount(sale,data=>saved=data);assert.equal(f.field('Importe del pago 1').props.value,310000);
+ await act(async()=>f.submit());assert.equal(saved.totalAmount,365000);assert.equal(saved.payments[0].amount,310000);assert.deepEqual(saved.items,sale.items);assert.equal(sale.payments[0].amount,365000,'source invoice is not changed until save');
+ }finally{delete globalThis.__saleExchange;if(f)await act(async()=>f.r.unmount());}
+});
+test('cannot save while exchange amounts are unknown or their query failed',async()=>{
+ for(const state of [{amount:0,ready:false,error:''},{amount:0,ready:false,error:'No se pudieron verificar los excedentes.'}]){
+ globalThis.__saleExchange=state;let f,calls=0;try{f=await mount(baseSale(),()=>calls++);await act(async()=>f.submit());assert.equal(calls,0);}finally{delete globalThis.__saleExchange;if(f)await act(async()=>f.r.unmount());}
+ }
+});
+test('sale validation includes external exchange payments once and rejects duplicated surplus',()=>{
+ const items=[{price:365000,quantity:1}],payment={amount:310000,method:'Sistecredito',date:'2026-10-17',seller:'Test'};
+ assert.doesNotThrow(()=>validateSaleEdit(items,[payment],365000,0,0,55000));assert.throws(()=>validateSaleEdit(items,[{...payment,amount:365000}],365000,0,0,55000),/pagos/);
+});

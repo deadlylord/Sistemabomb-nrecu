@@ -60,3 +60,22 @@ test('permission denial and switching context while reading cannot approve an ol
   await f.approve();assert.equal(f.commits,0);assert.ok(f.scope.alerts.length);
  }
 });
+
+test('310000 original payment stays unchanged after replacing 125000 with the actual 180000 price', async()=>{
+ const f=fixture(), incident=f.saved.get('incidents/change'),sale=f.saved.get('sales/sale');
+ Object.assign(sale,{items:[{id:'old',price:125000,quantity:1},{id:'unrelated',price:185000,quantity:1}],totalAmount:310000,paymentMethod:'Sistecredito',createdAt:'2026-10-01T15:00:00.000Z',seller:'Seller'});
+ Object.assign(incident,{returnedItems:[{productId:'old',productName:'Old',quantity:1,price:125000}],takenItems:[{productId:'new',productName:'New',quantity:1,price:180000,cost:80000}],adjustmentAmount:55000,paymentMethod:'Sistecredito'});
+ f.saved.get('inventory/new').price=170000;
+ await Promise.all([f.approve(),f.approve()]);
+ const updated=f.saved.get('sales/sale');assert.equal(f.commits,1);assert.equal(updated.totalAmount,365000);assert.equal(updated.items.find(i=>i.id==='new').price,180000);
+ assert.deepEqual(updated.payments,[{amount:310000,method:'Sistecredito',date:sale.createdAt,seller:'Seller'}]);assert.equal(f.saved.get('incidents/change').adjustmentAmount,55000);assert.equal(f.saved.get('inventory/new').price,170000);
+});
+test('exchange preserves original detailed payments, discount and surcharge without adding the surplus to payments',async()=>{
+ const f=fixture(),sale=f.saved.get('sales/sale');sale.totalAmount=47;sale.discountAmount=5;sale.paymentSurchargeAmount=2;sale.payments=[{amount:47,method:'Sistecredito',date:'2026-10-01',seller:'Seller'}];f.saved.get('incidents/change').takenItems[0].price=20;
+ await f.approve();const updated=f.saved.get('sales/sale');assert.equal(updated.totalAmount,57);assert.deepEqual(updated.payments,sale.payments);assert.equal(updated.discountAmount,5);assert.equal(updated.paymentSurchargeAmount,2);
+});
+test('mismatched surplus or invalid price rejects approval without moving stock or changing payments',async()=>{
+ for(const mutate of [i=>{i.takenItems[0].price=NaN},i=>{i.adjustmentAmount=55;i.paymentMethod='Sistecredito';i.returnedItems[0].price=5}]){
+ const f=fixture();mutate(f.saved.get('incidents/change'));await f.approve();assert.equal(f.commits,0);assert.equal(f.saved.get('inventory/new').stock,4);assert.ok(f.scope.alerts.length);
+ }
+});

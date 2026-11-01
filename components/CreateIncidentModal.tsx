@@ -237,6 +237,10 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
             alert('Por favor, ingresa un valor de excedente válido.');
             return;
         }
+        if (takenItems.some(item => !Number.isFinite(item.price) || item.price < 0) || Math.abs((Number(manualSurplus) || 0) - Math.max(0, difference)) > 0.01) {
+          alert('El excedente debe coincidir con la diferencia. Ajusta el precio cobrado de las prendas a llevar.');
+          return;
+        }
         data = { ...data, originalSaleId: originalSale.id, originalSaleInvoiceNumber, returnedItems, takenItems, customerName: toTitleCase(originalSale.customerName), customerPhone: originalSale.customerPhone, surplusPaid: surplusPaidAmount, surplusPaymentMethod: surplusPaymentMethod || undefined };
         break;
       case IncidentType.INVENTORY_TRANSFER_REQUEST:
@@ -516,6 +520,11 @@ const CreateIncidentModal: React.FC<CreateIncidentModalProps> = ({ isOpen, onClo
                                        <div key={item.productId} className="flex justify-between items-center text-xs bg-green-500/10 p-1.5 rounded">
                                            <span className="truncate flex-1 pr-2">{item.productName}</span>
                                            <div className="flex items-center gap-1">
+                                               <label className="flex items-center gap-1">Precio:
+                                                 <input aria-label={`Precio cobrado ${item.productName}`} type="number" min="0" step="1" required value={item.price}
+                                                   onChange={e => setTakenItems(prev => prev.map(row => row.productId === item.productId ? { ...row, price: Number(e.target.value) } : row))}
+                                                   className="w-24 rounded border border-gray-400 bg-white dark:bg-primary p-1" />
+                                               </label>
                                                <input type="number" value={item.quantity} onChange={e => updateItemQuantity(takenItems, setTakenItems, item.productId, parseInt(e.target.value))} className="w-10 text-center bg-transparent"/>
                                                <button type="button" onClick={() => updateItemQuantity(takenItems, setTakenItems, item.productId, 0)}><TrashIcon className="w-3 h-3 text-red-500"/></button>
                                            </div>
