@@ -88,42 +88,39 @@ const LayawayCard: React.FC<{
 
   return (
     <>
-      <div className="min-w-0 bg-gray-100 dark:bg-gray-800 rounded-lg p-4 transition-all duration-300">
+      <div className="min-w-0 bg-gray-100 dark:bg-gray-800 rounded-lg p-3 transition-all duration-300">
         <button type="button" aria-expanded={isExpanded} aria-label={`Ver detalle del apartado ${layaway.invoiceNumber}`} className={`w-full text-left flex gap-3 ${layout === 'grid' ? 'flex-col' : 'flex-col sm:flex-row sm:items-center'} justify-between`} onClick={() => setIsExpanded(!isExpanded)}>
-          <div className="flex-1 mb-4 sm:mb-0">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`px-2 py-1 text-xs font-bold rounded-full ${statusClasses[layaway.status]}`}>{statusTexts[layaway.status]}</span>
-              <h3 className="font-bold text-lg break-words text-gray-900 dark:text-white">{layaway.customerName}</h3>
+              <h3 className="font-bold text-base break-words text-gray-900 dark:text-white">{layaway.customerName}</h3>
             </div>
              <p className="text-sm text-gray-500 dark:text-text-dark">{layaway.customerPhone} | Fact: #{layaway.invoiceNumber}</p>
-            <p className="text-xs text-gray-500 dark:text-text-dark mt-1">Apartado el {timing.createdLabel}</p>
-          </div>
-          <div className={`flex-1 text-left ${layout === 'list' ? 'sm:text-right' : ''}`}>
-            <p className="text-xl font-bold text-accent">{formatCOP(layaway.paidAmount)} / <span className="text-base text-gray-500 dark:text-text-dark">{formatCOP(layaway.totalAmount)}</span></p>
           </div>
         </button>
-        <div className="mt-3 rounded-lg border border-gray-300 dark:border-gray-700 p-3 space-y-1">
-          <p className="font-bold text-accent">{timing.ageLabel} desde la creación</p>
-          <p className="text-xs text-gray-600 dark:text-gray-300">Último abono: {timing.lastPaymentLabel}</p>
-          {timing.lastPaymentAgeLabel && <p className="text-xs text-gray-500 dark:text-text-dark">{timing.lastPaymentAgeLabel} desde el último abono</p>}
-          {!isPending && <p className="text-xs text-gray-500 dark:text-text-dark">Antigüedad del registro · {statusTexts[layaway.status].toLowerCase()}</p>}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+          <p className="text-gray-600 dark:text-gray-300"><span data-testid="layaway-age" className={`font-bold ${timing.ageDays !== null && timing.ageDays > 30 ? 'text-red-600 dark:text-red-400' : 'text-accent'}`}>{timing.ageLabel}</span> desde el apartado</p>
+          <p className="font-semibold">{isPending ? 'Saldo pendiente' : 'Saldo'}: <span className="text-accent">{formatCOP(balance)}</span></p>
         </div>
         {layout === 'grid' && (
-          <div className="mt-3 text-sm space-y-2">
-            <p className="font-semibold">{isPending ? 'Saldo pendiente' : 'Saldo'}: <span className="text-accent">{formatCOP(balance)}</span></p>
+          <div className="mt-2 text-sm space-y-1">
             <ul className="space-y-1 text-gray-600 dark:text-gray-300">
-              {layaway.items.slice(0, 3).map(item => <li key={item.id} className="break-words">{item.quantity} × {item.name}</li>)}
+              {layaway.items.slice(0, 2).map(item => <li key={item.id} className="break-words">{item.quantity} × {item.name}</li>)}
             </ul>
-            {layaway.items.length > 3 && <p className="text-xs text-gray-500">+{layaway.items.length - 3} productos en el detalle</p>}
+            {layaway.items.length > 2 && <p className="text-xs text-gray-500">+{layaway.items.length - 2} productos en el detalle</p>}
             {layaway.status === 'pre-order' && layaway.description && <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">Por traer: {layaway.description}</p>}
           </div>
         )}
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mt-2">
-            <div className="bg-accent h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-        </div>
-        <button type="button" className="mt-3 text-sm font-semibold text-accent" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Ocultar detalle' : 'Ver detalle y acciones'}</button>
+        <button type="button" className="mt-2 text-xs font-semibold text-accent" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Ocultar detalle' : 'Ver detalle'}</button>
         {isExpanded && (
-           <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-700">
+           <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-700">
+              <div className="mb-3 text-sm space-y-1">
+                <p className="text-gray-500 dark:text-text-dark">Apartado el {timing.createdLabel}</p>
+                <p>Total: <strong>{formatCOP(layaway.totalAmount)}</strong> · Abonado: <strong>{formatCOP(layaway.paidAmount)}</strong></p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                  <div className="bg-accent h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                </div>
+              </div>
               {layaway.status === 'pre-order' && layaway.description && (
                   <div className="mb-4 p-3 bg-yellow-500/10 rounded-lg">
                       <h4 className="font-bold text-yellow-400 mb-1">Descripción del Pedido</h4>
@@ -351,7 +348,6 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
                         </select>
                     </label>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-text-dark mb-4">Días calendario en Bogotá desde la creación; no indica vencimiento. Abre el detalle para registrar abonos o consultar el historial.</p>
                 <div className={layout === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start' : 'space-y-4'}>
                     {filteredLayaways.length > 0 ? (
                         filteredLayaways.map(layaway => (

@@ -31,16 +31,10 @@ test('counts Bogotá calendar days across midnight even when less than 24h elaps
   assert.equal(getLayawayTiming({ createdAt: '2026-11-05T05:00:00Z', payments: [] }, now).ageLabel, '0 días');
   assert.match(timing.createdLabel, /04/);
 });
-test('last abono is latest positive valid payment, regardless of array order', () => {
-  const timing = getLayawayTiming({ createdAt: record.createdAt, payments: [payment('2026-11-03T14:00:00Z'), payment('bad'), payment('2026-11-04T14:00:00Z', 0), payment('2026-10-01T14:00:00Z')] }, now);
-  assert.equal(timing.lastPaymentAgeLabel, '2 días');
-  assert.match(timing.lastPaymentLabel, /03/);
-});
-test('missing and future dates do not invent age or last payment', () => {
+test('missing and future dates do not invent elapsed days', () => {
   const invalid = getLayawayTiming({ createdAt: '', payments: [] }, now);
   assert.equal(invalid.ageLabel, 'Tiempo no disponible');
-  assert.equal(invalid.lastPaymentLabel, 'Sin abonos registrados');
-  assert.equal(invalid.lastPaymentAgeLabel, null);
+  assert.equal(invalid.ageDays, null);
   assert.equal(getLayawayTiming({ createdAt: '2026-12-01T14:00:00Z', payments: [] }, now).ageLabel, 'Fecha futura');
 });
 function props(overrides = {}) { return { layaways: [record, { ...record, id: 'new', invoiceNumber: 'A-2', customerName: 'Beatriz', status: 'pre-order', createdAt: '2026-11-01T14:00:00Z' }], inventory: [], sellers: [{ id: 'u', name: 'Ana' }], currentUser: { id: 'u', name: 'Ana', roleId: 'admin' }, roles: [{ id: 'admin', name: 'Administrator' }], onAddPayment() {}, onFulfillPreOrder() {}, onDeleteLayaway() {}, onUpdateLayaway() {}, ...overrides }; }
@@ -85,4 +79,29 @@ test('read-only cards keep details but expose no writes', async () => {
     assert.match(JSON.stringify(r.toJSON()), /Historial de Pagos/);
   } finally { await act(async () => r.unmount()); }
 });
+test('compact cards show only age and one balance; red starts at 31 days', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: now.getTime() });
+  const make = (id, createdAt) => ({ ...record, id, createdAt });
+  let r;
+  await act(async () => { r = create(React.createElement(LayawayView, props({ layaways: [
+    make('30', '2026-10-06T05:00:00Z'),
+    make('31', '2026-10-05T05:00:00Z'),
+    make('future', '2026-12-01T05:00:00Z'),
+    make('invalid', ''),
+  ] }))); });
+  try {
+    const badges = r.root.findAllByProps({ 'data-testid': 'layaway-age' });
+    const badge = label => badges.find(b => b.children.join('') === label);
+    assert.doesNotMatch(badge('30 días').props.className, /text-red/);
+    assert.match(badge('31 días').props.className, /text-red-600/);
+    assert.doesNotMatch(badge('Fecha futura').props.className, /text-red/);
+    assert.doesNotMatch(badge('Tiempo no disponible').props.className, /text-red/);
+    const collapsed = JSON.stringify(r.toJSON());
+    assert.doesNotMatch(collapsed, /Último abono|desde el último abono|Apartado el|Abonado:|Total:/);
+    assert.equal((collapsed.match(/Saldo pendiente/g) || []).length, 4);
+    await act(async () => byLabel(r, 'Lista').props.onClick());
+    assert.equal((JSON.stringify(r.toJSON()).match(/Saldo pendiente/g) || []).length, 4);
+  } finally { await act(async () => r.unmount()); }
+});
+
 test.after(async () => { await rm(dir, { recursive: true, force: true }); });

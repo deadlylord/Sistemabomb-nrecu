@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Ajuste 2026-11-05 — apartados compactos, versión 1.1.202 (solo staging)
+
+- Carlos pidió compactar las tarjetas, retirar último abono, evitar importes repetidos y poner rojo el contador al superar 30 días. Las tarjetas muestran días desde el apartado y saldo una sola vez; fecha exacta, total, abonado y progreso pasan al detalle, que conserva productos, pagos y acciones. Se reducen espacios y la vista previa a dos productos (restantes en detalle). Lista/cuadrícula, filtros y orden se conservan.
+- El contador usa días calendario de Bogotá: 30 mantiene el color habitual y 31 pasa a rojo en claro/oscuro. Fechas futuras o inválidas no reciben alerta roja. `layawayTiming` ya no recorre pagos para calcular el último abono. No se cambian consultas, escrituras ni reglas Firebase; main no forma parte de esta publicación.
+- Seis pruebas focalizadas aprobadas (incluye edición móvil anterior), con límites 30/31 días, fecha inválida/futura, ausencia de información redundante, saldo único en lista y cuadrícula, filtros, orden, registro de pago y permisos de solo lectura. Typecheck mantiene los tres errores previos de AppErrorBoundary. Build y diff se verifican antes de subir. Sin nueva revisión visual de navegador; continúa pendiente la prueba con sesión real en staging.
+
 ## Cambio 2026-11-05 — cuadrícula de apartados, versión 1.1.201 (solo staging)
 
 - Carlos solicitó una cuadrícula con más información del tiempo transcurrido para probar en staging. `LayawayView.tsx` añade selector Cuadrícula/Lista (inicial: cuadrícula), orden opcional por más antiguos, fecha de creación y días calendario de Bogotá, fecha y días desde el último abono positivo válido. La cuadrícula muestra saldo y hasta tres líneas de prendas; el detalle conserva todos los productos, historial y acciones. Los registros completados/cancelados indican antigüedad del registro, sin inventar fecha de cierre ni vencimiento. Se conserva el orden inicial más reciente, filtros, búsqueda y permisos; la preferencia de vista/orden usa el proveedor existente por usuario/empresa.
