@@ -2,6 +2,13 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Cambio 2026-11-05 — días hábiles Por Traer, versión 1.1.205 (solo staging)
+
+- Carlos solicitó lista/cuadrícula para abonos por traer y contador desde el abono, rojo al superar 7 días hábiles, conservando lecturas. Por Traer usa las mismas tarjetas existentes; solo su contador cambia: días hábiles desde `createdAt`, día 7 normal y día 8 rojo. Pagos posteriores no reinician el plazo. Apartados normales conservan días calendario y umbral >30; al recibir un encargo deja de ser pre-order y usa el comportamiento del apartado normal, sin nuevas fechas ni escrituras.
+- Convención comunicada: lunes a viernes, sin festivos nacionales colombianos, fecha de Bogotá. Intervalo (fecha de creación, hoy], sin contar el día de creación. `colombiaBusinessDays.ts` calcula festivos fijos/móviles localmente según Ley 51 de 1983 art. 1 (https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=4954); computus gregoriano para Semana Santa y traslados al lunes. Caché en memoria por año, semanas completas por aritmética y hasta seis días residuales; no itera todo el historial ni consulta APIs/calendarios/Firebase. Conserva el reloj local por minuto existente y su limpieza al desmontar. No cambia consultas/listeners, reglas, índices, permisos, stock ni cálculos monetarios.
+- Pruebas focalizadas: 15 aprobadas (tarjetas, edición móvil y flujo por traer). Cobertura de todos los días de 2026 contra calendario esperado de festivos; fines de semana, medianoche Bogotá, cambio de año, festivos coincidentes de 2025 sin doble descuento, futuro/fecha inválida, límite 7/8 con festivo de noviembre, pago posterior sin reinicio, lista/cuadrícula, Editar/Eliminar y recepción/abono. El flujo real de creación/abono/recepción se prueba con datos sintéticos, sin escribir Firestore real.
+- Build/diff y Typecheck se revisan antes de publicar. Sin verificación visual con sesión real. Main queda fuera del cambio.
+
 ## Corrección 2026-11-05 — reconocimiento de administrador en apartados, versión 1.1.204 (solo staging)
 
 - Carlos aportó captura con detalle abierto y sin Editar/Eliminar; mover botones en 1.1.203 no resolvió la detección del rol. Causa comprobada en código: LayawayCard buscaba el primer rol con nombre literal `Administrator` y comparaba su ID con el usuario; un administrador con nombre traducido o personalizado/userType admin no coincidía. Las pruebas previas solo usaban ese nombre literal y no cubrían el caso. No se leyó el documento real del rol de la sesión fotografiada.

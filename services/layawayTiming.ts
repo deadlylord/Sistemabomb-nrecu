@@ -1,5 +1,6 @@
 import type { Layaway } from '../types';
 import { bogotaDateKey } from './incomeChart';
+import { colombiaBusinessDaysSince } from './colombiaBusinessDays';
 
 const dateFormatter = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota', day: '2-digit', month: 'short', year: 'numeric',
@@ -18,13 +19,17 @@ function dateLabel(date: string): string {
   return Number.isFinite(new Date(date).getTime()) ? dateFormatter.format(new Date(date)) : 'Fecha no disponible';
 }
 
-export function getLayawayTiming(layaway: Pick<Layaway, 'createdAt'>, now: Date) {
-  const days = ageDays(layaway.createdAt, now);
+export function getLayawayTiming(layaway: Pick<Layaway, 'createdAt'> & Partial<Pick<Layaway, 'status'>>, now: Date) {
+  const isPreOrder = layaway.status === 'pre-order';
+  const days = isPreOrder ? colombiaBusinessDaysSince(layaway.createdAt, now) : ageDays(layaway.createdAt, now);
   return {
     createdLabel: dateLabel(layaway.createdAt),
     ageDays: days,
+    isOverdue: days !== null && days > (isPreOrder ? 7 : 30),
+    sinceLabel: isPreOrder ? 'desde el abono' : 'desde el apartado',
+    explanation: isPreOrder ? 'Lunes a viernes, sin festivos de Colombia. Desde la creación del abono por traer.' : 'Días calendario desde la creación del apartado.',
     ageLabel: days === null
       ? (new Date(layaway.createdAt).getTime() > now.getTime() ? 'Fecha futura' : 'Tiempo no disponible')
-      : `${days} ${days === 1 ? 'día' : 'días'}`,
+      : `${days} ${days === 1 ? 'día' : 'días'}${isPreOrder ? (days === 1 ? ' hábil' : ' hábiles') : ''}`,
   };
 }

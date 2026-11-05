@@ -99,7 +99,7 @@ const LayawayCard: React.FC<{
           </div>
         </button>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-          <p className="text-gray-600 dark:text-gray-300"><span data-testid="layaway-age" className={`font-bold ${timing.ageDays !== null && timing.ageDays > 30 ? 'text-red-600 dark:text-red-400' : 'text-accent'}`}>{timing.ageLabel}</span> desde el apartado</p>
+          <p className="text-gray-600 dark:text-gray-300"><span data-testid="layaway-age" title={timing.explanation} className={`font-bold ${timing.isOverdue ? 'text-red-600 dark:text-red-400' : 'text-accent'}`}>{timing.ageLabel}</span> {timing.sinceLabel}</p>
           <p className="font-semibold">{isPending ? 'Saldo pendiente' : 'Saldo'}: <span className="text-accent">{formatCOP(balance)}</span></p>
         </div>
         {layout === 'grid' && (

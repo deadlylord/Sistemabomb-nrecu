@@ -17,6 +17,7 @@ async function bundle(entry, name, plugins = []) {
   return import(pathToFileURL(path).href);
 }
 const { getLayawayTiming } = await bundle('services/layawayTiming.ts', 'timing');
+const { colombiaBusinessDaysSince } = await bundle('services/colombiaBusinessDays.ts', 'business-days');
 const { LayawayView } = await bundle('components/LayawayView.tsx', 'view', [{ name: 'modal-stub', setup(b) {
   b.onResolve({ filter: /EditLayawayModal$/ }, () => ({ path: 'modal', namespace: 'stub' }));
   b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: "import React from 'react'; export default props => React.createElement('div', { 'data-testid': 'edit-layaway-stub', modalProps: props });" }));
@@ -169,6 +170,49 @@ test('tenant administrator roles with localized or custom names expose actions; 
       assert.equal(r.root.findAllByProps({ 'aria-label': 'Eliminar apartado' }).length, scenario.allowed ? 1 : 0, JSON.stringify(scenario));
     } finally { await act(async () => r.unmount()); }
   }
+});
+
+test('Colombian business dates exclude all 2026 national holidays and weekends', () => {
+  const excluded = new Set(['2026-01-01', '2026-01-12', '2026-03-23', '2026-04-02', '2026-04-03', '2026-05-01', '2026-05-18', '2026-06-08', '2026-06-15', '2026-06-29', '2026-07-20', '2026-08-07', '2026-08-17', '2026-10-12', '2026-11-02', '2026-11-16', '2026-12-08', '2026-12-25']);
+  for (let date = new Date('2026-01-01T12:00:00Z'); date.getUTCFullYear() === 2026; date = new Date(+date + 86400000)) {
+    const key = date.toISOString().slice(0, 10);
+    const expected = date.getUTCDay() === 0 || date.getUTCDay() === 6 || excluded.has(key) ? 0 : 1;
+    assert.equal(colombiaBusinessDaysSince(new Date(+date - 86400000).toISOString(), date), expected, key);
+  }
+});
+test('elapsed business days handle Bogotá midnight, year changes, duplicate holidays and invalid dates', () => {
+  assert.equal(colombiaBusinessDaysSince('2026-10-30T14:00:00Z', new Date('2026-11-03T14:00:00Z')), 1);
+  assert.equal(colombiaBusinessDaysSince('2026-12-24T14:00:00Z', new Date('2027-01-04T14:00:00Z')), 5);
+  assert.equal(colombiaBusinessDaysSince('2025-06-27T14:00:00Z', new Date('2025-07-01T14:00:00Z')), 1);
+  assert.equal(colombiaBusinessDaysSince('2026-11-05T04:59:00Z', new Date('2026-11-05T05:01:00Z')), 1);
+  assert.equal(colombiaBusinessDaysSince('2026-11-05T05:00:00Z', new Date('2026-11-05T05:01:00Z')), 0);
+  assert.equal(colombiaBusinessDaysSince('', now), null);
+  assert.equal(colombiaBusinessDaysSince('2027-01-01T12:00:00Z', now), null);
+});
+test('Por Traer retains grid/list actions; 7 business days stay normal and 8 turn red without resetting after payments', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-05T17:00:00Z').getTime() });
+  const seven = { ...record, status: 'pre-order', id: 'seven', invoiceNumber: 'P-7', createdAt: '2026-10-26T14:00:00Z' };
+  const eight = { ...record, status: 'pre-order', id: 'eight', invoiceNumber: 'P-8', createdAt: '2026-10-23T14:00:00Z', payments: [payment('2026-11-05T14:00:00Z')] };
+  let r;
+  await act(async () => { r = create(React.createElement(LayawayView, props({ layaways: [seven, eight] }))); });
+  try {
+    await act(async () => byLabel(r, 'Por Traer').props.onClick());
+    for (const layout of ['Cuadrícula', 'Lista']) {
+      await act(async () => byLabel(r, layout).props.onClick());
+      const badges = r.root.findAllByProps({ 'data-testid': 'layaway-age' });
+      assert.equal(badges.length, 2);
+      assert.doesNotMatch(badges.find(b => b.children.join('') === '7 días hábiles').props.className, /text-red/);
+      assert.match(badges.find(b => b.children.join('') === '8 días hábiles').props.className, /text-red-600/);
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Editar apartado' }).length, 2);
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Eliminar apartado' }).length, 2);
+      const header = r.root.findByProps({ 'aria-label': 'Ver detalle del apartado P-7' });
+      await act(async () => header.props.onClick());
+      assert.ok(byLabel(r, 'Registrar Abono'));
+      assert.ok(byLabel(r, 'Marcar Recibido'));
+      await act(async () => header.props.onClick());
+    }
+    assert.equal(getLayawayTiming(record, new Date('2026-11-05T17:00:00Z')).ageLabel, '35 días');
+  } finally { await act(async () => r.unmount()); }
 });
 
 test.after(async () => { await rm(dir, { recursive: true, force: true }); });
