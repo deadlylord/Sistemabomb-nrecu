@@ -2,6 +2,13 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Corrección 2026-11-05 — reconocimiento de administrador en apartados, versión 1.1.204 (solo staging)
+
+- Carlos aportó captura con detalle abierto y sin Editar/Eliminar; mover botones en 1.1.203 no resolvió la detección del rol. Causa comprobada en código: LayawayCard buscaba el primer rol con nombre literal `Administrator` y comparaba su ID con el usuario; un administrador con nombre traducido o personalizado/userType admin no coincidía. Las pruebas previas solo usaban ese nombre literal y no cubrían el caso. No se leyó el documento real del rol de la sesión fotografiada.
+- Se usa `resolveTenantRole` + `isTenantAdministrator` existentes para reconocer el rol propio del usuario en su empresa y sede. App pasa `visibleStores`; la vista determina canManage una sola vez y la tarjeta combina ese valor con `!readOnly`. No se decide por el nombre del usuario, no se cambian roles, reglas, consultas ni datos. Sin sede/rol válido, usuario deshabilitado, rol de otra empresa o modo consulta no se muestran estas acciones. Se preserva el diseño compacto y los callbacks originales.
+- Nueve pruebas focalizadas aprobadas, incluyendo edición móvil real anterior y nueve escenarios nuevos de rol: nombre personalizado admin, Administrador, Administrator, vendedor, vendedor llamado Administrator, rol de otra empresa, usuario deshabilitado, sede desconocida y consulta. La regresión combina además un rol Administrator ajeno antes del rol propio. Se comprueba edición/eliminación, filtros, orden, contador y pagos con datos sintéticos. No se afirma validación con la sesión real ni Firestore desplegado; solicitar comprobar 1.1.204 en staging después de la publicación.
+- Build y diff aprobados. Suite completa: 311 pruebas, 309 aprobadas; persisten solo los dos fallos previos de dependencia Functions y empaquetado React. Typecheck conserva los tres errores previos de AppErrorBoundary. Solo staging, sin modificar main ni conceder nuevos permisos guardados.
+
 ## Corrección 2026-11-05 — editar/eliminar visibles, versión 1.1.203 (solo staging)
 
 - Carlos reportó que no encontraba Editar/Eliminar tras compactar. Verificación: ambos seguían dentro del bloque `isExpanded`; no se habían borrado sus callbacks, pero la tarjeta cerrada no permitía verlos. Se trasladan a una fila visible junto a Ver detalle, con icono y texto, en lista y cuadrícula. No se duplican al expandir. Se conserva exactamente la condición previa `isAdmin && !readOnly` y no cambian roles, consultas, datos, guardado, confirmación de borrado ni inventario.

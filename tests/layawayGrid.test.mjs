@@ -37,7 +37,7 @@ test('missing and future dates do not invent elapsed days', () => {
   assert.equal(invalid.ageDays, null);
   assert.equal(getLayawayTiming({ createdAt: '2026-12-01T14:00:00Z', payments: [] }, now).ageLabel, 'Fecha futura');
 });
-function props(overrides = {}) { return { layaways: [record, { ...record, id: 'new', invoiceNumber: 'A-2', customerName: 'Beatriz', status: 'pre-order', createdAt: '2026-11-01T14:00:00Z' }], inventory: [], sellers: [{ id: 'u', name: 'Ana' }], currentUser: { id: 'u', name: 'Ana', roleId: 'admin' }, roles: [{ id: 'admin', name: 'Administrator' }], onAddPayment() {}, onFulfillPreOrder() {}, onDeleteLayaway() {}, onUpdateLayaway() {}, ...overrides }; }
+function props(overrides = {}) { return { layaways: [record, { ...record, id: 'new', invoiceNumber: 'A-2', customerName: 'Beatriz', status: 'pre-order', createdAt: '2026-11-01T14:00:00Z' }], inventory: [], sellers: [{ id: 'u', name: 'Ana' }], currentUser: { id: 'u', name: 'Ana', roleId: 'admin', companyId: 'test', storeId: 'store' }, stores: [{ id: 'store', companyId: 'test' }], roles: [{ id: 'admin', name: 'Administrator', companyId: 'test' }], onAddPayment() {}, onFulfillPreOrder() {}, onDeleteLayaway() {}, onUpdateLayaway() {}, ...overrides }; }
 const byLabel = (r, label) => r.root.findAllByType('button').find(b => b.children.join('') === label);
 
 test('grid/list, oldest order and search preserve records and existing payment action', async () => {
@@ -146,6 +146,29 @@ test('seller cannot gain edit or delete controls by changing layout or opening d
       }
     }
   } finally { await act(async () => r.unmount()); }
+});
+
+test('tenant administrator roles with localized or custom names expose actions; foreign/disabled roles do not', async () => {
+  const cases = [
+    { role: { name: 'Administrador Staging', userType: 'admin' }, allowed: true },
+    { role: { name: 'Administrador' }, allowed: true },
+    { role: { name: 'Administrator' }, allowed: true },
+    { role: { name: 'Asesor', userType: 'seller' }, allowed: false },
+    { role: { name: 'Administrator', userType: 'seller' }, allowed: false },
+    { role: { name: 'Administrador Staging', userType: 'admin', companyId: 'other' }, allowed: false },
+    { role: { name: 'Administrador Staging', userType: 'admin' }, user: { isDisabled: true }, allowed: false },
+    { role: { name: 'Administrador Staging', userType: 'admin' }, user: { storeId: 'missing' }, allowed: false },
+    { role: { name: 'Administrador Staging', userType: 'admin' }, readOnly: true, allowed: false },
+  ];
+  for (const scenario of cases) {
+    const defaults = props();
+    let r;
+    await act(async () => { r = create(React.createElement(LayawayView, props({ layaways: [record], roles: [{ id: 'other-admin', name: 'Administrator', companyId: 'other' }, { id: 'admin', companyId: 'test', ...scenario.role }], currentUser: { ...defaults.currentUser, ...scenario.user }, readOnly: scenario.readOnly || false }))); });
+    try {
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Editar apartado' }).length, scenario.allowed ? 1 : 0, JSON.stringify(scenario));
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Eliminar apartado' }).length, scenario.allowed ? 1 : 0, JSON.stringify(scenario));
+    } finally { await act(async () => r.unmount()); }
+  }
 });
 
 test.after(async () => { await rm(dir, { recursive: true, force: true }); });

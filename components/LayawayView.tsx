@@ -2,9 +2,10 @@ import { useViewFilter } from '../services/viewFilters';
 
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Layaway, PaymentMethod, Seller, Role, Product } from '../types';
+import { Layaway, PaymentMethod, Seller, Role, Product, Store } from '../types';
 import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, TrashIcon, CrossIcon, EditIcon } from './Icons';
+import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import EditLayawayModal from './EditLayawayModal';
 import { getLayawayTiming } from '../services/layawayTiming';
 
@@ -19,6 +20,7 @@ interface LayawayViewProps {
   onUpdateLayaway: (updatedLayaway: Layaway, originalLayaway: Layaway) => void;
   currentUser: Seller;
   roles: Role[];
+  stores: Store[];
 }
 
 const LayawayCard: React.FC<{
@@ -32,9 +34,8 @@ const LayawayCard: React.FC<{
   onFulfillPreOrder: (layawayId: string) => void;
   onDeleteLayaway: (layawayId: string) => void;
   onUpdateLayaway: (updatedLayaway: Layaway, originalLayaway: Layaway) => void;
-  currentUser: Seller;
-  roles: Role[];
-}> = ({ readOnly = false, layout, now, layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+  canManage: boolean;
+}> = ({ readOnly = false, layout, now, layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, canManage }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -43,8 +44,7 @@ const LayawayCard: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [paymentSeller, setPaymentSeller] = useState<string>('');
 
-  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);
+  const isAdmin = !readOnly && canManage;
 
   const balance = layaway.totalAmount - layaway.paidAmount;
   const progress = layaway.totalAmount > 0 ? Math.min(100, Math.max(0, (layaway.paidAmount / layaway.totalAmount) * 100)) : 0;
@@ -269,7 +269,8 @@ const LayawayCard: React.FC<{
 };
 
 
-export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles, stores = [] }) => {
+    const canManage = isTenantAdministrator(resolveTenantRole(currentUser, roles, stores));
     const [searchTerm, setSearchTerm] = useViewFilter('LayawayView:searchTerm', '');
     const [layout, setLayout] = useViewFilter<'list' | 'grid'>('LayawayView:layout', 'grid');
     const [sort, setSort] = useViewFilter<'newest' | 'oldest'>('LayawayView:sort', 'newest');
@@ -371,8 +372,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
                                 onFulfillPreOrder={onFulfillPreOrder}
                                 onDeleteLayaway={onDeleteLayaway}
                                 onUpdateLayaway={onUpdateLayaway}
-                                currentUser={currentUser}
-                                roles={roles}
+                                canManage={canManage}
                             />
                         ))
                     ) : (
