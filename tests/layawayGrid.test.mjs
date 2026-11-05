@@ -19,7 +19,7 @@ async function bundle(entry, name, plugins = []) {
 const { getLayawayTiming } = await bundle('services/layawayTiming.ts', 'timing');
 const { LayawayView } = await bundle('components/LayawayView.tsx', 'view', [{ name: 'modal-stub', setup(b) {
   b.onResolve({ filter: /EditLayawayModal$/ }, () => ({ path: 'modal', namespace: 'stub' }));
-  b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: 'export default () => null;' }));
+  b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: "import React from 'react'; export default props => React.createElement('div', { 'data-testid': 'edit-layaway-stub', modalProps: props });" }));
 } }]);
 const now = new Date('2026-11-05T05:01:00Z');
 const payment = (date, amount = 10000) => ({ date, amount, method: 'Efectivo', seller: 'Ana' });
@@ -101,6 +101,50 @@ test('compact cards show only age and one balance; red starts at 31 days', async
     assert.equal((collapsed.match(/Saldo pendiente/g) || []).length, 4);
     await act(async () => byLabel(r, 'Lista').props.onClick());
     assert.equal((JSON.stringify(r.toJSON()).match(/Saldo pendiente/g) || []).length, 4);
+  } finally { await act(async () => r.unmount()); }
+});
+
+test('edit and delete stay visible in collapsed grid/list and route the original record once', async () => {
+  let r, deleted = [], updates = [];
+  await act(async () => { r = create(React.createElement(LayawayView, props({ layaways: [record], onDeleteLayaway: id => deleted.push(id), onUpdateLayaway: (...args) => updates.push(args) }))); });
+  try {
+    for (const layout of ['Cuadrícula', 'Lista']) {
+      await act(async () => byLabel(r, layout).props.onClick());
+      assert.equal(r.root.findByProps({ 'aria-label': 'Ver detalle del apartado A-1' }).props['aria-expanded'], false);
+      const edit = () => r.root.findByProps({ 'aria-label': 'Editar apartado' });
+      const remove = () => r.root.findByProps({ 'aria-label': 'Eliminar apartado' });
+      await act(async () => edit().props.onClick());
+      const modal = r.root.findByProps({ 'data-testid': 'edit-layaway-stub' }).props.modalProps;
+      assert.equal(modal.layaway.id, record.id);
+      assert.equal(modal.isOpen, true);
+      const updated = { ...record, customerName: 'Editado' };
+      await act(async () => modal.onUpdateLayaway(updated, record));
+      assert.deepEqual(updates.at(-1), [updated, record]);
+      await act(async () => modal.onClose());
+      assert.equal(r.root.findAllByProps({ 'data-testid': 'edit-layaway-stub' }).length, 0);
+      await act(async () => remove().props.onClick());
+      assert.equal(deleted.at(-1), record.id);
+      await act(async () => r.root.findByProps({ 'aria-label': 'Ver detalle del apartado A-1' }).props.onClick());
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Editar apartado' }).length, 1);
+      assert.equal(r.root.findAllByProps({ 'aria-label': 'Eliminar apartado' }).length, 1);
+      await act(async () => r.root.findByProps({ 'aria-label': 'Ver detalle del apartado A-1' }).props.onClick());
+    }
+    assert.equal(deleted.length, 2);
+    assert.equal(updates.length, 2);
+  } finally { await act(async () => r.unmount()); }
+});
+test('seller cannot gain edit or delete controls by changing layout or opening details', async () => {
+  let r;
+  await act(async () => { r = create(React.createElement(LayawayView, props({ layaways: [record], currentUser: { id: 'seller', roleId: 'seller' } }))); });
+  try {
+    for (const layout of ['Cuadrícula', 'Lista']) {
+      await act(async () => byLabel(r, layout).props.onClick());
+      for (const expanded of [false, true]) {
+        assert.equal(r.root.findAllByProps({ 'aria-label': 'Editar apartado' }).length, 0);
+        assert.equal(r.root.findAllByProps({ 'aria-label': 'Eliminar apartado' }).length, 0);
+        await act(async () => r.root.findByProps({ 'aria-label': 'Ver detalle del apartado A-1' }).props.onClick());
+      }
+    }
   } finally { await act(async () => r.unmount()); }
 });
 

@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Corrección 2026-11-05 — editar/eliminar visibles, versión 1.1.203 (solo staging)
+
+- Carlos reportó que no encontraba Editar/Eliminar tras compactar. Verificación: ambos seguían dentro del bloque `isExpanded`; no se habían borrado sus callbacks, pero la tarjeta cerrada no permitía verlos. Se trasladan a una fila visible junto a Ver detalle, con icono y texto, en lista y cuadrícula. No se duplican al expandir. Se conserva exactamente la condición previa `isAdmin && !readOnly` y no cambian roles, consultas, datos, guardado, confirmación de borrado ni inventario.
+- Regresiones: ocho pruebas focalizadas aprobadas incluyendo las anteriores. Pruebas nuevas verifican botones sin expandir en ambas vistas, apertura/cierre de edición y callback con el registro original, borrado con ID correcto una vez por clic, ausencia de botones duplicados al expandir y ausencia de estos controles para vendedor/consulta. El editor real conserva su prueba móvil previa. Registro de abono, recepción de Por Traer, filtros, orden, contador y saldo conservan su implementación.
+- Build/diff comprobados antes de publicar. No se afirma revisión visual ni borrado sobre Firestore real; se usan datos sintéticos y callbacks de prueba. La prueba anterior del navegador sigue limitada por el entorno. Solo se publica staging; main permanece fuera del cambio.
+
 ## Ajuste 2026-11-05 — apartados compactos, versión 1.1.202 (solo staging)
 
 - Carlos pidió compactar las tarjetas, retirar último abono, evitar importes repetidos y poner rojo el contador al superar 30 días. Las tarjetas muestran días desde el apartado y saldo una sola vez; fecha exacta, total, abonado y progreso pasan al detalle, que conserva productos, pagos y acciones. Se reducen espacios y la vista previa a dos productos (restantes en detalle). Lista/cuadrícula, filtros y orden se conservan.

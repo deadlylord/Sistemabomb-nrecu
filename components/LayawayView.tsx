@@ -111,7 +111,33 @@ const LayawayCard: React.FC<{
             {layaway.status === 'pre-order' && layaway.description && <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">Por traer: {layaway.description}</p>}
           </div>
         )}
-        <button type="button" className="mt-2 text-xs font-semibold text-accent" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Ocultar detalle' : 'Ver detalle'}</button>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <button type="button" className="text-xs font-semibold text-accent" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Ocultar detalle' : 'Ver detalle'}</button>
+          <div className="flex items-center gap-1">
+            {isAdmin && (
+                <button
+                  type="button"
+                  aria-label="Editar apartado"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="bg-blue-500/10 text-blue-500 font-semibold inline-flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg hover:bg-blue-500/20 transition-colors"
+                  title="Editar Abono"
+                >
+                    <EditIcon className="w-4 h-4" /> Editar
+                </button>
+            )}
+            {isAdmin && (
+                <button
+                  type="button"
+                  aria-label="Eliminar apartado"
+                  onClick={() => onDeleteLayaway(layaway.id)}
+                  className="bg-red-500/10 text-red-500 font-semibold inline-flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg hover:bg-red-500/20 transition-colors"
+                  title="Eliminar Abono Permanentemente"
+                >
+                    <TrashIcon className="w-4 h-4" /> Eliminar
+                </button>
+            )}
+          </div>
+        </div>
         {isExpanded && (
            <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-700">
               <div className="mb-3 text-sm space-y-1">
@@ -144,24 +170,6 @@ const LayawayCard: React.FC<{
                 </ul>
               ) : <p className="text-sm text-gray-500 dark:text-text-dark">No hay pagos registrados.</p>}
                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                  {isAdmin && (
-                      <button 
-                        onClick={() => setIsEditModalOpen(true)}
-                        className="bg-blue-500/10 text-blue-500 font-bold p-2 rounded-lg hover:bg-blue-500/20 transition-colors"
-                        title="Editar Abono"
-                      >
-                          <EditIcon className="w-5 h-5" />
-                      </button>
-                  )}
-                  {isAdmin && (
-                      <button 
-                        onClick={() => onDeleteLayaway(layaway.id)} 
-                        className="bg-red-500/10 text-red-500 font-bold p-2 rounded-lg hover:bg-red-500/20 transition-colors"
-                        title="Eliminar Abono Permanentemente"
-                      >
-                          <TrashIcon className="w-5 h-5" />
-                      </button>
-                  )}
                   {!readOnly && layaway.status === 'pre-order' && (
                       <button 
                         onClick={async () => {
