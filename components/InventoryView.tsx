@@ -1,3 +1,4 @@
+import { ownedInventoryUnits } from '../services/inventoryOwnership';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { getInventoryCategorySummary } from '../services/inventoryCategories';
@@ -419,7 +420,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: raw
         .filter(e => e.date >= startDate)
         .reduce((sum, e) => sum + e.valueChange, 0);
 
-    const currentValue = inventory.reduce((sum, p) => sum + p.cost * p.stock, 0);
+    const currentValue = inventory.reduce((sum, p) => sum + p.cost * ownedInventoryUnits(p), 0);
     const startingValue = currentValue - netChangeInPeriod;
     
     const dailyChanges: { [date: string]: number } = {};

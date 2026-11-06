@@ -82,8 +82,9 @@ export async function warehouseOperation(db, auth, input) {
       const [local, warehouse] = await Promise.all([tx.get(localRef), tx.get(warehouseRef)]);
       const p = local.exists ? local.data() : null, w = warehouse.exists ? warehouse.data() : null;
       if (!p || p.storeId !== storeId || (p.companyId || 'default_company') !== companyId || p.isDisabled || !key(p.categoryId)) fail('permission-denied', 'El producto no pertenece al inventario activo de esta tienda.');
-      if (w && (!owns(w, companyId, storeId) || w.categoryId !== p.categoryId)) fail('failed-precondition', 'La categoría del producto cambió; un administrador debe revisar su ubicación.');
+      if (w && (!owns(w, companyId, storeId) || w.categoryId !== p.categoryId && w.stock > 0)) fail('failed-precondition', 'La categoría del producto cambió; un administrador debe revisar su ubicación.');
       const localBefore = p.stock, warehouseBefore = w?.stock || 0;
+      if ((p.warehouseUnits || 0) !== warehouseBefore) fail('failed-precondition', 'Las existencias enlazadas de bodega requieren revisión.');
       if (!quantity(localBefore) || !quantity(warehouseBefore)) fail('failed-precondition', 'Las existencias actuales requieren revisión.');
       const delta = direction === 'toWarehouse' ? units : -units;
       const localAfter = localBefore - delta, warehouseAfter = warehouseBefore + delta;
@@ -92,7 +93,7 @@ export async function warehouseOperation(db, auth, input) {
       const categoryBefore = category.exists ? category.data().stock : 0;
       if (!quantity(categoryBefore) || !quantity(categoryBefore + delta)) fail('failed-precondition', 'El resumen de bodega requiere revisión.');
       const record = { companyId, storeId, productId, productName: p.name, categoryId: p.categoryId, supplier: p.supplier || '', direction, quantity: units, localBefore, localAfter, warehouseBefore, warehouseAfter, createdAt: now, actorId: actor.id, actorName: actor.seller.name, note: input.note || '', ...(original ? { reversalOf: input.movementId } : {}) };
-      tx.update(localRef, { stock: localAfter });
+      tx.update(localRef, { companyId, stock: localAfter, warehouseUnits: warehouseAfter });
       tx.set(warehouseRef, { companyId, storeId, productId, name: p.name, supplier: p.supplier || '', categoryId: p.categoryId, stock: warehouseAfter, updatedAt: now });
       tx.set(categoryRef, { companyId, storeId, stock: categoryBefore + delta, revision: (category.data()?.revision || 0) + 1, updatedAt: now });
       tx.create(root.collection('movements').doc(recordId), record);
@@ -117,6 +118,10 @@ export async function warehouseOperation(db, auth, input) {
         if (!key(id) || !quantity(value)) fail('invalid-argument', 'Detalle inválido.');
         const p = await tx.get(root.collection('products').doc(id));
         if (!p.exists || !owns(p.data(),companyId,storeId) || !verified.some(v => v.categoryId === p.data().categoryId)) fail('permission-denied', 'El detalle no pertenece al conteo.');
+        if (action === 'adjust') {
+          const local = await tx.get(db.collection('inventory').doc(id));
+          if (!local.exists || !owns(local.data(),companyId,storeId) || local.data().categoryId !== p.data().categoryId || local.data().warehouseUnits !== p.data().stock) fail('failed-precondition', 'La referencia local cambió; revisa su vínculo con bodega.');
+        }
         adjustments.push({ productId: id, categoryId: p.data().categoryId, before: p.data().stock, after: value });
       }
       if (action === 'adjust') {
@@ -124,7 +129,10 @@ export async function warehouseOperation(db, auth, input) {
           const delta = adjustments.filter(p => p.categoryId === category.categoryId).reduce((sum,p) => sum + p.after - p.before,0);
           if (category.systemStock + delta !== category.physicalCount) fail('failed-precondition', 'El detalle contado no coincide con el total de la categoría.');
         }
-        for (const p of adjustments) tx.update(root.collection('products').doc(p.productId), { stock: p.after, updatedAt: now });
+        for (const p of adjustments) {
+          tx.update(root.collection('products').doc(p.productId), { stock: p.after, updatedAt: now });
+          tx.update(db.collection('inventory').doc(p.productId), { warehouseUnits: p.after });
+        }
         for (const category of verified) tx.update(root.collection('categories').doc(category.categoryId), { stock: category.physicalCount, revision: category.revision + 1, updatedAt: now });
       }
       const row = { companyId, storeId, createdAt: now, actorId: actor.id, actorName: actor.seller.name, verification: verified, productCounts: details, productAdjustments: action === 'adjust' ? adjustments : [], isApplied: action === 'adjust' };

@@ -1,3 +1,4 @@
+import { ownedInventoryUnits } from '../services/inventoryOwnership';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { useAsyncScope } from '../services/useAsyncScope';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
@@ -255,7 +256,7 @@ const SmartAccountantView: React.FC<SmartAccountantViewProps> = ({
     const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
     
     // Asset info
-    const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * p.stock), 0);
+    const totalInventoryValue = inventory.reduce((sum, p) => sum + (p.cost * ownedInventoryUnits(p)), 0);
 
     // Debt & Loans computation (Filtered by current store)
     const storeLoans = loans.filter(l => l.storeId === currentStore?.id);

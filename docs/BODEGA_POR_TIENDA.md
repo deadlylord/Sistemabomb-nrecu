@@ -4,7 +4,7 @@ Estado: rama de trabajo derivada de staging. Desactivada por defecto. No habilit
 
 ## Modelo
 
-- `inventory/{productId}.stock` continúa representando el stock del local. Compras, ventas y conteo actual no cambian de código.
+- `inventory/{productId}.stock` continúa representando el stock del local. Compras, ventas y conteo actual no cambian sus cantidades. `warehouseUnits` es un espejo administrado solo por servidor para proteger el vínculo y valorar local + bodega con los documentos existentes, sin nuevas consultas.
 - Una bodega lógica por empresa/tienda bajo `warehouseCompanies/{companyId}/stores/{storeId}`.
 - `products/{productId}` mantiene cantidades de bodega enlazadas por ID exacto al producto del local, nunca por nombre/marca/SKU.
 - `categories/{categoryId}` mantiene stock y revisión en la misma transacción de movimientos/ajustes. Inicialmente no hay mercancía; se envía desde el stock normal. No se duplica stock inicial.
@@ -17,7 +17,7 @@ Todo acceso usa `vestikaStagingWarehouse` (callable con App Check, región us-ce
 
 Se reutiliza verifiedActor: identidad firmada, versión de acceso, perfil, rol, empresa y sede activos. Un vendedor solo opera su propia tienda; un administrador de empresa puede escoger otras tiendas de la misma empresa. No existe excepción para Developer que permita cruzar empresas. Se exige acceso POS/inventario. Ajustes y reversiones solo administrador. Actor/empresa/stock no se aceptan como autoridad del navegador.
 
-Las reglas de staging actuales terminan en deny-all para rutas no declaradas. No se agregan permisos directos para warehouseCompanies; las lecturas y escrituras son solo del servidor. **Antes de activar, comprobar en emulador y en el proyecto real que estas rutas continúan denegadas al cliente y no existe otro match permisivo.** No se modificaron ni desplegaron reglas.
+Las reglas de staging actuales terminan en deny-all para rutas no declaradas. No se agregan permisos directos para warehouseCompanies; las lecturas y escrituras son solo del servidor. **Antes de activar, comprobar en emulador y en el proyecto real que estas rutas continúan denegadas al cliente y no existe otro match permisivo.** Se añaden validadores en las reglas de staging: el cliente no puede crear/alterar el espejo ni borrar o reclasificar referencias con unidades en bodega. No hay nuevas lecturas en reglas. Se validaron contra el emulador; aún no se desplegaron.
 
 ## Lecturas
 
@@ -37,16 +37,16 @@ Si sessionStorage está bloqueado o contiene un registro inválido, se impide gu
 
 ## Activación pendiente
 
-1. Instalar dependencias de functions con su lockfile y desplegar únicamente `vestikaStagingWarehouse` al proyecto **vestika-staging**, con cuenta autorizada. No desplegar todos los servicios ni producción.
+1. Dependencias de functions instaladas con lockfile. Falta completar autenticación Firebase iniciada con login --no-localhost; después desplegar únicamente `vestikaStagingWarehouse` y actualizar `businessInventoryChanged` en **vestika-staging**, para que el resumen mantenga la valoración local + bodega. Desplegar únicamente las reglas de staging verificadas. No desplegar todos los servicios ni producción.
 2. Validar App Check/identidad, reglas privadas de las rutas, consultas paginadas e índices efectivos. Ejecutar transacciones concurrentes contra emulador o staging con datos sintéticos.
 3. Comprobar en la sesión real de vendedor y administrador: movimiento en ambos sentidos, conteo general, ojos/borrador/ajuste, reversiones, cambio de tienda/empresa y errores/reintentos.
-4. Validar edición/cambio de categoría, baja/reactivación de referencias con unidades en bodega: por ahora el servicio bloquea inconsistencias, pero no hay asistente para resolver un producto local eliminado o cambiado de categoría.
-5. Revisar interpretación de valor de inventario: los informes actuales calculan con stock local; deben distinguirlo de la valoración consolidada local+bodega antes de considerar completada la integración financiera.
+4. Implementado y verificado en emulador: no borrar/cambiar categoría mientras warehouseUnits > 0; al vaciar bodega se permite reclasificar o borrar. Nombre, precio, costo y stock local siguen editables. Los detalles muestran el nombre/marca actual del catálogo cuando está cargado.
+5. Implementada valoración local + bodega en Dashboard, gráfico de valor de inventario, Contador Inteligente y proyección businessSummary; POS/conteo físico/categorías siguen usando solo stock local. Campo opcional ausente equivale a cero: no se migra inventario antiguo. La prueba de valoración asegura que mover 4 de 10 unidades no altera el valor consolidado y que editar costo valora ambas ubicaciones. Falta confirmar el trigger efectivo actualizado en staging al desplegar.
 6. Solo después, configurar **VITE_STORE_WAREHOUSE=true** en el contexto staging y recompilar. Además requiere VITE_APP_ENV=staging y el proyecto vestika-staging. No existe habilitación por defecto ni cambio de Netlify en esta propuesta.
 
 ## Validación ejecutada
 
-- 12 pruebas nuevas aprobadas de servicio y React. Servicio probado con un adaptador transaccional en memoria serializado, no con Firebase real: no certifica reintentos del SDK, IAM, índices o reglas desplegadas.
+- 15 pruebas focalizadas aprobadas de servicio y React. Servicio probado con un adaptador transaccional en memoria serializado, no con Firebase real: no certifica reintentos del SDK, IAM, índices o reglas desplegadas.
 - Incluye pertenencia de empresa/sede, acceso revocado, cantidades inválidas, operaciones repetidas, dos movimientos compitiendo por stock, retorno, reversión, conteo con revisión obsoleta, borradores, ajuste explícito admin, paginación, cargas al tocar el ojo y reintento de UI con el mismo ID.
-- Suite completa: 326 pruebas, 324 pasan y solo dos fallos conocidos de baseline (dependencia Functions ausente y empaquetado React en sharedRecordAccess). Typecheck conserva únicamente los tres errores previos de AppErrorBoundary. Build aprobado y diff limpio.
-- No hubo revisión visual en navegador ni escrituras sobre datos reales. No hay sesión Firebase CLI configurada en este entorno; no se desplegó el callable ni se activó la bandera. Staging y main publicados permanecen sin cambios.
+- Suite completa: 329 pruebas, 328 pasan y queda únicamente el fallo previo de empaquetado React en sharedRecordAccess; instalar dependencias de Functions resolvió el otro fallo de entorno. Typecheck conserva únicamente los tres errores previos de AppErrorBoundary. Build aprobado y diff limpio.
+- Emulador real: 21 pruebas aprobadas de identidad, resúmenes y bodega, incluidas transacciones SDK concurrentes, consulta paginada, validación de reglas privadas y conservación de ediciones de productos. No se escribieron datos reales. El intento visual con Chromium volvió a fallar por restricciones del proceso; queda pendiente la revisión visual. Firebase CLI está instalado; autenticación iniciada y pendiente del código de Carlos. No se desplegó el callable ni se activó la bandera. Staging y main publicados permanecen sin cambios.

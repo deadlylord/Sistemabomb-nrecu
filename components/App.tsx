@@ -2600,6 +2600,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       
       const currentSnap = await getDoc(productRef);
       if (!currentSnap.exists() || !isOwnInventory(currentSnap.data() as Product)) throw new Error('Producto no autorizado.');
+      if ((currentSnap.data().warehouseUnits || 0) > 0 && currentSnap.data().categoryId !== updatedProduct.categoryId) throw new Error('Regresa primero las unidades de bodega al local antes de cambiar su categoría.');
       const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
       const oldStock = currentSnap.exists() ? (currentSnap.data().stock || 0) : 0;
       const oldPrice = currentSnap.exists() ? (currentSnap.data().price || 0) : 0;
@@ -2630,6 +2631,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
               discountPrice: updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField()
           });
       } else {
+          if (snapshot.docs.some(d => (d.data().warehouseUnits || 0) > 0 && d.data().categoryId !== updatedProduct.categoryId)) throw new Error('Una referencia relacionada tiene unidades en bodega; regresa esas unidades antes de cambiar la categoría.');
           snapshot.docs.forEach(docSnap => {
               const updateData: any = { 
                   name: updatedProduct.name, 
@@ -2673,7 +2675,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       await batch.commit();
   };
 
-  const handleDeleteProduct = async (productId: string) => { await deleteDoc(doc(db, 'inventory', productId)); };
+  const handleDeleteProduct = async (productId: string) => {
+      if ((inventory.find(p => p.id === productId)?.warehouseUnits || 0) > 0) throw new Error('No puedes eliminar una referencia con unidades en bodega. Regresa primero la mercancía al local.');
+      await deleteDoc(doc(db, 'inventory', productId));
+  };
   
   const handleRegenerateAllSkus = async () => {
     if (!isAdmin) return;

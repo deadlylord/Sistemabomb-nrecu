@@ -2,6 +2,13 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Avance 2026-11-06 — bodega lista para validación de despliegue
+
+- Carlos solicitó continuar para poder probar. Se implementa warehouseUnits administrado en servidor, con reglas de staging que impiden falsificarlo, borrar o cambiar categoría con mercancía en bodega. No añade lecturas de reglas. Los mensajes del editor/borrado explican cómo vaciar bodega antes de reclasificar. Al vaciar, reclasificar y volver a enviar funciona con la nueva categoría.
+- Valoración local+bodega en Dashboard, Inventario, Contador Inteligente y businessSummary. Mantiene stock disponible/conteo del local sin cambios; no duplica compras ni deudas. Debe actualizarse businessInventoryChanged de staging antes de habilitar.
+- 15 pruebas focalizadas y 21 pruebas contra emulador real aprobadas. Suite general 328/329; solo falla el empaquetado React previo. Typecheck conserva tres errores previos de AppErrorBoundary. Build comprobado antes de guardar este avance. Chromium no arrancó por restricciones del proceso; sin revisión visual.
+- Firebase CLI y dependencias de functions instalados. Se inició login --no-localhost, pendiente código del usuario. No se publican funciones/reglas ni se activa bandera hasta completar autenticación y validar el despliegue real en vestika-staging. Main y staging publicado sin cambios.
+
 ## Candidato 2026-11-06 — bodega por tienda (sin activar)
 
 - Carlos autorizó comenzar la implementación de bodega propia por tienda, movimientos por vendedores en ambos sentidos con historial y conteo separado por categorías/ojos por marca. Se preparan WarehousePanel, callable staging privado, servicio lazy con bandera apagada y pruebas. No se altera InventoryVerificationModal ni los handlers de conteo de tienda, compras, ventas o traslados entre sedes. Los movimientos de bodega usan su propia transacción y no generan deudas entre sedes.

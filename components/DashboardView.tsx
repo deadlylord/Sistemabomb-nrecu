@@ -1,3 +1,4 @@
+import { ownedInventoryUnits } from '../services/inventoryOwnership';
 import type { DashboardInventoryRequest } from '../services/useDashboardInventory';
 import { dashboardSalesRanges, type SalesRange } from '../services/dashboardSalesRange';
 import type { useBusinessSummary } from '../services/useBusinessSummary';
@@ -490,7 +491,7 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
         const averageTicketSize = transactionCount > 0 ? salesCollected / transactionCount : 0;
         const unitsPerTransaction = transactionCount > 0 ? totalUnitsSold / transactionCount : 0;
         const grossMarginPercent = salesCollected > 0 ? (salesCollected - totalCogs) / salesCollected * 100 : 0;
-        const totalInventoryValue = inventory.reduce((sum, p) => sum + ((Number(p.cost) || 0) * (Number(p.stock) || 0)), 0);
+        const totalInventoryValue = inventory.reduce((sum, p) => sum + ((Number(p.cost) || 0) * ownedInventoryUnits(p)), 0);
         const netProfit = totalProfit - totalExpenses;
 
         return { 
