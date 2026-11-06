@@ -17,7 +17,7 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
   const storageKey = warehousePendingKey(companyId, store.id, userId);
   const submitting = useRef(false), pending = useRef<{ signature: string; operationId: string } | null>(null), alive = useRef(true);
   const call = (data: Record<string, unknown>) => api(companyId, store.id, data);
-  const refresh = async () => { const result = await call({ action: 'summary' }); if (alive.current) setRows(result.rows); };
+  const refresh = async () => { const result = await call({ action: 'summary' }); if (alive.current) { setRows(result.rows); setCounts({}); setProductCounts({}); setDetails([]); setCategory(''); } };
   useEffect(() => { alive.current = true; setBusy(true); try { pending.current = loadWarehousePending(storageKey); setStorageReady(true); } catch { setError('No se pudo recuperar la operación pendiente de bodega.'); } refresh().catch(e => { if (alive.current) setError(e.message); }).finally(() => { if (alive.current) setBusy(false); }); return () => { alive.current = false; }; }, [companyId, store.id]);
   const run = async (work: () => Promise<void>) => {
     if (submitting.current) return; submitting.current = true; setBusy(true); setError(''); setMessage('');
