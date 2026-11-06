@@ -2,6 +2,26 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Publicación de pruebas 2026-11-06 — bodega 1.1.206
+
+- OAuth Firebase completado. Desplegadas exclusivamente vestikaStagingWarehouse y businessInventoryChanged en vestika-staging; reglas anteriores comparadas exactamente con la base del repositorio y actualizadas con las protecciones de bodega. No se toca producción. El callable usa autenticación verificada de staging; App Check no está inicializado por el POS y no se exige para esta prueba, igual que los endpoints de identidad existentes.
+- Pruebas reales en Firestore staging con datos temporales aprobadas: reintento concurrente sin duplicar, envío/regreso, resumen, producto por categoría, conteo, historial y valoración local+bodega conservada por el trigger desplegado. Fixtures temporales eliminadas. Sin revisión visual de sesión real.
+- Interfaz 1.1.206 y bandera exclusivamente en context.staging de Netlify. Build aprobado; 21 pruebas previas en emulador real y 15 focalizadas aprobadas. Mantiene los fallos previos documentados de suite/typecheck.
+- CLI de funciones reportó creación/actualización exitosas, pero salió 1 por falta de política de limpieza de imágenes en us-central1; no se configuró borrado de artefactos por inferencia. Ver docs/BODEGA_POR_TIENDA.md.
+
+## Avance 2026-11-06 — bodega lista para validación de despliegue
+
+- Carlos solicitó continuar para poder probar. Se implementa warehouseUnits administrado en servidor, con reglas de staging que impiden falsificarlo, borrar o cambiar categoría con mercancía en bodega. No añade lecturas de reglas. Los mensajes del editor/borrado explican cómo vaciar bodega antes de reclasificar. Al vaciar, reclasificar y volver a enviar funciona con la nueva categoría.
+- Valoración local+bodega en Dashboard, Inventario, Contador Inteligente y businessSummary. Mantiene stock disponible/conteo del local sin cambios; no duplica compras ni deudas. Debe actualizarse businessInventoryChanged de staging antes de habilitar.
+- 15 pruebas focalizadas y 21 pruebas contra emulador real aprobadas. Suite general 328/329; solo falla el empaquetado React previo. Typecheck conserva tres errores previos de AppErrorBoundary. Build comprobado antes de guardar este avance. Chromium no arrancó por restricciones del proceso; sin revisión visual.
+- Firebase CLI y dependencias de functions instalados. Se inició login --no-localhost, pendiente código del usuario. No se publican funciones/reglas ni se activa bandera hasta completar autenticación y validar el despliegue real en vestika-staging. Main y staging publicado sin cambios.
+
+## Candidato 2026-11-06 — bodega por tienda (sin activar)
+
+- Carlos autorizó comenzar la implementación de bodega propia por tienda, movimientos por vendedores en ambos sentidos con historial y conteo separado por categorías/ojos por marca. Se preparan WarehousePanel, callable staging privado, servicio lazy con bandera apagada y pruebas. No se altera InventoryVerificationModal ni los handlers de conteo de tienda, compras, ventas o traslados entre sedes. Los movimientos de bodega usan su propia transacción y no generan deudas entre sedes.
+- 12 pruebas nuevas aprobadas. Suite completa: 324/326; solo dos fallos previos. Build aprobado; Typecheck mantiene los tres errores previos de AppErrorBoundary. No se probaron Firebase real/emulador ni navegador. Ver docs/BODEGA_POR_TIENDA.md para modelo, lecturas y límites.
+- Estado: candidato revisable, NO listo para activar. Faltan despliegue del callable con cuenta autorizada, pruebas reales de reglas/índices/App Check, validación de referencias editadas/eliminadas/valoración local+bodega. El entorno no tiene sesión Firebase CLI. VITE_STORE_WAREHOUSE sigue apagada. No se modifican main ni el staging publicado.
+
 ## Cambio 2026-11-05 — días hábiles Por Traer, versión 1.1.205 (solo staging)
 
 - Carlos solicitó lista/cuadrícula para abonos por traer y contador desde el abono, rojo al superar 7 días hábiles, conservando lecturas. Por Traer usa las mismas tarjetas existentes; solo su contador cambia: días hábiles desde `createdAt`, día 7 normal y día 8 rojo. Pagos posteriores no reinician el plazo. Apartados normales conservan días calendario y umbral >30; al recibir un encargo deja de ser pre-order y usa el comportamiento del apartado normal, sin nuevas fechas ni escrituras.

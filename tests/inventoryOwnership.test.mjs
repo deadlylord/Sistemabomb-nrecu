@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';
+import {businessContribution} from '../functions/src/businessSummary.mjs';
+const result=await build({entryPoints:['services/inventoryOwnership.ts'],bundle:true,write:false,format:'esm',platform:'node'});const{ownedInventoryUnits}=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+test('valuation counts both locations while local stock stays available for POS and physical store count',()=>{for(const p of [{stock:10,cost:1000},{stock:6,warehouseUnits:4,cost:1000},{stock:0,warehouseUnits:10,cost:1000}]){assert.equal(ownedInventoryUnits(p),10);const c=businessContribution('inventory',p);assert.equal(c.inventoryUnits,10);assert.equal(c.inventoryValue,10000);}assert.equal(businessContribution('inventory',{stock:6,warehouseUnits:4,cost:1200}).inventoryValue,12000);});

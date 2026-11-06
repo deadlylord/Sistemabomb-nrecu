@@ -332,6 +332,7 @@ export interface Seller {
 }
 
 export interface Product {
+  warehouseUnits?: number; // Server-managed stock of this store’s warehouse; never available in POS.
   id: string;
   companyId?: string;
   sku: string;

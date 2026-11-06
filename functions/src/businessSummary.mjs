@@ -75,8 +75,8 @@ export function businessContribution(kind, data) {
     inventoryUnits = 0;
   const invoiceDays = new Set();
   if (kind === "inventory") {
-    inventoryValue = n(data.cost) * n(data.stock);
-    inventoryUnits = n(data.stock);
+    inventoryUnits = n(data.stock) + n(data.warehouseUnits);
+    inventoryValue = n(data.cost) * inventoryUnits;
   }
   if (kind === "sales" || kind === "layaways") {
     const sale = kind === "sales";
