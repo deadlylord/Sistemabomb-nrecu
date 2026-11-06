@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Candidato 2026-11-06 — bodega por tienda (sin activar)
+
+- Carlos autorizó comenzar la implementación de bodega propia por tienda, movimientos por vendedores en ambos sentidos con historial y conteo separado por categorías/ojos por marca. Se preparan WarehousePanel, callable staging privado, servicio lazy con bandera apagada y pruebas. No se altera InventoryVerificationModal ni los handlers de conteo de tienda, compras, ventas o traslados entre sedes. Los movimientos de bodega usan su propia transacción y no generan deudas entre sedes.
+- 12 pruebas nuevas aprobadas. Suite completa: 324/326; solo dos fallos previos. Build aprobado; Typecheck mantiene los tres errores previos de AppErrorBoundary. No se probaron Firebase real/emulador ni navegador. Ver docs/BODEGA_POR_TIENDA.md para modelo, lecturas y límites.
+- Estado: candidato revisable, NO listo para activar. Faltan despliegue del callable con cuenta autorizada, pruebas reales de reglas/índices/App Check, validación de referencias editadas/eliminadas/valoración local+bodega. El entorno no tiene sesión Firebase CLI. VITE_STORE_WAREHOUSE sigue apagada. No se modifican main ni el staging publicado.
+
 ## Cambio 2026-11-05 — días hábiles Por Traer, versión 1.1.205 (solo staging)
 
 - Carlos solicitó lista/cuadrícula para abonos por traer y contador desde el abono, rojo al superar 7 días hábiles, conservando lecturas. Por Traer usa las mismas tarjetas existentes; solo su contador cambia: días hábiles desde `createdAt`, día 7 normal y día 8 rojo. Pagos posteriores no reinician el plazo. Apartados normales conservan días calendario y umbral >30; al recibir un encargo deja de ser pre-order y usa el comportamiento del apartado normal, sin nuevas fechas ni escrituras.
