@@ -1,6 +1,6 @@
 # Bodega por tienda — implementación candidata
 
-Estado: rama de trabajo derivada de staging. Desactivada por defecto. No habilitar en producción.
+Estado: backend desplegado y verificado en vestika-staging; interfaz 1.1.206 habilitada exclusivamente en el contexto staging. No habilitar en producción.
 
 ## Modelo
 
@@ -13,7 +13,7 @@ Estado: rama de trabajo derivada de staging. Desactivada por defecto. No habilit
 
 ## Acceso y seguridad
 
-Todo acceso usa `vestikaStagingWarehouse` (callable con App Check, región us-central1, máximo tres instancias). La función rechaza cualquier proyecto distinto de vestika-staging.
+Todo acceso usa `vestikaStagingWarehouse` (callable con autenticación verificada y autorización de servidor, región us-central1, máximo tres instancias). La función rechaza cualquier proyecto distinto de vestika-staging.
 
 Se reutiliza verifiedActor: identidad firmada, versión de acceso, perfil, rol, empresa y sede activos. Un vendedor solo opera su propia tienda; un administrador de empresa puede escoger otras tiendas de la misma empresa. No existe excepción para Developer que permita cruzar empresas. Se exige acceso POS/inventario. Ajustes y reversiones solo administrador. Actor/empresa/stock no se aceptan como autoridad del navegador.
 
@@ -35,7 +35,15 @@ Cada formulario conserva operationId y payload en sessionStorage por usuario, em
 
 Si sessionStorage está bloqueado o contiene un registro inválido, se impide guardar hasta resolver la recuperación. No se guardan clientes ni contraseñas. Cerrar definitivamente la sesión del navegador elimina sessionStorage: no se promete recuperar después de su eliminación.
 
-## Activación pendiente
+## Despliegue de pruebas 2026-11-06
+
+- Cuenta Firebase reconectada por OAuth. Publicadas vestikaStagingWarehouse (us-central1), businessInventoryChanged (southamerica-east1) y reglas de staging. Se comprobó que las reglas anteriores eran exactamente la base de esta rama antes de actualizarlas.
+- El POS no inicializa App Check; el callable usa enforceAppCheck=false, igual que las APIs de identidad existentes de staging. Conserva verificación obligatoria de identidad, rol vigente, empresa y sede y rechazo a otros proyectos. No se añadieron servicios reCAPTCHA ni se relaja la autenticación Firebase.
+- Prueba sobre Firestore real con empresa/sede/usuario/producto temporales: dos envíos idénticos aplicados una vez, ida/vuelta, resumen, consulta de categoría, conteo e historial y valor consolidado de 10 unidades conservado en el trigger desplegado. Datos temporales eliminados al finalizar. Esta prueba usa el servicio interno con SDK administrativo, no equivale a una sesión visual del vendedor.
+- La CLI informó funciones actualizadas correctamente, pero terminó con código 1 por no existir política de limpieza de imágenes de Artifact Registry en us-central1. No se forzó ninguna eliminación. El servicio se verificó por separado.
+- Frontend habilitado solo con VITE_STORE_WAREHOUSE=true en context.staging de Netlify. Producción no recibe esa bandera.
+
+## Referencia de activación y límites
 
 1. Dependencias de functions instaladas con lockfile. Falta completar autenticación Firebase iniciada con login --no-localhost; después desplegar únicamente `vestikaStagingWarehouse` y actualizar `businessInventoryChanged` en **vestika-staging**, para que el resumen mantenga la valoración local + bodega. Desplegar únicamente las reglas de staging verificadas. No desplegar todos los servicios ni producción.
 2. Validar App Check/identidad, reglas privadas de las rutas, consultas paginadas e índices efectivos. Ejecutar transacciones concurrentes contra emulador o staging con datos sintéticos.

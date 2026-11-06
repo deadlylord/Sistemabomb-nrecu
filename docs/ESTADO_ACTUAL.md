@@ -2,6 +2,13 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Publicación de pruebas 2026-11-06 — bodega 1.1.206
+
+- OAuth Firebase completado. Desplegadas exclusivamente vestikaStagingWarehouse y businessInventoryChanged en vestika-staging; reglas anteriores comparadas exactamente con la base del repositorio y actualizadas con las protecciones de bodega. No se toca producción. El callable usa autenticación verificada de staging; App Check no está inicializado por el POS y no se exige para esta prueba, igual que los endpoints de identidad existentes.
+- Pruebas reales en Firestore staging con datos temporales aprobadas: reintento concurrente sin duplicar, envío/regreso, resumen, producto por categoría, conteo, historial y valoración local+bodega conservada por el trigger desplegado. Fixtures temporales eliminadas. Sin revisión visual de sesión real.
+- Interfaz 1.1.206 y bandera exclusivamente en context.staging de Netlify. Build aprobado; 21 pruebas previas en emulador real y 15 focalizadas aprobadas. Mantiene los fallos previos documentados de suite/typecheck.
+- CLI de funciones reportó creación/actualización exitosas, pero salió 1 por falta de política de limpieza de imágenes en us-central1; no se configuró borrado de artefactos por inferencia. Ver docs/BODEGA_POR_TIENDA.md.
+
 ## Avance 2026-11-06 — bodega lista para validación de despliegue
 
 - Carlos solicitó continuar para poder probar. Se implementa warehouseUnits administrado en servidor, con reglas de staging que impiden falsificarlo, borrar o cambiar categoría con mercancía en bodega. No añade lecturas de reglas. Los mensajes del editor/borrado explican cómo vaciar bodega antes de reclasificar. Al vaciar, reclasificar y volver a enviar funciona con la nueva categoría.
