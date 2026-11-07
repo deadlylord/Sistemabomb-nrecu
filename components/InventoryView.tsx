@@ -53,6 +53,7 @@ interface InventoryViewProps {
   onShowDisabledProductsChange: (show: boolean) => void;
   onReactivateInconsistentProducts: (productIds: string[]) => void;
   onRegenerateAllSkus?: () => Promise<void>;
+  onOpenWarehouseHistory?: () => void;
   onDeleteProductHistoryLog?: (logId: string) => void;
 }
 
@@ -62,7 +63,7 @@ type SortConfig = {
 };
 
 
-const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: rawInventory, allInventory: rawAllInventory, sales: rawSales, purchases: rawPurchases, layaways: rawLayaways, categories: rawCategories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory: rawProductHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onDeleteProductHistoryLog }) => {
+const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: rawInventory, allInventory: rawAllInventory, sales: rawSales, purchases: rawPurchases, layaways: rawLayaways, categories: rawCategories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory: rawProductHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onOpenWarehouseHistory, onDeleteProductHistoryLog }) => {
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(currentStoreId) ? [currentStoreId] : []) };
   const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
@@ -514,6 +515,11 @@ const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: raw
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
             <h2 className="text-2xl font-bold text-accent">Stock de Productos</h2>
             <div className="flex items-center gap-2 flex-wrap">
+              {onOpenWarehouseHistory && (
+                <button type="button" onClick={onOpenWarehouseHistory} className="rounded-lg bg-accent/10 text-accent px-3 py-2 font-semibold">
+                  Movimientos de bodega
+                </button>
+              )}
               {isAdmin && inconsistentProducts.length > 0 && (
                 <button
                   onClick={() => setIsFixModalOpen(true)}

@@ -26,9 +26,8 @@ test('warehouse opens summary only; eyes load category on demand; save keeps sto
 });
 test('movement keeps the same operation after lost acknowledgement and blocks duplicate submissions',async()=>{
  storage.clear();let attempts=[],fail=true,release;const api=async(co,st,data)=>{if(data.action==='summary')return {rows:[]};attempts.push(data);if(fail)throw Error('Sin conexión');return new Promise(resolve=>{release=resolve})};let r;
- await act(async()=>{r=create(React.createElement(Panel,{...props,api}));});
- try{await act(async()=>button(r,'Mover mercancía').props.onClick());
- const selects=r.root.findAllByType('select');await act(async()=>selects[1].props.onChange({target:{value:'p'}}));
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toWarehouse'},api}));});
+ try{
  const units=r.root.findAllByType('input').find(n=>n.props.type==='number');await act(async()=>units.props.onChange({target:{value:'2'}}));
  await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));assert.match(JSON.stringify(r.toJSON()),/Sin conexión/);
  fail=false;await act(async()=>{r.root.findByType('form').props.onSubmit({preventDefault(){}})});
@@ -39,13 +38,30 @@ test('movement keeps the same operation after lost acknowledgement and blocks du
 });
 test('reopening panel recovers an unacknowledged operation without creating another ID',async()=>{
  storage.clear();let failed=true,requests=[];const api=async(c,s,data)=>{if(data.action==='summary')return {rows:[]};requests.push(data);if(failed)throw Error('Sin conexión');return {id:'saved'}};let r;
- await act(async()=>{r=create(React.createElement(Panel,{...props,api}));});
- await act(async()=>button(r,'Mover mercancía').props.onClick());
- await act(async()=>r.root.findAllByType('select')[1].props.onChange({target:{value:'p'}}));
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toWarehouse'},api}));});
  await act(async()=>r.root.findAllByType('input').find(n=>n.props.type==='number').props.onChange({target:{value:'2'}}));
  await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));
  await act(async()=>r.unmount());failed=false;
  await act(async()=>{r=create(React.createElement(Panel,{...props,api}));});
  try{await act(async()=>button(r,'Resolver operación pendiente').props.onClick());assert.equal(requests.length,2);assert.equal(requests[0].operationId,requests[1].operationId);assert.equal(storage.size,0);}finally{await act(async()=>r.unmount())}
+});
+test('card movement dialog opens with no queries and only writes its selected product',async()=>{
+ storage.clear();const calls=[];let r;
+ const api=async(c,s,data)=>{calls.push(data);return {id:'ok'};};
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toStore'},api}));});
+ try{
+  assert.equal(calls.length,0);
+  assert.equal(button(r,'Movimientos'),undefined);
+  await act(async()=>r.root.findAllByType('input').find(n=>n.props.type==='number').props.onChange({target:{value:'2'}}));
+  await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));
+  assert.deepEqual(calls.map(c=>c.action),['move']);
+  assert.equal(calls[0].productId,'p');assert.equal(calls[0].direction,'toStore');
+ }finally{await act(async()=>r.unmount())}
+});
+test('administrator history loads only paginated audit, without count summary',async()=>{
+ storage.clear();const calls=[];let r;
+ const api=async(c,s,data)=>{calls.push(data);return {rows:[],cursor:null};};
+ await act(async()=>{r=create(React.createElement(Panel,{...props,isAdmin:true,mode:'history',api}));});
+ try{assert.deepEqual(calls.map(c=>c.action),['history']);}finally{await act(async()=>r.unmount())}
 });
 test.after(async()=>rm(dir,{recursive:true,force:true}));

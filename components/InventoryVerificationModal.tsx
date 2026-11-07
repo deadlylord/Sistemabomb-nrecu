@@ -16,6 +16,7 @@ interface InventoryVerificationModalProps {
   isVendedor?: boolean;
   currentStore?: Store;
   onClose: () => void;
+  onOpenWarehouse?: () => void;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => Promise<void>;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
@@ -33,6 +34,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   isVendedor = false,
   currentStore,
   onClose,
+  onOpenWarehouse,
   onSaveStockTake,
   onSaveDetailedDraft,
   onApplyDetailedVerification,
@@ -216,7 +218,12 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                 <h2 className="text-xl sm:text-2xl font-black text-accent tracking-tighter uppercase">Inventario y Apertura</h2>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Revisión de stock antes de iniciar jornada</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon className="w-6 h-6"/></button>
+              <div className="flex items-center gap-2">
+                {onOpenWarehouse && (
+                  <button type="button" disabled={isSaving} onClick={onOpenWarehouse} className="rounded-lg bg-accent/10 text-accent px-3 py-2 font-semibold">Bodega</button>
+                )}
+                <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon className="w-6 h-6"/></button>
+              </div>
           </div>
           
           <div className="mb-4 space-y-4">

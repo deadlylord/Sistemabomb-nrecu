@@ -1,6 +1,6 @@
 # Bodega por tienda — implementación candidata
 
-Estado: backend desplegado y verificado en vestika-staging; interfaz 1.1.206 habilitada exclusivamente en el contexto staging. No habilitar en producción.
+Estado: backend desplegado y verificado en vestika-staging; interfaz 1.1.207 integrada exclusivamente en el contexto staging. No habilitar en producción.
 
 ## Modelo
 
@@ -15,17 +15,17 @@ Estado: backend desplegado y verificado en vestika-staging; interfaz 1.1.206 hab
 
 Todo acceso usa `vestikaStagingWarehouse` (callable con autenticación verificada y autorización de servidor, región us-central1, máximo tres instancias). La función rechaza cualquier proyecto distinto de vestika-staging.
 
-Se reutiliza verifiedActor: identidad firmada, versión de acceso, perfil, rol, empresa y sede activos. Un vendedor solo opera su propia tienda; un administrador de empresa puede escoger otras tiendas de la misma empresa. No existe excepción para Developer que permita cruzar empresas. Se exige acceso POS/inventario. Ajustes y reversiones solo administrador. Actor/empresa/stock no se aceptan como autoridad del navegador.
+Se reutiliza verifiedActor: identidad firmada, versión de acceso, perfil, rol, empresa y sede activos. Un vendedor solo opera su propia tienda; un administrador de empresa puede escoger otras tiendas de la misma empresa. No existe excepción para Developer que permita cruzar empresas. Se exige acceso POS/inventario. Historial de movimientos, conteos guardados, ajustes y reversiones solo administrador. Actor/empresa/stock no se aceptan como autoridad del navegador.
 
 Las reglas de staging actuales terminan en deny-all para rutas no declaradas. No se agregan permisos directos para warehouseCompanies; las lecturas y escrituras son solo del servidor. **Antes de activar, comprobar en emulador y en el proyecto real que estas rutas continúan denegadas al cliente y no existe otro match permisivo.** Se añaden validadores en las reglas de staging: el cliente no puede crear/alterar el espejo ni borrar o reclasificar referencias con unidades en bodega. No hay nuevas lecturas en reglas. Se validaron contra el emulador; aún no se desplegaron.
 
 ## Lecturas
 
-- El botón se añade al POS, donde los productos locales ya están cargados. El modal es lazy y no se descarga al iniciar sesión.
-- Abrir bodega: consulta resúmenes de categorías y validaciones de identidad; no descarga referencias ni historial.
+- La categoría Bodega filtra warehouseUnits de los productos ya cargados por el POS de la sede activa, incluso en modo multisede. Conserva las imágenes del producto. Abrir la categoría o el formulario desde una tarjeta no llama a la API. El modal sigue lazy.
+- Verificar → Bodega consulta resúmenes de categorías y validaciones de identidad. Volver a Tienda conserva los campos del conteo local mientras el diálogo permanece abierto.
 - Ojo: productos de una categoría con límite 50/página, más el borrador de ese usuario/categoría. Query por categoría con orden implícito por ID: verificar índice automático efectivo en staging; nunca hacer fallback a leer todas las bodegas.
-- Historial y conteos: 50 registros por página, ID con timestamp invertido para ordenar sin índice compuesto adicional. El historial paginado conserva todos los registros guardados; no hay listener permanente.
-- Movimiento: lecturas puntuales de identidad, recibo, producto local, producto bodega y categoría. La transacción escribe stock local, stock bodega, resumen, movimiento, historial local y recibo juntos. Conflictos SDK pueden repetir lecturas.
+- Stock → Movimientos de bodega exige administrador tanto en cliente como en servidor. Historial y conteos guardados cargan 50 registros por página, ID con timestamp invertido para ordenar sin índice compuesto adicional. El historial paginado conserva todos los registros guardados; no hay listener permanente.
+- Movimiento: lecturas puntuales de identidad, recibo, producto local, producto bodega y categoría. La transacción escribe stock local, stock bodega, resumen, auditoría privada, cambio básico de existencias en historial local y recibo juntos. El cambio básico conserva stockDelta para los saldos históricos, con actor Sistema y sin responsable real, nota, dirección o cantidades de bodega. Conflictos SDK pueden repetir lecturas.
 - Conteo: solo resúmenes incluidos y referencias contadas explícitamente en el ojo. Una revisión cambiada bloquea guardar y obliga a actualizar/revisar cantidades.
 - No se prometen cero lecturas al abrir/operar. Con la bandera desactivada no se ejecuta ninguna llamada de bodega.
 
@@ -58,3 +58,12 @@ Si sessionStorage está bloqueado o contiene un registro inválido, se impide gu
 - Incluye pertenencia de empresa/sede, acceso revocado, cantidades inválidas, operaciones repetidas, dos movimientos compitiendo por stock, retorno, reversión, conteo con revisión obsoleta, borradores, ajuste explícito admin, paginación, cargas al tocar el ojo y reintento de UI con el mismo ID.
 - Suite completa: 329 pruebas, 328 pasan y queda únicamente el fallo previo de empaquetado React en sharedRecordAccess; instalar dependencias de Functions resolvió el otro fallo de entorno. Typecheck conserva únicamente los tres errores previos de AppErrorBoundary. Build aprobado y diff limpio.
 - Emulador real: 21 pruebas aprobadas de identidad, resúmenes y bodega, incluidas transacciones SDK concurrentes, consulta paginada, validación de reglas privadas y conservación de ediciones de productos. No se escribieron datos reales. El intento visual con Chromium volvió a fallar por restricciones del proceso; queda pendiente la revisión visual. Firebase CLI está instalado; autenticación iniciada y pendiente del código de Carlos. No se desplegó el callable ni se activó la bandera. Staging y main publicados permanecen sin cambios.
+
+## Versión 1.1.207 — integración al POS
+
+- Verificación conserva el conteo local montado y añade el botón Bodega, con regreso a Tienda.
+- POS permite enviar/devolver cantidades desde cada tarjeta. Bodega usa solo productos activos con unidades de bodega de la empresa/sede activa. La selección por traer conserva su catálogo habitual.
+- En Bodega se deshabilita agregar por tarjeta, teclado y escáner. Para vender, primero se confirma la devolución física a Tienda.
+- El historial administrativo se abre desde Stock sin resumen, productos ni listener de auditoría. Un vendedor sigue pudiendo mover y contar su bodega, pero el servidor rechaza history y counts.
+- Se conservan recibos, operación pendiente en sessionStorage y reintentos idempotentes. No se consulta el resumen al abrir/confirmar un formulario de movimiento.
+- La auditoría privada conserva todos los datos. La copia básica de stock conserva saldos históricos. Se verificó la única copia detallada anterior en staging contra su auditoría privada y se redujo al mismo evento básico, conservando cantidades y fecha. Una nueva consulta confirmó cero copias detalladas antiguas.

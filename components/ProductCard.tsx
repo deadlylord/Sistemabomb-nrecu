@@ -3,9 +3,12 @@ import React from 'react';
 import { Product } from '../types';
 import { CameraIcon, EditIcon, PackageIcon, ChartBarIcon, TrendingUpIcon, TrendingDownIcon } from './Icons';
 import { formatCOP } from '../constants';
+import type { OpenWarehouseMovement } from '../services/warehouse';
 
 interface ProductCardProps {
   product: Product;
+  warehouseView?: boolean;
+  onMoveWarehouse?: OpenWarehouseMovement;
   preOrderSelection?: boolean;
   performanceTrend?: 'up' | 'down' | 'stable';
   onAddToCart: (product: Product) => void;
@@ -22,7 +25,9 @@ interface ProductCardProps {
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({ 
-  product, 
+  product,
+  warehouseView = false,
+  onMoveWarehouse,
   preOrderSelection = false,
   performanceTrend, 
   onAddToCart, 
@@ -38,7 +43,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
   recentSalesQty
 }) => {
 
-  const canSelect = !product.isDisabled && (preOrderSelection || product.stock > 0);
+  const stock = warehouseView ? product.warehouseUnits ?? 0 : product.stock;
+  const warehouseAction = warehouseView ? 'Devolver a tienda' : 'Enviar a bodega';
+  const canSelect = !warehouseView && !product.isDisabled && (preOrderSelection || product.stock > 0);
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent adding to cart if an admin button, the checkbox, or link was clicked
@@ -69,9 +76,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
     <div
       onClick={handleCardClick}
       onKeyPress={handleKeyPress}
-      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${canSelect ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
-      aria-label={`${canSelect ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
-      role="button"
+      className={`relative group/card bg-white dark:bg-slate-900/50 dark:backdrop-blur-lg dark:border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-300 flex flex-col aspect-[2/3] ${canSelect ? 'hover:shadow-lg hover:ring-2 hover:ring-accent cursor-pointer' : warehouseView ? '' : 'cursor-not-allowed'} ${product.id === justAddedProductId ? 'animate-pulse-accent' : ''}`}
+      aria-label={warehouseView ? product.name : `${canSelect ? `Agregar ${product.name}` : `${product.name} (agotado)`} al carrito`}
+      role={warehouseView ? undefined : 'button'}
       tabIndex={canSelect ? 0 : -1}
     >
       {/* Image */}
@@ -112,7 +119,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Insignias Visuales Dinámicas (Esquina inferior izquierda de la miniatura, autogestionadas de 30 días) */}
-        {isAdmin && (
+        {isAdmin && !warehouseView && (
           <div className="absolute bottom-2 left-2 z-20 flex flex-col gap-1 items-start pointer-events-none">
             {isTrending && (
               <span className="bg-amber-500/90 backdrop-blur-sm text-white text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md uppercase tracking-tight">
@@ -127,7 +134,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         )}
 
-        {isAdmin && (
+        {isAdmin && !warehouseView && (
             <div className="absolute top-1.5 right-1.5 z-20 flex flex-col items-end gap-1.5">
                 <button
                     onClick={(e) => { e.stopPropagation(); onShowPerformance(product); }}
@@ -187,8 +194,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <div className="flex justify-between items-baseline mt-1">
           <p className="text-xs text-slate-500 dark:text-text-dark truncate">{product.supplier || 'Sin proveedor'}</p>
           <div className="flex items-baseline gap-2">
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${canSelect ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
-                Stock: {product.stock}
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${canSelect || warehouseView ? 'bg-slate-500 text-white' : 'bg-red-600 text-white'}`}>
+                {warehouseView ? 'Bodega' : 'Stock'}: {stock}
             </span>
             <div className="flex flex-col items-end">
               {product.discountPrice !== undefined && product.discountPrice !== product.price && (
@@ -204,9 +211,22 @@ const ProductCard: React.FC<ProductCardProps> = ({
             </div>
           </div>
         </div>
+        {onMoveWarehouse && !product.isDisabled && stock > 0 && (
+          <button
+            type="button"
+            aria-label={`${warehouseAction}: ${product.name}`}
+            className="mt-2 w-full rounded-md bg-accent/10 px-2 py-1.5 text-xs font-bold text-accent hover:bg-accent/20"
+            onClick={event => {
+              event.stopPropagation();
+              onMoveWarehouse(product, warehouseView ? 'toStore' : 'toWarehouse');
+            }}
+          >
+            {warehouseAction}
+          </button>
+        )}
       </div>
 
-      {product.stock <= 0 && (
+      {!warehouseView && stock <= 0 && (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-xl pointer-events-none">
           <span className="text-white font-bold text-lg drop-shadow-md">{preOrderSelection ? 'POR TRAER' : 'AGOTADO'}</span>
         </div>

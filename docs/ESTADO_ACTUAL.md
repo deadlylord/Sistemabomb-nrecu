@@ -2,6 +2,14 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Integración 2026-11-07 — bodega 1.1.207
+
+- Conteo de bodega accesible desde Verificar con botón Bodega y regreso a Tienda, conservando los valores locales al alternar.
+- Envío desde tarjetas POS y categoría Bodega con fotos y devolución por unidades. La categoría reutiliza warehouseUnits de los documentos existentes de la sede activa. Formulario de movimiento sin lecturas de resumen.
+- Auditoría administrativa bajo demanda desde Stock. Servidor restringe history y counts a administrador. La copia básica de stock conserva deltas para el historial individual, sin datos del responsable/nota/bodega.
+- 24 pruebas focalizadas aprobadas, 6 con emulador real Firestore aprobadas. Suite completa 331/332, fallo previo de empaquetado React en sharedRecordAccess. Build aprobado. Typecheck conserva tres errores previos de AppErrorBoundary.
+- Firebase reconectado y callable vestikaStagingWarehouse actualizado correctamente en vestika-staging. La CLI vuelve a salir 1 por la política de retención de Artifact Registry pendiente, después de confirmar la función desplegada. Una copia histórica detallada se redujo a evento básico de stock tras verificar su auditoría privada, cantidades y fecha. Pendiente comprobar la interfaz servida tras publicar este commit.
+
 ## Publicación de pruebas 2026-11-06 — bodega 1.1.206
 
 - OAuth Firebase completado. Desplegadas exclusivamente vestikaStagingWarehouse y businessInventoryChanged en vestika-staging; reglas anteriores comparadas exactamente con la base del repositorio y actualizadas con las protecciones de bodega. No se toca producción. El callable usa autenticación verificada de staging; App Check no está inicializado por el POS y no se exige para esta prueba, igual que los endpoints de identidad existentes.

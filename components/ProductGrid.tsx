@@ -1,10 +1,14 @@
 
 import React from 'react';
-import { Product } from '../types';
+import { DEFAULT_COMPANY_ID, Product, type Store } from '../types';
 import ProductCard from './ProductCard';
+import type { OpenWarehouseMovement } from '../services/warehouse';
 
 interface ProductGridProps {
   products: Product[];
+  warehouseView?: boolean;
+  warehouseStore?: Store;
+  onMoveWarehouse?: OpenWarehouseMovement;
   preOrderSelection?: boolean;
   performanceTrends?: Record<string, 'up' | 'down' | 'stable'>;
   onAddToCart: (product: Product) => void;
@@ -20,7 +24,10 @@ interface ProductGridProps {
 }
 
 const ProductGrid: React.FC<ProductGridProps> = ({ 
-  products, 
+  products,
+  warehouseView,
+  warehouseStore,
+  onMoveWarehouse,
   preOrderSelection = false,
   performanceTrends, 
   onAddToCart, 
@@ -39,7 +46,11 @@ const ProductGrid: React.FC<ProductGridProps> = ({
       {products.map(product => (
         <ProductCard 
             key={product.id} 
-            product={product} 
+            product={product}
+            warehouseView={warehouseView}
+            onMoveWarehouse={warehouseStore && product.storeId === warehouseStore.id
+                && (product.companyId || DEFAULT_COMPANY_ID) === (warehouseStore.companyId || DEFAULT_COMPANY_ID)
+                ? onMoveWarehouse : undefined}
             preOrderSelection={preOrderSelection}
             performanceTrend={performanceTrends?.[product.id]}
             onAddToCart={onAddToCart} 

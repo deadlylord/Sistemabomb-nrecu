@@ -27,6 +27,7 @@ export async function warehouseOperation(db, auth, input) {
   const read = async (collection, id) => { const s = await db.collection(collection).doc(id).get(); return s.exists ? s.data() : null; };
   if (['summary', 'products', 'history', 'counts', 'draft'].includes(action)) {
     const actor = await authorize(read);
+    if (['history', 'counts'].includes(action) && (roleType(actor.role) !== 'admin' || actor.role.userType === 'seller')) fail('permission-denied', 'Solo un administrador puede consultar el historial de bodega.');
     if (action === 'summary') {
       const snapshot = await root.collection('categories').get();
       return { rows: snapshot.docs.map(d => ({ ...d.data(), id: d.id })) };
@@ -97,7 +98,13 @@ export async function warehouseOperation(db, auth, input) {
       tx.set(warehouseRef, { companyId, storeId, productId, name: p.name, supplier: p.supplier || '', categoryId: p.categoryId, stock: warehouseAfter, updatedAt: now });
       tx.set(categoryRef, { companyId, storeId, stock: categoryBefore + delta, revision: (category.data()?.revision || 0) + 1, updatedAt: now });
       tx.create(root.collection('movements').doc(recordId), record);
-      tx.create(db.collection('productHistory').doc(`warehouse_${input.operationId}`), { companyId, storeId, productId, productName: p.name, timestamp: now, changedBy: actor.seller.name, changeType: direction === 'toWarehouse' ? 'Enviado a bodega' : 'Regreso de bodega', stockDelta: -delta, details: `${units} unidades · ${record.note}`, warehouseMovementId: recordId });
+      // Keep stock-balance history complete without exposing the private audit's
+      // operator, direction, note, or warehouse quantities to inventory readers.
+      tx.create(db.collection('productHistory').doc(`warehouse_${input.operationId}`), {
+        companyId, storeId, productId, productName: p.name, timestamp: now,
+        changedBy: 'Sistema', changeType: 'Cambio de ubicación',
+        stockDelta: -delta, details: 'Actualización de existencias disponibles.'
+      });
       if (original) tx.update(originalRef, { reversedBy: recordId });
     } else if (action === 'count' || action === 'draftSave' || action === 'adjust') {
       const entries = input.entries;
