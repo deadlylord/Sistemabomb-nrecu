@@ -2,14 +2,14 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
-## Candidato 2026-11-07 — controles y compras de bodega 1.1.208
+## Integración 2026-11-07 — controles y compras de bodega 1.1.208
 
 - Menú de usuario con Configurar bodega para administradores de la sede. Los interruptores de envío y categoría se leen del documento de sede ya cargado. Ausentes equivalen a habilitado. Solo el callable autorizado puede escribir esos campos.
 - Verificar comparte la tabla y el diálogo entre Tienda y Bodega. Conserva conteos por ubicación y carga el resumen al entrar a Bodega. Detalle y borrador se consultan al abrir el ojo.
 - Auditoría privada con tabla ancha en escritorio y diseño adaptable en móvil. Firestore filtra 30 días y consulta 25 filas más una de comprobación por página.
 - Compras ofrece seleccionar unidades de las compras confirmadas por sede. Transacción de hasta 25 compras, agregada por producto y categoría. Recibos idempotentes y marcas privadas por compra. Edición y borrado comprueban stock disponible dentro de su transacción.
 - Compilación aprobada. 23 pruebas focalizadas y 23 en emulador Firestore aprobadas. Persiste el fallo previo React en la suite y los tres errores previos de AppErrorBoundary en TypeScript.
-- Publicación requiere actualizar reglas y callable en vestika-staging antes de promover la interfaz.
+- Reglas desplegadas y cotejadas con el repositorio en vestika-staging. Callable vestikaStagingWarehouse activo en la revisión 00004-vog, con acceso anónimo denegado. La CLI confirmó la actualización antes de informar el aviso previo de retención de imágenes.
 
 ## Integración 2026-11-07 — bodega 1.1.207
 
