@@ -21,8 +21,10 @@ export async function warehouseOperation(db, auth, input) {
     if (actor.seller.companyId !== companyId || (!admin && actor.seller.storeId !== storeId)) fail('permission-denied', 'Solo puedes gestionar la bodega de tu tienda.');
     const store = await read('stores', storeId);
     if (!store || store.companyId !== companyId || store.isDisabled || store.status === 'inactive') fail('permission-denied', 'Tienda no disponible.');
-    if (!actor.role.permissions?.some(p => ['pos', 'inventory'].includes(p)) || actor.company.allowedViews?.length && !actor.company.allowedViews.some(p => ['pos', 'inventory'].includes(p))) fail('permission-denied', 'Tu rol no tiene acceso al inventario de esta empresa.');
-    return actor;
+    const views = action === 'purchaseMove' ? ['purchases'] : ['pos', 'inventory'];
+    if (action === 'settings') views.push('purchases');
+    if (!views.some(view => actor.role.permissions?.includes(view) && (!actor.company.allowedViews?.length || actor.company.allowedViews.includes(view)))) fail('permission-denied', 'Tu rol no tiene acceso a esta operación.');
+    return { ...actor, store, admin };
   };
   const read = async (collection, id) => { const s = await db.collection(collection).doc(id).get(); return s.exists ? s.data() : null; };
   if (['summary', 'products', 'history', 'counts', 'draft'].includes(action)) {
@@ -43,18 +45,39 @@ export async function warehouseOperation(db, auth, input) {
       if (!key(input.categoryId)) fail('invalid-argument', 'Categoría inválida.');
       query = query.where('categoryId', '==', input.categoryId);
     }
-    // Default document-ID ordering needs no new composite index. Movement/count
-    // IDs begin with a reverse timestamp, so newest records are listed first.
+    const cutoff = action === 'history' ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() : null;
+    const pageSize = cutoff ? 25 : 50;
+    if (cutoff) query = query.where('createdAt', '>=', cutoff).orderBy('createdAt', 'desc');
     if (input.cursor !== undefined) {
       if (typeof input.cursor !== 'string' || !key(input.cursor)) fail('invalid-argument', 'Página inválida.');
       const cursor = await root.collection(collection).doc(input.cursor).get();
-      if (!cursor.exists || action === 'products' && cursor.data().categoryId !== input.categoryId) fail('invalid-argument', 'Página inválida.');
+      if (!cursor.exists || action === 'products' && cursor.data().categoryId !== input.categoryId || cutoff && cursor.data().createdAt < cutoff) fail('invalid-argument', 'Página inválida.');
       query = query.startAfter(cursor);
     }
-    const result = await query.limit(51).get();
-    return { rows: result.docs.slice(0, 50).map(d => ({ ...d.data(), id: d.id })), cursor: result.docs.length > 50 ? result.docs[49].id : null };
+    const result = await query.limit(pageSize + 1).get();
+    return { rows: result.docs.slice(0, pageSize).map(d => ({ ...d.data(), id: d.id })), cursor: result.docs.length > pageSize ? result.docs[pageSize - 1].id : null };
   }
-  if (!key(input.operationId)) fail('invalid-argument', 'Identificador de operación inválido.');
+  if (action === 'settings') {
+    const { sendEnabled, categoryVisible } = input;
+    if ((sendEnabled === undefined && categoryVisible === undefined) ||
+        (sendEnabled !== undefined && typeof sendEnabled !== 'boolean') ||
+        (categoryVisible !== undefined && typeof categoryVisible !== 'boolean')) {
+      fail('invalid-argument', 'Configuración de bodega inválida.');
+    }
+    return db.runTransaction(async tx => {
+      const actor = await authorize(async (collection, id) => {
+        const doc = await tx.get(db.collection(collection).doc(id));
+        return doc.exists ? doc.data() : null;
+      });
+      if (!actor.admin) fail('permission-denied', 'Solo un administrador puede configurar la bodega.');
+      tx.update(db.collection('stores').doc(storeId), {
+        ...(sendEnabled !== undefined ? { warehouseSendEnabled: sendEnabled } : {}),
+        ...(categoryVisible !== undefined ? { warehouseCategoryVisible: categoryVisible } : {}),
+      });
+      return { saved: true };
+    });
+  }
+  if (!key(input.operationId) || action === 'purchaseMove' && input.operationId.length > 100) fail('invalid-argument', 'Identificador de operación inválido.');
   const receiptRef = root.collection('receipts').doc(input.operationId);
   return db.runTransaction(async tx => {
     const actor = await authorize(async (collection, id) => { const s = await tx.get(db.collection(collection).doc(id)); return s.exists ? s.data() : null; });
@@ -67,7 +90,7 @@ export async function warehouseOperation(db, auth, input) {
     const now = new Date().toISOString();
     const recordId = `${String(9999999999999 - Date.parse(now)).padStart(13, '0')}_${input.operationId}`;
     let result = { id: recordId };
-    if (action === 'move' || action === 'reverse') {
+    if (action === 'move' || action === 'reverse' || action === 'purchaseMove') {
       let movement = input;
       let original, originalRef;
       if (action === 'reverse') {
@@ -77,35 +100,82 @@ export async function warehouseOperation(db, auth, input) {
         if (!original.exists || original.data().reversedBy || original.data().reversalOf) fail('failed-precondition', 'El movimiento no se puede revertir.');
         movement = { ...original.data(), direction: original.data().direction === 'toWarehouse' ? 'toStore' : 'toWarehouse' };
       }
-      const { productId, direction } = movement, units = movement.quantity;
-      if (!key(productId) || !quantity(units) || units < 1 || !['toWarehouse', 'toStore'].includes(direction) || typeof (input.note || '') !== 'string' || (input.note || '').length > 500) fail('invalid-argument', 'Revisa producto, dirección y cantidad.');
-      const localRef = db.collection('inventory').doc(productId), warehouseRef = root.collection('products').doc(productId);
-      const [local, warehouse] = await Promise.all([tx.get(localRef), tx.get(warehouseRef)]);
-      const p = local.exists ? local.data() : null, w = warehouse.exists ? warehouse.data() : null;
-      if (!p || p.storeId !== storeId || (p.companyId || 'default_company') !== companyId || p.isDisabled || !key(p.categoryId)) fail('permission-denied', 'El producto no pertenece al inventario activo de esta tienda.');
-      if (w && (!owns(w, companyId, storeId) || w.categoryId !== p.categoryId && w.stock > 0)) fail('failed-precondition', 'La categoría del producto cambió; un administrador debe revisar su ubicación.');
-      const localBefore = p.stock, warehouseBefore = w?.stock || 0;
-      if ((p.warehouseUnits || 0) !== warehouseBefore) fail('failed-precondition', 'Las existencias enlazadas de bodega requieren revisión.');
-      if (!quantity(localBefore) || !quantity(warehouseBefore)) fail('failed-precondition', 'Las existencias actuales requieren revisión.');
-      const delta = direction === 'toWarehouse' ? units : -units;
-      const localAfter = localBefore - delta, warehouseAfter = warehouseBefore + delta;
-      if (!quantity(localAfter) || !quantity(warehouseAfter)) fail('failed-precondition', 'No hay existencias suficientes en el origen.');
-      const categoryRef = root.collection('categories').doc(p.categoryId), category = await tx.get(categoryRef);
-      const categoryBefore = category.exists ? category.data().stock : 0;
-      if (!quantity(categoryBefore) || !quantity(categoryBefore + delta)) fail('failed-precondition', 'El resumen de bodega requiere revisión.');
-      const record = { companyId, storeId, productId, productName: p.name, categoryId: p.categoryId, supplier: p.supplier || '', direction, quantity: units, localBefore, localAfter, warehouseBefore, warehouseAfter, createdAt: now, actorId: actor.id, actorName: actor.seller.name, note: input.note || '', ...(original ? { reversalOf: input.movementId } : {}) };
-      tx.update(localRef, { companyId, stock: localAfter, warehouseUnits: warehouseAfter });
-      tx.set(warehouseRef, { companyId, storeId, productId, name: p.name, supplier: p.supplier || '', categoryId: p.categoryId, stock: warehouseAfter, updatedAt: now });
-      tx.set(categoryRef, { companyId, storeId, stock: categoryBefore + delta, revision: (category.data()?.revision || 0) + 1, updatedAt: now });
-      tx.create(root.collection('movements').doc(recordId), record);
-      // Keep stock-balance history complete without exposing the private audit's
-      // operator, direction, note, or warehouse quantities to inventory readers.
-      tx.create(db.collection('productHistory').doc(`warehouse_${input.operationId}`), {
-        companyId, storeId, productId, productName: p.name, timestamp: now,
-        changedBy: 'Sistema', changeType: 'Cambio de ubicación',
-        stockDelta: -delta, details: 'Actualización de existencias disponibles.'
-      });
+      const direction = action === 'purchaseMove' ? 'toWarehouse' : movement.direction;
+      if (!['toWarehouse', 'toStore'].includes(direction) || typeof (input.note || '') !== 'string' || (input.note || '').length > 500) fail('invalid-argument', 'Revisa dirección y nota.');
+      if (direction === 'toWarehouse' && action !== 'reverse' && actor.store.warehouseSendEnabled === false) fail('failed-precondition', 'El envío a bodega está desactivado en esta sede.');
+
+      const items = new Map();
+      const dispatchRefs = [];
+      if (action === 'purchaseMove') {
+        const entries = input.entries;
+        if (!Array.isArray(entries) || !entries.length || entries.length > 25 ||
+          entries.some(entry => !key(entry?.purchaseId) || !quantity(entry.quantity) || entry.quantity < 1) ||
+          new Set(entries.map(entry => entry.purchaseId)).size !== entries.length) fail('invalid-argument', 'Selecciona entre 1 y 25 compras distintas y cantidades válidas.');
+        for (const { purchaseId, quantity: units } of entries) {
+          const dispatchRef = root.collection('purchaseDispatches').doc(purchaseId);
+          const [purchase, dispatch] = await Promise.all([tx.get(db.collection('purchases').doc(purchaseId)), tx.get(dispatchRef)]);
+          const row = purchase.data();
+          if (!owns(row, companyId, storeId) || !key(row.productId)) fail('permission-denied', 'La compra no pertenece a esta sede.');
+          if (dispatch.exists) fail('already-exists', 'La compra ya fue enviada a bodega.');
+          if (!quantity(row.quantity) || units > row.quantity) fail('failed-precondition', 'La cantidad supera las unidades registradas en la compra.');
+          const item = items.get(row.productId) || { units: 0, purchaseIds: [] };
+          item.units += units;
+          item.purchaseIds.push(purchaseId);
+          items.set(row.productId, item);
+          dispatchRefs.push({ ref: dispatchRef, quantity: units });
+        }
+      } else {
+        items.set(movement.productId, { units: movement.quantity });
+      }
+
+      const categories = new Map();
+      const moves = [];
+      for (const [productId, { units, purchaseIds }] of items) {
+        if (!key(productId) || !quantity(units) || units < 1) fail('invalid-argument', 'Revisa producto y cantidad.');
+        const localRef = db.collection('inventory').doc(productId), warehouseRef = root.collection('products').doc(productId);
+        const [local, warehouse] = await Promise.all([tx.get(localRef), tx.get(warehouseRef)]);
+        const p = local.exists ? local.data() : null, w = warehouse.exists ? warehouse.data() : null;
+        if (!p || p.storeId !== storeId || (p.companyId || 'default_company') !== companyId || p.isDisabled || !key(p.categoryId)) fail('permission-denied', 'El producto no pertenece al inventario activo de esta tienda.');
+        if (w && (!owns(w, companyId, storeId) || w.categoryId !== p.categoryId && w.stock > 0)) fail('failed-precondition', 'La categoría del producto cambió; un administrador debe revisar su ubicación.');
+        const localBefore = p.stock, warehouseBefore = w?.stock || 0;
+        if ((p.warehouseUnits || 0) !== warehouseBefore) fail('failed-precondition', 'Las existencias enlazadas de bodega requieren revisión.');
+        if (!quantity(localBefore) || !quantity(warehouseBefore)) fail('failed-precondition', 'Las existencias actuales requieren revisión.');
+        const delta = direction === 'toWarehouse' ? units : -units;
+        const localAfter = localBefore - delta, warehouseAfter = warehouseBefore + delta;
+        if (!quantity(localAfter) || !quantity(warehouseAfter)) fail('failed-precondition', 'No hay existencias suficientes en el origen.');
+        let category = categories.get(p.categoryId);
+        if (!category) {
+          const ref = root.collection('categories').doc(p.categoryId);
+          const snapshot = await tx.get(ref);
+          category = { ref, stock: snapshot.exists ? snapshot.data().stock : 0, revision: snapshot.data()?.revision || 0 };
+          categories.set(p.categoryId, category);
+        }
+        if (!quantity(category.stock) || !quantity(category.stock + delta)) fail('failed-precondition', 'El resumen de bodega requiere revisión.');
+        category.stock += delta;
+        const suffix = action === 'purchaseMove' ? `_${moves.length}` : '';
+        const id = recordId + suffix;
+        const record = { companyId, storeId, productId, productName: p.name, categoryId: p.categoryId, supplier: p.supplier || '', direction, quantity: units, localBefore, localAfter, warehouseBefore, warehouseAfter, createdAt: now, actorId: actor.id, actorName: actor.seller.name, note: input.note || '', ...(original ? { reversalOf: input.movementId } : {}), ...(purchaseIds ? { purchaseIds } : {}) };
+        moves.push({ id, suffix, localRef, warehouseRef, record, delta });
+      }
+
+      for (const { ref, stock, revision } of categories.values()) {
+        tx.set(ref, { companyId, storeId, stock, revision: revision + 1, updatedAt: now });
+      }
+      for (const { id, suffix, localRef, warehouseRef, record, delta } of moves) {
+        const { productId, productName, categoryId, supplier, warehouseAfter, localAfter } = record;
+        tx.update(localRef, { companyId, stock: localAfter, warehouseUnits: warehouseAfter });
+        tx.set(warehouseRef, { companyId, storeId, productId, name: productName, supplier, categoryId, stock: warehouseAfter, updatedAt: now });
+        tx.create(root.collection('movements').doc(id), record);
+        // Preserve stock balances while keeping the audit private.
+        tx.create(db.collection('productHistory').doc(`warehouse_${input.operationId}${suffix}`), {
+          companyId, storeId, productId, productName, timestamp: now,
+          changedBy: 'Sistema', changeType: 'Cambio de ubicación',
+          stockDelta: -delta, details: 'Actualización de existencias disponibles.'
+        });
+      }
+      for (const { ref, quantity } of dispatchRefs) tx.create(ref, { operationId: input.operationId, quantity, createdAt: now });
       if (original) tx.update(originalRef, { reversedBy: recordId });
+      if (action === 'purchaseMove') result = { id: recordId, purchaseIds: input.entries.map(entry => entry.purchaseId) };
     } else if (action === 'count' || action === 'draftSave' || action === 'adjust') {
       const entries = input.entries;
       if (!Array.isArray(entries) || !entries.length || entries.length > 100 || new Set(entries.map(e => e.categoryId)).size !== entries.length) fail('invalid-argument', 'Ingresa entre 1 y 100 categorías distintas.');

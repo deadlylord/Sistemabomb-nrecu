@@ -85,11 +85,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const warehouseStore = props.onMoveWarehouse && !preOrderSelection ? props.currentStore : undefined;
-  const warehouseSelected = !!warehouseStore && selectedCategoryId === WAREHOUSE_CATEGORY_ID;
+  const warehouseCategoryVisible = !!warehouseStore && warehouseStore.warehouseCategoryVisible !== false;
+  const warehouseSelected = warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID;
 
   useEffect(() => {
-    if (!warehouseStore && selectedCategoryId === WAREHOUSE_CATEGORY_ID) setSelectedCategoryId(null);
-  }, [warehouseStore, selectedCategoryId]);
+    if (!warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID) setSelectedCategoryId(null);
+  }, [warehouseCategoryVisible, selectedCategoryId]);
   const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
   const [searchTerm, setSearchTerm] = useViewFilter('PosView:searchTerm', '');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
@@ -868,7 +869,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                             >
                                 Todos
                             </button>
-                            {warehouseStore && (
+                            {warehouseCategoryVisible && (
                                 <button
                                     type="button"
                                     aria-pressed={warehouseSelected}
@@ -948,7 +949,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     <ProductGrid
                         warehouseView={warehouseSelected}
                         warehouseStore={warehouseStore}
-                        onMoveWarehouse={props.onMoveWarehouse}
+                        onMoveWarehouse={warehouseSelected || warehouseStore?.warehouseSendEnabled !== false ? props.onMoveWarehouse : undefined}
                         preOrderSelection={preOrderSelection}
                         products={filteredInventory} 
                         performanceTrends={performanceTrends}

@@ -257,6 +257,8 @@ export interface Store {
   loginBackgroundUrl?: string | null;
   imageCompressionQuality?: 'high' | 'medium' | 'low';
   accentColorsUpdated?: boolean;
+  warehouseSendEnabled?: boolean;
+  warehouseCategoryVisible?: boolean;
   hideDetailedVerificationForSellers?: boolean;
   detailedVerificationEnabledDate?: string; // ISO date string (YYYY-MM-DD)
   initialBalances?: {

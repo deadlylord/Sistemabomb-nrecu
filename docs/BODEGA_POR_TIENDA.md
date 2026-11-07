@@ -67,3 +67,12 @@ Si sessionStorage está bloqueado o contiene un registro inválido, se impide gu
 - El historial administrativo se abre desde Stock sin resumen, productos ni listener de auditoría. Un vendedor sigue pudiendo mover y contar su bodega, pero el servidor rechaza history y counts.
 - Se conservan recibos, operación pendiente en sessionStorage y reintentos idempotentes. No se consulta el resumen al abrir/confirmar un formulario de movimiento.
 - La auditoría privada conserva todos los datos. La copia básica de stock conserva saldos históricos. Se verificó la única copia detallada anterior en staging contra su auditoría privada y se redujo al mismo evento básico, conservando cantidades y fecha. Una nueva consulta confirmó cero copias detalladas antiguas.
+
+## Controles y envíos desde Compras 1.1.208
+
+- El administrador abre Configurar bodega desde el menú de usuario en la sede activa. Leer los interruptores reutiliza el listener existente de sedes. Guardar actualiza únicamente los campos modificados mediante el callable. Las reglas de staging protegen ambos campos de escrituras directas.
+- El interruptor de envío se valida dentro de la transacción de movimiento y del envío desde Compras. El interruptor de categoría controla su visibilidad en el POS.
+- Tienda y Bodega comparten diálogo, tabla y controles de conteo. El resumen de Bodega se consulta al entrar y se conserva al alternar. Los detalles y borradores se consultan por categoría al tocar el ojo.
+- El historial de movimientos consulta únicamente 30 días usando el índice de createdAt y 25 filas por página, con una fila de comprobación y lectura del cursor al avanzar. Conteos guardados conservan su consulta separada.
+- Un envío desde Compras consume hasta 25 compras de la misma sede. Comprueba los documentos de compra y stock, registra un evento por producto y actualiza cada resumen de categoría una vez. Una marca privada por compra impide volver a enviar esa selección y el recibo permite reintentar la misma operación.
+- Corregir o borrar una compra bloquea descuentos que superarían las existencias de tienda. Cuando hay unidades en bodega, se pueden regresar al local antes de hacer la corrección.

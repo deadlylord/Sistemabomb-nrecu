@@ -22,6 +22,7 @@ interface HeaderProps {
   currentCompany?: Company | null;
   userPermissions: View[];
   onLogout: () => void;
+  onOpenWarehouseSettings?: () => void;
   stores: Store[];
   onSwitchStore: (storeId: string) => void;
   roles: Role[];
@@ -61,7 +62,7 @@ const ChartNavIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' 
 
 const Header: React.FC<HeaderProps> = ({ 
   currentView, setCurrentView, theme, toggleTheme, currentUser, currentStore, 
-  currentCompany, userPermissions, onLogout, stores, onSwitchStore, roles, isGlobalMode, 
+  currentCompany, userPermissions, onLogout, onOpenWarehouseSettings, stores, onSwitchStore, roles, isGlobalMode,
   onToggleGlobalMode, incidents, onOpenBriefing, isDeveloper: isDeveloperProp
 }) => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -373,6 +374,16 @@ const Header: React.FC<HeaderProps> = ({
                         </button>
                       )}
 
+                      {onOpenWarehouseSettings && (
+                        <button
+                          type="button"
+                          onClick={() => { onOpenWarehouseSettings(); setIsUserDropdownOpen(false); }}
+                          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <SettingsIcon className="w-5 h-5 text-accent" />
+                          Configurar bodega
+                        </button>
+                      )}
                       {isDeveloper && (
                         <button 
                           onClick={() => { setCurrentView(View.DEVELOPER_CENTER); setIsUserDropdownOpen(false); }} 

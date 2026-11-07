@@ -1,6 +1,6 @@
 import { useViewFilter } from '../services/viewFilters';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
 import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon, TagIcon, PrintIcon, CalendarIcon } from './Icons';
 import { formatCOP, encodePrice, normalizeText } from '../constants';
@@ -8,7 +8,10 @@ import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
 import { LabelPrintModal } from './LabelPrintModal';
 
+const WarehousePanel = lazy(() => import('./WarehousePanel'));
+
 interface PurchasesViewProps {
+  warehouseAccess?: { userId: string; companyId: string; storeIds: Set<string> };
   purchases: Purchase[];
   inventory: Product[];
   allInventoryForSearch?: Product[];
@@ -18,8 +21,8 @@ interface PurchasesViewProps {
   onMultiStorePurchase: (data: {
     productInfo: { name: string; categoryId: string; };
     storeEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }>;
-  }) => Promise<void>;
-  onUpdatePurchase: (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => void;
+  }) => Promise<Purchase[]>;
+  onUpdatePurchase: (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => Promise<void>;
   onDeletePurchase: (purchaseId: string) => void;
   onUpdateProduct: (updatedProduct: Product, imageFile?: File) => Promise<void>;
   onLoadFullHistory?: () => void;
@@ -46,7 +49,7 @@ const toYYYYMMDD = (date: Date) => {
     return `${year}-${month}-${day}`;
 };
 
-const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
+const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchases, inventory, allInventoryForSearch, categories, stores, currentStoreId, onMultiStorePurchase, onUpdatePurchase, onDeletePurchase, onUpdateProduct, onLoadFullHistory, isFullHistoryLoaded }) => {
   const [productSearch, setProductSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeStoreIds, setActiveStoreIds] = useState<string[]>([currentStoreId]);
@@ -75,6 +78,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   const [batchItems, setBatchItems] = useState<BatchPurchaseItem[]>([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const processingBatch = useRef(false);
+  const [warehousePurchases, setWarehousePurchases] = useState<Purchase[]>([]);
+  const [warehouseStoreId, setWarehouseStoreId] = useState<string | null>(null);
+  const dispatchStores = stores.filter(store => warehouseAccess?.storeIds.has(store.id) && warehousePurchases.some(purchase => purchase.storeId === store.id));
+  const dispatchStore = dispatchStores.find(store => store.id === warehouseStoreId);
+
 
   useEffect(() => {
     if (successMessage) {
@@ -268,14 +277,17 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
   }, [batchItems, activeStoreIds]);
 
   const handleProcessBatch = async () => {
-    if (batchItems.length === 0) return;
+    if (processingBatch.current || batchItems.length === 0) return;
     for (const item of batchItems) {
         if (!item.categoryId) { alert(`El producto "${item.productName}" no tiene categoría.`); return; }
         const hasQty = Object.entries(item.storeEntries).some(([sid, entry]) => activeStoreIds.includes(sid) && parseInt((entry as any).quantity) > 0);
         if (!hasQty) { alert(`El producto "${item.productName}" no tiene cantidades en las tiendas seleccionadas.`); return; }
     }
 
+    processingBatch.current = true;
     setIsProcessingBatch(true);
+    const confirmedItems = new Set<string>();
+    const savedPurchases: Purchase[] = [];
     try {
         for (const item of batchItems) {
             const finalStoreEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }> = {};
@@ -293,17 +305,24 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
                 }
             });
             if (Object.keys(finalStoreEntries).length > 0) {
-                await onMultiStorePurchase({
+                const saved = await onMultiStorePurchase({
                     productInfo: { name: item.productName, categoryId: item.categoryId },
                     storeEntries: finalStoreEntries,
                 });
+                savedPurchases.push(...saved);
+                confirmedItems.add(item.id);
             }
         }
-        setBatchItems([]);
         setSuccessMessage('Lote procesado correctamente.');
     } catch (error: any) {
         alert("Error: " + error.message);
     } finally {
+        setBatchItems(previous => previous.filter(item => !confirmedItems.has(item.id)));
+        if (warehouseAccess) {
+            const eligible = savedPurchases.filter(purchase => warehouseAccess.storeIds.has(purchase.storeId));
+            setWarehousePurchases(previous => [...previous, ...eligible]);
+        }
+        processingBatch.current = false;
         setIsProcessingBatch(false);
     }
   };
@@ -460,6 +479,31 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ purchases, inventory, all
 
   return (
     <div className="max-w-full mx-auto space-y-6">
+      {dispatchStores.some(store => store.warehouseSendEnabled !== false) && (
+        <section className="rounded-xl border border-accent/30 p-4">
+          <h2 className="font-bold text-accent">Compras guardadas para enviar a bodega</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {dispatchStores.filter(store => store.warehouseSendEnabled !== false).map(store => (
+              <button key={store.id} type="button" onClick={() => setWarehouseStoreId(store.id)}
+                className="rounded-lg bg-accent/10 px-3 py-2 font-semibold text-accent">
+                Seleccionar · {store.name} ({warehousePurchases.filter(purchase => purchase.storeId === store.id).length})
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {dispatchStore && warehouseAccess && (
+        <Suspense fallback={<p role="status">Cargando selección de bodega…</p>}>
+          <WarehousePanel key={dispatchStore.id} mode="purchase" userId={warehouseAccess.userId}
+            companyId={warehouseAccess.companyId} store={dispatchStore} inventory={inventory} categories={categories}
+            isAdmin={false} purchases={warehousePurchases.filter(purchase => purchase.storeId === dispatchStore.id)}
+            onClose={() => setWarehouseStoreId(null)} onPurchasesMoved={ids => {
+              setWarehousePurchases(previous => previous.filter(purchase => !ids.includes(purchase.id)));
+              setWarehouseStoreId(null);
+              setSuccessMessage('Envío a bodega confirmado.');
+            }} />
+        </Suspense>
+      )}
       {/* SECTOR DE CONFIGURACIÓN Y BÚSQUEDA */}
       <div className="bg-white dark:bg-secondary p-6 rounded-2xl shadow-xl border-l-8 border-accent">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mb-6">

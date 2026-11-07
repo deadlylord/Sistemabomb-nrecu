@@ -6,7 +6,7 @@ interface EditPurchaseModalProps {
   product: Product;
   isOpen: boolean;
   onClose: () => void;
-  onUpdatePurchase: (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => void;
+  onUpdatePurchase: (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => Promise<void>;
 }
 
 const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
@@ -16,6 +16,8 @@ const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
   onClose,
   onUpdatePurchase,
 }) => {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     quantity: purchase.quantity.toString(),
     cost: purchase.cost.toString(),
@@ -41,8 +43,9 @@ const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const quantity = parseInt(formData.quantity, 10);
     const cost = parseFloat(formData.cost);
     const price = parseFloat(formData.price);
@@ -60,8 +63,16 @@ const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
       totalCost: quantity * cost,
     };
     
-    onUpdatePurchase(updatedPurchase, purchase.quantity, price);
-    onClose();
+    setError('');
+    setSaving(true);
+    try {
+      await onUpdatePurchase(updatedPurchase, purchase.quantity, price);
+      onClose();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'No se pudo actualizar la compra.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -90,9 +101,10 @@ const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
               <input type="number" name="price" id="price" value={formData.price} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none" required min="0" step="1"/>
             </div>
           </div>
+          {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
           <div className="mt-6 flex justify-end space-x-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
-            <button type="submit" className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">Guardar Cambios</button>
+            <button type="button" disabled={saving} onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">{saving ? 'Guardando…' : 'Guardar Cambios'}</button>
           </div>
         </form>
       </div>

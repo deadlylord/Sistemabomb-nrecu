@@ -165,8 +165,10 @@ service cloud.firestore {
     match /stores/{id} {
       allow get: if live() && (resource == null || scoped(resource.data));
       allow list: if live() && scoped(resource.data);
-      allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id);
+      allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id)
+        && !request.resource.data.keys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible']);
       allow update: if live() && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible'])
         && (hasAny(['stores','settings']) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nextInvoiceNumber']) && request.resource.data.nextInvoiceNumber is int && request.resource.data.nextInvoiceNumber == resource.data.nextInvoiceNumber + 1);
       allow delete: if false;
     }

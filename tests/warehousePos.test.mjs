@@ -72,6 +72,14 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     await act(async () => button('Todos').props.onClick());
     await act(async () => renderer.root.findByProps({ 'aria-label': 'Agregar Blusa al carrito' }).props.onClick({ target: { closest: () => null } }));
     assert.deepEqual(added, ['p']);
+    await act(async () => renderer.update(screen({ currentStore: { ...props.currentStore, warehouseSendEnabled: false } })));
+    assert.ok(button('Bodega'));
+    assert.equal(renderer.root.findAllByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).length, 0);
+    await act(async () => button('Bodega').props.onClick());
+    assert.ok(renderer.root.findByProps({ 'aria-label': 'Devolver a tienda: Vestido' }));
+    await act(async () => renderer.update(screen({ currentStore: { ...props.currentStore, warehouseCategoryVisible: false } })));
+    assert.equal(button('Bodega'), undefined);
+    assert.ok(renderer.root.findByProps({ 'aria-label': 'Enviar a bodega: Blusa' }));
     await act(async () => renderer.update(screen({ onMoveWarehouse: undefined })));
     assert.equal(button('Bodega'), undefined);
   } finally {

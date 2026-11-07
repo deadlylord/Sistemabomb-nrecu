@@ -8,8 +8,8 @@ import {create,act} from 'react-test-renderer';
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const storage = new Map();globalThis.sessionStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
 const dir=await mkdtemp(process.cwd()+'/tests/.warehouse-ui-');
-const b=await build({entryPoints:['components/WarehousePanel.tsx'],bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'api-stub',setup(b){b.onResolve({filter:/services\/warehouse$/},()=>({path:'api',namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export const callWarehouse = async () => {throw Error("Unexpected default API")};'}))}}]});
-await writeFile(dir+'/ui.mjs',b.outputFiles[0].text);const {default:Panel}=await import(pathToFileURL(dir+'/ui.mjs').href);
+const b=await build({stdin:{ contents: "export { default } from './components/WarehousePanel'; export { InventoryVerificationModal } from './components/InventoryVerificationModal';", resolveDir: process.cwd() },bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'api-stub',setup(b){b.onResolve({filter:/DetailedInventoryVerificationModal$/},()=>({path:'detail',namespace:'stub'}));b.onResolve({filter:/services\/warehouse$/},()=>({path:'api',namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},args=>({contents:args.path === 'detail' ? 'export default function Detail(){ return null; }' : 'export const callWarehouse = async () => {throw Error("Unexpected default API")};'}))}}]});
+await writeFile(dir+'/ui.mjs',b.outputFiles[0].text);const {default:Panel, InventoryVerificationModal}=await import(pathToFileURL(dir+'/ui.mjs').href);
 const props={userId:'u',companyId:'co',store:{id:'st',companyId:'co',name:'Tienda'},inventory:[{id:'p',companyId:'co',storeId:'st',name:'Blusa',stock:6}],categories:[{id:'cat',name:'Blusas'}],isAdmin:false,onClose(){}};
 const button=(r,label)=>r.root.findAllByType('button').find(b=>b.children.join('')===label);
 test('warehouse opens summary only; eyes load category on demand; save keeps store scope and revision',async()=>{
@@ -64,4 +64,66 @@ test('administrator history loads only paginated audit, without count summary',a
  await act(async()=>{r=create(React.createElement(Panel,{...props,isAdmin:true,mode:'history',api}));});
  try{assert.deepEqual(calls.map(c=>c.action),['history']);}finally{await act(async()=>r.unmount())}
 });
+test('Verificar opens warehouse on demand and keeps independent drafts in the same dialog', async () => {
+  storage.clear();
+  const calls = [];
+  const api = async (company, store, data) => {
+    calls.push(data.action);
+    return { rows: [{ id: 'cat', stock: 4, revision: 1 }] };
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(InventoryVerificationModal, {
+      isOpen: true, isAdmin: true, inventory: [{ ...props.inventory[0], categoryId: 'cat' }],
+      categories: props.categories, sellers: [], currentStore: props.store, onClose() {},
+      warehouseContent: React.createElement(Panel, { ...props, api, embedded: true }),
+    }));
+  });
+  const inputs = () => renderer.root.findAllByProps({ 'aria-label': 'Conteo Blusas' });
+  try {
+    assert.deepEqual(calls, []);
+    await act(async () => inputs()[0].props.onChange({ target: { value: '5' } }));
+    await act(async () => button(renderer, 'Bodega').props.onClick());
+    assert.deepEqual(calls, ['summary']);
+    await act(async () => inputs()[0].props.onChange({ target: { value: '3' } }));
+    await act(async () => button(renderer, 'Tienda').props.onClick());
+    assert.equal(inputs()[1].props.value, '5');
+    await act(async () => button(renderer, 'Bodega').props.onClick());
+    assert.equal(inputs()[0].props.value, '3');
+    assert.deepEqual(calls, ['summary']);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test('purchase transfer opens without querying and recovers the same operation after connection loss', async () => {
+  storage.clear();
+  const calls = [], confirmed = [];
+  const api = async (company, store, data) => {
+    calls.push([company, store, data]);
+    if (calls.length === 1) throw Error('Sin conexión');
+    return { purchaseIds: ['a', 'b'] };
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(Panel, {
+      ...props, mode: 'purchase', api,
+      purchases: [{ id: 'a', productName: 'Blusa', quantity: 5 }, { id: 'b', productName: 'Pantalón', quantity: 2 }],
+      onPurchasesMoved: ids => confirmed.push(ids),
+    }));
+  });
+  try {
+    assert.deepEqual(calls, []);
+    await act(async () => renderer.root.findAllByProps({ type: 'checkbox' }).forEach(box => box.props.onChange({ target: { checked: true } })));
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Unidades para bodega de Blusa' }).props.onChange({ target: { value: '3' } }));
+    await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+    assert.deepEqual(calls[0][2].entries, [{ purchaseId: 'a', quantity: 3 }, { purchaseId: 'b', quantity: 2 }]);
+    await act(async () => button(renderer, 'Resolver operación pendiente').props.onClick());
+    assert.deepEqual(calls[0], calls[1]);
+    assert.deepEqual(confirmed, [['a', 'b']]);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
 test.after(async()=>rm(dir,{recursive:true,force:true}));
