@@ -1267,21 +1267,25 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
   // Used by both direct transfers and approved requests. The transaction reads
   // both products again; an intervening sale/transfer forces a fresh stock check.
-  const applyInventoryTransfer = async (transaction: any, data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string }, transferRef: any) => {
+  const applyInventoryTransfer = async (transaction: any, data: { fromStoreId: string; toStoreId: string; productId: string; quantity: number; sellerName: string }, transferRef: any, parallelOriginRead = false) => {
     const { fromStoreId, toStoreId, productId, quantity, sellerName } = data;
     if (!currentUser || (!isAdmin && !isDeveloper) || recordReadOnly) throw new Error('No tienes permiso para realizar traslados.');
     if (!visibleStoreIds.has(fromStoreId) || !visibleStoreIds.has(toStoreId) || fromStoreId === toStoreId) throw new Error('Origen y destino deben ser sedes distintas de la empresa activa.');
     if (!Number.isSafeInteger(quantity) || quantity <= 0) throw new Error('La cantidad debe ser un número entero positivo.');
     const scope = { companyId: operationalCompanyId, storeIds: visibleStoreIds };
-    const receipt = await transaction.get(transferRef);
+    const fromRef = doc(db, 'inventory', productId);
+    // A pending request already needs both documents. Read them together;
+    // direct receipt recovery keeps its cheaper receipt-only path.
+    const [receipt, originSnapshot] = parallelOriginRead
+      ? await Promise.all([transaction.get(transferRef), transaction.get(fromRef)])
+      : [await transaction.get(transferRef), undefined];
     if (receipt.exists()) {
       const saved = receipt.data();
       assertTenantData('inventoryTransfers', saved, scope);
       if (saved.processedByUserId !== currentUser.id) throw new Error('Este traslado pertenece a otra operación.');
       return saved.fromStoreId === fromStoreId && saved.toStoreId === toStoreId && saved.productId === productId && saved.quantity === quantity;
     }
-    const fromRef = doc(db, 'inventory', productId);
-    const fromSnapshot = await transaction.get(fromRef);
+    const fromSnapshot = originSnapshot ?? await transaction.get(fromRef);
     if (!fromSnapshot.exists()) throw new Error('No se encontró el producto de origen.');
     const fromProduct = { ...fromSnapshot.data(), id: fromSnapshot.id } as Product;
     assertTenantData('inventory', fromProduct, scope);
@@ -1692,7 +1696,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
           const matches = await applyInventoryTransfer(transaction, {
             fromStoreId: saved.fromStoreId, toStoreId: saved.toStoreId, productId: saved.productId,
             quantity: saved.quantity, sellerName: saved.sellerName
-          }, doc(db, 'inventoryTransfers', `request_${incidentId}`));
+          }, doc(db, 'inventoryTransfers', `request_${incidentId}`), true);
           if (!matches) throw new Error('La solicitud ya tiene un traslado registrado con otros datos.');
           if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
           const now = new Date().toISOString();

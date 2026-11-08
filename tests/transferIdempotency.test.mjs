@@ -6,12 +6,12 @@ const b=await build({stdin:{contents:`import{DEFAULT_COMPANY_ID,IncidentType}fro
 let fixtureCount=0;
 function fixture(stock=1){
  const user='user-'+(++fixtureCount),records=new Map([['inventory/p',{id:'p',companyId:'a',storeId:'origin',name:'Test',stock,cost:10}],['inventory/q',{id:'q',companyId:'a',storeId:'destination',name:'Test',stock:0,cost:10}],['incidents/request',{id:'request',companyId:'a',storeId:'origin',fromStoreId:'origin',toStoreId:'destination',productId:'p',quantity:1,sellerName:'Test',type:types.IncidentType.INVENTORY_TRANSFER_REQUEST,status:types.IncidentStatus.TRASLADO_SOLICITADO}]]);
- const versions=new Map();let serial=0,commits=0,attempts=0,fail=false,loseAck=false,beforeCommit,afterQuery;
+ const versions=new Map();let serial=0,commits=0,attempts=0,fail=false,loseAck=false,beforeCommit,afterQuery,readGate;
  const external=(path,data)=>{records.set(path,{...records.get(path),...data});versions.set(path,(versions.get(path)||0)+1)};
  const snapshot=path=>{const data=structuredClone(records.get(path));return{id:path.split('/').at(-1),exists:()=>!!data,data:()=>data}};
  function client(){const context={},alerts=[];const scope={...types,pendingTransferId,completeTransferId,db:{},currentUser:{id:user,name:'Test'},isAdmin:true,isDeveloper:false,recordReadOnly:false,operationalCompanyId:'a',currentStoreId:'origin',visibleStoreIds:new Set(['origin','destination']),operationContextRef:{current:context},contextAtRender:context,transfersInFlight:{current:new Set()},incidents:[structuredClone(records.get('incidents/request'))],increment:n=>({delta:n}),collection:(_,name)=>({name}),doc:(...args)=>{const path=args.length===1?args[0].name+'/'+(++serial):args[1]+'/'+args[2];return{path,id:path.split('/').at(-1)}},where:(field,op,value)=>({field,value}),limit:value=>({limit:value}),query:(collection,...filters)=>({...collection,filters}),getDocs:async q=>{const docs=[...records].filter(([path,row])=>path.startsWith(q.name+'/')&&q.filters.every(f=>!f.field||row[f.field]===f.value)).slice(0,q.filters.find(f=>f.limit)?.limit).map(([path])=>snapshot(path));afterQuery?.(scope);return{docs,empty:!docs.length}},getStoreName:id=>id,createProductHistoryLog:(product,changedBy,changeType,details,stockDelta)=>({id:'log-'+(++serial),productId:product.id,storeId:product.storeId,changedBy,changeType,details,stockDelta}),alert:m=>alerts.push(m),console:{error(){}},runTransaction:async(_,callback)=>{
   for(let retry=0;retry<8;retry++){attempts++;const reads=new Map(),ops=[];
-   const result=await callback({get:async ref=>{assert.equal(ops.length,0,'all reads precede writes');reads.set(ref.path,versions.get(ref.path)||0);return snapshot(ref.path)},update:(ref,data)=>ops.push({ref,data}),set:(ref,data)=>ops.push({ref,data})});
+   const result=await callback({get:async ref=>{assert.equal(ops.length,0,'all reads precede writes');reads.set(ref.path,versions.get(ref.path)||0);if(readGate)await readGate(ref.path);return snapshot(ref.path)},update:(ref,data)=>ops.push({ref,data}),set:(ref,data)=>ops.push({ref,data})});
    if(beforeCommit){const fn=beforeCommit;beforeCommit=null;fn()}
    if([...reads].some(([path,v])=>(versions.get(path)||0)!==v))continue;
    if(fail)throw Error('offline');
@@ -19,7 +19,7 @@ function fixture(stock=1){
   }throw Error('too many conflicts');
  }};const actions=new Function('scope',`with(scope){${code};return{transfer:handleInventoryTransfer,approve:handleApproveIncident}}`)(scope);return{scope,alerts,...actions};}
  const input=(operationId=crypto.randomUUID())=>({operationId,fromStoreId:'origin',toStoreId:'destination',productId:'p',quantity:1,sellerName:'Test'});
- return{records,client,input,external,get commits(){return commits},get attempts(){return attempts},set fail(v){fail=v},set loseAck(v){loseAck=v},set beforeCommit(fn){beforeCommit=fn},set afterQuery(fn){afterQuery=fn},transfers:()=>[...records].filter(([path])=>path.startsWith('inventoryTransfers/')),logs:()=>[...records].filter(([path])=>path.startsWith('productHistory/')).map(([,row])=>row)};
+ return{records,client,input,external,set readGate(fn){readGate=fn},get commits(){return commits},get attempts(){return attempts},set fail(v){fail=v},set loseAck(v){loseAck=v},set beforeCommit(fn){beforeCommit=fn},set afterQuery(fn){afterQuery=fn},transfers:()=>[...records].filter(([path])=>path.startsWith('inventoryTransfers/')),logs:()=>[...records].filter(([path])=>path.startsWith('productHistory/')).map(([,row])=>row)};
 }
 test('double direct submission applies one transfer and exactly one exit and entry',async()=>{const f=fixture(),c=f.client(),data=f.input();const result=await Promise.allSettled([c.transfer(data),c.transfer(data)]);assert.equal(result.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.commits,1);assert.equal(f.records.get('inventory/p').stock,0);assert.equal(f.records.get('inventory/q').stock,1);assert.equal(f.logs().length,2)});
 test('two devices retry the same operation ID without generating a second transfer',async()=>{const f=fixture(),a=f.client(),b=f.client(),data=f.input();await Promise.all([a.transfer(data),b.transfer(data)]);assert.equal(f.commits,1);assert.equal(f.transfers().length,1);assert.equal(f.logs().length,2);assert.ok(f.attempts>=3)});
@@ -36,3 +36,12 @@ test('request approval reads current saved fields and refuses missing, foreign o
 test('independent valid operations move the requested number of units and preserve linked history',async()=>{const f=fixture(2),c=f.client();await c.transfer(f.input());await c.transfer(f.input());assert.equal(f.records.get('inventory/p').stock,0);assert.equal(f.records.get('inventory/q').stock,2);assert.equal(f.transfers().length,2);assert.equal(f.logs().length,4);for(const row of f.logs())assert.ok(f.transfers().some(([path])=>path.endsWith('/'+row.transferId)))});
 
 test('retrying a transfer after the received unit is sold leaves zero units in both stores',async()=>{const f=fixture(),c=f.client(),data=f.input();await c.transfer(data);f.external('inventory/q',{stock:0});await c.transfer(data);assert.equal(f.records.get('inventory/p').stock,0);assert.equal(f.records.get('inventory/q').stock,0);assert.equal(f.commits,1);assert.equal(f.logs().length,2)});
+
+test('request approval starts receipt and origin reads together without adding reads or dropping atomic checks',async()=>{
+ const f=fixture(),c=f.client(),seen=[];let release;
+ f.readGate=async path=>{seen.push(path);if(path==='inventoryTransfers/request_request')await new Promise(resolve=>release=resolve);};
+ const pending=c.approve('request');
+ await new Promise(resolve=>setImmediate(resolve));
+ const overlap=seen.includes('inventory/p');release?.();await pending;
+ assert.ok(overlap,'origin read starts before receipt read finishes');assert.equal(seen.filter(p=>p==='inventory/p').length,1);assert.equal(f.commits,1);assert.equal(f.records.get('inventory/p').stock,0);assert.equal(f.records.get('inventory/q').stock,1);
+});
