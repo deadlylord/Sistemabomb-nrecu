@@ -2,6 +2,15 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Traslados en servidor — 1.1.213, preparado sin activar
+
+- Carlos autorizó preparar y probar un callable exclusivamente en vestika-staging, sin main ni producción. Implementados handler Admin transaccional, wrapper de proyecto staging, cliente con flag apagado por defecto y diagnóstico opt-in agregado. Guarda stock, solicitud, comprobante y dos logs juntos; valida identidad/rol/grant vigente, empresa, sedes, productos, categorías, cantidades y referencias históricas. Consulta destino en la misma transacción; no afecta bodega ni elimina validaciones.
+- Ruta cliente actual se mantiene si flag está apagado. Tras enviar al servidor nunca se ejecuta un traslado cliente como respaldo ante error/timeout. Respuesta ambigua obliga a revisar estado; cambio de sede no cancela una operación ya enviada. Procesados son no-op, pendiente con comprobante es inconsistencia bloqueada.
+- Pruebas focalizadas 69/69; 43/43 del handler repetidas en Node22.23.4, runtime declarado del servicio. Importación del índice de funciones con SDK real en proyecto demo aprobada, sin invocar servicios. Emulador local: tres pruebas preparadas, no ejecutadas porque el JAR de storage.googleapis.com fue bloqueado por la red. No se declara validación Firebase real ni mejora de latencia.
+- Dependencias functions instaladas desde lockfile ignorado; esto resuelve en el entorno la ausencia previa de @google-cloud/firestore. Sin cambios a las dependencias versionadas. Suite completa 404/405 antes de añadir tres pruebas adicionales del wrapper (estas tres también aprobadas en la ejecución focalizada final). Persiste solo el fallo previo de React/ESM en sharedRecordAccess. Typecheck conserva los tres errores previos de AppErrorBoundary; build aprobado y diff limpio. No se declara typecheck general aprobado.
+- Falta identidad administrativa limitada a staging y aplicar accesos de red. Se guardó propuesta de dominios en el borrador de entorno Codex, sin aplicar ni publicar el entorno. Región us-central1 provisional: verificar ubicación de Firestore, plan y cuenta de ejecución antes de desplegar. No se cambió Netlify, reglas, índices, credenciales ni datos históricos. No se activó el servicio ni se puso el flag en true.
+- Procedimiento, límites, despliegue restringido, desactivación y mediciones pendientes: docs/performance/STAGING_SERVER_APPROVAL.md. Mantener main intacta; no trasladar este prototipo a producción sin validación real y autorización.
+
 ## Primera lectura — 1.1.212, instrumento en staging
 
 - Carlos autoriza separar autenticación, lectura directa y transacción siguiendo AGENTS.md. Se le informó que este executor no tiene identidad/sesión de Firebase ni acceso de red a Firebase/Netlify; no se ejecutó la comparación contra Firebase real. No inventar tiempos ni afirmar diagnóstico de causa completado.

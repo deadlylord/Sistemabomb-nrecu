@@ -1,3 +1,4 @@
+import { serverTransferApprovalEnabled, callServerTransferApproval } from '../services/serverTransferApproval';
 import { warehouseEnabled, type WarehouseDirection } from '../services/warehouse';
 import { pendingTransferId, completeTransferId } from '../services/transferCheckout';
 import { pendingSaleId, completeSaleId, saleFingerprint } from '../services/saleCheckout';
@@ -1693,6 +1694,12 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     if (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST) {
       try {
         const approvalContext = operationContextRef.current;
+        if (serverTransferApprovalEnabled) {
+          if (recordReadOnly || (!isAdmin && !isDeveloper)) throw new Error('No tienes permiso para aprobar traslados.');
+          await callServerTransferApproval(operationalCompanyId, currentStoreId!, incidentId);
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede o sesión cambió. Revisa el estado del traslado en su sede original.');
+          return;
+        }
         const incidentRef = doc(db, 'incidents', incidentId);
         await runTransaction(db, async transaction => {
           if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
@@ -1717,7 +1724,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         });
       } catch (error: any) {
         console.error('Error approving transfer request:', error);
-        alert(`Error al aprobar: ${error.message}`);
+        const rejected = ['functions/permission-denied','functions/unauthenticated','functions/invalid-argument','functions/failed-precondition','functions/already-exists'].includes(error?.code);
+        alert(serverTransferApprovalEnabled
+          ? rejected ? `No se aprobó el traslado: ${error.message}` : 'No se pudo confirmar la respuesta del servidor. Revisa el estado de la solicitud antes de reintentar; no se ejecutará otro traslado automáticamente.'
+          : `Error al aprobar: ${error.message}`);
       }
       return;
     }

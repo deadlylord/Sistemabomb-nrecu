@@ -9,10 +9,10 @@ export type ReadRow = ReadContext & { resource: string; operation: string; reque
 type Session = { id: number; label: string; startedAt: string; stoppedAt?: string; active: boolean;
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
   droppedGroups: number; droppedTimings: number };
-export type DiagnosticPhase = 'Primera lectura: restaurar Auth' | 'Primera lectura: obtener token disponible' | 'Primera lectura: directa A' | 'Primera lectura: transacción A' | 'Primera lectura: transacción B' | 'Primera lectura: directa B' | 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: restaurar estado de sesión' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar' | 'Guardado: validar empresa y referencias' | 'Guardado: confirmar lote' | 'Novedades: leer registro' | 'Validación: leer referencia' | `Novedades: espera de aprobación (${IncidentType | 'sin tipo'})`;
+export type DiagnosticPhase = 'Novedades: aprobación en servidor' | 'Primera lectura: restaurar Auth' | 'Primera lectura: obtener token disponible' | 'Primera lectura: directa A' | 'Primera lectura: transacción A' | 'Primera lectura: transacción B' | 'Primera lectura: directa B' | 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: restaurar estado de sesión' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar' | 'Guardado: validar empresa y referencias' | 'Guardado: confirmar lote' | 'Novedades: leer registro' | 'Validación: leer referencia' | `Novedades: espera de aprobación (${IncidentType | 'sin tipo'})`;
 const serverLoginPhases = ['attempts', 'index', 'credentials', 'password', 'seller', 'store', 'permissions', 'token'] as const;
 type ServerLoginTiming = { version: 1; totalMs: number; phases: { phase: typeof serverLoginPhases[number]; durationMs: number }[] };
-type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string; server?: ServerLoginTiming };
+type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string; server?: ServerLoginTiming; serverApproval?: {version:1;totalMs:number;attempts:number;reads:number} };
 const timings: Timing[] = [];
 let approvalsInProgress = 0;
 export function incidentApprovalInFlight() { return approvalsInProgress > 0; }
@@ -29,7 +29,7 @@ const listeners = new Set<number>();
 const subscribers = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let cached: ReturnType<typeof buildSnapshot>;
-function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size, approvalActive: incidentApprovalInFlight(), timings: timings.map(t => ({ ...t, ...(t.server ? { server: { ...t.server, phases: t.server.phases.map(p => ({ ...p })) } } : {}) })) }; }
+function buildSnapshot() { return { session: session ? { ...session } : null, rows: [...rows.values()].map(r => ({ ...r })), activeListeners: listeners.size, approvalActive: incidentApprovalInFlight(), timings: timings.map(t => ({ ...t, ...(t.serverApproval ? {serverApproval:{...t.serverApproval}} : {}), ...(t.server ? { server: { ...t.server, phases: t.server.phases.map(p => ({ ...p })) } } : {}) })) }; }
 function changed(immediate = false) {
   revision++;
   if (!subscribers.size) return;
@@ -116,7 +116,7 @@ export function beginDiagnosticPhase(phase: DiagnosticPhase) {
 }
 const diagnosticErrorCodes = new Set(['permission-denied', 'unauthenticated', 'unavailable', 'deadline-exceeded', 'aborted', 'resource-exhausted', 'failed-precondition', 'invalid-argument', 'not-found', 'already-exists', 'cancelled', 'internal', 'unknown', 'data-loss', 'unimplemented']);
 export function safeDiagnosticErrorCode(error: unknown) {
-  const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code.replace(/^firestore\//, '') : '';
+  const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code.replace(/^(firestore|functions)\//, '') : '';
   return diagnosticErrorCodes.has(code) ? code : undefined;
 }
 export function finishDiagnosticPhase(ticket: ReturnType<typeof beginDiagnosticPhase>, error = false, cause?: unknown) {
@@ -143,4 +143,11 @@ export function measureDiagnosticPhase<T>(phase: DiagnosticPhase, run: () => Pro
   try {
     return run().then(value => { finishDiagnosticPhase(ticket); return value; }, error => { finishDiagnosticPhase(ticket, true, error); throw error; });
   } catch (error) { finishDiagnosticPhase(ticket, true, error); throw error; }
+}
+
+// Aggregate server observations only. Never retain callable payloads or IDs.
+export function attachServerApprovalTiming(ticket: ReturnType<typeof beginDiagnosticPhase>, input: any) {
+  if (!ticket || ticket.timing.phase !== 'Novedades: aprobación en servidor' || !session?.active || session.id !== ticket.sessionId || !input || input.version !== 1) return;
+  if (!Number.isFinite(input.totalMs) || input.totalMs < 0 || input.totalMs > 120000 || !Number.isSafeInteger(input.attempts) || input.attempts < 1 || input.attempts > 20 || !Number.isSafeInteger(input.reads) || input.reads < 0 || input.reads > 10000) return;
+  ticket.timing.serverApproval = {version:1,totalMs:input.totalMs,attempts:input.attempts,reads:input.reads}; changed();
 }

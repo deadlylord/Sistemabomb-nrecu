@@ -39,3 +39,4 @@ export { financialLedgerChanged } from './financialTrigger.mjs';
 export { vestikaStagingLogin, vestikaStagingUsers, vestikaStagingRoles } from './stagingIdentity.mjs';
 export { businessSalesChanged, businessLayawaysChanged, businessIncidentsChanged, businessExpensesChanged, businessInventoryChanged } from './businessTrigger.mjs';
 export { vestikaStagingWarehouse } from './warehouseCallable.mjs';
+export { vestikaStagingApproveTransfer } from './transferApprovalCallable.mjs';
