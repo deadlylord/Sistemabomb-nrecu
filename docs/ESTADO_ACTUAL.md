@@ -2,6 +2,11 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Región de pruebas — 1.1.214
+
+- Capturas de Carlos: Firestore southamerica-east1 y proyecto Vestika Staging / vestika-staging. Ajustados conjuntamente wrapper de aprobación y cliente a southamerica-east1, sin mover base de datos ni desplegar servicio. Guard de proyecto y flag apagado permanecen.
+- Pruebas focalizadas de handler, wrapper, cliente e idempotencia; comprobación sintáctica y diff. No se repite suite completa/build para una constante regional sin cambios de lógica. La activación y la medición real siguen bloqueadas por acceso administrativo y red del entorno. No se tocó main ni producción.
+
 ## Traslados en servidor — 1.1.213, preparado sin activar
 
 - Carlos autorizó preparar y probar un callable exclusivamente en vestika-staging, sin main ni producción. Implementados handler Admin transaccional, wrapper de proyecto staging, cliente con flag apagado por defecto y diagnóstico opt-in agregado. Guarda stock, solicitud, comprobante y dos logs juntos; valida identidad/rol/grant vigente, empresa, sedes, productos, categorías, cantidades y referencias históricas. Consulta destino en la misma transacción; no afecta bodega ni elimina validaciones.

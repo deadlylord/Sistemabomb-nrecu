@@ -6,7 +6,7 @@ export async function callServerTransferApproval(companyId: string, storeId: str
   const ticket = beginDiagnosticPhase('Novedades: aprobación en servidor');
   try {
     const sdk = await import('firebase/functions');
-    const result = (await sdk.httpsCallable(sdk.getFunctions(auth.app, 'us-central1'), 'vestikaStagingApproveTransfer', {timeout:60000})({companyId,storeId,incidentId,...(readMeasurementActive() ? {diagnostics:true} : {})})).data as any;
+    const result = (await sdk.httpsCallable(sdk.getFunctions(auth.app, 'southamerica-east1'), 'vestikaStagingApproveTransfer', {timeout:60000})({companyId,storeId,incidentId,...(readMeasurementActive() ? {diagnostics:true} : {})})).data as any;
     if (result?.processed !== true) throw new Error('No se recibió confirmación. Revisa el estado de la solicitud.');
     finishDiagnosticPhase(ticket); attachServerApprovalTiming(ticket, result.diagnostics);
     return result;

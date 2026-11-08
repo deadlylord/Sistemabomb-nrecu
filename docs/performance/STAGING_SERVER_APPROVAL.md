@@ -1,4 +1,4 @@
-# Aprobación de traslados por servidor — prototipo 1.1.213
+# Aprobación de traslados por servidor — prototipo 1.1.214
 
 ## Estado y límites
 
@@ -14,7 +14,7 @@ La respuesta no contiene datos de producto/cliente. Si se mide, añade totalMs, 
 
 El executor no tiene identidad de Firebase/GCP autorizada; la política de red vigente bloquea servicios Google de despliegue. El intento de emulador local no pudo descargar el JAR de storage.googleapis.com. La propuesta de dominios necesaria quedó guardada en el borrador del entorno Codex, sin aplicarse al runtime ni activar servicios.
 
-No se consultó la ubicación real de Firestore, el plan de facturación ni configuración de servicio. No se desplegó ni activó el callable. No se midió latencia real y no se promete reducción. La región us-central1 en wrapper y cliente es provisional, basada en servicios existentes; verificar proximidad a Firestore antes de desplegar. minInstances=0 evita instancias mantenidas por este prototipo; medir también arranque frío. maxInstances=3. No habilitar facturación/APIs/cambiar IAM por suposición.
+Carlos aportó capturas de ubicación southamerica-east1 y del proyecto vestika-staging; no se consultaron el plan de facturación ni la configuración del servicio mediante API. No se desplegó ni activó el callable. No se midió latencia real y no se promete reducción. Wrapper y cliente usan southamerica-east1 (São Paulo), conforme a las capturas aportadas. Verificar también la ubicación mediante API antes del despliegue. minInstances=0 evita instancias mantenidas por este prototipo; medir también arranque frío. maxInstances=3. No habilitar facturación/APIs/cambiar IAM por suposición.
 
 ## Verificaciones antes de activar
 
