@@ -61,3 +61,11 @@ Integridad de ventas e inventario; aislamiento multiempresa; seguridad y permiso
 - No ejecutar `npm install`, `npm run build` o pruebas generales automáticamente en cada cambio cosmético. Si faltan dependencias o la validación requiere entorno, explicar la limitación.
 - Reportar en pocas líneas: alcance, archivos modificados, validación ejecutada, verificaciones omitidas y riesgos. Evitar narraciones extensas de exploración.
 - Medir por separado cuando se investigue lentitud: búsqueda, edición, typecheck, build de estilos, build Vite, pruebas Node y emulador Firestore; no atribuir demoras sin medición.
+
+## Equipo especializado y skills de Vestika
+- Agentes del proyecto: `.codex/agents/{firebase,frontend,seguridad,qa,arquitectura}.toml`. Skills del proyecto: `.agents/skills/vestika-*/SKILL.md`.
+- SIMPLE: trabajar con agente principal, sin subagentes; aplicar skill `vestika-cambio-rapido` cuando corresponda.
+- MEDIA: convocar como máximo un especialista si aporta valor real; usar skill de QA cuando haya riesgo de regresión.
+- CRÍTICA: delegar revisión focalizada a Firebase o Seguridad y QA si son tareas independientes; limitar concurrencia a dos subagentes; coordinar resultados antes de editar.
+- No invocar agentes por defecto ni duplicar exploraciones. El agente principal es responsable del cambio y de la validación final.
+- Estos archivos son configuración versionada para Codex; su disponibilidad depende de abrir el proyecto en una versión compatible y confiable de Codex. No implican ejecución automática ni instalación global.
