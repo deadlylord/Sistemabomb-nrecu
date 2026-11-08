@@ -66,6 +66,11 @@ Integridad de ventas e inventario; aislamiento multiempresa; seguridad y permiso
 - Agentes del proyecto: `.codex/agents/{firebase,frontend,seguridad,qa,arquitectura}.toml`. Skills del proyecto: `.agents/skills/vestika-*/SKILL.md`.
 - SIMPLE: trabajar con agente principal, sin subagentes; aplicar skill `vestika-cambio-rapido` cuando corresponda.
 - MEDIA: convocar como máximo un especialista si aporta valor real; usar skill de QA cuando haya riesgo de regresión.
-- CRÍTICA: delegar revisión focalizada a Firebase o Seguridad y QA si son tareas independientes; limitar concurrencia a dos subagentes; coordinar resultados antes de editar.
+- CRÍTICA: si el entorno ofrece delegación y los roles están disponibles, delegar revisión focalizada a Firebase o Seguridad y QA para tareas independientes; limitar concurrencia a dos subagentes y coordinar resultados antes de editar. Si no están disponibles, el agente principal realiza las mismas revisiones secuencialmente y documenta esa limitación; no omitir comprobaciones ni instalar agentes por rutina.
 - No invocar agentes por defecto ni duplicar exploraciones. El agente principal es responsable del cambio y de la validación final.
 - Estos archivos son configuración versionada para Codex; su disponibilidad depende de abrir el proyecto en una versión compatible y confiable de Codex. No implican ejecución automática ni instalación global.
+
+### Compatibilidad con Codex web
+- `AGENTS.md` contiene las instrucciones de trabajo; las skills se descubren desde `.agents/skills/<nombre>/SKILL.md` cuando el entorno admite skills del repositorio. No asumir que están activadas: comprobar el catálogo disponible o leer su archivo antes de aplicarlas.
+- `.codex/config.toml` y los perfiles de `.codex/agents/` son configuración de proyecto para clientes compatibles y repositorios confiables. No fuerzan la activación de herramientas, permisos o roles en Codex web. No editar configuraciones globales del entorno para activarlos.
+- Si un rol o skill no se carga automáticamente, consultar sus instrucciones locales y aplicar la revisión con el agente principal, respetando siempre las restricciones superiores del entorno. No afirmar que se ejecutó un especialista si no se invocó realmente.

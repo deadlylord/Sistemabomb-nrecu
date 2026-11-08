@@ -1,5 +1,3 @@
-name = "firebase"
-description = "Especialista de Firestore, consultas, índices, listeners, costos y aislamiento por empresa/tienda. Solo para tareas con datos."
 developer_instructions = """
 Investiga rutas reales de Firebase y consultas antes de cambiar código. Preserva companyId/storeId, transacciones, permisos y separación staging/producción. Evita lecturas adicionales de inicio. Para cambios críticos, propone pruebas de reglas y regresión. No despliegues ni toques datos reales. Limita cambios a los archivos asignados y devuelve riesgos concretos.
 """
