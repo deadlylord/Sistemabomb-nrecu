@@ -2,6 +2,15 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Aprobación de traslados — 1.1.210, 2026-11-08
+
+- Medición aportada: contexto staging, transacción 6642.4 ms, callback 5732.2 ms, un intento y cero errores. Lectura de novedad 3247.3 ms; comprobante 429.2 ms; dos productos 844.2 ms agregados; búsqueda destino 794.5 ms; categoría 412.4 ms. Son tiempos del cliente, no lecturas facturadas ni tiempos exclusivos de servidor. No demuestra reintentos ni la causa exacta de la primera espera.
+- Mejora limitada: en solicitudes pendientes se leen comprobante y origen en paralelo; se conserva la lectura fresca en transacción y su validación antes de escribir, destino, stock, estado persistido y recibo determinista. No se añaden listeners ni lecturas al caso normal nuevo. La recuperación de recibos de traslados directos sigue leyendo solo el recibo. Si existiera un recibo con solicitud aún pendiente, se consulta también origen; no vuelve a descontar stock. No se promete eliminar toda la demora ni una reducción medida sin nueva captura.
+- Staging: 44/44 pruebas focalizadas aprobadas. Suite 338/340, fallos previos por @google-cloud/firestore ausente y bundle React en sharedRecordAccess. Typecheck conserva los tres errores anteriores de AppErrorBoundary. Build aprobado, diff limpio. Nueva prueba verifica solapamiento sin duplicar lectura del origen, manteniendo escrituras atómicas.
+- Candidato aislado sobre main: suite 302/304 (los mismos dos fallos previos), build aprobado y diff limpio. Typecheck mantiene únicamente los tres errores anteriores de AppErrorBoundary. No se incorporó el resto de staging.
+- Publicación a main autorizada por Carlos tras revisar staging. Se prepara desde main anterior 8e92b9c, trasladando únicamente este parche, prueba, versión, historial y caché; se excluyen bodega y demás cambios exclusivos de staging. Sin cambios de Firebase, reglas, índices, credenciales ni datos reales. No se registra como comprobada la mejora de latencia ni el despliegue servido.
+- Verificación manual pendiente: cargar 1.1.210, medir aprobación de una solicitud sintética en staging, confirmar una salida/entrada y estado completado, repetir con el mismo contexto/red y exportar JSON; comparar primera lectura, transacción y número de intentos. No crear traslados reales solo para medir.
+
 ## Corrección 2026-10-31 — precios y excedentes de cambios, versión 1.1.200 (publicación autorizada)
 
 - Carlos autorizó corregir el caso de venta Sistecrédito $310.000: devuelve $125.000, lleva prenda cobrada a $180.000 (catálogo $170.000), excedente $55.000. Después de aportar capturas de #2415, Carlos autorizó publicar; no se aplican reparaciones históricas automáticamente. Las capturas muestran el pago de factura $365.000 más excedente $55.000, sumando $420.000 por una operación real de $365.000. La prenda ya figura a $180.000.
