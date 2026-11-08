@@ -3749,7 +3749,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         </AppErrorBoundary>}
       </main>
-      {measurementVisible && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
+      {measurementVisible && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} firstReadTarget={currentView === View.INCIDENTS && dataContextReady && (isAdmin || isDeveloper) ? (() => {
+        const record = incidents.find(row => row.companyId === operationalCompanyId && row.storeId === currentStoreId);
+        return record ? { companyId: operationalCompanyId, storeId: record.storeId, incidentId: record.id } : undefined;
+      })() : undefined} /></Suspense>}
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
       {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}

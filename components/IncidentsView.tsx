@@ -1,4 +1,4 @@
-import { measureDiagnosticPhase } from '../services/readDiagnostics';
+import { measureDiagnosticPhase, beginIncidentApproval } from '../services/readDiagnostics';
 import ReceiveDamagedModal from './ReceiveDamagedModal';
 import { isPlatformOwner } from '../services/developerAccess';
 import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
@@ -46,13 +46,14 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
     if (readOnly || approvalsInFlight.current.has(id)) return;
     approvalsInFlight.current.add(id);
     setApprovingIds(new Set(approvalsInFlight.current));
+    const endApproval = beginIncidentApproval();
     try {
       const value = rawIncidents.find(incident => incident.id === id)?.type;
       const type: IncidentType | 'sin tipo' = value && Object.values(IncidentType).includes(value) ? value : 'sin tipo';
       await measureDiagnosticPhase(`Novedades: espera de aprobación (${type})`, () => Promise.resolve(onApproveIncident(id)));
     }
     catch (error) { alert(error instanceof Error ? error.message : 'No se pudo aprobar la novedad.'); }
-    finally { approvalsInFlight.current.delete(id); setApprovingIds(new Set(approvalsInFlight.current)); }
+    finally { endApproval(); approvalsInFlight.current.delete(id); setApprovingIds(new Set(approvalsInFlight.current)); }
   };
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
