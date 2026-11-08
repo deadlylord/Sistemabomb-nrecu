@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Edición de porcentajes — 1.1.209, staging local
+
+- Configuración conserva el texto introducido en descuentos/comisiones y recargos mientras se edita; aplica dos decimales al salir. Vacío continúa representando cero al guardar, como antes. El borrador se limpia al cambiar empresa/sede o recibir ajustes actualizados; no cambia conversiones porcentuales, permisos ni consultas.
+- Prueba focalizada `TZ=America/Bogota node --experimental-strip-types --test tests/settingsPercentages.test.mjs`: aprobada; cubre borrar, escribir decimales, guardar 3.5 como 0.035, formato al salir y cambio de sede sin arrastrar borradores. `git diff --check` limpio. No se ejecutó suite general/build para este ajuste local del formulario; no se verificó visualmente en navegador.
+- Versión, historial y caché SW actualizados. Carlos autorizó continuar con la subida a GitHub en staging; sin publicación de producción. Versión servida pendiente de comprobación.
+
 ## Integración 2026-11-07 — controles y compras de bodega 1.1.208
 
 - Menú de usuario con Configurar bodega para administradores de la sede. Los interruptores de envío y categoría se leen del documento de sede ya cargado. Ausentes equivalen a habilitado. Solo el callable autorizado puede escribir esos campos.

@@ -35,10 +35,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
   const [localSettings, setLocalSettings] = useState<Store | null>(stores.find(s => s.id === selectedStoreId) || null);
   
 
+  const [percentageDrafts, setPercentageDrafts] = useState<Record<string, string>>({});
+  const finishPercentage = (e: React.FocusEvent<HTMLInputElement>) => {
+    const name = e.target.name;
+    setPercentageDrafts(prev => { const next = { ...prev }; delete next[name]; return next; });
+  };
+
   const beginImage = useAsyncScope(JSON.stringify([companyId, selectedStoreId]));
   useEffect(() => {
     const storeToEdit = stores.find(s => s.id === selectedStoreId);
     setLocalSettings(storeToEdit || null);
+    setPercentageDrafts({});
     if (!storeToEdit && stores.length) setSelectedStoreId(stores[0].id);
   }, [selectedStoreId, stores]);
 
@@ -69,6 +76,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
             }
         }) : null);
         return;
+    }
+
+    if (name.startsWith('commission_') || name.startsWith('surcharge_')) {
+        setPercentageDrafts(prev => ({ ...prev, [name]: value }));
     }
 
     if (name.startsWith('commission_')) {
@@ -381,7 +392,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
                   <input 
                     type="number" 
                     name={`commission_${method}`}
-                    value={((localSettings.paymentCommissions?.[method] || 0) * 100).toFixed(2)}
+                    value={percentageDrafts[`commission_${method}`] ?? ((localSettings.paymentCommissions?.[method] || 0) * 100).toFixed(2)}
+                    onBlur={finishPercentage}
                     onChange={handleSettingsChange}
                     className="w-full bg-white dark:bg-gray-700 p-2 pr-6 rounded-lg border outline-none font-bold text-sm"
                     placeholder="0.00"
@@ -402,7 +414,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
                 <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">{method}</label>
                 <div className="relative">
                   <input type="number" name={`surcharge_${method}`}
-                    value={((localSettings.paymentSurcharges?.[method] || 0) * 100).toFixed(2)}
+                    value={percentageDrafts[`surcharge_${method}`] ?? ((localSettings.paymentSurcharges?.[method] || 0) * 100).toFixed(2)}
+                    onBlur={finishPercentage}
                     onChange={handleSettingsChange}
                     className="w-full bg-white dark:bg-gray-700 p-2 pr-6 rounded-lg border outline-none font-bold text-sm"
                     placeholder="0.00" step="0.01" min="0" />
