@@ -1,0 +1,6 @@
+# Configuración de Codex específica de Vestika. Se aplica en proyectos confiables.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+
+# No fijar modelo global: usar el disponible en la sesión.
