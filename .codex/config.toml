@@ -1,0 +1,25 @@
+# Roles de Codex para Vestika. Solo se aplican si el entorno Codex admite
+# configuracion por proyecto y confia en este repositorio.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+
+[agents.firebase]
+description = "Consultas Firestore, reglas, listeners y rendimiento multiempresa"
+config_file = "agents/firebase.toml"
+
+[agents.frontend]
+description = "Interfaz React y TypeScript; componentes y experiencia movil"
+config_file = "agents/frontend.toml"
+
+[agents.seguridad]
+description = "Revision de roles, permisos y aislamiento entre empresas"
+config_file = "agents/seguridad.toml"
+
+[agents.qa]
+description = "Pruebas focalizadas y regresiones segun riesgo"
+config_file = "agents/qa.toml"
+
+[agents.arquitectura]
+description = "Analisis de dependencias y cambios estructurales complejos"
+config_file = "agents/arquitectura.toml"

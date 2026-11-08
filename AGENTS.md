@@ -49,3 +49,28 @@
 
 ## Prioridades
 Integridad de ventas e inventario; aislamiento multiempresa; seguridad y permisos; disponibilidad del punto de venta; rendimiento; consistencia móvil; pruebas de regresión. Preferir soluciones sencillas y medibles.
+
+## Protocolo de velocidad para Codex (sin reducir seguridad)
+- Clasificar cada solicitud antes de trabajar: **SIMPLE** (texto, iconos, espaciado o estilos aislados sin lógica), **MEDIA** (comportamiento local, formularios sin persistencia) o **CRÍTICA** (Firestore, ventas, inventario, pagos, bodega, conciliación, autenticación, roles, caché compartida, despliegues).
+- Si hay incertidumbre sobre el alcance o se toca una dependencia compartida, subir la clasificación; nunca tratar una modificación de datos o permisos como SIMPLE.
+- **SIMPLE:** confirmar rama y cambios pendientes; buscar el componente con nombres/rutas de `docs/MAPA_RAPIDO_CODEX.md`; leer el fragmento y dependencias directas; aplicar el parche mínimo; comprobar el diff y ejecutar validación focalizada disponible. Evitar suites completas, compilaciones reiteradas y subagentes salvo evidencia de necesidad. Registrar explícitamente lo no ejecutado.
+- **MEDIA:** revisar el flujo relacionado y ejecutar pruebas del módulo; usar `npm run lint` o build cuando la naturaleza del cambio lo justifique; no repetir verificaciones exitosas sin cambios nuevos.
+- **CRÍTICA:** conservar íntegramente todas las comprobaciones de seguridad y regresión descritas arriba; validar reglas/aislamiento y pruebas relacionadas; no omitir pruebas por velocidad.
+- Leer `docs/ARQUITECTURA.md` y `docs/ESTADO_ACTUAL.md` de forma proporcional: para SIMPLE, consultar apartados relevantes cuando aplique; para MEDIA/CRÍTICA, revisar contexto completo necesario. El mapa rápido es orientación, no fuente de verdad frente al código.
+- No instalar skills, paquetes, dependencias o agentes para una tarea trivial sin beneficio concreto. Preferir un único agente para SIMPLE; paralelizar únicamente tareas independientes con interfaces claras.
+- No ejecutar `npm install`, `npm run build` o pruebas generales automáticamente en cada cambio cosmético. Si faltan dependencias o la validación requiere entorno, explicar la limitación.
+- Reportar en pocas líneas: alcance, archivos modificados, validación ejecutada, verificaciones omitidas y riesgos. Evitar narraciones extensas de exploración.
+- Medir por separado cuando se investigue lentitud: búsqueda, edición, typecheck, build de estilos, build Vite, pruebas Node y emulador Firestore; no atribuir demoras sin medición.
+
+## Equipo especializado y skills de Vestika
+- Agentes del proyecto: `.codex/agents/{firebase,frontend,seguridad,qa,arquitectura}.toml`. Skills del proyecto: `.agents/skills/vestika-*/SKILL.md`.
+- SIMPLE: trabajar con agente principal, sin subagentes; aplicar skill `vestika-cambio-rapido` cuando corresponda.
+- MEDIA: convocar como máximo un especialista si aporta valor real; usar skill de QA cuando haya riesgo de regresión.
+- CRÍTICA: si el entorno ofrece delegación y los roles están disponibles, delegar revisión focalizada a Firebase o Seguridad y QA para tareas independientes; limitar concurrencia a dos subagentes y coordinar resultados antes de editar. Si no están disponibles, el agente principal realiza las mismas revisiones secuencialmente y documenta esa limitación; no omitir comprobaciones ni instalar agentes por rutina.
+- No invocar agentes por defecto ni duplicar exploraciones. El agente principal es responsable del cambio y de la validación final.
+- Estos archivos son configuración versionada para Codex; su disponibilidad depende de abrir el proyecto en una versión compatible y confiable de Codex. No implican ejecución automática ni instalación global.
+
+### Compatibilidad con Codex web
+- `AGENTS.md` contiene las instrucciones de trabajo; las skills se descubren desde `.agents/skills/<nombre>/SKILL.md` cuando el entorno admite skills del repositorio. No asumir que están activadas: comprobar el catálogo disponible o leer su archivo antes de aplicarlas.
+- `.codex/config.toml` y los perfiles de `.codex/agents/` son configuración de proyecto para clientes compatibles y repositorios confiables. No fuerzan la activación de herramientas, permisos o roles en Codex web. No editar configuraciones globales del entorno para activarlos.
+- Si un rol o skill no se carga automáticamente, consultar sus instrucciones locales y aplicar la revisión con el agente principal, respetando siempre las restricciones superiores del entorno. No afirmar que se ejecutó un especialista si no se invocó realmente.
