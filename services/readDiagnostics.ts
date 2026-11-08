@@ -1,3 +1,4 @@
+import type { IncidentType } from '../types';
 // Local, opt-in observations. These counters are NOT Firestore billing metrics.
 // Never retain result document data/IDs, filters, credentials or snapshots.
 // Context includes the selected company/store IDs, not result ownership.
@@ -8,7 +9,7 @@ export type ReadRow = ReadContext & { resource: string; operation: string; reque
 type Session = { id: number; label: string; startedAt: string; stoppedAt?: string; active: boolean;
   initialListeners: number; listenerStarts: number; listenerStops: number; transactionAttempts: number;
   droppedGroups: number; droppedTimings: number };
-export type DiagnosticPhase = 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: restaurar estado de sesión' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar';
+export type DiagnosticPhase = 'Login: cargar módulo de acceso' | 'Login: preparar Firebase' | 'Login: restaurar estado de sesión' | 'Login: cerrar sesión previa' | 'Inicio de sesión: verificar acceso' | 'Login: cargar aplicación' | 'Login: servicio de identidad' | 'Login: autenticar en Firebase' | 'Login: validar identidad' | 'Guardar conciliación: hasta confirmación en cliente' | 'Transacción completa' | 'Callback de transacción' | 'Comprobar registro previo' | 'Lecturas de documentos' | 'Preparar movimientos' | 'Validar empresa y referencias' | 'Borrador: comprobar productos' | 'Borrador: validar y guardar' | 'Guardado: validar empresa y referencias' | 'Guardado: confirmar lote' | 'Novedades: leer registro' | 'Validación: leer referencia' | `Novedades: espera de aprobación (${IncidentType | 'sin tipo'})`;
 const serverLoginPhases = ['attempts', 'index', 'credentials', 'password', 'seller', 'store', 'permissions', 'token'] as const;
 type ServerLoginTiming = { version: 1; totalMs: number; phases: { phase: typeof serverLoginPhases[number]; durationMs: number }[] };
 type Timing = ReadContext & { id: number; phase: DiagnosticPhase; startOffsetMs: number; durationMs: number; status: 'running' | 'success' | 'error' | 'incomplete'; errorCode?: string; server?: ServerLoginTiming };

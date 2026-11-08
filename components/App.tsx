@@ -1560,8 +1560,18 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             }
           }
           if (!deltas.size) throw new Error('El cambio no contiene prendas.');
+          const exchangeSnapshots = new Map<string, any>();
+          const exchangeRefs = [...deltas.keys()].map(id => doc(db, 'inventory', id));
+          if (incident.originalSaleId) exchangeRefs.push(doc(db, 'sales', incident.originalSaleId));
+          // Independent reads from the persisted request, bounded per attempt.
+          // Keep every read in the transaction; never reuse snapshots across retries.
+          for (let offset = 0; offset < exchangeRefs.length; offset += 12) {
+            await Promise.all(exchangeRefs.slice(offset, offset + 12).map(async ref => {
+              exchangeSnapshots.set(ref.path, await transaction.get(ref));
+            }));
+          }
           for (const [id, delta] of deltas) {
-            const productSnapshot = await transaction.get(doc(db, 'inventory', id));
+            const productSnapshot = exchangeSnapshots.get(doc(db, 'inventory', id).path);
             if (!productSnapshot.exists()) throw new Error('No se encontró una prenda del cambio.');
             const product = productSnapshot.data();
             assertTenantData('inventory', product, scope);
@@ -1570,7 +1580,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
           }
           let savedSale: Sale | undefined;
           if (incident.originalSaleId) {
-            const saleSnapshot = await transaction.get(doc(db, 'sales', incident.originalSaleId));
+            const saleSnapshot = exchangeSnapshots.get(doc(db, 'sales', incident.originalSaleId).path);
             if (!saleSnapshot.exists()) throw new Error('No se encontró la venta original del cambio.');
             savedSale = { ...saleSnapshot.data(), id: incident.originalSaleId } as Sale;
             assertTenantData('sales', savedSale, scope);

@@ -41,103 +41,105 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
     const cache = new Map<string, any>();
     const pending = new Map(operations.filter(op => op.kind === 'set').map(op => [op.ref.path, op.data]));
     const load = async (ref: DocumentReference) => {
-      if (!cache.has(ref.path)) cache.set(ref.path, generated.has(ref.path) ? { exists: () => false } : await read(ref));
+      if (!cache.has(ref.path)) cache.set(ref.path, generated.has(ref.path) ? Promise.resolve({ exists: () => false }) : measureDiagnosticPhase('Validación: leer referencia', () => read(ref)));
       return cache.get(ref.path);
     };
-    for (const op of operations) {
-      const snapshot = await load(op.ref);
-      const name = collectionName(op.ref);
-      if (snapshot.exists()) {
-        assertTenantData(name, snapshot.data(), scope);
-        if (name === 'roles' && isPlatformRole(snapshot.data())) throw new Error('Este rol de plataforma no se modifica desde roles de empresa.');
-      }
-      if (op.kind === 'update' && !snapshot.exists()) throw new Error('No se encontró el registro a modificar.');
-      if (op.kind === 'delete') continue;
-      if (name === 'sellers' && op.data?.platformRole !== undefined) throw new Error('El rol de plataforma solo se asigna desde Developer Center por Carlos.');
-      const data = { ...(snapshot.exists() ? snapshot.data() : {}), ...op.data, companyId: op.data?.companyId || scope.companyId };
-      assertTenantData(name, data, scope);
-      if (name === 'roles') assertCompanyRole(data);
-      op.data = { ...op.data, companyId: scope.companyId };
-      const references: DocumentReference[] = [];
-      if (data.categoryId) references.push(doc(db, 'categories', data.categoryId));
-      if (['sellers', 'customers'].includes(name) && data.storeId) references.push(doc(db, 'stores', data.storeId));
-      if (data.roleId) references.push(doc(db, 'roles', data.roleId));
-      if (data.productId && !data.productId.startsWith('voucher-')) references.push(doc(db, 'inventory', data.productId));
-      for (const item of [...Object.values(data.items || {}), ...(name === 'incidents' ? [...(data.returnedItems || []), ...(data.takenItems || [])] : [])] as any[]) {
-        const id = item?.productId || item?.id;
-        if (id && !id.startsWith('voucher-')) references.push(doc(db, 'inventory', id));
-      }
-      for (const key of ['counts', 'productCounts', 'systemSnapshot', 'scannedCounts']) {
-        const values = name === 'tagScanningSessions' && op.kind === 'update' ? op.data?.[key] : data[key];
-        for (const id of Object.keys(values || {})) references.push(doc(db, 'inventory', id));
-      }
-      if (name === 'tagScanningSessions') {
-        const previousScans = new Set(op.kind === 'update' && snapshot.exists() ? (snapshot.data().scanHistory || []).map((scan: any) => JSON.stringify([scan.id, scan.productId])) : []);
-        for (const scan of op.data?.scanHistory || []) {
-          if (scan.productId && !previousScans.has(JSON.stringify([scan.id, scan.productId]))) references.push(doc(db, 'inventory', scan.productId));
+    return measureDiagnosticPhase('Guardado: validar empresa y referencias', async () => {
+      for (const op of operations) {
+        const snapshot = await load(op.ref);
+        const name = collectionName(op.ref);
+        if (snapshot.exists()) {
+          assertTenantData(name, snapshot.data(), scope);
+          if (name === 'roles' && isPlatformRole(snapshot.data())) throw new Error('Este rol de plataforma no se modifica desde roles de empresa.');
         }
-        for (const key of Object.keys(op.data || {})) {
-          if (key.startsWith('scannedCounts.')) references.push(doc(db, 'inventory', key.slice('scannedCounts.'.length)));
+        if (op.kind === 'update' && !snapshot.exists()) throw new Error('No se encontró el registro a modificar.');
+        if (op.kind === 'delete') continue;
+        if (name === 'sellers' && op.data?.platformRole !== undefined) throw new Error('El rol de plataforma solo se asigna desde Developer Center por Carlos.');
+        const data = { ...(snapshot.exists() ? snapshot.data() : {}), ...op.data, companyId: op.data?.companyId || scope.companyId };
+        assertTenantData(name, data, scope);
+        if (name === 'roles') assertCompanyRole(data);
+        op.data = { ...op.data, companyId: scope.companyId };
+        const references: DocumentReference[] = [];
+        if (data.categoryId) references.push(doc(db, 'categories', data.categoryId));
+        if (['sellers', 'customers'].includes(name) && data.storeId) references.push(doc(db, 'stores', data.storeId));
+        if (data.roleId) references.push(doc(db, 'roles', data.roleId));
+        if (data.productId && !data.productId.startsWith('voucher-')) references.push(doc(db, 'inventory', data.productId));
+        for (const item of [...Object.values(data.items || {}), ...(name === 'incidents' ? [...(data.returnedItems || []), ...(data.takenItems || [])] : [])] as any[]) {
+          const id = item?.productId || item?.id;
+          if (id && !id.startsWith('voucher-')) references.push(doc(db, 'inventory', id));
         }
-      }
-      // Historical links may outlive their source document. Existing targets,
-      // however, must always belong to this company, including staged mirrors.
-      const historicalReferences: DocumentReference[] = [];
-      if (data.originalSaleId) historicalReferences.push(doc(db, 'sales', data.originalSaleId));
-      if (data.saleId) historicalReferences.push(doc(db, 'sales', data.saleId));
-      if (data.layawayId) historicalReferences.push(doc(db, 'layaways', data.layawayId));
-      if (data.relatedRecordId) historicalReferences.push(doc(db, 'financialRecords', data.relatedRecordId));
-      if (name === 'financialRecordsHistory' && data.recordId) historicalReferences.push(doc(db, 'financialRecords', data.recordId));
-      for (const payment of Object.values(data.payments || {}) as any[]) {
-        if (payment?.voucherId) historicalReferences.push(doc(db, 'giftVouchers', payment.voucherId));
-      }
-      for (const entry of data.verification || []) if (entry.categoryId) historicalReferences.push(doc(db, 'categories', entry.categoryId));
-      for (const ref of historicalReferences) {
-        const staged = pending.get(ref.path);
-        const linked = staged ? null : await load(ref);
-        const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked?.exists() ? linked.data() : null;
-        if (linkedData) {
-          assertTenantData(collectionName(ref), linkedData, scope);
-          if (name === 'incidents' && collectionName(ref) === 'sales' && ref.id === data.originalSaleId && linkedData.storeId !== data.storeId) throw new Error('La venta original pertenece a otra sede.');
+        for (const key of ['counts', 'productCounts', 'systemSnapshot', 'scannedCounts']) {
+          const values = name === 'tagScanningSessions' && op.kind === 'update' ? op.data?.[key] : data[key];
+          for (const id of Object.keys(values || {})) references.push(doc(db, 'inventory', id));
         }
-      }
-      let draftProductsLoaded = false;
-      for (const ref of references) {
-        // Keep the existing validation order and ownership checks. Once category
-        // checks pass, load product references without serial document requests.
-        // Reuse the per-commit cache across counts, snapshot and history.
-        if (!draftProductsLoaded && collectionName(ref) === 'inventory' &&
-            ['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name)) {
-          draftProductsLoaded = true;
-          const products = [...new Map(references.filter(item => collectionName(item) === 'inventory' && !pending.has(item.path) && !cache.has(item.path)).map(item => [item.path, item])).values()];
-          if (products.length) await measureDiagnosticPhase('Borrador: comprobar productos', async () => {
-            if (queryDraftProducts) {
-              // A verification snapshots the selected category. Read it once,
-              // preserving legacy products without companyId and tenant rules.
-              // Transactions below must retain transaction.get conflict checks.
-              const result = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', data.storeId), where('categoryId', '==', data.categoryId)));
-              const found = new Map(result.docs.map(item => [item.ref.path, item]));
-              for (const item of products) cache.set(item.path, found.get(item.path) || { exists: () => false });
-            } else {
-              for (let offset = 0; offset < products.length; offset += 12) {
-                await Promise.all(products.slice(offset, offset + 12).map(load));
+        if (name === 'tagScanningSessions') {
+          const previousScans = new Set(op.kind === 'update' && snapshot.exists() ? (snapshot.data().scanHistory || []).map((scan: any) => JSON.stringify([scan.id, scan.productId])) : []);
+          for (const scan of op.data?.scanHistory || []) {
+            if (scan.productId && !previousScans.has(JSON.stringify([scan.id, scan.productId]))) references.push(doc(db, 'inventory', scan.productId));
+          }
+          for (const key of Object.keys(op.data || {})) {
+            if (key.startsWith('scannedCounts.')) references.push(doc(db, 'inventory', key.slice('scannedCounts.'.length)));
+          }
+        }
+        // Historical links may outlive their source document. Existing targets,
+        // however, must always belong to this company, including staged mirrors.
+        const historicalReferences: DocumentReference[] = [];
+        if (data.originalSaleId) historicalReferences.push(doc(db, 'sales', data.originalSaleId));
+        if (data.saleId) historicalReferences.push(doc(db, 'sales', data.saleId));
+        if (data.layawayId) historicalReferences.push(doc(db, 'layaways', data.layawayId));
+        if (data.relatedRecordId) historicalReferences.push(doc(db, 'financialRecords', data.relatedRecordId));
+        if (name === 'financialRecordsHistory' && data.recordId) historicalReferences.push(doc(db, 'financialRecords', data.recordId));
+        for (const payment of Object.values(data.payments || {}) as any[]) {
+          if (payment?.voucherId) historicalReferences.push(doc(db, 'giftVouchers', payment.voucherId));
+        }
+        for (const entry of data.verification || []) if (entry.categoryId) historicalReferences.push(doc(db, 'categories', entry.categoryId));
+        for (const ref of historicalReferences) {
+          const staged = pending.get(ref.path);
+          const linked = staged ? null : await load(ref);
+          const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked?.exists() ? linked.data() : null;
+          if (linkedData) {
+            assertTenantData(collectionName(ref), linkedData, scope);
+            if (name === 'incidents' && collectionName(ref) === 'sales' && ref.id === data.originalSaleId && linkedData.storeId !== data.storeId) throw new Error('La venta original pertenece a otra sede.');
+          }
+        }
+        let draftProductsLoaded = false;
+        for (const ref of references) {
+          // Keep the existing validation order and ownership checks. Once category
+          // checks pass, load product references without serial document requests.
+          // Reuse the per-commit cache across counts, snapshot and history.
+          if (!draftProductsLoaded && collectionName(ref) === 'inventory' &&
+              ['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name)) {
+            draftProductsLoaded = true;
+            const products = [...new Map(references.filter(item => collectionName(item) === 'inventory' && !pending.has(item.path) && !cache.has(item.path)).map(item => [item.path, item])).values()];
+            if (products.length) await measureDiagnosticPhase('Borrador: comprobar productos', async () => {
+              if (queryDraftProducts) {
+                // A verification snapshots the selected category. Read it once,
+                // preserving legacy products without companyId and tenant rules.
+                // Transactions below must retain transaction.get conflict checks.
+                const result = await getDocs(query(collection(db, 'inventory'), where('storeId', '==', data.storeId), where('categoryId', '==', data.categoryId)));
+                const found = new Map(result.docs.map(item => [item.ref.path, item]));
+                for (const item of products) cache.set(item.path, found.get(item.path) || { exists: () => false });
+              } else {
+                for (let offset = 0; offset < products.length; offset += 12) {
+                  await Promise.all(products.slice(offset, offset + 12).map(load));
+                }
               }
-            }
-          });
-        }
-        const staged = pending.get(ref.path);
-        const linked = staged ? null : await load(ref);
-        if (!staged && !linked.exists()) throw new Error('No se encontró un registro vinculado.');
-        const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked.data();
-        assertTenantData(collectionName(ref), linkedData, scope);
-        if (collectionName(ref) === 'roles') assertCompanyRole(linkedData);
-        const expectedStore = name === 'inventoryTransfers' || (name === 'incidents' && data.type === IncidentType.INVENTORY_TRANSFER_REQUEST) ? data.fromStoreId : data.storeId;
-        if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers', 'incidents'].includes(name)) {
-          if (linkedData.storeId !== expectedStore) throw new Error('El producto vinculado pertenece a otra sede.');
-          if (['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name) && linkedData.categoryId !== data.categoryId) throw new Error('El producto no pertenece a la categoría del conteo.');
+            });
+          }
+          const staged = pending.get(ref.path);
+          const linked = staged ? null : await load(ref);
+          if (!staged && !linked.exists()) throw new Error('No se encontró un registro vinculado.');
+          const linkedData = staged ? { ...staged, companyId: staged.companyId || scope.companyId } : linked.data();
+          assertTenantData(collectionName(ref), linkedData, scope);
+          if (collectionName(ref) === 'roles') assertCompanyRole(linkedData);
+          const expectedStore = name === 'inventoryTransfers' || (name === 'incidents' && data.type === IncidentType.INVENTORY_TRANSFER_REQUEST) ? data.fromStoreId : data.storeId;
+          if (collectionName(ref) === 'inventory' && ['purchases', 'productHistory', 'stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory', 'tagScanningSessions', 'inventoryTransfers', 'incidents'].includes(name)) {
+            if (linkedData.storeId !== expectedStore) throw new Error('El producto vinculado pertenece a otra sede.');
+            if (['pendingDetailedVerifications', 'detailedVerificationHistory'].includes(name) && linkedData.categoryId !== data.categoryId) throw new Error('El producto no pertenece a la categoría del conteo.');
+          }
         }
       }
-    }
+    });
   };
   const apply = (target: any, op: Operation) => {
     if (op.kind === 'delete') target.delete(op.ref);
@@ -202,7 +204,7 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
     async addDoc(collection: any, data: any) { const ref = doc(collection); generated.add(ref.path); const operations: Operation[] = [{ kind: 'set', ref, data }]; if (hasFinancialChanges(operations)) await commitFinancial(operations); else { await validate(operations, getDoc); await setDoc(ref, operations[0].data); } generated.delete(ref.path); return ref; },
     writeBatch() {
       const operations: Operation[] = []; const queue = makeQueue(operations);
-      queue.commit = async () => { if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc, true); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await batch.commit(); operations.forEach(op => generated.delete(op.ref.path)); return result; };
+      queue.commit = async () => { if (hasFinancialChanges(operations)) return commitFinancial(operations); await validate(operations, getDoc, true); const batch = writeBatch(db); for (const op of operations) apply(batch, op); const result = await measureDiagnosticPhase('Guardado: confirmar lote', () => batch.commit()); operations.forEach(op => generated.delete(op.ref.path)); return result; };
       return queue as WriteBatch;
     },
     async runTransaction<T>(_: Firestore, callback: (transaction: any) => Promise<T>) {
@@ -211,11 +213,12 @@ export function createTenantWriter(db: Firestore, scope: TenantScope) {
         const operations: Operation[] = [];
         const cache = new Map<string, any>();
         const read = async (ref: DocumentReference) => {
-          if (!cache.has(ref.path)) cache.set(ref.path, await transaction.get(ref));
+          if (!cache.has(ref.path)) cache.set(ref.path, transaction.get(ref));
           return cache.get(ref.path);
         };
         const queue = makeQueue(operations, async (ref: DocumentReference) => {
-          const snapshot = await read(ref);
+          const snapshot = await (collectionName(ref) === 'incidents'
+            ? measureDiagnosticPhase('Novedades: leer registro', () => read(ref)) : read(ref));
           if (snapshot.exists()) assertTenantData(collectionName(ref), snapshot.data(), scope);
           return snapshot;
         });

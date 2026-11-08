@@ -12,7 +12,7 @@ async function withWriter(run, { yieldReads = false } = {}) {
  export const records=new Map(), reads=[], writes=[], queries=[], readStats={active:0,max:0,returned:0,failQuery:false};
  export const doc=(_,collection,id)=>({path:collection+'/'+id,id});
  const snapshot=ref=>({ref,id:ref.id,exists:()=>records.has(ref.path),data:()=>records.get(ref.path)});
- export const getDoc=async ref=>{reads.push(ref.path);readStats.active++;readStats.max=Math.max(readStats.max,readStats.active);try{${yieldReads ? 'await new Promise(resolve=>setImmediate(resolve));' : ''}return snapshot(ref)}finally{readStats.active--}};
+ export const getDoc=async ref=>{reads.push(ref.path);readStats.active++;readStats.max=Math.max(readStats.max,readStats.active);try{${yieldReads ? 'await new Promise(resolve=>setImmediate(resolve));' : ''}if(readStats.failDocument===ref.path)throw Error('document network failure');return snapshot(ref)}finally{readStats.active--}};
  export const collection=(_,name)=>({path:name});export const documentId=()=>"__name__";
  export const where=(field,op,value)=>({field,op,value});export const query=(source,...filters)=>({...source,filters});
  export const getDocs=async q=>{queries.push(q);readStats.active++;readStats.max=Math.max(readStats.max,readStats.active);try{
@@ -360,4 +360,18 @@ test('detailed-draft query failure writes nothing, while transactions retain tra
  const queryCount=queries.length;readStats.failQuery=false;
  await writer.runTransaction({},async tx=>tx.set(ref('pendingDetailedVerifications/d'),data));
  assert.equal(queries.length,queryCount,'transaction validation never uses independent queries');assert.ok(reads.includes('inventory/p'));assert.equal(records.get('pendingDetailedVerifications/d').counts.p,3);
+}, {yieldReads:true}));
+
+test('concurrent reads of the same product share one in-flight transaction read; next transaction reads again',()=>withWriter(async({createTenantWriter,records,reads})=>{
+ records.set('inventory/p',{companyId:'mayla',storeId:'mayla-1',stock:5});const writer=createTenantWriter({},scope);
+ await writer.runTransaction({},async tx=>{const values=await Promise.all(Array.from({length:12},()=>tx.get(ref('inventory/p'))));assert.ok(values.every(v=>v.data().stock===5));});
+ assert.equal(reads.filter(p=>p==='inventory/p').length,1);
+ records.set('inventory/p',{companyId:'mayla',storeId:'mayla-1',stock:3});
+ await writer.runTransaction({},async tx=>assert.equal((await tx.get(ref('inventory/p'))).data().stock,3));assert.equal(reads.filter(p=>p==='inventory/p').length,2);
+}, {yieldReads:true}));
+test('failed shared reads write nothing and never poison subsequent attempts or tenant checks',()=>withWriter(async({createTenantWriter,records,reads,writes,readStats})=>{
+ records.set('inventory/p',{companyId:'mayla',storeId:'mayla-1',stock:5});const writer=createTenantWriter({},scope);readStats.failDocument='inventory/p';
+ await assert.rejects(writer.runTransaction({},async tx=>{await Promise.all([tx.get(ref('inventory/p')),tx.get(ref('inventory/p'))]);tx.update(ref('inventory/p'),{stock:0});}),/network failure/);assert.equal(writes.length,0);assert.equal(reads.length,1);
+ readStats.failDocument=null;await writer.runTransaction({},async tx=>assert.equal((await tx.get(ref('inventory/p'))).data().stock,5));
+ records.set('inventory/p',{companyId:'foreign',storeId:'other',stock:5});await assert.rejects(writer.runTransaction({},async tx=>{await Promise.all([tx.get(ref('inventory/p')),tx.get(ref('inventory/p'))]);tx.update(ref('inventory/p'),{stock:0});}));assert.equal(writes.length,0);
 }, {yieldReads:true}));
