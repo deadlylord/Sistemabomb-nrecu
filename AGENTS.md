@@ -49,3 +49,15 @@
 
 ## Prioridades
 Integridad de ventas e inventario; aislamiento multiempresa; seguridad y permisos; disponibilidad del punto de venta; rendimiento; consistencia móvil; pruebas de regresión. Preferir soluciones sencillas y medibles.
+
+## Protocolo de velocidad para Codex (sin reducir seguridad)
+- Clasificar cada solicitud antes de trabajar: **SIMPLE** (texto, iconos, espaciado o estilos aislados sin lógica), **MEDIA** (comportamiento local, formularios sin persistencia) o **CRÍTICA** (Firestore, ventas, inventario, pagos, bodega, conciliación, autenticación, roles, caché compartida, despliegues).
+- Si hay incertidumbre sobre el alcance o se toca una dependencia compartida, subir la clasificación; nunca tratar una modificación de datos o permisos como SIMPLE.
+- **SIMPLE:** confirmar rama y cambios pendientes; buscar el componente con nombres/rutas de `docs/MAPA_RAPIDO_CODEX.md`; leer el fragmento y dependencias directas; aplicar el parche mínimo; comprobar el diff y ejecutar validación focalizada disponible. Evitar suites completas, compilaciones reiteradas y subagentes salvo evidencia de necesidad. Registrar explícitamente lo no ejecutado.
+- **MEDIA:** revisar el flujo relacionado y ejecutar pruebas del módulo; usar `npm run lint` o build cuando la naturaleza del cambio lo justifique; no repetir verificaciones exitosas sin cambios nuevos.
+- **CRÍTICA:** conservar íntegramente todas las comprobaciones de seguridad y regresión descritas arriba; validar reglas/aislamiento y pruebas relacionadas; no omitir pruebas por velocidad.
+- Leer `docs/ARQUITECTURA.md` y `docs/ESTADO_ACTUAL.md` de forma proporcional: para SIMPLE, consultar apartados relevantes cuando aplique; para MEDIA/CRÍTICA, revisar contexto completo necesario. El mapa rápido es orientación, no fuente de verdad frente al código.
+- No instalar skills, paquetes, dependencias o agentes para una tarea trivial sin beneficio concreto. Preferir un único agente para SIMPLE; paralelizar únicamente tareas independientes con interfaces claras.
+- No ejecutar `npm install`, `npm run build` o pruebas generales automáticamente en cada cambio cosmético. Si faltan dependencias o la validación requiere entorno, explicar la limitación.
+- Reportar en pocas líneas: alcance, archivos modificados, validación ejecutada, verificaciones omitidas y riesgos. Evitar narraciones extensas de exploración.
+- Medir por separado cuando se investigue lentitud: búsqueda, edición, typecheck, build de estilos, build Vite, pruebas Node y emulador Firestore; no atribuir demoras sin medición.
