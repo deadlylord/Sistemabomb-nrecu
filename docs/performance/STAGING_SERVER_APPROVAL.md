@@ -2,7 +2,7 @@
 
 ## Estado y límites
 
-Preparado exclusivamente en la rama staging para vestika-staging. Autorización de Carlos: preparar y probar el callable de traslados; producción y main quedan excluidos. El cliente conserva la ruta previa mientras VITE_SERVER_TRANSFER_APPROVAL no sea exactamente true. No se añadió esta variable a Netlify. No hay migración ni reparación de históricos.
+Preparado exclusivamente en la rama staging para vestika-staging. Autorización de Carlos: preparar y probar el callable de traslados; producción y main quedan excluidos. El cliente conserva la ruta previa mientras VITE_SERVER_TRANSFER_APPROVAL no sea exactamente true. El estado inicial no incluía esta variable; ver actualización reportada más abajo. No hay migración ni reparación de históricos.
 
 El endpoint es vestikaStagingApproveTransfer. Recibe solo companyId, storeId (sede creadora), incidentId y diagnostics opcional. Actor/roles/Developer vienen de token verificado y documentos vigentes. Las cantidades, productos y ruta vienen de la solicitud persistida. La función usa Admin SDK: replica aislamiento/roles/categorías y no depende de controles visuales ni de reglas para autorizar sus escrituras. Usa transacción para usuario/rol/empresa/sedes/solicitud/productos/categorías/comprobante y búsqueda destino limitada a dos documentos. El stock de bodega no cambia.
 
@@ -10,11 +10,24 @@ El estado procesado y el recibo request_<incidentId> impiden una nueva aplicaci�
 
 La respuesta no contiene datos de producto/cliente. Si se mide, añade totalMs, attempts y operaciones de lectura observadas en servidor (no facturación). La etapa de servidor excluye arranque anterior al manejador y transporte. El cliente espera confirmación, ignora resultados fuera de contexto y nunca ejecuta el flujo cliente como respaldo al error/timeout. Un error de respuesta no demuestra que no se guardó: revisar la solicitud y reutilizar el mismo ID.
 
-## Bloqueos externos actuales
+## Actualización reportada por Carlos desde Codex escritorio
 
-El executor no tiene identidad de Firebase/GCP autorizada; la política de red vigente bloquea servicios Google de despliegue. El intento de emulador local no pudo descargar el JAR de storage.googleapis.com. La propuesta de dominios necesaria quedó guardada en el borrador del entorno Codex, sin aplicarse al runtime ni activar servicios.
+- Función desplegada ACTIVE, Node22 segunda generación, vestika-staging/southamerica-east1. Rechazo anónimo 403. Flag activado exclusivamente en la rama staging de Netlify; producción permanece en main 524fd45. Despliegue aportado: https://app.netlify.com/projects/vestikapos/deploys/6af13c3281dc11fb903b564d.
+- Prueba sintética: origen 5→3, destino 1→3, bodega 3 intacta; un comprobante, dos logs y una transición. Cinco reintentos devolvieron alreadyProcessed sin efectos adicionales.
+- Desde interfaz con dos administradores: aprobación simultánea única; venta de última unidad gana y traslado pendiente sin comprobante/logs; respuesta perdida y cambio de sede no reenvían ni aplican respaldo local.
+- Cinco aprobaciones nuevas: panel 320–520 ms (mediana 320), servidor 117–147 ms (mediana 125), clic a completado 395–1429 ms (mediana 402); un intento cada una. No constituye comparación controlada ni medición confirmada de arranque frío. Cuentas y datos de prueba eliminados según reporte.
+- Evidencia aportada en la conversación, no repetida con acceso remoto por este executor. Las limitaciones de acceso de este executor descritas debajo no significan que el despliegue externo siga pendiente. Nada de esto instala funciones ni migra datos a factura2-6e811.
 
-Carlos aportó capturas de ubicación southamerica-east1 y del proyecto vestika-staging; no se consultaron el plan de facturación ni la configuración del servicio mediante API. No se desplegó ni activó el callable. No se midió latencia real y no se promete reducción. Wrapper y cliente usan southamerica-east1 (São Paulo), conforme a las capturas aportadas. Verificar también la ubicación mediante API antes del despliegue. minInstances=0 evita instancias mantenidas por este prototipo; medir también arranque frío. maxInstances=3. No habilitar facturación/APIs/cambiar IAM por suposición.
+## Verificación del executor — 2026-11-08
+
+- Recuperado staging en el commit exacto 77c578a, versión 1.1.214. main y producción intactos. Sin cambios al flag ni a Netlify.
+- Política de red observada vigente y aplicada: los dominios Google requeridos están permitidos. GitHub y firebase.googleapis.com responden fuera del sandbox; dentro, la conexión al proxy:8080 falla. La respuesta HTTP 404 de la raíz de Firebase acredita conectividad, no autorización ni acceso a todas las APIs.
+- Firebase CLI 15.34.0: login:list informa que no hay cuentas autorizadas; projects:list falla por autenticación. No hay identidad outbound, secretos, ADC ni FIREBASE_TOKEN configurados. Falta vincular una identidad administrativa limitada a vestika-staging por el mecanismo seguro del entorno. No introducir secretos en chat ni Git.
+- Dependencias functions instaladas con npm ci --prefix functions --ignore-scripts. Pruebas focalizadas: 66/66 con --test-isolation=none (Node24.22.1 local; runtime declarado del servicio Node22). Build aprobado. Typecheck mantiene los tres errores previos de AppErrorBoundary.tsx.
+- Emulador Firestore 1.22.0 descargado y ejecutado en demo-vestika-transfer-approval: 3/3 aprobadas (aplicación atómica única concurrente y bodega intacta; categoría ajena sin escrituras; destino ambiguo rechazado). Ningún dato remoto utilizado.
+- Sin autenticación no se pueden verificar mediante API ubicación, facturación, cuenta de ejecución ni existencia/estado remoto de la función. No se intentó desplegar, habilitar APIs, cambiar IAM ni activar el cliente.
+
+Estado inicial, previo al despliegue externo reportado: Carlos aportó capturas de ubicación southamerica-east1 y del proyecto vestika-staging; no se consultaron el plan de facturación ni la configuración del servicio mediante API. No se desplegó ni activó el callable. No se midió latencia real y no se promete reducción. Wrapper y cliente usan southamerica-east1 (São Paulo), conforme a las capturas aportadas. Verificar también la ubicación mediante API antes del despliegue. minInstances=0 evita instancias mantenidas por este prototipo; medir también arranque frío. maxInstances=3. No habilitar facturación/APIs/cambiar IAM por suposición.
 
 ## Verificaciones antes de activar
 
@@ -46,4 +59,4 @@ Emulador obligatorio local, proyecto demo, sin credenciales productivas:
 XDG_CONFIG_HOME=/tmp/vestika-firebase-config FIREBASE_EMULATORS_PATH=/tmp/vestika-emulators npx --yes firebase-tools@15.34.0 emulators:exec --config firebase.staging.emulator.json --only firestore --project demo-vestika-transfer-approval 'TZ=America/Bogota node --test tests/firestore/serverTransferApproval.test.mjs'
 ```
 
-Las tres pruebas reales de emulador están preparadas, pero no se ejecutaron por bloqueo de descarga del JAR. Las pruebas sintéticas no reemplazan esa verificación ni una medición real del servicio desplegado.
+Las tres pruebas con Firestore local se ejecutaron y aprobaron el 2026-11-08. Esto no reemplaza una validación autenticada en staging ni una medición real del servicio desplegado.

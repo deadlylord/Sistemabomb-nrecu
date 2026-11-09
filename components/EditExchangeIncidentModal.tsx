@@ -9,7 +9,7 @@ interface EditExchangeIncidentModalProps {
   incident: Incident;
   inventory: Product[];
   sales: Sale[];
-  onUpdateIncident: (incident: Incident) => void;
+  onUpdateIncident: (incident: Incident) => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -23,6 +23,8 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
   isAdmin
 }) => {
   // State for all editable fields
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [description, setDescription] = useState('');
   const [createdAt, setCreatedAt] = useState('');
   const [originalSaleInvoiceNumber, setOriginalSaleInvoiceNumber] = useState('');
@@ -175,8 +177,10 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
       }
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+    setSaveError('');
     if (customerPhone.trim() && customerPhone.trim().length !== 10) {
       alert("El número de celular debe tener exactamente 10 dígitos.");
       return;
@@ -218,8 +222,15 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
         updatedIncident.paymentMethod = undefined;
     }
     
-    onUpdateIncident(updatedIncident);
-    onClose();
+    setIsSaving(true);
+    try {
+      await onUpdateIncident(updatedIncident);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar la novedad. Revisa e intenta de nuevo.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -228,6 +239,7 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col">
         <h2 className="text-2xl font-bold text-accent mb-4">Editar Novedad de Cambio</h2>
+        {saveError && <p role="alert" className="text-red-600 p-2">{saveError}</p>}
         <form onSubmit={handleSubmit} id="edit-exchange-form" className="flex-grow overflow-y-auto pr-2 space-y-4">
             <div className="space-y-3 bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
                 <h4 className="font-bold">Detalles del Cambio</h4>
@@ -443,8 +455,8 @@ const EditExchangeIncidentModal: React.FC<EditExchangeIncidentModalProps> = ({
             </div>
         </form>
         <div className="mt-6 flex justify-end space-x-3 border-t-2 border-accent/30 pt-4">
-          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-slate-700 dark:text-slate-200">Cancelar</button>
-          <button type="submit" form="edit-exchange-form" className="px-4 py-2 bg-accent text-white rounded-md font-semibold font-sans hover:brightness-110 active:scale-95 transition-all">Guardar Cambios</button>
+          <button type="button" disabled={isSaving} onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-slate-700 dark:text-slate-200">Cancelar</button>
+          <button type="submit" disabled={isSaving} form="edit-exchange-form" className="px-4 py-2 bg-accent text-white rounded-md font-semibold font-sans hover:brightness-110 active:scale-95 transition-all">{isSaving ? 'Guardando…' : 'Guardar Cambios'}</button>
         </div>
       </div>
     </div>

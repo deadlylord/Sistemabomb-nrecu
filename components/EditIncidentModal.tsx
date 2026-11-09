@@ -6,11 +6,13 @@ interface EditIncidentModalProps {
   isOpen: boolean;
   onClose: () => void;
   incident: Incident;
-  onUpdateIncident: (incident: Incident) => void;
+  onUpdateIncident: (incident: Incident) => Promise<void>;
   isAdmin: boolean;
 }
 
 const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, incident, onUpdateIncident, isAdmin }) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [description, setDescription] = useState('');
   const [createdAt, setCreatedAt] = useState('');
   const [adjustmentAmount, setAdjustmentAmount] = useState('');
@@ -32,8 +34,10 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+    setSaveError('');
     if (!description.trim()) {
       alert("La descripción no puede estar vacía.");
       return;
@@ -64,8 +68,15 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
         updatedIncident.adjustmentAmount = oldAmount;
     }
     
-    onUpdateIncident(updatedIncident);
-    onClose();
+    setIsSaving(true);
+    try {
+      await onUpdateIncident(updatedIncident);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar la novedad. Revisa e intenta de nuevo.');
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   const renderReadOnlyDetails = () => {
@@ -88,6 +99,7 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
       <div className="bg-white dark:bg-secondary rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
         <h2 className="text-2xl font-bold text-accent mb-4">Editar Novedad</h2>
         
+        {saveError && <p role="alert" className="text-red-600 p-2">{saveError}</p>}
         <form onSubmit={handleSubmit} id="incident-form" className="flex-grow overflow-y-auto pr-2 space-y-4">
             {renderReadOnlyDetails()}
             {isAdmin && (
@@ -173,11 +185,11 @@ const EditIncidentModal: React.FC<EditIncidentModalProps> = ({ isOpen, onClose, 
         </form>
 
         <div className="mt-6 flex justify-end space-x-3 border-t-2 border-accent/30 pt-4">
-          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+          <button type="button" disabled={isSaving} onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
             Cancelar
           </button>
-          <button type="submit" form="incident-form" onClick={handleSubmit} className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">
-            Guardar Cambios
+          <button type="submit" disabled={isSaving} form="incident-form" className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover transition-colors">
+            {isSaving ? 'Guardando…' : 'Guardar Cambios'}
           </button>
         </div>
       </div>

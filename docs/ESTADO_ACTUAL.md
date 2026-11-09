@@ -2,6 +2,24 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Stock, clientes y edición de novedades — 1.1.215, publicación staging autorizada
+
+- Movimientos de bodega pasa del encabezado de tabla a la barra superior de Stock junto a Tabla de Productos, Análisis y Categorías. Conserva callback, diálogo y permisos; no altera movimientos ni consultas.
+- Autocompletado: antes solo se consultaba el array de customers con teléfono exacto; ventas/apartados guardan nombre y teléfono pero no crean automáticamente directorio. Se combinan sugerencias del directorio y ventas/apartados ya cargados en empresa/sede activa; normaliza separadores y prefijo colombiano 57, directorio tiene prioridad. Sin escrituras ni nuevas lecturas. No incluye históricos no cargados ni clientes de otras sedes.
+- Editores general y cambios cerraban inmediatamente sin esperar el Promise de Firebase ni mostrar rechazo. Ahora esperan confirmación, bloquean guardar/cancelar durante envío y conservan datos con error visible si falla. No amplía permisos, estados ni campos editables. Esta causa se comprobó en código; no se ha reproducido el error particular del administrador con su sesión real.
+- Validación focalizada de aislamiento, sugerencias, rechazo de guardado, contexto tardío y bodega: 12/12. Build Vite aprobado. Typecheck final conserva únicamente los tres errores previos de AppErrorBoundary; sin errores nuevos. Prueba del editor verifica rechazo con datos conservados y posterior confirmación exitosa. Publicación autorizada exclusivamente a staging; sin cambios de Firebase, main ni producción. Anular recepción de prenda dañada NO está implementado. Pendiente verificación visual móvil/escritorio y edición con cuenta admin de staging. Revisiones de alcance y seguridad realizadas por agente principal; perfiles locales no cargados como agentes especializados en esta sesión.
+
+## Pruebas reales de traslados reportadas por Carlos
+
+- Codex escritorio reportó vestikaStagingApproveTransfer ACTIVE y flag activado solo en staging. Validó concurrencia entre administradores, venta concurrente, respuesta perdida, cambio de sede e idempotencia, con datos sintéticos eliminados al finalizar. Cinco aprobaciones nuevas: mediana panel 320 ms, servidor 125 ms, clic a completado 402 ms. Evidencia detallada en docs/performance/STAGING_SERVER_APPROVAL.md. No repetido desde este executor ni extendido a producción.
+
+## Continuación de pruebas de servidor — 2026-11-08
+
+- Checkout staging 77c578a (1.1.214), main y producción intactos. Red a GitHub y Firebase comprobada fuera del sandbox; política aplicada permite los dominios Google configurados. Firebase CLI confirma ausencia de cuentas autorizadas y falla projects:list por autenticación. No hay identidad administrativa vinculada al executor.
+- 66/66 pruebas focalizadas aprobadas; dependencias functions instaladas desde lockfile. Build aprobado; TypeScript conserva tres errores previos de AppErrorBoundary. Node local 24.22.1, runtime del servicio declarado Node22.
+- Emulador Firestore local: 3/3 aprobadas, aplicación única concurrente, bodega intacta, categoría ajena y destino ambiguo sin escrituras. Solo proyecto demo, sin datos remotos.
+- Despliegue y verificaciones remotas pendientes de identidad segura para vestika-staging. Flag sin cambios; no se modificaron Netlify, IAM, APIs, reglas, índices ni datos remotos. Evidencia y procedimiento en docs/performance/STAGING_SERVER_APPROVAL.md.
+
 ## Región de pruebas — 1.1.214
 
 - Capturas de Carlos: Firestore southamerica-east1 y proyecto Vestika Staging / vestika-staging. Ajustados conjuntamente wrapper de aprobación y cliente a southamerica-east1, sin mover base de datos ni desplegar servicio. Guard de proyecto y flag apagado permanecen.

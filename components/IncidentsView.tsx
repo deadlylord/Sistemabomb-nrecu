@@ -28,7 +28,7 @@ interface IncidentsViewProps {
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
   onApproveIncident: (incidentId: string) => void | Promise<void>;
   onResolveIncident: (incidentId: string, receivedProductId?: string) => Promise<void>;
-  onUpdateIncident: (incident: Incident) => void;
+  onUpdateIncident: (incident: Incident) => Promise<void>;
   onDeleteIncident: (incidentId: string) => void;
 }
 
