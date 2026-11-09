@@ -1,11 +1,13 @@
 import { useViewFilter } from '../services/viewFilters';
 
 
-import React, { useState, useMemo } from 'react';
-import { Layaway, PaymentMethod, Seller, Role, Product } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Layaway, PaymentMethod, Seller, Role, Product, Store } from '../types';
 import { formatCOP, normalizeText } from '../constants';
 import { SearchIcon, TrashIcon, CrossIcon, EditIcon } from './Icons';
+import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import EditLayawayModal from './EditLayawayModal';
+import { getLayawayTiming } from '../services/layawayTiming';
 
 interface LayawayViewProps {
   readOnly?: boolean;
@@ -18,10 +20,13 @@ interface LayawayViewProps {
   onUpdateLayaway: (updatedLayaway: Layaway, originalLayaway: Layaway) => void;
   currentUser: Seller;
   roles: Role[];
+  stores: Store[];
 }
 
 const LayawayCard: React.FC<{
   readOnly?: boolean;
+  layout: 'list' | 'grid';
+  now: Date;
   layaway: Layaway, 
   sellers: Seller[], 
   inventory: Product[],
@@ -29,9 +34,8 @@ const LayawayCard: React.FC<{
   onFulfillPreOrder: (layawayId: string) => void;
   onDeleteLayaway: (layawayId: string) => void;
   onUpdateLayaway: (updatedLayaway: Layaway, originalLayaway: Layaway) => void;
-  currentUser: Seller;
-  roles: Role[];
-}> = ({ readOnly = false, layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+  canManage: boolean;
+}> = ({ readOnly = false, layout, now, layaway, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, canManage }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -40,11 +44,12 @@ const LayawayCard: React.FC<{
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [paymentSeller, setPaymentSeller] = useState<string>('');
 
-  const adminRole = useMemo(() => roles.find(r => r.name === 'Administrator'), [roles]);
-  const isAdmin = useMemo(() => !readOnly && currentUser.roleId === adminRole?.id, [currentUser, adminRole, readOnly]);
+  const isAdmin = !readOnly && canManage;
 
   const balance = layaway.totalAmount - layaway.paidAmount;
-  const progress = (layaway.paidAmount / layaway.totalAmount) * 100;
+  const progress = layaway.totalAmount > 0 ? Math.min(100, Math.max(0, (layaway.paidAmount / layaway.totalAmount) * 100)) : 0;
+  const timing = getLayawayTiming(layaway, now);
+  const isPending = layaway.status === 'active' || layaway.status === 'pre-order';
 
   const handleAddPayment = () => {
     const amount = parseFloat(paymentAmount);
@@ -83,26 +88,65 @@ const LayawayCard: React.FC<{
 
   return (
     <>
-      <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 transition-all duration-300">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-          <div className="flex-1 mb-4 sm:mb-0">
-            <div className="flex items-center space-x-3">
+      <div className="min-w-0 bg-gray-100 dark:bg-gray-800 rounded-lg p-3 transition-all duration-300">
+        <button type="button" aria-expanded={isExpanded} aria-label={`Ver detalle del apartado ${layaway.invoiceNumber}`} className={`w-full text-left flex gap-3 ${layout === 'grid' ? 'flex-col' : 'flex-col sm:flex-row sm:items-center'} justify-between`} onClick={() => setIsExpanded(!isExpanded)}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <span className={`px-2 py-1 text-xs font-bold rounded-full ${statusClasses[layaway.status]}`}>{statusTexts[layaway.status]}</span>
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white">{layaway.customerName}</h3>
+              <h3 className="font-bold text-base break-words text-gray-900 dark:text-white">{layaway.customerName}</h3>
             </div>
              <p className="text-sm text-gray-500 dark:text-text-dark">{layaway.customerPhone} | Fact: #{layaway.invoiceNumber}</p>
-            <p className="text-xs text-gray-500 dark:text-text-dark mt-1">Creado: {new Date(layaway.createdAt).toLocaleDateString()}</p>
           </div>
-          <div className="flex-1 text-left sm:text-right">
-            <p className="text-xl font-bold text-accent">{formatCOP(layaway.paidAmount)} / <span className="text-base text-gray-500 dark:text-text-dark">{formatCOP(layaway.totalAmount)}</span></p>
+        </button>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+          <p className="text-gray-600 dark:text-gray-300"><span data-testid="layaway-age" title={timing.explanation} className={`font-bold ${timing.isOverdue ? 'text-red-600 dark:text-red-400' : 'text-accent'}`}>{timing.ageLabel}</span> {timing.sinceLabel}</p>
+          <p className="font-semibold">{isPending ? 'Saldo pendiente' : 'Saldo'}: <span className="text-accent">{formatCOP(balance)}</span></p>
+        </div>
+        {layout === 'grid' && (
+          <div className="mt-2 text-sm space-y-1">
+            <ul className="space-y-1 text-gray-600 dark:text-gray-300">
+              {layaway.items.slice(0, 2).map(item => <li key={item.id} className="break-words">{item.quantity} × {item.name}</li>)}
+            </ul>
+            {layaway.items.length > 2 && <p className="text-xs text-gray-500">+{layaway.items.length - 2} productos en el detalle</p>}
+            {layaway.status === 'pre-order' && layaway.description && <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">Por traer: {layaway.description}</p>}
+          </div>
+        )}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <button type="button" className="text-xs font-semibold text-accent" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>{isExpanded ? 'Ocultar detalle' : 'Ver detalle'}</button>
+          <div className="flex items-center gap-1">
+            {isAdmin && (
+                <button
+                  type="button"
+                  aria-label="Editar apartado"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="bg-blue-500/10 text-blue-500 font-semibold inline-flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg hover:bg-blue-500/20 transition-colors"
+                  title="Editar Abono"
+                >
+                    <EditIcon className="w-4 h-4" /> Editar
+                </button>
+            )}
+            {isAdmin && (
+                <button
+                  type="button"
+                  aria-label="Eliminar apartado"
+                  onClick={() => onDeleteLayaway(layaway.id)}
+                  className="bg-red-500/10 text-red-500 font-semibold inline-flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg hover:bg-red-500/20 transition-colors"
+                  title="Eliminar Abono Permanentemente"
+                >
+                    <TrashIcon className="w-4 h-4" /> Eliminar
+                </button>
+            )}
           </div>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mt-2">
-            <div className="bg-accent h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-        </div>
-        
         {isExpanded && (
-           <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-700">
+           <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-700">
+              <div className="mb-3 text-sm space-y-1">
+                <p className="text-gray-500 dark:text-text-dark">Apartado el {timing.createdLabel}</p>
+                <p>Total: <strong>{formatCOP(layaway.totalAmount)}</strong> · Abonado: <strong>{formatCOP(layaway.paidAmount)}</strong></p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                  <div className="bg-accent h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                </div>
+              </div>
               {layaway.status === 'pre-order' && layaway.description && (
                   <div className="mb-4 p-3 bg-yellow-500/10 rounded-lg">
                       <h4 className="font-bold text-yellow-400 mb-1">Descripción del Pedido</h4>
@@ -125,25 +169,7 @@ const LayawayCard: React.FC<{
                   ))}
                 </ul>
               ) : <p className="text-sm text-gray-500 dark:text-text-dark">No hay pagos registrados.</p>}
-               <div className="mt-4 flex justify-end space-x-2">
-                  {isAdmin && (
-                      <button 
-                        onClick={() => setIsEditModalOpen(true)}
-                        className="bg-blue-500/10 text-blue-500 font-bold p-2 rounded-lg hover:bg-blue-500/20 transition-colors"
-                        title="Editar Abono"
-                      >
-                          <EditIcon className="w-5 h-5" />
-                      </button>
-                  )}
-                  {isAdmin && (
-                      <button 
-                        onClick={() => onDeleteLayaway(layaway.id)} 
-                        className="bg-red-500/10 text-red-500 font-bold p-2 rounded-lg hover:bg-red-500/20 transition-colors"
-                        title="Eliminar Abono Permanentemente"
-                      >
-                          <TrashIcon className="w-5 h-5" />
-                      </button>
-                  )}
+               <div className="mt-4 flex flex-wrap justify-end gap-2">
                   {!readOnly && layaway.status === 'pre-order' && (
                       <button 
                         onClick={async () => {
@@ -243,8 +269,16 @@ const LayawayCard: React.FC<{
 };
 
 
-export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles }) => {
+export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, layaways, sellers, inventory, onAddPayment, onFulfillPreOrder, onDeleteLayaway, onUpdateLayaway, currentUser, roles, stores = [] }) => {
+    const canManage = isTenantAdministrator(resolveTenantRole(currentUser, roles, stores));
     const [searchTerm, setSearchTerm] = useViewFilter('LayawayView:searchTerm', '');
+    const [layout, setLayout] = useViewFilter<'list' | 'grid'>('LayawayView:layout', 'grid');
+    const [sort, setSort] = useViewFilter<'newest' | 'oldest'>('LayawayView:sort', 'newest');
+    const [now, setNow] = useState(() => new Date());
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(new Date()), 60_000);
+        return () => window.clearInterval(timer);
+    }, []);
     const [filter, setFilter] = useViewFilter<Layaway['status'] | 'all'>('LayawayView:filter', 'all');
 
     const filteredLayaways = useMemo(() => {
@@ -259,8 +293,11 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
                 normalizeText(l.invoiceNumber).includes(normalizedSearch)
                 : true;
             return matchesFilter && matchesSearch;
-        }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [layaways, searchTerm, filter]);
+        }).sort((a,b) => {
+            const difference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            return sort === 'oldest' ? -difference : difference;
+        });
+    }, [layaways, searchTerm, filter, sort]);
 
     const filterOptions: { value: Layaway['status'] | 'all', label: string }[] = [
         { value: 'all', label: 'Todos' },
@@ -271,10 +308,10 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
     ];
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <div className="bg-white dark:bg-secondary p-6 rounded-xl shadow-lg">
+        <div className={`${layout === 'grid' ? 'max-w-7xl' : 'max-w-4xl'} mx-auto`}>
+            <div className="bg-white dark:bg-secondary p-3 sm:p-6 rounded-xl shadow-lg">
                 <h2 className="text-2xl font-bold text-accent mb-6 border-b-2 border-accent/30 pb-2">Apartados y Abonos</h2>
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <div className="flex flex-col xl:flex-row gap-4 mb-4">
                     <div className="relative flex-grow">
                         <input
                             type="text"
@@ -309,11 +346,24 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
                     </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div role="group" aria-label="Vista de apartados" className="flex gap-1 rounded-lg bg-gray-100 dark:bg-gray-800 p-1">
+                        {(['grid', 'list'] as const).map(value => <button key={value} type="button" aria-pressed={layout === value} onClick={() => setLayout(value)} className={`rounded-md px-3 py-2 text-sm font-semibold ${layout === value ? 'bg-accent text-white' : 'text-gray-600 dark:text-gray-300'}`}>{value === 'grid' ? 'Cuadrícula' : 'Lista'}</button>)}
+                    </div>
+                    <label className="text-sm flex flex-wrap items-center gap-2">Ordenar
+                        <select value={sort} onChange={event => setSort(event.target.value as 'newest' | 'oldest')} className="rounded-md border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 p-2">
+                            <option value="newest">Más recientes primero</option>
+                            <option value="oldest">Más antiguos primero</option>
+                        </select>
+                    </label>
+                </div>
+                <div className={layout === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start' : 'space-y-4'}>
                     {filteredLayaways.length > 0 ? (
                         filteredLayaways.map(layaway => (
                             <LayawayCard
                                 key={layaway.id}
+                                layout={layout}
+                                now={now}
                                 readOnly={readOnly}
                                 layaway={layaway}
                                 sellers={sellers}
@@ -322,8 +372,7 @@ export const LayawayView: React.FC<LayawayViewProps> = ({ readOnly = false, laya
                                 onFulfillPreOrder={onFulfillPreOrder}
                                 onDeleteLayaway={onDeleteLayaway}
                                 onUpdateLayaway={onUpdateLayaway}
-                                currentUser={currentUser}
-                                roles={roles}
+                                canManage={canManage}
                             />
                         ))
                     ) : (

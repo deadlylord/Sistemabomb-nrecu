@@ -1,3 +1,6 @@
+import { customerSuggestions } from '../services/customerSuggestions';
+import { serverTransferApprovalEnabled, callServerTransferApproval } from '../services/serverTransferApproval';
+import { warehouseEnabled, type WarehouseDirection } from '../services/warehouse';
 import { pendingTransferId, completeTransferId } from '../services/transferCheckout';
 import { pendingSaleId, completeSaleId, saleFingerprint } from '../services/saleCheckout';
 import { useMeasurementVisibility } from '../services/diagnosticsVisibility';
@@ -7,7 +10,7 @@ import type { VerifiedSession } from './VerifiedEntry';
 import { loginVerified, logoutVerified, manageVerifiedUser, manageVerifiedRole, manageVerifiedPlatform, watchVerifiedIdentity } from '../services/verifiedAuth';
 import { assertCartAvailability } from '../services/cartAvailability';
 import { planDamagedReceipt } from '../services/damagedReceipt';
-import { resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
+import { isTenantAdministrator, resolveTenantRole, tenantPermissions, tenantOperationPermissions } from '../services/tenantIdentity';
 import { createVerifiedCompanyAdmin } from '../services/createVerifiedCompanyAdmin';
 import { ensureCompanyRole } from '../services/companyRoles';
 import { createTenantWriter, assertTenantData } from '../services/tenantWrites';
@@ -71,6 +74,8 @@ import { PwaInstallModal } from './PwaInstallModal';
 const PosView = lazy(() => import('./PosView'));
 const InventoryView = lazy(() => import('./InventoryView'));
 const InventoryTransferView = lazy(() => import('./InventoryTransferView').then(module => ({ default: module.InventoryTransferView })));
+const WarehousePanel = lazy(() => import('./WarehousePanel'));
+const WarehouseSettingsDialog = lazy(() => import('./WarehouseSettingsDialog'));
 const LayawayView = lazy(() => import('./LayawayView').then(module => ({ default: module.LayawayView })));
 const SalesView = lazy(() => import('./SalesView'));
 const PurchasesView = lazy(() => import('./PurchasesView'));
@@ -205,6 +210,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const [verifiedProducts, setVerifiedProducts] = useState<Set<string>>(new Set());
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const [dashboardDetail, setDashboardDetail] = useState<{ key: string; section?: string } | null>(null);
+  const [warehouseView, setWarehouseView] = useState<
+    { mode: 'history' | 'settings' } | { mode: 'move'; productId: string; direction: WarehouseDirection } | null
+  >(null);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isVerificationInventoryLoading, setIsVerificationInventoryLoading] = useState(false);
   const [verificationInventoryError, setVerificationInventoryError] = useState<string | null>(null);
@@ -379,10 +387,11 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const operationContext = operationContextKey(currentUser?.id, operationalCompanyId, currentStoreId);
   const [settledDataContext, setSettledDataContext] = useState(operationContext);
   const dataContextReady = settledDataContext === operationContext;
+  const suggestedCustomers = useMemo(() => customerSuggestions(operationalCompanyId, currentStoreId || '', customers, sales, layaways), [operationalCompanyId, currentStoreId, customers, sales, layaways]);
   const overlayScope = `${operationContext}:${currentView}`;
   const [settledOverlayScope, setSettledOverlayScope] = useState(overlayScope);
   useEffect(() => {
-    setIsReportsModalOpen(false); setIsVerificationModalOpen(false); setIsBriefingModalOpen(false);
+    setWarehouseView(null); setIsReportsModalOpen(false); setIsVerificationModalOpen(false); setIsBriefingModalOpen(false);
     setShowReceiptModal(false); setSaleForReceipt(null); setShowRecaudoReceipt(false); setLastRecaudo(null);
     setVerificationInventoryError(null); setIsVerificationInventoryLoading(false);
     setSettledOverlayScope(overlayScope);
@@ -477,7 +486,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   }, [currentUser?.id, currentUser?.storeId, isDeveloper, currentStoreId, companyStoreKey]);
 
   const userPermissions = useMemo(() => tenantPermissions(currentUser, roles, stores, isDeveloper ? undefined : currentCompany?.allowedViews), [currentUser, roles, stores, isDeveloper, currentCompany]);
-  const recordReadOnly = !isDeveloper && !tenantOperationPermissions(currentUser, roles, stores, currentCompany?.allowedViews).includes(currentView);
+  const operationPermissions = tenantOperationPermissions(currentUser, roles, stores, currentCompany?.allowedViews);
+  const recordReadOnly = !isDeveloper && !operationPermissions.includes(currentView);
+  const warehouseAdmin = isTenantAdministrator(resolveTenantRole(currentUser, roles, stores));
+  const warehouseInScope = warehouseEnabled && !!currentStore && !!currentUser
+    && currentUser.companyId === operationalCompanyId
+    && (warehouseAdmin || currentUser.storeId === currentStore.id)
+    && !currentStore.isDisabled && currentStore.status !== 'inactive';
+  const warehouseAvailable = warehouseInScope && (operationPermissions.includes(View.POS) || operationPermissions.includes(View.INVENTORY));
+  const canConfigureWarehouse = warehouseAdmin && warehouseInScope && (warehouseAvailable || operationPermissions.includes(View.PURCHASES));
   const canAccessCurrentView = isDeveloper || userPermissions.includes(currentView);
 
   // Enforce role permissions at the view level, not only in navigation.
@@ -1546,8 +1563,18 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             }
           }
           if (!deltas.size) throw new Error('El cambio no contiene prendas.');
+          const exchangeSnapshots = new Map<string, any>();
+          const exchangeRefs = [...deltas.keys()].map(id => doc(db, 'inventory', id));
+          if (incident.originalSaleId) exchangeRefs.push(doc(db, 'sales', incident.originalSaleId));
+          // Independent reads from the persisted request, bounded per attempt.
+          // Keep every read in the transaction; never reuse snapshots across retries.
+          for (let offset = 0; offset < exchangeRefs.length; offset += 12) {
+            await Promise.all(exchangeRefs.slice(offset, offset + 12).map(async ref => {
+              exchangeSnapshots.set(ref.path, await transaction.get(ref));
+            }));
+          }
           for (const [id, delta] of deltas) {
-            const productSnapshot = await transaction.get(doc(db, 'inventory', id));
+            const productSnapshot = exchangeSnapshots.get(doc(db, 'inventory', id).path);
             if (!productSnapshot.exists()) throw new Error('No se encontró una prenda del cambio.');
             const product = productSnapshot.data();
             assertTenantData('inventory', product, scope);
@@ -1556,7 +1583,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
           }
           let savedSale: Sale | undefined;
           if (incident.originalSaleId) {
-            const saleSnapshot = await transaction.get(doc(db, 'sales', incident.originalSaleId));
+            const saleSnapshot = exchangeSnapshots.get(doc(db, 'sales', incident.originalSaleId).path);
             if (!saleSnapshot.exists()) throw new Error('No se encontró la venta original del cambio.');
             savedSale = { ...saleSnapshot.data(), id: incident.originalSaleId } as Sale;
             assertTenantData('sales', savedSale, scope);
@@ -1669,6 +1696,12 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     if (incident.type === IncidentType.INVENTORY_TRANSFER_REQUEST) {
       try {
         const approvalContext = operationContextRef.current;
+        if (serverTransferApprovalEnabled) {
+          if (recordReadOnly || (!isAdmin && !isDeveloper)) throw new Error('No tienes permiso para aprobar traslados.');
+          await callServerTransferApproval(operationalCompanyId, currentStoreId!, incidentId);
+          if (operationContextRef.current !== approvalContext) throw new Error('La sede o sesión cambió. Revisa el estado del traslado en su sede original.');
+          return;
+        }
         const incidentRef = doc(db, 'incidents', incidentId);
         await runTransaction(db, async transaction => {
           if (operationContextRef.current !== approvalContext) throw new Error('La sede cambió. Vuelve a abrir la novedad.');
@@ -1693,7 +1726,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         });
       } catch (error: any) {
         console.error('Error approving transfer request:', error);
-        alert(`Error al aprobar: ${error.message}`);
+        const rejected = ['functions/permission-denied','functions/unauthenticated','functions/invalid-argument','functions/failed-precondition','functions/already-exists'].includes(error?.code);
+        alert(serverTransferApprovalEnabled
+          ? rejected ? `No se aprobó el traslado: ${error.message}` : 'No se pudo confirmar la respuesta del servidor. Revisa el estado de la solicitud antes de reintentar; no se ejecutará otro traslado automáticamente.'
+          : `Error al aprobar: ${error.message}`);
       }
       return;
     }
@@ -2601,6 +2637,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       
       const currentSnap = await getDoc(productRef);
       if (!currentSnap.exists() || !isOwnInventory(currentSnap.data() as Product)) throw new Error('Producto no autorizado.');
+      if ((currentSnap.data().warehouseUnits || 0) > 0 && currentSnap.data().categoryId !== updatedProduct.categoryId) throw new Error('Regresa primero las unidades de bodega al local antes de cambiar su categoría.');
       const nameInDb = currentSnap.exists() ? currentSnap.data().name : updatedProduct.name;
       const oldStock = currentSnap.exists() ? (currentSnap.data().stock || 0) : 0;
       const oldPrice = currentSnap.exists() ? (currentSnap.data().price || 0) : 0;
@@ -2631,6 +2668,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
               discountPrice: updatedProduct.discountPrice !== undefined ? updatedProduct.discountPrice : deleteField()
           });
       } else {
+          if (snapshot.docs.some(d => (d.data().warehouseUnits || 0) > 0 && d.data().categoryId !== updatedProduct.categoryId)) throw new Error('Una referencia relacionada tiene unidades en bodega; regresa esas unidades antes de cambiar la categoría.');
           snapshot.docs.forEach(docSnap => {
               const updateData: any = { 
                   name: updatedProduct.name, 
@@ -2674,7 +2712,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       await batch.commit();
   };
 
-  const handleDeleteProduct = async (productId: string) => { await deleteDoc(doc(db, 'inventory', productId)); };
+  const handleDeleteProduct = async (productId: string) => {
+      if ((inventory.find(p => p.id === productId)?.warehouseUnits || 0) > 0) throw new Error('No puedes eliminar una referencia con unidades en bodega. Regresa primero la mercancía al local.');
+      await deleteDoc(doc(db, 'inventory', productId));
+  };
   
   const handleRegenerateAllSkus = async () => {
     if (!isAdmin) return;
@@ -2796,8 +2837,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const handleMultiStorePurchase = async (data: {
     productInfo: { name: string; categoryId: string; };
     storeEntries: Record<string, { quantity: number; cost: number; price: number; supplier: string }>;
-  }) => {
-    if (!currentUser) return;
+  }): Promise<Purchase[]> => {
+    if (!currentUser) throw new Error('La sesión no está disponible.');
     
     const { productInfo, storeEntries } = data;
     const inputName = productInfo.name;
@@ -2826,6 +2867,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     }
 
     const batch = writeBatch(db);
+    const savedPurchases: Purchase[] = [];
 
     try {
         for (const [storeId, entry] of Object.entries(storeEntries)) {
@@ -2883,7 +2925,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
             }
 
             const purchaseRef = doc(collection(db, 'purchases'));
-            batch.set(purchaseRef, cleanObject({
+            const purchase: Purchase = {
                 id: purchaseRef.id,
                 productId: productId,
                 productName: inputName,
@@ -2894,7 +2936,9 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
                 createdAt: new Date().toISOString(),
                 storeId: storeId,
                 companyId: operationalCompanyId
-            }));
+            };
+            batch.set(purchaseRef, cleanObject(purchase));
+            savedPurchases.push(purchase);
 
             const logRef = doc(collection(db, 'productHistory'));
             const log = {
@@ -2913,6 +2957,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         }
 
         await batch.commit();
+        return savedPurchases;
     } catch (error: any) {
         console.error("Error al registrar compras multi-tienda:", error);
         alert(`Error al procesar la compra: ${error.message}`);
@@ -2920,28 +2965,26 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     }
   };
 
-  const handleUpdatePurchase = async (updatedPurchase: Purchase, originalQuantity: number, newProductPrice: number) => {
+  const handleUpdatePurchase = async (updatedPurchase: Purchase, _originalQuantity: number, newProductPrice: number) => {
     if (!currentUser) return;
-    const batch = writeBatch(db);
     const purchaseRef = doc(db, 'purchases', updatedPurchase.id);
     const productRef = doc(db, 'inventory', updatedPurchase.productId);
-
-    const existing = await getDoc(purchaseRef);
-    if (!existing.exists()) throw new Error('Compra no encontrada.');
-    assertTenantData('purchases', existing.data(), { companyId: operationalCompanyId, storeIds: visibleStoreIds });
-    if (existing.data().storeId !== updatedPurchase.storeId || existing.data().productId !== updatedPurchase.productId) throw new Error('No se puede cambiar la sede o el producto de una compra existente.');
-    const qtyDiff = updatedPurchase.quantity - existing.data().quantity;
-
-    batch.update(purchaseRef, { ...updatedPurchase });
-    batch.update(productRef, {
-        stock: increment(qtyDiff),
-        cost: updatedPurchase.cost,
-        price: newProductPrice,
-        supplier: updatedPurchase.supplier
-    });
-
     const logRef = doc(collection(db, 'productHistory'));
-    batch.set(logRef, {
+
+    await runTransaction(db, async transaction => {
+      const existing = await transaction.get(purchaseRef);
+      if (!existing.exists()) throw new Error('Compra no encontrada.');
+      assertTenantData('purchases', existing.data(), { companyId: operationalCompanyId, storeIds: visibleStoreIds });
+      if (existing.data().storeId !== updatedPurchase.storeId || existing.data().productId !== updatedPurchase.productId) throw new Error('No se puede cambiar la sede o el producto de una compra existente.');
+      const product = await transaction.get(productRef);
+      if (!product.exists() || product.data().storeId !== updatedPurchase.storeId) throw new Error('Producto de la compra no encontrado en esta sede.');
+      const qtyDiff = updatedPurchase.quantity - existing.data().quantity;
+      if (qtyDiff < 0 && product.data().stock + qtyDiff < 0) {
+        throw new Error('La tienda no tiene unidades suficientes para reducir esta compra. Revisa las existencias y las unidades enviadas a bodega.');
+      }
+      transaction.update(purchaseRef, { ...updatedPurchase });
+      transaction.update(productRef, { stock: increment(qtyDiff), cost: updatedPurchase.cost, price: newProductPrice, supplier: updatedPurchase.supplier });
+      transaction.set(logRef, {
         id: logRef.id,
         productId: updatedPurchase.productId,
         productName: updatedPurchase.productName,
@@ -2951,37 +2994,43 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         changeType: ProductChangeType.PURCHASE_EDIT,
         stockDelta: qtyDiff,
         details: `Edición de compra. Ajuste stock: ${qtyDiff > 0 ? '+' : ''}${qtyDiff}`
+      });
     });
-
-    await batch.commit();
   };
 
   const handleDeletePurchase = async (purchaseId: string) => {
-    const purchase = purchases.find(p => p.id === purchaseId);
-    if (!purchase || !currentUser) return;
-    
+    if (!purchases.some(p => p.id === purchaseId) || !currentUser) return;
     if (!window.confirm('¿Eliminar compra? El stock se restará del inventario.')) return;
-
-    const batch = writeBatch(db);
-    batch.delete(doc(db, 'purchases', purchaseId));
-    batch.update(doc(db, 'inventory', purchase.productId), {
-        stock: increment(-purchase.quantity)
-    });
-
+    const purchaseRef = doc(db, 'purchases', purchaseId);
     const logRef = doc(collection(db, 'productHistory'));
-    batch.set(logRef, {
-        id: logRef.id,
-        productId: purchase.productId,
-        productName: purchase.productName,
-        storeId: purchase.storeId,
-        changedBy: currentUser.name,
-        timestamp: new Date().toISOString(),
-        changeType: ProductChangeType.PURCHASE_DELETE,
-        stockDelta: -purchase.quantity,
-        details: `Compra eliminada. Se restaron ${purchase.quantity} unidades.`
-    });
-
-    await batch.commit();
+    try {
+      await runTransaction(db, async transaction => {
+        const existing = await transaction.get(purchaseRef);
+        if (!existing.exists()) return;
+        const purchase = existing.data() as Purchase;
+        const productRef = doc(db, 'inventory', purchase.productId);
+        const product = await transaction.get(productRef);
+        if (!product.exists() || product.data().storeId !== purchase.storeId) throw new Error('Producto de la compra no encontrado en esta sede.');
+        if (product.data().stock < purchase.quantity) {
+          throw new Error('La tienda no tiene unidades suficientes para eliminar esta compra. Revisa las existencias y las unidades enviadas a bodega.');
+        }
+        transaction.delete(purchaseRef);
+        transaction.update(productRef, { stock: increment(-purchase.quantity) });
+        transaction.set(logRef, {
+          id: logRef.id,
+          productId: purchase.productId,
+          productName: purchase.productName,
+          storeId: purchase.storeId,
+          changedBy: currentUser.name,
+          timestamp: new Date().toISOString(),
+          changeType: ProductChangeType.PURCHASE_DELETE,
+          stockDelta: -purchase.quantity,
+          details: `Compra eliminada. Se restaron ${purchase.quantity} unidades.`
+        });
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'No se pudo eliminar la compra.');
+    }
   };
 
   const assertCategoryAccess = async (id: string) => {
@@ -3034,7 +3083,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   };
   const handleUpdateStore = async (updatedStore: Store) => {
     try {
-      await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(updatedStore) as any);
+      const { warehouseSendEnabled, warehouseCategoryVisible, ...storeSettings } = updatedStore;
+      await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(storeSettings) as any);
       
       // Sincronizar configuración de etiquetas en todos los locales
       if (updatedStore.labelConfig) {
@@ -3570,7 +3620,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? dashboardIncidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
+      <Header currentView={currentView} setCurrentView={setCurrentView} theme={theme} toggleTheme={toggleTheme} currentUser={currentUser} currentStore={currentStore} currentCompany={currentCompany} userPermissions={userPermissions} onLogout={handleLogout} onOpenWarehouseSettings={canConfigureWarehouse ? () => setWarehouseView({ mode: 'settings' }) : undefined} stores={visibleStores} onSwitchStore={handleSwitchStore} roles={visibleRoles} isGlobalMode={isGlobalMode} onToggleGlobalMode={() => setIsGlobalMode(!isGlobalMode)} incidents={dataContextReady ? dashboardIncidents : []} onOpenBriefing={() => setIsBriefingModalOpen(true)} isDeveloper={isDeveloper} />
       <ViewFiltersProvider key={`filters:${dataScope}`}>
       <main key={`${dataScope}:${currentStoreId}:${currentView}`} className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-5 py-3 sm:py-4 pb-20 lg:pb-8 lg:pl-[calc(var(--vestika-sidebar-width,15rem)+1.25rem)] transition-[padding-left] duration-300 overflow-x-hidden">
         {!canAccessCurrentView && <div role="status" className="p-6 text-center">Esperando los permisos de acceso. Si continúa, consulta al administrador.</div>}
@@ -3581,11 +3631,15 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         {summaryOnly && <BusinessOverview key={dashboardKey} companyId={operationalCompanyId} store={currentStore} stores={visibleStores} scope={dataScope} onOpenDetails={openDashboardDetails} onOpenVerification={() => setIsVerificationModalOpen(true)} onSummaryUnavailable={() => openDashboardDetails('summary-unavailable')} />}
         {dailySummaryEnabled && currentView === View.DASHBOARD && !summaryOnly && <div className="mb-4 rounded-xl bg-white dark:bg-slate-800 p-3 flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{dashboardDetail?.section === 'summary-unavailable' ? 'El resumen aún no está verificado; se muestran los datos completos de la sede.' : 'Historial y herramientas de la sede'}</span><button type="button" className="text-accent font-bold" onClick={() => setDashboardDetail(null)}>Volver al resumen</button></div>}
         {currentView === View.DASHBOARD && !summaryOnly && <DashboardView activityLoading={activityLoading || activityMode && dashboardSalesStatus.loading} activityMonths={activityMode ? Object.keys(dashboardBusinessSummary.meta?.dashboardActivityMonths || {}) : undefined} onResolveLayaway={activityMode ? async id => { const snapshot = await getDoc(doc(db, 'layaways', id)); if (!snapshot.exists()) throw new Error('No se encontró el apartado.'); const row = { ...snapshot.data(), id: snapshot.id } as Layaway; assertTenantData('layaways', row, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId!]) }); return row; } : undefined} inventorySummary={summaryInventoryMode ? { value: inventorySummaryReady ? dashboardBusinessSummary.meta!.inventoryValue : null } : undefined} onInventoryRequest={summaryInventoryMode ? onDashboardInventoryRequest : undefined} inventoryStatus={summaryInventoryMode ? dashboardInventory : undefined} monthlySummary={(monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled) && (!paymentIndexRequired || dashboardSummaryPending || dashboardBusinessSummary.ready && !dashboardBusinessSummary.error && dashboardBusinessSummary.meta?.paymentIndexVersion === 1) ? dashboardBusinessSummary : undefined} onSummaryRangeChange={monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled ? onDashboardSummaryRange : undefined} onSalesRangesChange={monthlyDashboardSalesEnabled ? onDashboardSalesRanges : undefined} initialSection={dashboardDetail?.key === dashboardKey ? dashboardDetail.section : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(activityMode ? dashboardIncidents : scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={dashboardLayaways} expenses={expenses} inventory={summaryInventoryMode ? dashboardInventory.rows : inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} />}
-        {currentView === View.POS && <PosView inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={customers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
-        {currentView === View.INVENTORY && <InventoryView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
+        {currentView === View.POS && <PosView warehouseDialogOpen={!!warehouseView} onMoveWarehouse={warehouseAvailable && !recordReadOnly ? (product, direction) => setWarehouseView({ mode: 'move', productId: product.id, direction }) : undefined} inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={suggestedCustomers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
+        {currentView === View.INVENTORY && <InventoryView onOpenWarehouseHistory={warehouseAvailable && warehouseAdmin && !recordReadOnly ? () => setWarehouseView({ mode: 'history' }) : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
-        {currentView === View.LAYAWAY && <LayawayView readOnly={recordReadOnly} layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
-        {currentView === View.PURCHASES && <PurchasesView purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
+        {currentView === View.LAYAWAY && <LayawayView stores={visibleStores} readOnly={recordReadOnly} layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
+        {currentView === View.PURCHASES && <PurchasesView key={dataScope} warehouseAccess={warehouseEnabled && currentUser.companyId === operationalCompanyId && !recordReadOnly ? {
+          userId: currentUser.id,
+          companyId: operationalCompanyId,
+          storeIds: new Set(visibleStores.filter(store => (warehouseAdmin || store.id === currentUser.storeId) && !store.isDisabled && store.status !== 'inactive').map(store => store.id)),
+        } : undefined} purchases={purchases} inventory={inventory} allInventoryForSearch={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onMultiStorePurchase={handleMultiStorePurchase} onUpdatePurchase={handleUpdatePurchase} onDeletePurchase={handleDeletePurchase} onUpdateProduct={handleUpdateProduct} onLoadFullHistory={() => setLoadFullPurchases(true)} isFullHistoryLoaded={loadFullPurchases} />}
         {currentView === View.SELLERS && <SellersView sellers={visibleSellers.filter(user => isOwner || user.id !== PLATFORM_OWNER_USER_ID && user.platformRole !== 'developer')} roles={visibleRoles} stores={visibleStores} onAddSeller={handleAddSeller} onUpdateSeller={handleUpdateSeller} onDeleteSeller={handleDeleteSeller} onToggleSellerStatus={handleToggleSellerStatus} isDeveloper={false} />}
         {currentView === View.STORES && <StoresView stores={visibleStores} onAddStore={handleAddStore} onUpdateStore={handleUpdateStore} onDeleteStore={handleDeleteStore} isDeveloper={isDeveloper} />}
         {currentView === View.CUSTOMERS && <CustomersView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} storeId={currentStoreId || ''} sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
@@ -3593,7 +3647,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
         {currentView === View.SETTINGS && <SettingsView key={dataScope} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
-        {currentView === View.INCIDENTS && <IncidentsView readOnly={recordReadOnly} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} activeStoreId={currentStoreId || ''} incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={customers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
+        {currentView === View.INCIDENTS && <IncidentsView readOnly={recordReadOnly} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} activeStoreId={currentStoreId || ''} incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={suggestedCustomers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && canLoadStore && (
           <SmartAccountantView key={`${dataScope}:${currentStoreId}`}
             sales={sales} 
@@ -3707,15 +3761,45 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         </AppErrorBoundary>}
       </main>
-      {measurementVisible && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} /></Suspense>}
+      {measurementVisible && <Suspense fallback={null}><ReadDiagnosticsPanel available={true} firstReadTarget={currentView === View.INCIDENTS && dataContextReady && (isAdmin || isDeveloper) ? (() => {
+        const record = incidents.find(row => row.companyId === operationalCompanyId && row.storeId === currentStoreId);
+        return record ? { companyId: operationalCompanyId, storeId: record.storeId, incidentId: record.id } : undefined;
+      })() : undefined} /></Suspense>}
       </ViewFiltersProvider>
       {dataContextReady && settledOverlayScope === overlayScope && <React.Fragment key={overlayScope}>
       {isReportsModalOpen && <Suspense fallback={<VestikaLoader fullScreen />}><ReportsModal key={`reports:${overlayScope}`} companyId={operationalCompanyId} isOpen={isReportsModalOpen} onClose={() => setIsReportsModalOpen(false)} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.length > 0 ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} stores={visibleStores} categories={categories} /></Suspense>}
       {showReceiptModal && saleForReceipt && <ReceiptModal sale={saleForReceipt} store={currentStore || null} company={currentCompany} onClose={() => setShowReceiptModal(false)} />}
       {currentUser && showRecaudoReceipt && lastRecaudo && lastRecaudo.storeId === currentStoreId && (!lastRecaudo.companyId || lastRecaudo.companyId === operationalCompanyId) && <RecaudoReceiptModal incident={lastRecaudo} store={currentStore || null} onClose={() => setShowRecaudoReceipt(false)} />}
+      {canConfigureWarehouse && currentStore && warehouseView?.mode === 'settings' && (
+        <Suspense fallback={<VestikaLoader fullScreen />}>
+          <WarehouseSettingsDialog companyId={operationalCompanyId} store={currentStore} onClose={() => setWarehouseView(null)} />
+        </Suspense>
+      )}
+      {warehouseAvailable && currentStore && warehouseView && warehouseView.mode !== 'settings' && (warehouseView.mode !== 'history' || warehouseAdmin) && (
+        <Suspense fallback={<VestikaLoader fullScreen />}>
+          <WarehousePanel
+            mode={warehouseView.mode}
+            movement={warehouseView.mode === 'move' ? warehouseView : undefined}
+            userId={currentUser.id}
+            companyId={operationalCompanyId}
+            store={currentStore}
+            inventory={inventory}
+            categories={categories}
+            isAdmin={warehouseAdmin}
+            onClose={() => setWarehouseView(null)}
+          />
+        </Suspense>
+      )}
       {isVerificationModalOpen && (
           <InventoryVerificationModal
               isOpen={isVerificationModalOpen}
+              warehouseContent={warehouseAvailable && currentStore ? (
+                <Suspense fallback={<p role="status">Cargando bodega…</p>}>
+                  <WarehousePanel embedded userId={currentUser.id} companyId={operationalCompanyId} store={currentStore}
+                    inventory={inventory} categories={categories} isAdmin={warehouseAdmin}
+                    onClose={() => setIsVerificationModalOpen(false)} />
+                </Suspense>
+              ) : undefined}
               isLoadingInventory={isVerificationInventoryLoading}
               inventoryError={verificationInventoryError}
               isAdmin={isAdmin}

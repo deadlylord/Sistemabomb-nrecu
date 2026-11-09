@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Category, Seller, StockTake, Store } from '../types';
 import { CheckIcon, CrossIcon, EyeIcon } from './Icons';
 import DetailedInventoryVerificationModal from './DetailedInventoryVerificationModal';
+import VerificationCountTable from './VerificationCountTable';
 
 interface InventoryVerificationModalProps {
   inventory: Product[];
@@ -16,6 +17,7 @@ interface InventoryVerificationModalProps {
   isVendedor?: boolean;
   currentStore?: Store;
   onClose: () => void;
+  warehouseContent?: React.ReactNode;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => Promise<void>;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
@@ -33,11 +35,15 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   isVendedor = false,
   currentStore,
   onClose,
+  warehouseContent,
   onSaveStockTake,
   onSaveDetailedDraft,
   onApplyDetailedVerification,
   onUpdateStoreSettings,
 }) => {
+  const [warehouseOpened, setWarehouseOpened] = useState(false);
+  const [showWarehouse, setShowWarehouse] = useState(false);
+  const warehouseActive = !!warehouseContent && showWarehouse;
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [detailedCounts, setDetailedCounts] = useState<Record<string, Record<string, string>>>({});
   const [selectedSeller, setSelectedSeller] = useState('');
@@ -213,12 +219,28 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
         <div className="bg-white dark:bg-secondary rounded-none sm:rounded-2xl shadow-xl p-4 sm:p-6 w-full max-w-2xl h-full sm:h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="flex justify-between items-start border-b-2 border-accent/30 pb-4 mb-4">
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-accent tracking-tighter uppercase">Inventario y Apertura</h2>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Revisión de stock antes de iniciar jornada</p>
+                <h2 className="text-xl sm:text-2xl font-black text-accent tracking-tighter uppercase">{warehouseActive ? 'Inventario de bodega' : 'Inventario y Apertura'}</h2>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{warehouseActive ? currentStore?.name : 'Revisión de stock antes de iniciar jornada'}</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon className="w-6 h-6"/></button>
+              <div className="flex items-center gap-2">
+                <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors"><CrossIcon className="w-6 h-6"/></button>
+              </div>
           </div>
           
+          {warehouseContent && (
+            <div className="flex gap-2 mb-4">
+              <button type="button" disabled={isSaving} aria-pressed={!warehouseActive} onClick={() => setShowWarehouse(false)}
+                className={`rounded-lg px-3 py-2 font-semibold ${warehouseActive ? 'bg-accent/10 text-accent' : 'bg-accent text-white'}`}>Tienda</button>
+              <button type="button" disabled={isSaving} aria-pressed={warehouseActive} onClick={() => { setWarehouseOpened(true); setShowWarehouse(true); }}
+                className={`rounded-lg px-3 py-2 font-semibold ${warehouseActive ? 'bg-accent text-white' : 'bg-accent/10 text-accent'}`}>Bodega</button>
+            </div>
+          )}
+          {warehouseOpened && warehouseContent && (
+            <div hidden={!warehouseActive} className={warehouseActive ? 'flex flex-col min-h-0 grow' : undefined}>
+              {warehouseContent}
+            </div>
+          )}
+          <div hidden={warehouseActive} className={warehouseActive ? undefined : 'flex flex-col min-h-0 grow'}>
           <div className="mb-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -255,57 +277,17 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           </div>
 
           <div className="flex-grow overflow-y-auto pr-2 scrollbar-hide">
-            <table className="w-full text-left">
-              <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10 rounded-xl overflow-hidden">
-                <tr>
-                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Categoría</th>
-                  {isDetailedVerificationVisible && <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Detalle</th>}
-                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Conteo Físico</th>
-                  <th className="p-3 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {(isLoadingInventory || inventoryError || categoryTotals.length === 0) && (
-                  <tr><td colSpan={isDetailedVerificationVisible ? 4 : 3} className="p-6 text-center text-sm text-gray-500" role="status">
-                    {isLoadingInventory ? 'Cargando inventario de la sede…' : inventoryError || 'No hay categorías con existencias distintas de cero en esta sede para verificar.'}
-                  </td></tr>
-                )}
-                {!isLoadingInventory && !inventoryError && categoryTotals.map(category => {
-                  const physicalCountStr = counts[category.id];
-                  const physicalCount = physicalCountStr !== undefined && physicalCountStr !== '' ? parseInt(physicalCountStr, 10) : null;
-                  const difference = physicalCount !== null ? physicalCount - category.totalStock : null;
-                  return (
-                    <tr key={category.id} className="hover:bg-accent/5 transition-colors h-16 group">
-                      <td className="p-2">
-                          <p className="font-black text-sm uppercase tracking-tight text-gray-700 dark:text-gray-200">{category.name}</p>
-                          {isAdmin && (
-                            <p className="text-[10px] text-gray-400 font-bold uppercase">Sist: {category.totalStock}</p>
-                          )}
-                      </td>
-                      {isDetailedVerificationVisible && (
-                        <td className="p-2 text-center">
-                            <button onClick={() => openDetailedVerification(category)} className="p-2.5 text-accent bg-accent/10 rounded-xl hover:bg-accent hover:text-white transition-all shadow-sm" title="Verificar por marca / producto"><EyeIcon className="w-5 h-5" /></button>
-                        </td>
-                      )}
-                      <td className="p-2 text-center">
-                        <input type="number" min="0" value={counts[category.id] || ''} onChange={(e) => handleCountChange(category.id, e.target.value)} className="w-20 bg-white dark:bg-gray-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl p-2 text-center font-black text-base focus:ring-2 focus:ring-accent focus:border-accent outline-none shadow-inner" placeholder="0" />
-                      </td>
-                      <td className="p-2 text-center">
-                         <div className="flex justify-center">
-                             {physicalCount !== null ? (
-                                 difference === 0 ? (
-                                     <span className="text-green-500 bg-green-500/10 p-2 rounded-full" title="Correcto"><CheckIcon className="w-5 h-5" /></span>
-                                 ) : (
-                                     <span className="text-red-500 bg-red-500/10 p-2 rounded-full" title="Error en conteo"><CrossIcon className="w-5 h-5" /></span>
-                                 )
-                             ) : <span className="text-gray-300 dark:text-gray-700">--</span>}
-                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <VerificationCountTable
+              rows={categoryTotals}
+              counts={counts}
+              showSystem={isAdmin}
+              status={isLoadingInventory ? 'Cargando inventario de la sede…' : inventoryError || (categoryTotals.length === 0 ? 'No hay categorías con existencias distintas de cero en esta sede para verificar.' : null)}
+              onCountChange={handleCountChange}
+              onOpenDetails={isDetailedVerificationVisible ? id => {
+                const category = categoryTotals.find(row => row.id === id);
+                if (category) openDetailedVerification(category);
+              } : undefined}
+            />
           </div>
           <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 border-t-2 border-accent/30 pt-4">
               <button onClick={onClose} disabled={isSaving} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center font-black text-xs uppercase tracking-widest text-gray-500 disabled:opacity-50">Cerrar</button>
@@ -320,9 +302,10 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
                   <span>{saveSuccess ? '¡Guardado con éxito!' : isSaving ? 'Guardando...' : (isAdmin ? 'Guardar y Aplicar Stock' : 'Enviar para Revisión')}</span>
               </button>
           </div>
+          </div>
         </div>
       </div>
-      {activeCategoryForDetails && (
+      {!warehouseActive && activeCategoryForDetails && (
         <DetailedInventoryVerificationModal 
           isOpen={!!activeCategoryForDetails}
           onClose={() => setActiveCategoryForDetails(null)}

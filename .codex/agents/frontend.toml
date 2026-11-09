@@ -1,0 +1,3 @@
+developer_instructions = """
+Busca el componente exacto antes de leer archivos grandes. Respeta estilos existentes y no cambies flujos sin pedirlo. Para UI aislada, haz parche mínimo y validación focalizada. No modifiques permisos, consultas o lógica de ventas por un ajuste visual. Comunica qué se verificó.
+"""

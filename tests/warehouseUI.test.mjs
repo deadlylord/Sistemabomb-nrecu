@@ -1,0 +1,129 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { mkdtemp,writeFile,rm } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import React from 'react';
+import {create,act} from 'react-test-renderer';
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+const storage = new Map();globalThis.sessionStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+const dir=await mkdtemp(process.cwd()+'/tests/.warehouse-ui-');
+const b=await build({stdin:{ contents: "export { default } from './components/WarehousePanel'; export { InventoryVerificationModal } from './components/InventoryVerificationModal';", resolveDir: process.cwd() },bundle:true,write:false,format:'esm',platform:'node',external:['react'],plugins:[{name:'api-stub',setup(b){b.onResolve({filter:/DetailedInventoryVerificationModal$/},()=>({path:'detail',namespace:'stub'}));b.onResolve({filter:/services\/warehouse$/},()=>({path:'api',namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},args=>({contents:args.path === 'detail' ? 'export default function Detail(){ return null; }' : 'export const callWarehouse = async () => {throw Error("Unexpected default API")};'}))}}]});
+await writeFile(dir+'/ui.mjs',b.outputFiles[0].text);const {default:Panel, InventoryVerificationModal}=await import(pathToFileURL(dir+'/ui.mjs').href);
+const props={userId:'u',companyId:'co',store:{id:'st',companyId:'co',name:'Tienda'},inventory:[{id:'p',companyId:'co',storeId:'st',name:'Blusa',stock:6}],categories:[{id:'cat',name:'Blusas'}],isAdmin:false,onClose(){}};
+const button=(r,label)=>r.root.findAllByType('button').find(b=>b.children.join('')===label);
+test('warehouse opens summary only; eyes load category on demand; save keeps store scope and revision',async()=>{
+ storage.clear();const calls=[];const api=async(co,st,data)=>{calls.push([co,st,data]);return data.action==='summary'?{rows:[{id:'cat',stock:4,revision:1}]}:data.action==='products'?{rows:[{id:'p',name:'Blusa',supplier:'Marca',stock:4}],cursor:null}:data.action==='draft'?{draft:null}:{id:'saved'}};let r;
+ await act(async()=>{r=create(React.createElement(Panel,{...props,api}));});
+ try {assert.deepEqual(calls.map(c=>c[2].action),['summary']);
+ await act(async()=>r.root.findByProps({'aria-label':'Verificar marcas Blusas'}).props.onClick());
+ assert.deepEqual(calls.map(c=>c[2].action),['summary','products','draft']);
+ await act(async()=>r.root.findByProps({'aria-label':'Conteo Blusas'}).props.onChange({target:{value:'3'}}));
+ await act(async()=>button(r,'Guardar conteo de bodega').props.onClick());
+ const saved=calls.find(c=>c[2].action==='count');assert.deepEqual(saved.slice(0,2),['co','st']);assert.deepEqual(saved[2].entries,[{categoryId:'cat',revision:1,physicalCount:3}]);assert.ok(saved[2].operationId);
+ assert.equal(button(r,'Aplicar ajuste por productos'),undefined);
+ }finally{await act(async()=>r.unmount())}
+});
+test('movement keeps the same operation after lost acknowledgement and blocks duplicate submissions',async()=>{
+ storage.clear();let attempts=[],fail=true,release;const api=async(co,st,data)=>{if(data.action==='summary')return {rows:[]};attempts.push(data);if(fail)throw Error('Sin conexión');return new Promise(resolve=>{release=resolve})};let r;
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toWarehouse'},api}));});
+ try{
+ const units=r.root.findAllByType('input').find(n=>n.props.type==='number');await act(async()=>units.props.onChange({target:{value:'2'}}));
+ await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));assert.match(JSON.stringify(r.toJSON()),/Sin conexión/);
+ fail=false;await act(async()=>{r.root.findByType('form').props.onSubmit({preventDefault(){}})});
+ await act(async()=>{r.root.findByType('form').props.onSubmit({preventDefault(){}})});
+ assert.equal(attempts.length,2);assert.equal(attempts[0].operationId,attempts[1].operationId);assert.equal(button(r,'Cerrar').props.disabled,true);
+ await act(async()=>release({id:'ok'}));assert.equal(button(r,'Cerrar').props.disabled,false);
+ }finally{await act(async()=>r.unmount())}
+});
+test('reopening panel recovers an unacknowledged operation without creating another ID',async()=>{
+ storage.clear();let failed=true,requests=[];const api=async(c,s,data)=>{if(data.action==='summary')return {rows:[]};requests.push(data);if(failed)throw Error('Sin conexión');return {id:'saved'}};let r;
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toWarehouse'},api}));});
+ await act(async()=>r.root.findAllByType('input').find(n=>n.props.type==='number').props.onChange({target:{value:'2'}}));
+ await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));
+ await act(async()=>r.unmount());failed=false;
+ await act(async()=>{r=create(React.createElement(Panel,{...props,api}));});
+ try{await act(async()=>button(r,'Resolver operación pendiente').props.onClick());assert.equal(requests.length,2);assert.equal(requests[0].operationId,requests[1].operationId);assert.equal(storage.size,0);}finally{await act(async()=>r.unmount())}
+});
+test('card movement dialog opens with no queries and only writes its selected product',async()=>{
+ storage.clear();const calls=[];let r;
+ const api=async(c,s,data)=>{calls.push(data);return {id:'ok'};};
+ await act(async()=>{r=create(React.createElement(Panel,{...props,mode:'move',movement:{productId:'p',direction:'toStore'},api}));});
+ try{
+  assert.equal(calls.length,0);
+  assert.equal(button(r,'Movimientos'),undefined);
+  await act(async()=>r.root.findAllByType('input').find(n=>n.props.type==='number').props.onChange({target:{value:'2'}}));
+  await act(async()=>r.root.findByType('form').props.onSubmit({preventDefault(){}}));
+  assert.deepEqual(calls.map(c=>c.action),['move']);
+  assert.equal(calls[0].productId,'p');assert.equal(calls[0].direction,'toStore');
+ }finally{await act(async()=>r.unmount())}
+});
+test('administrator history loads only paginated audit, without count summary',async()=>{
+ storage.clear();const calls=[];let r;
+ const api=async(c,s,data)=>{calls.push(data);return {rows:[],cursor:null};};
+ await act(async()=>{r=create(React.createElement(Panel,{...props,isAdmin:true,mode:'history',api}));});
+ try{assert.deepEqual(calls.map(c=>c.action),['history']);}finally{await act(async()=>r.unmount())}
+});
+test('Verificar opens warehouse on demand and keeps independent drafts in the same dialog', async () => {
+  storage.clear();
+  const calls = [];
+  const api = async (company, store, data) => {
+    calls.push(data.action);
+    return { rows: [{ id: 'cat', stock: 4, revision: 1 }] };
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(InventoryVerificationModal, {
+      isOpen: true, isAdmin: true, inventory: [{ ...props.inventory[0], categoryId: 'cat' }],
+      categories: props.categories, sellers: [], currentStore: props.store, onClose() {},
+      warehouseContent: React.createElement(Panel, { ...props, api, embedded: true }),
+    }));
+  });
+  const inputs = () => renderer.root.findAllByProps({ 'aria-label': 'Conteo Blusas' });
+  try {
+    assert.deepEqual(calls, []);
+    await act(async () => inputs()[0].props.onChange({ target: { value: '5' } }));
+    await act(async () => button(renderer, 'Bodega').props.onClick());
+    assert.deepEqual(calls, ['summary']);
+    await act(async () => inputs()[0].props.onChange({ target: { value: '3' } }));
+    await act(async () => button(renderer, 'Tienda').props.onClick());
+    assert.equal(inputs()[1].props.value, '5');
+    await act(async () => button(renderer, 'Bodega').props.onClick());
+    assert.equal(inputs()[0].props.value, '3');
+    assert.deepEqual(calls, ['summary']);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test('purchase transfer opens without querying and recovers the same operation after connection loss', async () => {
+  storage.clear();
+  const calls = [], confirmed = [];
+  const api = async (company, store, data) => {
+    calls.push([company, store, data]);
+    if (calls.length === 1) throw Error('Sin conexión');
+    return { purchaseIds: ['a', 'b'] };
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(Panel, {
+      ...props, mode: 'purchase', api,
+      purchases: [{ id: 'a', productName: 'Blusa', quantity: 5 }, { id: 'b', productName: 'Pantalón', quantity: 2 }],
+      onPurchasesMoved: ids => confirmed.push(ids),
+    }));
+  });
+  try {
+    assert.deepEqual(calls, []);
+    await act(async () => renderer.root.findAllByProps({ type: 'checkbox' }).forEach(box => box.props.onChange({ target: { checked: true } })));
+    await act(async () => renderer.root.findByProps({ 'aria-label': 'Unidades para bodega de Blusa' }).props.onChange({ target: { value: '3' } }));
+    await act(async () => renderer.root.findByType('form').props.onSubmit({ preventDefault() {} }));
+    assert.deepEqual(calls[0][2].entries, [{ purchaseId: 'a', quantity: 3 }, { purchaseId: 'b', quantity: 2 }]);
+    await act(async () => button(renderer, 'Resolver operación pendiente').props.onClick());
+    assert.deepEqual(calls[0], calls[1]);
+    assert.deepEqual(confirmed, [['a', 'b']]);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test.after(async()=>rm(dir,{recursive:true,force:true}));

@@ -40,6 +40,7 @@
 
 # Staging retains its separately verified identity and ledger processors.
 [context.staging.environment]
+  VITE_STORE_WAREHOUSE = "true"
   # Keep the original dashboard layout; monthly chart uses verified summaries.
   VITE_DASHBOARD_SUMMARY = "false"
   # Month-scoped sales index verified READY in vestika-staging.

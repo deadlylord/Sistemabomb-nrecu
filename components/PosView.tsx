@@ -1,7 +1,8 @@
 import { useViewFilter } from '../services/viewFilters';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, CeoDailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
+import { DEFAULT_COMPANY_ID, Product, CartItem, PaymentMethod, HeldCart, Category, Seller, StockTake, Sale, DailyNote, CeoDailyNote, Layaway, View, Store, Incident, IncidentType, IncidentStatus, Role, Customer, Payment, Purchase, GiftVoucher } from '../types';
 import ProductGrid from './ProductGrid';
+import type { OpenWarehouseMovement } from '../services/warehouse';
 import ProductPerformanceModal from './ProductPerformanceModal';
 import CartPanel from './CartPanel';
 import DailySalesReportModal from './DailySalesReportModal';
@@ -13,7 +14,11 @@ import CheckVoucherModal from './CheckVoucherModal';
 import { formatCOP, normalizeText } from '../constants';
 import EditProductModal from './EditProductModal';
 
+const WAREHOUSE_CATEGORY_ID = ':store-warehouse';
+
 interface PosViewProps {
+  onMoveWarehouse?: OpenWarehouseMovement;
+  warehouseDialogOpen?: boolean;
   inventory: Product[];
   categories: Category[];
   sellers: Seller[];
@@ -79,6 +84,13 @@ const PosView: React.FC<PosViewProps> = (props) => {
   };
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const warehouseStore = props.onMoveWarehouse && !preOrderSelection ? props.currentStore : undefined;
+  const warehouseCategoryVisible = !!warehouseStore && warehouseStore.warehouseCategoryVisible !== false;
+  const warehouseSelected = warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID;
+
+  useEffect(() => {
+    if (!warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID) setSelectedCategoryId(null);
+  }, [warehouseCategoryVisible, selectedCategoryId]);
   const [businessSortMode, setBusinessSortMode] = useState<'inteligente' | 'tendencias' | 'recompra' | 'alfabetico'>('alfabetico');
   const [searchTerm, setSearchTerm] = useViewFilter('PosView:searchTerm', '');
   const [isSalesReportModalOpen, setIsSalesReportModalOpen] = useState(false);
@@ -170,7 +182,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
         (e.target instanceof HTMLElement && e.target.isContentEditable);
       const isSearchInput = e.target === searchInputRef.current;
       // The search field handles its own Enter; never process it twice here.
-      if (isSearchInput || e.defaultPrevented || e.repeat) {
+      if (warehouseSelected || props.warehouseDialogOpen || isSearchInput || e.defaultPrevented || e.repeat) {
         barcodeBufferRef.current = '';
         return;
       }
@@ -218,7 +230,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       window.removeEventListener('keydown', handleKeyDown);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [props.inventory, preOrderSelection]);
+  }, [props.inventory, preOrderSelection, warehouseSelected, props.warehouseDialogOpen]);
 
   useEffect(() => {
     return () => {
@@ -427,6 +439,15 @@ const PosView: React.FC<PosViewProps> = (props) => {
 
       const normalizedSearch = normalizeText(searchTerm);
 
+      if (warehouseSelected && warehouseStore) {
+          return props.inventory.filter(product =>
+              product.storeId === warehouseStore.id
+              && (product.companyId || DEFAULT_COMPANY_ID) === (warehouseStore.companyId || DEFAULT_COMPANY_ID)
+              && !product.isDisabled && (product.warehouseUnits ?? 0) > 0
+              && [product.name, product.supplier, product.sku].some(value => normalizeText(value).includes(normalizedSearch))
+          ).sort((a, b) => a.name.localeCompare(b.name));
+      }
+
       if (selectedCategoryId === NOVEDADES_CATEGORY_ID) {
           result = newArrivalsInventory.filter(p => {
               const matchesSearch = normalizedSearch
@@ -519,7 +540,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
       });
 
       return sortedResult;
-  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, recentSalesMap, businessSortMode, preOrderSelection]);
+  }, [props.inventory, selectedCategoryId, searchTerm, newArrivalsInventory, isAdmin, recentSalesMap, businessSortMode, preOrderSelection, warehouseSelected, warehouseStore]);
 
   const commonButtonClasses = "px-3 py-1.5 text-sm font-bold transition-colors duration-300 rounded-full";
   const activeButtonClasses = "bg-accent text-white shadow-md shadow-accent/30";
@@ -785,7 +806,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        if (e.repeat) return;
+                                        if (e.repeat || warehouseSelected || props.warehouseDialogOpen) return;
                                         barcodeBufferRef.current = '';
                                         if (trimmedSearch.length > 0) {
                                             const normalizedTerm = normalizeText(trimmedSearch);
@@ -848,6 +869,16 @@ const PosView: React.FC<PosViewProps> = (props) => {
                             >
                                 Todos
                             </button>
+                            {warehouseCategoryVisible && (
+                                <button
+                                    type="button"
+                                    aria-pressed={warehouseSelected}
+                                    onClick={() => setSelectedCategoryId(WAREHOUSE_CATEGORY_ID)}
+                                    className={`${commonButtonClasses} ${warehouseSelected ? activeButtonClasses : inactiveButtonClasses}`}
+                                >
+                                    Bodega
+                                </button>
+                            )}
                             {categoriesWithStock.map(cat => (
                                 <button
                                     key={cat.id}
@@ -858,7 +889,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 </button>
                             ))}
                         </div>
-                        {isAdmin && (
+                        {isAdmin && !warehouseSelected && (
                             <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/30 dark:border-slate-800/30">
                                 <span className="text-xs font-black text-slate-500 dark:text-slate-400 mr-2 uppercase tracking-wider flex items-center gap-1">
                                   📊 Orden de Negocio (30 días):
@@ -912,7 +943,13 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     </div>
                 </div>
                 <div className="flex-grow overflow-y-auto pr-2 -mr-3">
-                    <ProductGrid 
+                    {warehouseSelected && filteredInventory.length === 0 && (
+                        <p className="p-4 text-sm text-slate-500 dark:text-slate-400">No hay productos en bodega que coincidan con la búsqueda.</p>
+                    )}
+                    <ProductGrid
+                        warehouseView={warehouseSelected}
+                        warehouseStore={warehouseStore}
+                        onMoveWarehouse={warehouseSelected || warehouseStore?.warehouseSendEnabled !== false ? props.onMoveWarehouse : undefined}
                         preOrderSelection={preOrderSelection}
                         products={filteredInventory} 
                         performanceTrends={performanceTrends}

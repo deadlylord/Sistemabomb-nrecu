@@ -1,3 +1,4 @@
+import { ownedInventoryUnits } from '../services/inventoryOwnership';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { getInventoryCategorySummary } from '../services/inventoryCategories';
@@ -52,6 +53,7 @@ interface InventoryViewProps {
   onShowDisabledProductsChange: (show: boolean) => void;
   onReactivateInconsistentProducts: (productIds: string[]) => void;
   onRegenerateAllSkus?: () => Promise<void>;
+  onOpenWarehouseHistory?: () => void;
   onDeleteProductHistoryLog?: (logId: string) => void;
 }
 
@@ -61,7 +63,7 @@ type SortConfig = {
 };
 
 
-const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: rawInventory, allInventory: rawAllInventory, sales: rawSales, purchases: rawPurchases, layaways: rawLayaways, categories: rawCategories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory: rawProductHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onDeleteProductHistoryLog }) => {
+const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: rawInventory, allInventory: rawAllInventory, sales: rawSales, purchases: rawPurchases, layaways: rawLayaways, categories: rawCategories, stores, currentStoreId, onAddProduct, onUpdateProduct, onBulkAddProducts, onDeleteProduct, onAddCategory, onUpdateCategory, onDeleteCategory, onNavigate, productHistory: rawProductHistory, currentUser, roles, showDisabledProducts, onShowDisabledProductsChange, onReactivateInconsistentProducts, onRegenerateAllSkus, onOpenWarehouseHistory, onDeleteProductHistoryLog }) => {
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(currentStoreId) ? [currentStoreId] : []) };
   const inventory = selectAnalyticsRows<Product>('inventory', rawInventory, storeScope);
@@ -419,7 +421,7 @@ const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: raw
         .filter(e => e.date >= startDate)
         .reduce((sum, e) => sum + e.valueChange, 0);
 
-    const currentValue = inventory.reduce((sum, p) => sum + p.cost * p.stock, 0);
+    const currentValue = inventory.reduce((sum, p) => sum + p.cost * ownedInventoryUnits(p), 0);
     const startingValue = currentValue - netChangeInPeriod;
     
     const dailyChanges: { [date: string]: number } = {};
@@ -461,6 +463,11 @@ const InventoryView: React.FC<InventoryViewProps> = ({ companyId, inventory: raw
             <button onClick={() => scrollToSection('category-management-section')} className="px-4 py-2 text-sm font-black bg-purple-600 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2">
                 <SettingsIcon className="w-4 h-4" /> Gestionar Categorías
             </button>
+            {onOpenWarehouseHistory && (
+                <button type="button" onClick={onOpenWarehouseHistory} className="px-4 py-2 text-sm font-black bg-accent text-white rounded-xl shadow-md transition-all flex items-center gap-2">
+                    <SwapIcon className="w-4 h-4" /> Movimientos de bodega
+                </button>
+            )}
             {isAdmin && onRegenerateAllSkus && (
                 <button onClick={onRegenerateAllSkus} className="px-4 py-2 text-sm font-black bg-amber-500 text-white rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2 ml-auto">
                     <PowerIcon className="w-4 h-4" /> Regenerar SKUs

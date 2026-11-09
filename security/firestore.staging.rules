@@ -109,6 +109,19 @@ service cloud.firestore {
         && mate.date == data.date && mate.accountType == data.accountType
         && (mate.amount == data.amount || mate.amount == -data.amount);
     }
+    // inventory.warehouseUnits: optional nonnegative integer, server-managed.
+    // No extra document reads: prevent deletion/reclassification while bodega owns units.
+    function validWarehouseInventory(data) {
+      return data.get('warehouseUnits', 0) is int && data.get('warehouseUnits', 0) >= 0;
+    }
+    function warehouseInventoryCreate(name, data) {
+      return name != 'inventory' || validWarehouseInventory(data) && data.get('warehouseUnits', 0) == 0;
+    }
+    function warehouseInventoryUpdate(name, before, after) {
+      return name != 'inventory' || validWarehouseInventory(after)
+        && after.get('warehouseUnits', 0) == before.get('warehouseUnits', 0)
+        && (before.get('warehouseUnits', 0) == 0 || after.categoryId == before.categoryId);
+    }
     function validOperational(name, id, data) {
       return name == 'financialRecords'
         ? validFinancial(data) && financialPair(id,data)
@@ -152,8 +165,10 @@ service cloud.firestore {
     match /stores/{id} {
       allow get: if live() && (resource == null || scoped(resource.data));
       allow list: if live() && scoped(resource.data);
-      allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id);
+      allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id)
+        && !request.resource.data.keys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible']);
       allow update: if live() && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible'])
         && (hasAny(['stores','settings']) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nextInvoiceNumber']) && request.resource.data.nextInvoiceNumber is int && request.resource.data.nextInvoiceNumber == resource.data.nextInvoiceNumber + 1);
       allow delete: if false;
     }
@@ -191,9 +206,10 @@ service cloud.firestore {
     match /{name}/{id} {
       allow get: if operational(name) && live() && moduleAccess(name) && (resource == null || storeVisible(resource.data,name));
       allow list: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name);
-      allow create: if operational(name) && live() && moduleAccess(name) && validOperational(name,id,request.resource.data) && storeVisible(request.resource.data,name);
-      allow update: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name) && validOperational(name,id,request.resource.data) && sameOwner(resource.data,request.resource.data);
+      allow create: if operational(name) && live() && moduleAccess(name) && validOperational(name,id,request.resource.data) && warehouseInventoryCreate(name,request.resource.data) && storeVisible(request.resource.data,name);
+      allow update: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name) && validOperational(name,id,request.resource.data) && sameOwner(resource.data,request.resource.data) && warehouseInventoryUpdate(name,resource.data,request.resource.data);
       allow delete: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name)
+        && (name != 'inventory' || resource.data.get('warehouseUnits', 0) == 0)
         && (name != 'financialRecords' || !('relatedRecordId' in resource.data) || !existsAfter(/databases/$(database)/documents/financialRecords/$(resource.data.relatedRecordId)));
     }
     match /{document=**} { allow read, write: if false; }

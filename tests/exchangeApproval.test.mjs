@@ -16,11 +16,11 @@ function fixture() {
   'inventory/old':{id:'old',companyId:'a',storeId:'a1',stock:1},
   'sales/sale':{id:'sale',companyId:'a',storeId:'a1',items:[{id:'old',quantity:1,price:10},{id:'unrelated',quantity:2,price:20}],totalAmount:50}
  }));
- const versions = new Map(); let serial=0, commits=0, attempts=0, fail=false, afterRead;
+ const versions = new Map(); let serial=0, commits=0, attempts=0, fail=false, afterRead, readGate;
  const context={}; const scope={...types,operationContextRef:{current:context},contextAtRender:context,recordReadOnly:false,isAdmin:true,isDeveloper:false,operationalCompanyId:'a',currentStoreId:'a1',currentUser:{name:'Carlos'},incidents:[structuredClone(saved.get('incidents/change'))],db:{},increment:n=>({delta:n}),collection:(_,name)=>({name}),doc:(...args)=>{const path=args.length===1?args[0].name+'/'+(++serial):args[1]+'/'+args[2];return{path,id:path.split('/').at(-1)};},alerts:[],alert:m=>scope.alerts.push(m),console:{error(){}},runTransaction:async(_,callback)=>{
   for(let retry=0;retry<6;retry++) {
    attempts++;const reads=new Map(),ops=[];
-   await callback({get:async ref=>{assert.equal(ops.length,0,'read all documents before writes');const value=structuredClone(saved.get(ref.path));reads.set(ref.path,versions.get(ref.path)||0);afterRead?.(ref.path);return{exists:()=>!!value,data:()=>value};},update:(ref,data)=>ops.push({ref,data,update:true}),set:(ref,data)=>ops.push({ref,data})});
+   await callback({get:async ref=>{assert.equal(ops.length,0,'read all documents before writes');const value=structuredClone(saved.get(ref.path));reads.set(ref.path,versions.get(ref.path)||0);afterRead?.(ref.path);if(readGate)await readGate(ref.path);return{exists:()=>!!value,data:()=>value};},update:(ref,data)=>ops.push({ref,data,update:true}),set:(ref,data)=>ops.push({ref,data})});
    if([...reads].some(([path,v])=>(versions.get(path)||0)!==v))continue;
    if(fail)throw Error('Simulated network failure');
    if(ops.length)commits++;
@@ -30,7 +30,7 @@ function fixture() {
   throw Error('Too many conflicts');
  }};
  const approve = new Function('scope',`with(scope){${code};return handleApproveIncident;}`)(scope);
- return {saved,scope,approve:()=>approve('change'),get commits(){return commits},get attempts(){return attempts},set fail(value){fail=value},set afterRead(value){afterRead=value},logs:()=>[...saved].filter(([path])=>path.startsWith('productHistory/')).map(([,row])=>row)};
+ return {saved,scope,set readGate(fn){readGate=fn},approve:()=>approve('change'),get commits(){return commits},get attempts(){return attempts},set fail(value){fail=value},set afterRead(value){afterRead=value},logs:()=>[...saved].filter(([path])=>path.startsWith('productHistory/')).map(([,row])=>row)};
 }
 test('two devices approving the same change apply inventory, original sale and history exactly once',async()=>{
  const f=fixture();await Promise.all([f.approve(),f.approve()]);
@@ -78,4 +78,11 @@ test('mismatched surplus or invalid price rejects approval without moving stock 
  for(const mutate of [i=>{i.takenItems[0].price=NaN},i=>{i.adjustmentAmount=55;i.paymentMethod='Sistecredito';i.returnedItems[0].price=5}]){
  const f=fixture();mutate(f.saved.get('incidents/change'));await f.approve();assert.equal(f.commits,0);assert.equal(f.saved.get('inventory/new').stock,4);assert.ok(f.scope.alerts.length);
  }
+});
+
+test('exchange reads independent products and sale together after persisted incident validation',async()=>{
+ const f=fixture(),seen=[];let release;
+ f.readGate=async path=>{seen.push(path);if(path==='inventory/old')await new Promise(resolve=>release=resolve);};
+ const pending=f.approve();await new Promise(resolve=>setImmediate(resolve));const overlap=seen.includes('inventory/new')&&seen.includes('sales/sale');release?.();await pending;
+ assert.ok(overlap);assert.equal(seen.filter(p=>p==='inventory/old').length,1);assert.equal(f.commits,1);assert.equal(f.logs().length,2);
 });

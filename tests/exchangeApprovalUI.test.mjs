@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 import React from 'react';
 import {create,act} from 'react-test-renderer';
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
-test('approval button blocks immediate double clicks and recovers after failed save without changing filters',async()=>{
+for (const [kind, status] of [['PRODUCT_EXCHANGE','CAMBIO_SOLICITADO'], ['INVENTORY_TRANSFER_REQUEST','TRASLADO_SOLICITADO'], ['DAMAGED','DAÑADO_REPORTADO'], ['CASH_ADJUSTMENT','PENDIENTE_APROBACION']]) test(`approval feedback and double-submit protection for ${kind}`,async(t)=>{
  const dir=await mkdtemp(join(process.cwd(),'tests/.exchange-ui-'));let r;
  const oldAlert=globalThis.alert,alerts=[];globalThis.alert=m=>alerts.push(m);
  try{
@@ -16,13 +16,18 @@ test('approval button blocks immediate double clicks and recovers after failed s
   const b=await build({stdin:{contents:"export {default as Screen} from './components/IncidentsView';export {IncidentType,IncidentStatus} from './types';",resolveDir:process.cwd()},bundle:true,write:false,platform:'node',format:'esm',external:['react','react-dom'],plugins:[{name:'modal-stubs',setup(builder){builder.onResolve({filter:/tenantWrites$/},a=>({path:a.path,namespace:'tenant'}));builder.onLoad({filter:/.*/,namespace:'tenant'},()=>({contents:`import {DEFAULT_COMPANY_ID,IncidentType} from './types';${validator}`,loader:'ts',resolveDir:process.cwd()}));builder.onResolve({filter:/(ReceiveDamagedModal|CreateIncidentModal|EditIncidentModal|EditExchangeIncidentModal)$/},a=>({path:a.path,namespace:'stub'}));builder.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export default function Modal(){return null}'}));}}]});
   const path=join(dir,'screen.mjs');await writeFile(path,b.outputFiles[0].text);const {Screen,IncidentType:T,IncidentStatus:S}=await import(pathToFileURL(path).href);
   let calls=0,reject,resolve;
-  const props={companyId:'a',activeStoreId:'a1',stores:[{id:'a1',companyId:'a',name:'Test'}],currentUser:{id:'admin',companyId:'a',storeId:'a1',roleId:'admin'},roles:[{id:'admin',companyId:'a',name:'Administrador',userType:'admin'}],incidents:[{id:'one',storeId:'a1',companyId:'a',type:T.PRODUCT_EXCHANGE,status:S.CAMBIO_SOLICITADO,createdAt:'2026-10-01',description:'Cambio'}],inventory:[],sales:[],customers:[],onApproveIncident:()=>{calls++;return new Promise((yes,no)=>{resolve=yes;reject=no})}};
+  const props={companyId:'a',activeStoreId:'a1',stores:[{id:'a1',companyId:'a',name:'Test'}],currentUser:{id:'admin',companyId:'a',storeId:'a1',roleId:'admin'},roles:[{id:'admin',companyId:'a',name:'Administrador',userType:'admin'}],incidents:[{id:'one',storeId:'a1',companyId:'a',type:T[kind],status:S[status],createdAt:'2026-10-01',description:'Cambio'}],inventory:[],sales:[],customers:[],onApproveIncident:()=>{calls++;return new Promise((yes,no)=>{resolve=yes;reject=no})}};
   await act(async()=>{r=create(React.createElement(Screen,props))});
   const search=()=>r.root.findByProps({placeholder:'Buscar por producto, cliente, factura...'});
   await act(async()=>search().props.onChange({target:{value:'Cambio'}}));
-  const button=()=>r.root.findAllByType('button').find(b=>b.props.title==='Aprobar y Procesar'||b.props.title==='Guardando cambio…');
+  const button=()=>r.root.findAllByType('button').find(b=>b.props.title==='Aprobar y Procesar'||b.props.title==='Guardando novedad…');
+  t.mock.timers.enable({apis:['setTimeout']});
   let pending;await act(async()=>{pending=button().props.onClick();button().props.onClick();});
   assert.equal(calls,1);assert.equal(button().props.disabled,true);assert.equal(button().props['aria-busy'],true);
+  assert.equal(r.root.findByProps({role:'status'}).children.join(''),'Guardando novedad…');
+  await act(async()=>t.mock.timers.tick(5000));
+  assert.ok(r.root.findByProps({role:'status'}).children.join('').includes('Firebase aún no confirma'));
+  assert.equal(button().props.disabled,true);assert.equal(calls,1,'a long wait never resends or releases the guard');
   await act(async()=>{reject(Error('Sin conexión'));await pending});
   assert.equal(button().props.disabled,false);assert.deepEqual(alerts,['Sin conexión']);assert.equal(search().props.value,'Cambio');
   await act(async()=>{pending=button().props.onClick()});await act(async()=>{resolve();await pending});assert.equal(calls,2);assert.equal(button().props.disabled,false);

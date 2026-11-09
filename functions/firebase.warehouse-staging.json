@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "source": ".",
+    "codebase": "vestika-identity",
+    "ignore": [
+      "node_modules",
+      "firebase-debug.log",
+      "firebase-debug.*.log"
+    ]
+  }
+}

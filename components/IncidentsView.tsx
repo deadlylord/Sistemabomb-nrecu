@@ -1,9 +1,10 @@
+import { measureDiagnosticPhase, beginIncidentApproval } from '../services/readDiagnostics';
 import ReceiveDamagedModal from './ReceiveDamagedModal';
 import { isPlatformOwner } from '../services/developerAccess';
 import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import { useViewFilter } from '../services/viewFilters';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 // FIX: Added 'Customer' type import to support the new 'customers' prop.
 import { Incident, IncidentStatus, IncidentType, Product, Seller, Role, Sale, Store, Customer } from '../types';
 import { PlusCircleIcon, CheckIcon, SwapIcon, SearchIcon, EditIcon, TrashIcon, CrossIcon, HistoryIcon } from './Icons';
@@ -27,20 +28,32 @@ interface IncidentsViewProps {
   onCreateIncident: (data: Omit<Incident, 'id' | 'status' | 'createdAt' | 'storeId' | 'sellerName'> & { surplusPaid?: number; incidentDate?: string; }) => void;
   onApproveIncident: (incidentId: string) => void | Promise<void>;
   onResolveIncident: (incidentId: string, receivedProductId?: string) => Promise<void>;
-  onUpdateIncident: (incident: Incident) => void;
+  onUpdateIncident: (incident: Incident) => Promise<void>;
   onDeleteIncident: (incidentId: string) => void;
 }
 
 const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, companyId, activeStoreId, incidents: rawIncidents, inventory: rawInventory, currentUser, roles, sales: rawSales, stores, customers: rawCustomers, onCreateIncident, onApproveIncident, onResolveIncident, onUpdateIncident, onDeleteIncident }) => {
   const approvalsInFlight = useRef(new Set<string>());
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+  const [slowApprovalIds, setSlowApprovalIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setSlowApprovalIds(new Set());
+    if (!approvingIds.size) return;
+    const timer = setTimeout(() => setSlowApprovalIds(new Set(approvingIds)), 5000);
+    return () => clearTimeout(timer);
+  }, [approvingIds]);
   const approveIncident = async (id: string) => {
     if (readOnly || approvalsInFlight.current.has(id)) return;
     approvalsInFlight.current.add(id);
     setApprovingIds(new Set(approvalsInFlight.current));
-    try { await onApproveIncident(id); }
+    const endApproval = beginIncidentApproval();
+    try {
+      const value = rawIncidents.find(incident => incident.id === id)?.type;
+      const type: IncidentType | 'sin tipo' = value && Object.values(IncidentType).includes(value) ? value : 'sin tipo';
+      await measureDiagnosticPhase(`Novedades: espera de aprobación (${type})`, () => Promise.resolve(onApproveIncident(id)));
+    }
     catch (error) { alert(error instanceof Error ? error.message : 'No se pudo aprobar la novedad.'); }
-    finally { approvalsInFlight.current.delete(id); setApprovingIds(new Set(approvalsInFlight.current)); }
+    finally { endApproval(); approvalsInFlight.current.delete(id); setApprovingIds(new Set(approvalsInFlight.current)); }
   };
   const scope = analyticsScope(companyId, stores);
   const storeScope = { companyId, storeIds: new Set(scope.storeIds.has(activeStoreId) ? [activeStoreId] : []) };
@@ -282,9 +295,14 @@ const IncidentsView: React.FC<IncidentsViewProps> = ({ readOnly = false, company
                     <td className="p-3 text-center">
                       <div className="flex justify-center items-center space-x-1">
                         {canBeApproved && (
-                           <button disabled={approvingIds.has(incident.id)} aria-busy={approvingIds.has(incident.id)} onClick={() => approveIncident(incident.id)} className="text-green-500 hover:text-green-400 p-2 rounded-full hover:bg-green-500/10 transition-colors" title={approvingIds.has(incident.id) ? "Guardando cambio…" : "Aprobar y Procesar"}>
+                           <>
+                           <button disabled={approvingIds.has(incident.id)} aria-busy={approvingIds.has(incident.id)} onClick={() => approveIncident(incident.id)} className="text-green-500 hover:text-green-400 p-2 rounded-full hover:bg-green-500/10 transition-colors" title={approvingIds.has(incident.id) ? "Guardando novedad…" : "Aprobar y Procesar"}>
                               <CheckIcon />
                             </button>
+                            {approvingIds.has(incident.id) && <span role="status" className="text-xs text-amber-600 dark:text-amber-400">
+                              {slowApprovalIds.has(incident.id) ? 'Firebase aún no confirma. Espera sin volver a enviar.' : 'Guardando novedad…'}
+                            </span>}
+                           </>
                         )}
                         {canBeResolved && (
                             <button style={readOnly ? { display: 'none' } : undefined} onClick={() => { if (readOnly) return; if (incident.type === IncidentType.DAMAGED) setReceivingIncident(incident); else onResolveIncident(incident.id).catch(error => alert(error.message)); }} className="text-blue-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title={incident.status === IncidentStatus.WARRANTY_ACTIVE ? "Marcar como Devuelta" : "Recibir prenda"}>
