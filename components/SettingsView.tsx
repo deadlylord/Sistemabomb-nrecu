@@ -1,9 +1,10 @@
+import { storeSettingsPatch, applyStoreSettingsPatch } from '../services/storeSettingsPatch';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
 import { useAsyncScope } from '../services/useAsyncScope';
 import { resolveTenantRole } from '../services/tenantIdentity';
 import { DEFAULT_COMPANY_ID } from '../types';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Store, Seller, Role, Product, Category, PaymentMethod, LabelConfig, COMPANY_COLOR_PRESETS, ColorPalettePreset } from '../types';
 import { CheckIcon, DownloadIcon, DollarIcon, BuildingStorefrontIcon, TagIcon, SparklesIcon } from './Icons';
 import { compressImage } from '../services/storageService';
@@ -12,10 +13,11 @@ import { LabelConfigPanel } from './LabelConfigPanel';
 
 interface SettingsViewProps {
   companyId: string;
+  activeStoreId?: string;
   stores: Store[];
   allInventory: Product[];
   categories: Category[];
-  onSave: (updatedStore: Store) => void;
+  onSave: (updatedStore: Store, changes?: Partial<Store>) => void | Promise<void>;
   onResetStoreData: (storeId: string) => void;
   currentUser: Seller;
   roles: Role[];
@@ -26,15 +28,20 @@ interface SettingsViewProps {
   onReactivateAllProducts: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: rawStores, allInventory, categories, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, activeStoreId, stores: rawStores, allInventory, categories, onSave, onResetStoreData, currentUser, roles, onRecompressAllProductImages, isRecompressing, recompressProgress, onGenerateTestData, onReactivateAllProducts }) => {
   const stores = React.useMemo(() => rawStores.filter(store => (store.companyId || DEFAULT_COMPANY_ID) === companyId), [rawStores, companyId]);
   const ownRole = resolveTenantRole(currentUser, roles, stores);
   const isAdmin = ownRole?.userType === 'admin' || ['administrator', 'administrador'].includes((ownRole?.name || '').toLowerCase());
 
-  const [selectedStoreId, setSelectedStoreId] = useState<string>((stores.some(store => store.id === currentUser.storeId) ? currentUser.storeId : stores[0]?.id) || '');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>((stores.some(store => store.id === (activeStoreId || currentUser.storeId)) ? (activeStoreId || currentUser.storeId) : stores[0]?.id) || '');
   const [localSettings, setLocalSettings] = useState<Store | null>(stores.find(s => s.id === selectedStoreId) || null);
   
 
+  const baseline = useRef(localSettings);
+  const dirty = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const beginSave = useAsyncScope(JSON.stringify([companyId, selectedStoreId]));
   const [percentageDrafts, setPercentageDrafts] = useState<Record<string, string>>({});
   const finishPercentage = (e: React.FocusEvent<HTMLInputElement>) => {
     const name = e.target.name;
@@ -44,14 +51,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
   const beginImage = useAsyncScope(JSON.stringify([companyId, selectedStoreId]));
   useEffect(() => {
     const storeToEdit = stores.find(s => s.id === selectedStoreId);
-    setLocalSettings(storeToEdit || null);
-    setPercentageDrafts({});
+    const contextChanged = baseline.current?.id !== selectedStoreId || (baseline.current?.companyId || DEFAULT_COMPANY_ID) !== companyId;
+    if (!storeToEdit || contextChanged || !dirty.current) {
+      baseline.current = storeToEdit || null;
+      dirty.current = false;
+      setLocalSettings(storeToEdit || null);
+      setPercentageDrafts({});
+      setSaveError('');
+      setSaveSuccess(false);
+      setIsSaving(false);
+    }
+    else if (baseline.current && localSettings) {
+      const edits = storeSettingsPatch(baseline.current, localSettings, companyId);
+      baseline.current = storeToEdit;
+      setLocalSettings(applyStoreSettingsPatch(storeToEdit, edits));
+    }
     if (!storeToEdit && stores.length) setSelectedStoreId(stores[0].id);
-  }, [selectedStoreId, stores]);
+  }, [selectedStoreId, stores, companyId]);
 
 
   const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    if (!localSettings) return;
+    if (!localSettings || isSaving) return;
+    dirty.current = true;
+    setSaveSuccess(false);
     const { name, value, type } = e.target;
     
         if (name.startsWith('initialBalance_')) {
@@ -123,6 +145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
           const isCurrent = beginImage();
           const compressedImage = await compressImage(file, 'logo');
           if (!isCurrent()) return;
+          dirty.current = true;
           setLocalSettings(prev => prev ? ({ ...prev, logo: compressedImage }) : null);
         } catch (error) {
           console.error("Error compressing logo:", error);
@@ -135,6 +158,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
   };
   
   const handleRemoveLogo = () => {
+    dirty.current = true;
     setLocalSettings(prev => prev ? ({ ...prev, logo: null }) : null);
     const fileInput = document.getElementById('logo-upload') as HTMLInputElement;
     if (fileInput) {
@@ -150,6 +174,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
           const isCurrent = beginImage();
           const compressedImage = await compressImage(file, 'background');
           if (!isCurrent()) return;
+          dirty.current = true;
           setLocalSettings(prev => prev ? ({ ...prev, loginBackgroundUrl: compressedImage }) : null);
         } catch (error) {
           console.error("Error compressing background image:", error);
@@ -162,6 +187,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
   };
 
   const handleRemoveBackground = () => {
+    dirty.current = true;
       setLocalSettings(prev => prev ? ({ ...prev, loginBackgroundUrl: null }) : null);
       const fileInput = document.getElementById('background-upload') as HTMLInputElement;
       if (fileInput) {
@@ -171,15 +197,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
 
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(localSettings) {
-        onSave(localSettings);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+  const saveSettings = async (updatedStore: Store) => {
+    if (isSaving || !baseline.current) return;
+    const changes = storeSettingsPatch(baseline.current, updatedStore, companyId);
+    const stillCurrent = beginSave();
+    dirty.current = true;
+    setIsSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      await onSave(updatedStore, changes);
+      if (!stillCurrent()) return;
+      baseline.current = updatedStore;
+      dirty.current = false;
+      setSaveSuccess(true);
+      return true;
+    } catch (error) {
+      if (stillCurrent()) setSaveError(error instanceof Error ? error.message : 'No se pudieron guardar los ajustes.');
+      return false;
+    } finally {
+      if (stillCurrent()) setIsSaving(false);
     }
   };
-  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (localSettings) await saveSettings(localSettings);
+  };
+
   const handleOptimizeClick = () => {
       if (!localSettings) return;
       const quality = localSettings.imageCompressionQuality || 'medium';
@@ -232,11 +276,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
     document.body.removeChild(link);
   };
   
-  const handleLabelConfigSave = (config: LabelConfig) => {
+  const handleLabelConfigSave = async (config: LabelConfig) => {
     if (!localSettings) return;
     const updatedStore = { ...localSettings, labelConfig: config };
     setLocalSettings(updatedStore);
-    onSave(updatedStore);
+    if (!await saveSettings(updatedStore)) throw new Error('No se pudo confirmar el guardado de etiquetas.');
   };
 
   if (!localSettings) {
@@ -258,7 +302,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
             <div className="mb-6">
                 <label htmlFor="storeSelector" className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-1">Editando Ajustes de la Tienda</label>
                 <select 
-                    id="storeSelector" 
+                    id="storeSelector" disabled={isSaving}
                     value={selectedStoreId} 
                     onChange={e => setSelectedStoreId(e.target.value)}
                     className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md p-2 focus:ring-2 focus:ring-accent focus:border-accent outline-none"
@@ -270,7 +314,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
             </div>
         )}
 
+        {saveError && <p role="alert" className="text-red-600 mb-4">{saveError}</p>}
         <form onSubmit={handleSubmit} className="space-y-6">
+          <fieldset disabled={isSaving} className="space-y-6 border-0 p-0 m-0 min-w-0">
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light">Tiquete de Compra</h3>
           <div>
             <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Logo de la Tienda (PNG, JPG, SVG)</label>
@@ -641,9 +687,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, stores: r
             )}
             <button type="submit" className="bg-accent text-white font-bold py-2 px-6 rounded-lg flex items-center justify-center space-x-2 transition-colors duration-300 hover:bg-accent-hover">
               <CheckIcon />
-              <span>Guardar Ajustes</span>
+              <span>{isSaving ? 'Guardando…' : 'Guardar Ajustes'}</span>
             </button>
           </div>
+          </fieldset>
         </form>
 
         <div className="mt-8 pt-6 border-t-2 border-gray-200 dark:border-gray-700">

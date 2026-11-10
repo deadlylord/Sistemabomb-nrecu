@@ -2,6 +2,14 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Ajustes aislados y confirmación de guardado — 1.1.216
+
+- Carlos autoriza corrección urgente y publicación idéntica en main/staging. Revisión estática: listas y escritor tenant ya filtran empresa; NO se demuestra filtración remota entre empresas ni se reparan históricos por suposición.
+- Fallos reproducidos: formulario abría sede asignada al usuario en vez de sede activa; refresh de stores reemplazaba borradores; se anunciaba éxito sin esperar Firebase; documento completo podía sobrescribir consecutivo y campos ajenos. labelConfig se propagaba en cada guardado aunque no se hubiera editado.
+- Ajustes ahora inicia en sede activa y se remonta al cambiar contexto; conserva ediciones con valores limpios remotos frescos. Envía solo cambios, con rutas por medio de pago/saldo/cuenta, sin copiar otros porcentajes o consecutivo. Handler valida contexto/empresa/sede y confirma el batch completo. Etiquetas solo se sincronizan cuando se editan expresamente y exclusivamente entre sedes de la empresa activa (comportamiento compartido previo conservado).
+- Formularios general y etiquetas esperan Promise real; muestran rechazo y bloquean repetición mientras guardan. Respuestas tardías fuera de empresa/sede no muestran confirmación en destino.
+- 33 regresiones de porcentajes, formulario real, confirmación de etiquetas, handler extraído y tenantIsolation aprobadas; build con configuración production aprobado; typecheck conserva únicamente tres errores previos AppErrorBoundary. No cambia reglas, índices, funciones ni datos históricos. Sin autenticación remota para verificar valores persistidos particulares reportados por Carlos.
+
 ## Sincronización a main autorizada — 1.1.215
 
 - Carlos autoriza actualizar main con el conjunto de staging. Candidato de fusión conserva main previo 524fd45 y staging c6451c4. Conflictos de versión/historial y prueba duplicada resueltos conservando el estado más reciente de staging; APP_VERSION corregida a 1.1.215.

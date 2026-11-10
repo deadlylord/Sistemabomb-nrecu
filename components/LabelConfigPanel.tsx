@@ -7,7 +7,7 @@ import { TagIcon } from 'lucide-react';
 
 interface LabelConfigPanelProps {
   store: Store;
-  onSave: (config: LabelConfig) => void;
+  onSave: (config: LabelConfig) => void | Promise<void>;
 }
 
 export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSave }) => {
@@ -68,23 +68,22 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
     }
   };
 
-  const handleReset = () => {
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const persistConfig = async (next: LabelConfig) => {
+    if (isSaving) return;
+    setIsSaving(true); setSaveError(''); setShowSuccess(false);
+    try { await onSave(next); setShowSuccess(true); }
+    catch (error) { setSaveError(error instanceof Error ? error.message : 'No se pudo guardar la configuración.'); }
+    finally { setIsSaving(false); }
+  };
+  const handleReset = async () => {
     if (window.confirm('¿Estás seguro de que deseas restablecer la configuración a los valores predeterminados?')) {
-      setConfig(DEFAULT_CONFIG);
-      setLocalValues({}); // Clear local string values
-      onSave(DEFAULT_CONFIG);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setConfig(DEFAULT_CONFIG); setLocalValues({}); await persistConfig(DEFAULT_CONFIG);
     }
   };
-
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  const handleSave = () => {
-    onSave(config);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
-  };
+  const handleSave = () => persistConfig(config);
 
   const handleTestPrint = () => {
     const rows = Math.max(1, Math.floor(config.rows || 1));
@@ -270,6 +269,7 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
 
   return (
     <div className="space-y-6 relative">
+      {saveError && <p role="alert" className="text-red-600">{saveError}</p>}
       {showSuccess && (
         <div className="absolute -top-12 right-0 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in flex items-center gap-2 z-50">
           <CheckIcon className="w-4 h-4" />
@@ -542,13 +542,13 @@ export const LabelConfigPanel: React.FC<LabelConfigPanelProps> = ({ store, onSav
 
       <div className="flex justify-between gap-3">
         <button 
-          onClick={handleReset}
+          disabled={isSaving} onClick={handleReset}
           className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-black uppercase tracking-widest py-4 px-10 rounded-2xl flex items-center justify-center space-x-2 transition-all duration-300 hover:scale-105 shadow-lg"
         >
           <span>Restablecer</span>
         </button>
         <button 
-          onClick={handleSave}
+          disabled={isSaving} onClick={handleSave}
           className="bg-accent text-white font-black uppercase tracking-widest py-4 px-10 rounded-2xl flex items-center justify-center space-x-2 transition-all duration-300 hover:scale-105 shadow-lg shadow-accent/20"
         >
           <CheckIcon className="w-5 h-5" />

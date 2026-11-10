@@ -1,3 +1,4 @@
+import { storeSettingsPatch } from '../services/storeSettingsPatch';
 import { customerSuggestions } from '../services/customerSuggestions';
 import { serverTransferApprovalEnabled, callServerTransferApproval } from '../services/serverTransferApproval';
 import { warehouseEnabled, type WarehouseDirection } from '../services/warehouse';
@@ -3081,26 +3082,21 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     if (productionIdentityEnabled) { await manageVerifiedPlatform({ action: 'createStore', companyId: storeToSave.companyId, store: cleanObject(storeToSave) }); return; }
     await setDoc(doc(db, 'stores', storeToSave.id), cleanObject(storeToSave) as any);
   };
-  const handleUpdateStore = async (updatedStore: Store) => {
-    try {
-      const { warehouseSendEnabled, warehouseCategoryVisible, ...storeSettings } = updatedStore;
-      await updateDoc(doc(db, 'stores', updatedStore.id), cleanObject(storeSettings) as any);
-      
-      // Sincronizar configuración de etiquetas en todos los locales
-      if (updatedStore.labelConfig) {
-        const batch = writeBatch(db);
-        visibleStores.forEach(s => {
-          if (s.id !== updatedStore.id) {
-            batch.update(doc(db, 'stores', s.id), { labelConfig: updatedStore.labelConfig });
-          }
-        });
-        await batch.commit();
-      }
-    } catch (error: any) {
-      console.error('Error updating store:', error);
-      alert(`Error al guardar: ${error?.message || 'Error desconocido'}`);
-      throw error;
+  const handleUpdateStore = async (updatedStore: Store, changes?: Partial<Store>) => {
+    if (operationContextRef.current !== contextAtRender) throw new Error('La empresa o sede cambió. Vuelve a abrir Ajustes.');
+    const before = visibleStores.find(store => store.id === updatedStore.id);
+    if (!before) throw new Error('La sede no pertenece a la empresa activa.');
+    const patch = storeSettingsPatch(before, changes ? { ...before, ...changes, id: updatedStore.id, companyId: updatedStore.companyId } : updatedStore, operationalCompanyId);
+    if (!Object.keys(patch).length) return;
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'stores', updatedStore.id), cleanObject(patch));
+    // Labels remain shared only within the current company, only when edited.
+    if (patch.labelConfig) {
+      visibleStores.forEach(store => {
+        if (store.id !== updatedStore.id) batch.update(doc(db, 'stores', store.id), { labelConfig: patch.labelConfig });
+      });
     }
+    await batch.commit();
   };
   const handleDeleteStore = async (id: string) => { if(window.confirm('¿Eliminar tienda?')) await deleteDoc(doc(db, 'stores', id)); };
 
@@ -3645,7 +3641,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
         {currentView === View.CUSTOMERS && <CustomersView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} storeId={currentStoreId || ''} sales={sales} layaways={layaways} allCustomers={customers} onBulkAddCustomers={handleBulkAddCustomers} onUpdateCustomer={handleUpdateCustomer} />}
         {currentView === View.STOCK_TAKE_HISTORY && <StockTakeHistoryView stockTakes={stockTakes} sellers={visibleSellers} onDeleteStockTake={(id) => deleteDoc(doc(db, 'stockTakes', id))} onAddNoteToStockTake={(id, note) => updateDoc(doc(db, 'stockTakes', id), { notes: arrayUnion({ content: note, author: currentUser.name, date: new Date().toISOString() }) })} onApplyStockTake={handleApplyHistoricalStockTake} currentUser={currentUser} roles={visibleRoles} />}
         {currentView === View.PAYROLL && canLoadStore && <PayrollView key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} sellers={visibleSellers} sales={sales} layaways={layaways} loginHistory={loginHistory} payrollHistory={payrollHistory} onSavePayroll={handleSavePayroll} onDeletePayroll={handleDeletePayroll} currentUser={currentUser} currentStore={currentStore} />}
-        {currentView === View.SETTINGS && <SettingsView key={dataScope} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
+        {currentView === View.SETTINGS && <SettingsView key={`${dataScope}:${currentStoreId}`} activeStoreId={currentStoreId || undefined} companyId={operationalCompanyId} stores={visibleStores} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} onSave={handleUpdateStore} onResetStoreData={() => {}} currentUser={currentUser} roles={visibleRoles} onRecompressAllProductImages={() => {}} isRecompressing={isRecompressing} recompressProgress={recompressProgress} onGenerateTestData={() => {}} onReactivateAllProducts={() => {}} />}
         {currentView === View.ROLE_MANAGER && <RoleManagerView roles={visibleRoles} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} isDeveloper={false} />}
         {currentView === View.INCIDENTS && <IncidentsView readOnly={recordReadOnly} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} activeStoreId={currentStoreId || ''} incidents={incidents} inventory={inventory} currentUser={currentUser} roles={visibleRoles} sales={sales} stores={visibleStores} customers={suggestedCustomers} onCreateIncident={handleCreateIncident} onApproveIncident={handleApproveIncident} onResolveIncident={handleResolveIncident} onUpdateIncident={handleUpdateIncident} onDeleteIncident={handleDeleteIncident} />}
         {currentView === View.ACCOUNTING && canLoadStore && (
