@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Hora límite del conteo de Tienda — 1.1.217
+
+- Ajustes permite al administrador fijar por sede la hora límite diaria de verificación de Tienda. La hora se calcula en Colombia y un valor vacío permite todo el día.
+- El bloqueo se vuelve a comprobar al guardar el conteo, el borrador o al aplicar un conteo. Firestore valida la hora del servidor. Bodega conserva su flujo independiente. Se reutilizan los ajustes ya cargados y el temporizador funciona únicamente con el formulario abierto.
+- Validación focalizada con React y Firestore Emulator sobre reglas de staging y la base conocida de producción. La revisión funcional manual queda a cargo de Carlos.
+
 ## Ajustes aislados y confirmación de guardado — 1.1.216
 
 - Carlos autoriza corrección urgente y publicación idéntica en main/staging. Revisión estática: listas y escritor tenant ya filtran empresa; NO se demuestra filtración remota entre empresas ni se reparan históricos por suposición.

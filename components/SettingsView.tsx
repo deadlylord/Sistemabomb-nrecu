@@ -1,7 +1,8 @@
 import { storeSettingsPatch, applyStoreSettingsPatch } from '../services/storeSettingsPatch';
 import { analyticsScope, selectAnalyticsRows } from '../services/analyticsScope';
+import { inventoryVerificationTime } from '../services/inventoryVerificationCutoff';
 import { useAsyncScope } from '../services/useAsyncScope';
-import { resolveTenantRole } from '../services/tenantIdentity';
+import { isTenantAdministrator, resolveTenantRole } from '../services/tenantIdentity';
 import { DEFAULT_COMPANY_ID } from '../types';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -317,6 +318,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ companyId, activeSto
         {saveError && <p role="alert" className="text-red-600 mb-4">{saveError}</p>}
         <form onSubmit={handleSubmit} className="space-y-6">
           <fieldset disabled={isSaving} className="space-y-6 border-0 p-0 m-0 min-w-0">
+          {isTenantAdministrator(ownRole) && (
+            <section className="space-y-2">
+              <h3 className="text-lg font-bold text-gray-800 dark:text-text-light">Verificación de inventario</h3>
+              <label htmlFor="inventoryVerificationCutoff" className="block text-sm font-medium">
+                Hora límite diaria de Tienda
+              </label>
+              <input
+                id="inventoryVerificationCutoff"
+                type="time"
+                className="rounded-md border border-gray-300 bg-gray-100 p-2 dark:border-gray-700 dark:bg-gray-800"
+                value={localSettings.inventoryVerificationCutoffMinutes == null ? '' : inventoryVerificationTime(localSettings.inventoryVerificationCutoffMinutes)}
+                onChange={event => {
+                  const value = event.target.value;
+                  const [hours, minutes] = value.split(':').map(Number);
+                  dirty.current = true;
+                  setLocalSettings(previous => previous ? {
+                    ...previous,
+                    inventoryVerificationCutoffMinutes: value ? hours * 60 + minutes : null,
+                  } : null);
+                }}
+              />
+              <p className="text-sm text-gray-500">Hora de Colombia. Deja el campo vacío para permitir el conteo todo el día.</p>
+            </section>
+          )}
           <h3 className="text-lg font-bold text-gray-800 dark:text-text-light">Tiquete de Compra</h3>
           <div>
             <label className="block text-sm font-medium text-gray-500 dark:text-text-dark mb-2">Logo de la Tienda (PNG, JPG, SVG)</label>

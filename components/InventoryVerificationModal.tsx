@@ -18,6 +18,7 @@ interface InventoryVerificationModalProps {
   currentStore?: Store;
   onClose: () => void;
   warehouseContent?: React.ReactNode;
+  storeClosedMessage?: string;
   onSaveStockTake: (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => Promise<void>;
   onSaveDetailedDraft: (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => Promise<void>;
   onApplyDetailedVerification: (categoryId: string, counts: Record<string, number>) => Promise<void>;
@@ -36,6 +37,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   currentStore,
   onClose,
   warehouseContent,
+  storeClosedMessage,
   onSaveStockTake,
   onSaveDetailedDraft,
   onApplyDetailedVerification,
@@ -142,7 +144,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
   };
 
   const handleSubmit = async () => {
-    if (isLoadingInventory || inventoryError || categoryTotals.length === 0) return;
+    if (storeClosedMessage || isLoadingInventory || inventoryError || categoryTotals.length === 0) return;
     if (!selectedSeller) {
       alert("Por favor, selecciona el vendedor que realiza la verificación.");
       return;
@@ -193,7 +195,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
       }, 2000);
     } catch (error) {
       console.error("Error saving stock take:", error);
-      alert("Error al guardar la verificación.");
+      alert(error instanceof Error ? error.message : "Error al guardar la verificación.");
     } finally {
       setIsSaving(false);
     }
@@ -240,7 +242,10 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
               {warehouseContent}
             </div>
           )}
-          <div hidden={warehouseActive} className={warehouseActive ? undefined : 'flex flex-col min-h-0 grow'}>
+          {!warehouseActive && storeClosedMessage && (
+            <p role="status" className="rounded-lg bg-amber-100 p-3 text-sm text-amber-900">{storeClosedMessage}</p>
+          )}
+          <div hidden={warehouseActive || !!storeClosedMessage} className={warehouseActive || storeClosedMessage ? undefined : 'flex flex-col min-h-0 grow'}>
           <div className="mb-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -305,7 +310,7 @@ export const InventoryVerificationModal: React.FC<InventoryVerificationModalProp
           </div>
         </div>
       </div>
-      {!warehouseActive && activeCategoryForDetails && (
+      {!warehouseActive && !storeClosedMessage && activeCategoryForDetails && (
         <DetailedInventoryVerificationModal 
           isOpen={!!activeCategoryForDetails}
           onClose={() => setActiveCategoryForDetails(null)}

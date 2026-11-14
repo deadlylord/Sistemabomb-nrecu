@@ -1,6 +1,7 @@
 import { storeSettingsPatch } from '../services/storeSettingsPatch';
 import { customerSuggestions } from '../services/customerSuggestions';
 import { serverTransferApprovalEnabled, callServerTransferApproval } from '../services/serverTransferApproval';
+import { inventoryVerificationClosed, inventoryVerificationClosedMessage } from '../services/inventoryVerificationCutoff';
 import { warehouseEnabled, type WarehouseDirection } from '../services/warehouse';
 import { pendingTransferId, completeTransferId } from '../services/transferCheckout';
 import { pendingSaleId, completeSaleId, saleFingerprint } from '../services/saleCheckout';
@@ -495,6 +496,31 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     && (warehouseAdmin || currentUser.storeId === currentStore.id)
     && !currentStore.isDisabled && currentStore.status !== 'inactive';
   const warehouseAvailable = warehouseInScope && (operationPermissions.includes(View.POS) || operationPermissions.includes(View.INVENTORY));
+  const verificationCutoff = currentStore?.inventoryVerificationCutoffMinutes;
+  const [verificationClock, setVerificationClock] = useState(() => Math.floor(Date.now() / 60000));
+  const storeVerificationClosed = verificationCutoff != null && inventoryVerificationClosed(verificationCutoff, new Date(verificationClock * 60000));
+  useEffect(() => {
+    if (!isVerificationModalOpen || verificationCutoff == null) return;
+    const refreshClock = () => setVerificationClock(Math.floor(Date.now() / 60000));
+    refreshClock();
+    const timer = window.setInterval(refreshClock, 1000);
+    return () => window.clearInterval(timer);
+  }, [isVerificationModalOpen, verificationCutoff]);
+
+  const assertStoreVerificationOpen = () => {
+    if (verificationCutoff != null && inventoryVerificationClosed(verificationCutoff)) {
+      throw new Error(inventoryVerificationClosedMessage(verificationCutoff));
+    }
+  };
+
+  const openInventoryVerification = () => {
+    if (!warehouseAvailable && verificationCutoff != null && inventoryVerificationClosed(verificationCutoff)) {
+      alert(inventoryVerificationClosedMessage(verificationCutoff));
+      return;
+    }
+    setVerificationClock(Math.floor(Date.now() / 60000));
+    setIsVerificationModalOpen(true);
+  };
   const canConfigureWarehouse = warehouseAdmin && warehouseInScope && (warehouseAvailable || operationPermissions.includes(View.PURCHASES));
   const canAccessCurrentView = isDeveloper || userPermissions.includes(currentView);
 
@@ -616,7 +642,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()); };
   }, [isOperationalView, isAppReady, isAuthReady, currentUser?.id, operationalCompanyId, companyStoreKey, currentView]);
 
-  const needsInventory = (isVerificationModalOpen || !summaryOnly && [...(!summaryInventoryMode ? [View.DASHBOARD] : []), View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
+  const needsInventory = (isVerificationModalOpen && !storeVerificationClosed || !summaryOnly && [...(!summaryInventoryMode ? [View.DASHBOARD] : []), View.POS, View.INVENTORY, View.INVENTORY_TRANSFER, View.LAYAWAY, View.PURCHASES, View.SETTINGS, View.INCIDENTS, View.ACCOUNTING, View.TAG_SCANNING].includes(currentView));
   const inventoryStoreKey = scopedStoreLoadingEnabled
     ? JSON.stringify(isGlobalMode && needsInventory || isReportsModalOpen || currentView === View.PURCHASES ? [...visibleStoreIds].sort() : needsInventory && currentStoreId && visibleStoreIds.has(currentStoreId) ? [currentStoreId] : [])
     : companyStoreKey;
@@ -671,7 +697,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   // The verification dialog also needs inventory when opened outside a catalog view.
   // Read the selected store afresh and ignore responses after a store/company change.
   useEffect(() => {
-    if (!isVerificationModalOpen) return;
+    if (!isVerificationModalOpen || storeVerificationClosed) return;
     let active = true;
     setVerificationInventoryError(null);
     setIsVerificationInventoryLoading(true);
@@ -694,7 +720,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       })
       .finally(() => { if (active) setIsVerificationInventoryLoading(false); });
     return () => { active = false; };
-  }, [isVerificationModalOpen, canLoadStore, currentStoreId, dataScope]);
+  }, [isVerificationModalOpen, storeVerificationClosed, canLoadStore, currentStoreId, dataScope]);
 
   useEffect(() => {
     if (!canLoadStore || !currentStoreId || operationalCompanyId === DEFAULT_COMPANY_ID || categoryState.companyId !== operationalCompanyId) return;
@@ -2329,6 +2355,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   const handleReprintSale = (sale: Sale) => { setSaleForReceipt(sale); setShowReceiptModal(true); };
 
   const handleSaveStockTake = async (stockTakeData: Omit<StockTake, 'id' | 'createdAt' | 'storeId'>, applyNow: boolean) => {
+    assertStoreVerificationOpen();
       if (!currentStoreId || !currentUser) return;
       const batch = writeBatch(db);
       const newRef = doc(collection(db, 'stockTakes'));
@@ -2376,6 +2403,11 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
   const handleApplyHistoricalStockTake = async (stockTake: StockTake) => {
     if (!isAdmin || !stockTake.productCounts || stockTake.isApplied) return;
+    const cutoff = visibleStores.find(store => store.id === stockTake.storeId)?.inventoryVerificationCutoffMinutes;
+    if (cutoff != null && inventoryVerificationClosed(cutoff)) {
+        alert(inventoryVerificationClosedMessage(cutoff));
+        return;
+    }
     if (window.confirm(`¿Estás seguro de aplicar este conteo físico realizado por ${stockTake.seller}? El stock actual será reemplazado por los valores de este reporte.`)) {
         const batch = writeBatch(db);
         Object.entries(stockTake.productCounts).forEach(([pid, count]) => {
@@ -2394,6 +2426,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   };
 
   const handleSaveDetailedDraft = async (categoryId: string, counts: Record<string, number>, systemSnapshot: Record<string, number>) => {
+    assertStoreVerificationOpen();
     if (!currentStoreId || !currentUser) return;
     
     const draftId = `${categoryId}_${currentStoreId}`;
@@ -2433,6 +2466,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
   };
 
   const handleApplyDetailedVerification = async (categoryId: string, counts: Record<string, number>) => {
+    assertStoreVerificationOpen();
     if (!currentStoreId || !currentUser || !isAdmin) return;
     const batch = writeBatch(db);
     Object.entries(counts).forEach(([pid, count]) => {
@@ -3087,6 +3121,13 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     const before = visibleStores.find(store => store.id === updatedStore.id);
     if (!before) throw new Error('La sede no pertenece a la empresa activa.');
     const patch = storeSettingsPatch(before, changes ? { ...before, ...changes, id: updatedStore.id, companyId: updatedStore.companyId } : updatedStore, operationalCompanyId);
+    if ('inventoryVerificationCutoffMinutes' in patch) {
+      const cutoff = patch.inventoryVerificationCutoffMinutes;
+      if (!warehouseAdmin) throw new Error('Solo un administrador puede cambiar la hora límite.');
+      if (cutoff !== null && (typeof cutoff !== 'number' || !Number.isInteger(cutoff) || cutoff < 0 || cutoff >= 1440)) {
+        throw new Error('Ingresa una hora límite válida.');
+      }
+    }
     if (!Object.keys(patch).length) return;
     const batch = writeBatch(db);
     batch.update(doc(db, 'stores', updatedStore.id), cleanObject(patch));
@@ -3624,10 +3665,10 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
 
         <Suspense fallback={<VestikaLoader />} >
         {(monthlyDashboard || dashboardSummaryPending) && dashboardSalesStatus.error && <div role="alert" className="mb-3 text-sm font-semibold text-accent">{dashboardSalesStatus.error}</div>}
-        {summaryOnly && <BusinessOverview key={dashboardKey} companyId={operationalCompanyId} store={currentStore} stores={visibleStores} scope={dataScope} onOpenDetails={openDashboardDetails} onOpenVerification={() => setIsVerificationModalOpen(true)} onSummaryUnavailable={() => openDashboardDetails('summary-unavailable')} />}
+        {summaryOnly && <BusinessOverview key={dashboardKey} companyId={operationalCompanyId} store={currentStore} stores={visibleStores} scope={dataScope} onOpenDetails={openDashboardDetails} onOpenVerification={openInventoryVerification} onSummaryUnavailable={() => openDashboardDetails('summary-unavailable')} />}
         {dailySummaryEnabled && currentView === View.DASHBOARD && !summaryOnly && <div className="mb-4 rounded-xl bg-white dark:bg-slate-800 p-3 flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{dashboardDetail?.section === 'summary-unavailable' ? 'El resumen aún no está verificado; se muestran los datos completos de la sede.' : 'Historial y herramientas de la sede'}</span><button type="button" className="text-accent font-bold" onClick={() => setDashboardDetail(null)}>Volver al resumen</button></div>}
-        {currentView === View.DASHBOARD && !summaryOnly && <DashboardView activityLoading={activityLoading || activityMode && dashboardSalesStatus.loading} activityMonths={activityMode ? Object.keys(dashboardBusinessSummary.meta?.dashboardActivityMonths || {}) : undefined} onResolveLayaway={activityMode ? async id => { const snapshot = await getDoc(doc(db, 'layaways', id)); if (!snapshot.exists()) throw new Error('No se encontró el apartado.'); const row = { ...snapshot.data(), id: snapshot.id } as Layaway; assertTenantData('layaways', row, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId!]) }); return row; } : undefined} inventorySummary={summaryInventoryMode ? { value: inventorySummaryReady ? dashboardBusinessSummary.meta!.inventoryValue : null } : undefined} onInventoryRequest={summaryInventoryMode ? onDashboardInventoryRequest : undefined} inventoryStatus={summaryInventoryMode ? dashboardInventory : undefined} monthlySummary={(monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled) && (!paymentIndexRequired || dashboardSummaryPending || dashboardBusinessSummary.ready && !dashboardBusinessSummary.error && dashboardBusinessSummary.meta?.paymentIndexVersion === 1) ? dashboardBusinessSummary : undefined} onSummaryRangeChange={monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled ? onDashboardSummaryRange : undefined} onSalesRangesChange={monthlyDashboardSalesEnabled ? onDashboardSalesRanges : undefined} initialSection={dashboardDetail?.key === dashboardKey ? dashboardDetail.section : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(activityMode ? dashboardIncidents : scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={dashboardLayaways} expenses={expenses} inventory={summaryInventoryMode ? dashboardInventory.rows : inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={() => setIsVerificationModalOpen(true)} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} />}
-        {currentView === View.POS && <PosView warehouseDialogOpen={!!warehouseView} onMoveWarehouse={warehouseAvailable && !recordReadOnly ? (product, direction) => setWarehouseView({ mode: 'move', productId: product.id, direction }) : undefined} inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={suggestedCustomers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={() => setIsVerificationModalOpen(true)} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
+        {currentView === View.DASHBOARD && !summaryOnly && <DashboardView activityLoading={activityLoading || activityMode && dashboardSalesStatus.loading} activityMonths={activityMode ? Object.keys(dashboardBusinessSummary.meta?.dashboardActivityMonths || {}) : undefined} onResolveLayaway={activityMode ? async id => { const snapshot = await getDoc(doc(db, 'layaways', id)); if (!snapshot.exists()) throw new Error('No se encontró el apartado.'); const row = { ...snapshot.data(), id: snapshot.id } as Layaway; assertTenantData('layaways', row, { companyId: operationalCompanyId, storeIds: new Set([currentStoreId!]) }); return row; } : undefined} inventorySummary={summaryInventoryMode ? { value: inventorySummaryReady ? dashboardBusinessSummary.meta!.inventoryValue : null } : undefined} onInventoryRequest={summaryInventoryMode ? onDashboardInventoryRequest : undefined} inventoryStatus={summaryInventoryMode ? dashboardInventory : undefined} monthlySummary={(monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled) && (!paymentIndexRequired || dashboardSummaryPending || dashboardBusinessSummary.ready && !dashboardBusinessSummary.error && dashboardBusinessSummary.meta?.paymentIndexVersion === 1) ? dashboardBusinessSummary : undefined} onSummaryRangeChange={monthlyDashboardChartEnabled || monthlyDashboardSalesEnabled ? onDashboardSummaryRange : undefined} onSalesRangesChange={monthlyDashboardSalesEnabled ? onDashboardSalesRanges : undefined} initialSection={dashboardDetail?.key === dashboardKey ? dashboardDetail.section : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} stores={visibleStores} allLayaways={allLayaways.filter(l => visibleStoreIds.has(l.storeId))} allIncidents={(activityMode ? dashboardIncidents : scopedStoreLoadingEnabled ? incidents : allIncidents).filter(i => visibleStoreIds.has(i.storeId))} currentUser={currentUser} roles={visibleRoles} onSwitchStore={handleSwitchStore} onNavigate={setCurrentView} onOpenReports={() => setIsReportsModalOpen(true)} sales={sales} layaways={dashboardLayaways} expenses={expenses} inventory={summaryInventoryMode ? dashboardInventory.rows : inventory} categories={categories} sellers={visibleSellers} dailyNotes={dailyNotes} currentStore={currentStore} onUpdateSale={handleUpdateSale} onUpdateLayaway={handleUpdateLayaway} onDeleteSale={handleDeleteSale} onReprintSale={handleReprintSale} onOpenVerification={openInventoryVerification} purchases={purchases} allSales={allSales.filter(s => visibleStoreIds.has(s.storeId))} allInventory={globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId))} />}
+        {currentView === View.POS && <PosView warehouseDialogOpen={!!warehouseView} onMoveWarehouse={warehouseAvailable && !recordReadOnly ? (product, direction) => setWarehouseView({ mode: 'move', productId: product.id, direction }) : undefined} inventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} categories={categories} sellers={visibleSellers} stores={visibleStores} sales={sales} purchases={purchases} layaways={layaways} allCustomers={suggestedCustomers} activeCart={activeCart} heldCarts={heldCarts} onAddToCart={handleAddToCart} onUpdateCartQuantity={handleUpdateCartQuantity} onUpdateCartItemPrice={handleUpdateCartItemPrice} onRemoveFromCart={handleRemoveFromCart} onClearCart={handleClearCart} onProcessSale={handleProcessSale} onHoldSale={handleHoldSale} onResumeSale={handleResumeSale} onCreateLayaway={handleCreateLayaway} onSaveStockTake={handleSaveStockTake} dailyNotes={dailyNotes} onAddDailyNote={handleAddDailyNote} onNavigate={setCurrentView} canAccessTagScanning={isDeveloper || userPermissions.includes(View.TAG_SCANNING)} currentStore={currentStore} incidents={incidents} onCreateIncident={handleCreateIncident} currentUser={currentUser} roles={visibleRoles} nextInvoiceNumber={currentStore?.nextInvoiceNumber || 1} onUpdateProduct={handleUpdateProduct} verifiedProducts={verifiedProducts} onToggleProductVerification={handleToggleProductVerification} onClearVerifications={handleClearVerifications} onSaveDetailedDraft={handleSaveDetailedDraft} onApplyDetailedVerification={handleApplyDetailedVerification} onUpdateStoreSettings={handleUpdateStore} onOpenVerification={openInventoryVerification} giftVouchers={giftVouchers} onCreateGiftVoucher={handleCreateGiftVoucher} onUpdateGiftVoucher={handleUpdateGiftVoucher} onRegenerateAllSkus={handleRegenerateAllSkus} ceoNotes={ceoNotes} onAddCeoNote={handleSaveCeoNote} />}
         {currentView === View.INVENTORY && <InventoryView onOpenWarehouseHistory={warehouseAvailable && warehouseAdmin && !recordReadOnly ? () => setWarehouseView({ mode: 'history' }) : undefined} key={`${dataScope}:${currentStoreId}`} companyId={operationalCompanyId} inventory={inventory} allInventory={isGlobalMode ? globalInventoryForSearch.filter(p => visibleStoreIds.has(p.storeId)) : inventory} sales={sales} purchases={purchases} layaways={layaways} categories={categories} stores={visibleStores} currentStoreId={currentStoreId || ''} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} onBulkAddProducts={handleBulkAddProducts} onDeleteProduct={handleDeleteProduct} onAddCategory={handleAddCategory} onUpdateCategory={handleUpdateCategory} onDeleteCategory={handleDeleteCategory} onNavigate={setCurrentView} productHistory={productHistory} currentUser={currentUser} roles={visibleRoles} showDisabledProducts={shouldIncludeDisabledProducts} onShowDisabledProductsChange={setShouldIncludeDisabledProducts} onReactivateInconsistentProducts={(ids) => ids.forEach(id => updateDoc(doc(db, 'inventory', id), { isDisabled: false }))} onRegenerateAllSkus={handleRegenerateAllSkus} onDeleteProductHistoryLog={(logId) => deleteDoc(doc(db, 'productHistory', logId))} />}
         {currentView === View.INVENTORY_TRANSFER && <InventoryTransferView readOnly={recordReadOnly} inventory={inventory} stores={visibleStores} currentUser={currentUser} transfers={inventoryTransfers.filter(t => visibleStoreIds.has(t.fromStoreId) && visibleStoreIds.has(t.toStoreId) && (!recordReadOnly || t.fromStoreId === currentStoreId || t.toStoreId === currentStoreId))} onTransfer={(data) => handleInventoryTransfer(data)} onDeleteTransfer={handleDeleteTransfer} onResetBalances={handleResetBalances} />}
         {currentView === View.LAYAWAY && <LayawayView stores={visibleStores} readOnly={recordReadOnly} layaways={layaways} sellers={visibleSellers} inventory={inventory} onAddPayment={handleAddPaymentToLayaway} onFulfillPreOrder={handleFulfillPreOrder} onDeleteLayaway={handleDeleteLayaway} onUpdateLayaway={handleUpdateLayaway} currentUser={currentUser} roles={visibleRoles} />}
@@ -3789,6 +3830,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       {isVerificationModalOpen && (
           <InventoryVerificationModal
               isOpen={isVerificationModalOpen}
+              storeClosedMessage={storeVerificationClosed && verificationCutoff != null ? inventoryVerificationClosedMessage(verificationCutoff) : undefined}
               warehouseContent={warehouseAvailable && currentStore ? (
                 <Suspense fallback={<p role="status">Cargando bodega…</p>}>
                   <WarehousePanel embedded userId={currentUser.id} companyId={operationalCompanyId} store={currentStore}

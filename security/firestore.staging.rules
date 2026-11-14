@@ -40,6 +40,25 @@ service cloud.firestore {
       return request.auth.token.platformDeveloper == true && (owner() || activeDeveloperGrant());
     }
     function administrator() { return (role().get('userType', 'seller') == 'admin' || role().name in ['Administrator', 'Administrador', 'Admin'] || role().permissions.hasAny(['role_manager','ceo_center'])); }
+    function validVerificationCutoff(data) {
+      let cutoff = data.get('inventoryVerificationCutoffMinutes', null);
+      return cutoff == null || cutoff is int && cutoff >= 0 && cutoff < 1440;
+    }
+    function verificationOpen(storeId) {
+      let cutoff = get(/databases/$(database)/documents/stores/$(storeId)).data.get('inventoryVerificationCutoffMinutes', null);
+      let localTime = request.time - duration.value(5, 'h');
+      return cutoff == null || localTime.hours() * 60 + localTime.minutes() < cutoff;
+    }
+    function newVerificationAllowed(name, data) {
+      return !(name in ['stockTakes', 'pendingDetailedVerifications', 'detailedVerificationHistory']
+        || name == 'productHistory' && data.get('changeType', '') == 'Conteo Físico Aplicado')
+        || verificationOpen(data.storeId);
+    }
+    function verificationUpdateAllowed(name, before, after) {
+      return !(name in ['pendingDetailedVerifications', 'detailedVerificationHistory']
+        || name == 'stockTakes' && after.diff(before).affectedKeys().hasAny(['verification', 'productCounts', 'isApplied']))
+        || verificationOpen(after.storeId);
+    }
     function storeCompany(id) { return get(/databases/$(database)/documents/stores/$(id)).data.get('companyId', 'default_company'); }
     function scoped(data) {
       return (developer() || data.get('companyId', '') == request.auth.token.companyId
@@ -166,9 +185,12 @@ service cloud.firestore {
       allow get: if live() && (resource == null || scoped(resource.data));
       allow list: if live() && scoped(resource.data);
       allow create: if live() && hasAny(['stores','settings']) && validScope(request.resource.data) && validId(id)
-        && !request.resource.data.keys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible']);
+        && !request.resource.data.keys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible', 'inventoryVerificationCutoffMinutes']);
       allow update: if live() && scoped(resource.data) && validScope(request.resource.data) && sameOwner(resource.data,request.resource.data)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['warehouseSendEnabled', 'warehouseCategoryVisible'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['inventoryVerificationCutoffMinutes'])
+          || scoped(resource.data) && resource.data.get('companyId', 'default_company') == request.auth.token.companyId
+            && role().get('userType', '') != 'seller' && administrator() && validVerificationCutoff(request.resource.data))
         && (hasAny(['stores','settings']) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nextInvoiceNumber']) && request.resource.data.nextInvoiceNumber is int && request.resource.data.nextInvoiceNumber == resource.data.nextInvoiceNumber + 1);
       allow delete: if false;
     }
@@ -206,8 +228,10 @@ service cloud.firestore {
     match /{name}/{id} {
       allow get: if operational(name) && live() && moduleAccess(name) && (resource == null || storeVisible(resource.data,name));
       allow list: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name);
-      allow create: if operational(name) && live() && moduleAccess(name) && validOperational(name,id,request.resource.data) && warehouseInventoryCreate(name,request.resource.data) && storeVisible(request.resource.data,name);
-      allow update: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name) && validOperational(name,id,request.resource.data) && sameOwner(resource.data,request.resource.data) && warehouseInventoryUpdate(name,resource.data,request.resource.data);
+      allow create: if operational(name) && live() && moduleAccess(name) && validOperational(name,id,request.resource.data) && warehouseInventoryCreate(name,request.resource.data) && storeVisible(request.resource.data,name)
+        && newVerificationAllowed(name, request.resource.data);
+      allow update: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name) && validOperational(name,id,request.resource.data) && sameOwner(resource.data,request.resource.data) && warehouseInventoryUpdate(name,resource.data,request.resource.data)
+        && verificationUpdateAllowed(name, resource.data, request.resource.data);
       allow delete: if operational(name) && live() && moduleAccess(name) && storeVisible(resource.data,name)
         && (name != 'inventory' || resource.data.get('warehouseUnits', 0) == 0)
         && (name != 'financialRecords' || !('relatedRecordId' in resource.data) || !existsAfter(/databases/$(database)/documents/financialRecords/$(resource.data.relatedRecordId)));

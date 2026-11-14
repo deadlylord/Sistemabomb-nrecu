@@ -260,6 +260,7 @@ export interface Store {
   warehouseSendEnabled?: boolean;
   warehouseCategoryVisible?: boolean;
   hideDetailedVerificationForSellers?: boolean;
+  inventoryVerificationCutoffMinutes?: number | null;
   detailedVerificationEnabledDate?: string; // ISO date string (YYYY-MM-DD)
   initialBalances?: {
     cash: number;
