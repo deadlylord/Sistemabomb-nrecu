@@ -7,8 +7,11 @@ export const PRODUCTION_PROJECT = 'factura2-6e811';
 export async function productionAccess() {
  const require=createRequire(import.meta.url);
  let cli,account;
- for(const dir of await readdir(join(homedir(),'.npm/_npx')).catch(()=>[]))try{
-  const candidate=require(join(homedir(),'.npm/_npx',dir,'node_modules/firebase-tools/lib/auth.js'));
+ const candidates=[];
+ if(process.env.APPDATA)candidates.push(join(process.env.APPDATA,'npm/node_modules/firebase-tools/lib/auth.js'));
+ for(const dir of await readdir(join(homedir(),'.npm/_npx')).catch(()=>[]))candidates.push(join(homedir(),'.npm/_npx',dir,'node_modules/firebase-tools/lib/auth.js'));
+ for(const path of candidates)try{
+  const candidate=require(path);
   const value=candidate.getGlobalDefaultAccount();if(value){cli=candidate;account=value;break;}
  }catch{}
  if(!account)throw Error('Firebase administrative reconnection required');

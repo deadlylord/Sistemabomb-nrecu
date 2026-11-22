@@ -1,6 +1,13 @@
 # Vestika POS — Estado operativo y decisiones
 
-**Actualizado:** 2026-10-26. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
+**Actualizado:** 2026-11-21. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
+
+## Bodega habilitada en producción (`factura2-6e811`) — 1.1.218
+
+- Carlos autoriza habilitar bodega en producción (`factura2-6e811`). `services/warehouse.ts` selecciona ahora `productionPosWarehouse` (`us-central1`) en producción (`factura2-6e811`) y `vestikaStagingWarehouse` (`us-central1`) en staging (`vestika-staging`), conservando el bloqueo cruzado entre entornos y el flag `VITE_STORE_WAREHOUSE=true`.
+- En `functions/src/warehouse.mjs` se agregó compatibilidad `companyId || 'default_company'` en `purchaseMove` y `adjust` tras verificar en producción que compras históricas de `default_company` omiten `companyId`, manteniendo el aislamiento estricto para otras empresas.
+- Despliegue backend en `factura2-6e811` verificado con `node functions/scripts/productionWarehouse.mjs --mode check` (`serverReady: true`, `businessInventoryReady: true`, `rulesReady: true`): `productionBusinessInventoryChanged` actualizada al build `4e294549...` (conserva valoración `stock + warehouseUnits`), `productionPosWarehouse` ACTIVE en codebase aislado `vestika-pos-warehouse-production` (build `9a4173e2...`), y reglas compatibles desplegadas (`ruleset c2e4c30a-2bbf-49f6-9160-49340e1ead95`, respaldo previo `7aba8c00-...` guardado localmente). Llamada anónima al callable y lectura anónima a `warehouseCompanies` confirmadas en `403 PERMISSION_DENIED`. Sin nuevos índices compuestos requeridos (`fieldOverrides: []`, consultas de campo único).
+- `netlify.toml` activa `VITE_STORE_WAREHOUSE = "true"` en `[context.production.environment]`. Validación local: 33/33 unitarias de bodega, 19/19 en Firestore Emulator (staging, producción y regresión de hora límite 1.1.217 sobre reglas de producción con bodega), build Vite con configuración de producción aprobado y `tsc --noEmit` sin errores nuevos. Pendiente: verificación funcional manual en producción por Carlos (movimientos tienda ↔ bodega, conteos, envíos desde Compras, historial y valoración).
 
 ## Hora límite del conteo de Tienda — 1.1.217
 

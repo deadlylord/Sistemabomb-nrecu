@@ -6,12 +6,17 @@ import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebas
 import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { warehouseOperation } from '../../functions/src/warehouse.mjs';
 import { identityUid } from '../../functions/src/stagingUsers.mjs';
+import { prepareCompatibleWarehouseRules, warehouseProductionBaseline } from '../../functions/src/compatibleWarehouseRules.mjs';
 if (!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '')) throw Error('Local emulator required');
 const require=createRequire(new URL('../../functions/package.json',import.meta.url));
 const {Firestore}=require('@google-cloud/firestore');
-const projectId='demo-vestika-warehouse',db=new Firestore({projectId});
-test('real Firestore transactions and private warehouse rules',async t=>{
- const env=await initializeTestEnvironment({projectId,firestore:{rules:await readFile(new URL('../../security/firestore.staging.rules',import.meta.url),'utf8')}});
+const stagingRules = await readFile(new URL('../../security/firestore.staging.rules', import.meta.url), 'utf8');
+const productionRules = prepareCompatibleWarehouseRules(warehouseProductionBaseline).source;
+
+for (const [environment, rules] of [['staging', stagingRules], ['production', productionRules]]) {
+test(`real Firestore transactions and private warehouse rules (${environment})`,async t=>{
+ const projectId='demo-vestika-warehouse-'+environment,db=new Firestore({projectId});
+ const env=await initializeTestEnvironment({projectId,firestore:{rules}});
  const claims={identityVersion:1,sellerId:'u',companyId:'co',storeId:'st',roleId:'seller',authVersion:1};
  const auth={uid:identityUid('u'),token:claims};const client=env.authenticatedContext(auth.uid,{...claims,firebase:{sign_in_provider:'custom'}}).firestore();
  const run=data=>warehouseOperation(db,auth,{companyId:'co',storeId:'st',...data});
@@ -57,3 +62,4 @@ test('real Firestore transactions and private warehouse rules',async t=>{
   });
  }finally{await env.cleanup();await db.terminate()}
 });
+}

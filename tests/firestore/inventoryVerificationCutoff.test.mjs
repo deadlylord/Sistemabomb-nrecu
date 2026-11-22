@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { prepareCompatibleVerificationCutoffRules, verificationCutoffProductionBaseline } from '../../functions/src/compatibleVerificationCutoffRules.mjs';
+import { prepareCompatibleWarehouseRules, warehouseProductionBaseline } from '../../functions/src/compatibleWarehouseRules.mjs';
 
 if (!/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '')) throw new Error('Local emulator required.');
 
@@ -10,6 +11,7 @@ const staging = await readFile(new URL('../../security/firestore.staging.rules',
 for (const [environment, rules] of [
   ['staging', staging],
   ['production', prepareCompatibleVerificationCutoffRules(verificationCutoffProductionBaseline)],
+  ['production-warehouse', prepareCompatibleWarehouseRules(warehouseProductionBaseline).source],
 ]) {
   test(`Store verification cutoff with ${environment} rules`, async () => {
     const env = await initializeTestEnvironment({ projectId: 'demo-cutoff-' + environment, firestore: { rules } });

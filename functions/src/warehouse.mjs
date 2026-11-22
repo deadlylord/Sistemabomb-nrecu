@@ -6,6 +6,7 @@ const fail = (code, message) => { throw new IdentityError(code, message); };
 const key = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const quantity = value => Number.isSafeInteger(value) && value >= 0;
 const owns = (row, companyId, storeId) => row && row.companyId === companyId && row.storeId === storeId;
+const ownsLegacy = (row, companyId, storeId) => row && (row.companyId || 'default_company') === companyId && row.storeId === storeId;
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 // All access is through the callable. The nested warehouse collections are
@@ -115,7 +116,7 @@ export async function warehouseOperation(db, auth, input) {
           const dispatchRef = root.collection('purchaseDispatches').doc(purchaseId);
           const [purchase, dispatch] = await Promise.all([tx.get(db.collection('purchases').doc(purchaseId)), tx.get(dispatchRef)]);
           const row = purchase.data();
-          if (!owns(row, companyId, storeId) || !key(row.productId)) fail('permission-denied', 'La compra no pertenece a esta sede.');
+          if (!ownsLegacy(row, companyId, storeId) || !key(row.productId)) fail('permission-denied', 'La compra no pertenece a esta sede.');
           if (dispatch.exists) fail('already-exists', 'La compra ya fue enviada a bodega.');
           if (!quantity(row.quantity) || units > row.quantity) fail('failed-precondition', 'La cantidad supera las unidades registradas en la compra.');
           const item = items.get(row.productId) || { units: 0, purchaseIds: [] };
@@ -197,7 +198,7 @@ export async function warehouseOperation(db, auth, input) {
         if (!p.exists || !owns(p.data(),companyId,storeId) || !verified.some(v => v.categoryId === p.data().categoryId)) fail('permission-denied', 'El detalle no pertenece al conteo.');
         if (action === 'adjust') {
           const local = await tx.get(db.collection('inventory').doc(id));
-          if (!local.exists || !owns(local.data(),companyId,storeId) || local.data().categoryId !== p.data().categoryId || local.data().warehouseUnits !== p.data().stock) fail('failed-precondition', 'La referencia local cambió; revisa su vínculo con bodega.');
+          if (!local.exists || !ownsLegacy(local.data(),companyId,storeId) || local.data().categoryId !== p.data().categoryId || local.data().warehouseUnits !== p.data().stock) fail('failed-precondition', 'La referencia local cambió; revisa su vínculo con bodega.');
         }
         adjustments.push({ productId: id, categoryId: p.data().categoryId, before: p.data().stock, after: value });
       }
