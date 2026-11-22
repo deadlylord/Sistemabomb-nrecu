@@ -2,6 +2,12 @@
 
 **Actualizado:** 2026-11-21. Este documento distingue hechos verificados del repositorio y reportes históricos de Carlos. **No constituye una auditoría de producción ni certifica que un error siga abierto.**
 
+## Centro de Bodega en Inventario y envío masivo desde Compras — 1.1.219
+
+- Carlos autoriza reorganizar bodega y publicarlo en `staging` y `main`.
+- **Inventario (`InventoryView` + `InventoryWarehouseSection`):** la sección consolidada `#warehouse-section` reúne KPIs instantáneos sin lecturas extra (En Bodega, En Tienda, Total Consolidado y Valor en Bodega), desglose por categoría, tabla de existencias con acciones directas `→ Bodega` / `→ Tienda` (más opción para ver productos solo en tienda), accesos a Conteo y Configurar sede, y pestañas bajo demanda para **Movimientos (30 días)** (con filtros locales) y **Conteos guardados** (solo admin). El botón superior **Bodega** navega directo a esta sección y `InventoryTable` muestra `+X bod.` bajo el stock local cuando aplica.
+- **Compras (`PurchasesView` + `WarehousePanel`):** ahora se pueden marcar compras con checkboxes directamente en el Historial de Compras (con barra flotante **Enviar todo a bodega** agrupada por sede), enviar un día completo desde el selector rápido, enviar una compra individual desde la fila, o usar **Enviar todo a bodega** / **Seleccionar todo** en el modal (máx. 25 por lote, respetando `operationId` e idempotencia). Sin cambios en reglas, funciones ni índices de Firebase.
+
 ## Bodega habilitada en producción (`factura2-6e811`) — 1.1.218
 
 - Carlos autoriza habilitar bodega en producción (`factura2-6e811`). `services/warehouse.ts` selecciona ahora `productionPosWarehouse` (`us-central1`) en producción (`factura2-6e811`) y `vestikaStagingWarehouse` (`us-central1`) en staging (`vestika-staging`), conservando el bloqueo cruzado entre entornos y el flag `VITE_STORE_WAREHOUSE=true`.

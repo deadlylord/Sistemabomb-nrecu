@@ -215,7 +215,12 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({ inventory, categ
                       <VelocityPill velocity={product.velocity} />
                     </td>
                     <td className="p-3 text-right font-semibold text-accent">{formatCOP(product.price)}</td>
-                    <td className="p-3 text-right font-bold">{product.stock}</td>
+                    <td className="p-3 text-right font-bold">
+                        <div>{product.stock}</div>
+                        {(product.warehouseUnits || 0) > 0 && (
+                            <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400">+{product.warehouseUnits} bod.</div>
+                        )}
+                    </td>
                     <td className="p-3 text-center">
                       <div className="flex justify-center items-center">
                         <button onClick={() => handleToggleDisabled(product)} className={`p-2 rounded-full transition-colors ${!product.isDisabled ? 'text-red-500 hover:text-red-400 hover:bg-red-500/10' : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'}`} title={product.isDisabled ? 'Habilitar Producto' : 'Deshabilitar Producto'}>

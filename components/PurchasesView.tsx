@@ -2,7 +2,7 @@ import { useViewFilter } from '../services/viewFilters';
 
 import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { Purchase, Product, Category, Store } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon, TagIcon, PrintIcon, CalendarIcon } from './Icons';
+import { PlusCircleIcon, EditIcon, TrashIcon, SearchIcon, CheckIcon, CrossIcon, BuildingStorefrontIcon, PackageIcon, CameraIcon, PlusIcon, HistoryIcon, CopyIcon, TagIcon, PrintIcon, CalendarIcon, SwapIcon } from './Icons';
 import { formatCOP, encodePrice, normalizeText } from '../constants';
 import EditPurchaseModal from './EditPurchaseModal';
 import EditProductImageModal from './EditProductImageModal';
@@ -80,9 +80,17 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const processingBatch = useRef(false);
   const [warehousePurchases, setWarehousePurchases] = useState<Purchase[]>([]);
-  const [warehouseStoreId, setWarehouseStoreId] = useState<string | null>(null);
+  const [warehouseModal, setWarehouseModal] = useState<{ storeId: string; purchases: Purchase[]; initialSelectedIds?: string[] } | null>(null);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [dispatchedPurchaseIds, setDispatchedPurchaseIds] = useState<Set<string>>(new Set());
   const dispatchStores = stores.filter(store => warehouseAccess?.storeIds.has(store.id) && warehousePurchases.some(purchase => purchase.storeId === store.id));
-  const dispatchStore = dispatchStores.find(store => store.id === warehouseStoreId);
+  const dispatchStore = warehouseModal ? stores.find(store => store.id === warehouseModal.storeId) : undefined;
+  const hasWarehouseSendAccess = !!warehouseAccess && stores.some(store => warehouseAccess.storeIds.has(store.id) && store.warehouseSendEnabled !== false);
+  const canSendPurchaseToWarehouse = (purchase: Purchase) =>
+    !!warehouseAccess
+    && warehouseAccess.storeIds.has(purchase.storeId)
+    && stores.find(s => s.id === purchase.storeId)?.warehouseSendEnabled !== false
+    && !dispatchedPurchaseIds.has(purchase.id);
 
 
   useEffect(() => {
@@ -477,31 +485,138 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
 
   const currentMonthName = new Date().toLocaleString('es-CO', { month: 'long' });
 
+  const eligibleHistoryPurchases = useMemo(
+    () => filteredPurchases.filter(canSendPurchaseToWarehouse),
+    [filteredPurchases, warehouseAccess, stores, dispatchedPurchaseIds],
+  );
+
+  const selectedHistoryPurchases = useMemo(
+    () => purchases.filter(p => selectedHistoryIds.has(p.id) && canSendPurchaseToWarehouse(p)),
+    [purchases, selectedHistoryIds, warehouseAccess, stores, dispatchedPurchaseIds],
+  );
+
+  const selectedByStore = useMemo(() => {
+    const groups = new Map<string, Purchase[]>();
+    for (const p of selectedHistoryPurchases) {
+      const list = groups.get(p.storeId) || [];
+      list.push(p);
+      groups.set(p.storeId, list);
+    }
+    return [...groups.entries()].map(([storeId, list]) => ({
+      store: stores.find(s => s.id === storeId),
+      storeId,
+      purchases: list,
+      units: list.reduce((sum, item) => sum + item.quantity, 0),
+    })).filter(g => g.store);
+  }, [selectedHistoryPurchases, stores]);
+
+  const toggleHistorySelection = (purchaseId: string) => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(purchaseId)) next.delete(purchaseId);
+      else next.add(purchaseId);
+      return next;
+    });
+  };
+
+  const selectVisibleForWarehouse = () => {
+    if (eligibleHistoryPurchases.length === 0) return;
+    const targetStoreId = selectedHistoryPurchases[0]?.storeId || (eligibleHistoryPurchases.some(p => p.storeId === currentStoreId) ? currentStoreId : eligibleHistoryPurchases[0].storeId);
+    const storeMatches = eligibleHistoryPurchases.filter(p => p.storeId === targetStoreId).slice(0, 25);
+    const allAlreadySelected = storeMatches.length > 0 && storeMatches.every(p => selectedHistoryIds.has(p.id));
+    if (allAlreadySelected) {
+      setSelectedHistoryIds(new Set());
+      return;
+    }
+    setSelectedHistoryIds(new Set(storeMatches.map(p => p.id)));
+  };
+
+  const openWarehouseForDay = (dateStr: string) => {
+    const dayEligible = eligibleHistoryPurchases.filter(p => new Date(p.createdAt).toLocaleDateString() === dateStr);
+    if (!dayEligible.length) return;
+    const preferredStoreId = dayEligible.some(p => p.storeId === currentStoreId) ? currentStoreId : dayEligible[0].storeId;
+    const storeRows = dayEligible.filter(p => p.storeId === preferredStoreId);
+    setWarehouseModal({
+      storeId: preferredStoreId,
+      purchases: storeRows,
+      initialSelectedIds: storeRows.slice(0, 25).map(p => p.id),
+    });
+  };
+
+  const warehouseInventoryForModal = useMemo(() => {
+    if (!dispatchStore) return inventory;
+    return searchSource.some(p => p.storeId === dispatchStore.id) ? searchSource : inventory;
+  }, [dispatchStore, searchSource, inventory]);
+
   return (
     <div className="max-w-full mx-auto space-y-6">
       {dispatchStores.some(store => store.warehouseSendEnabled !== false) && (
-        <section className="rounded-xl border border-accent/30 p-4">
-          <h2 className="font-bold text-accent">Compras guardadas para enviar a bodega</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {dispatchStores.filter(store => store.warehouseSendEnabled !== false).map(store => (
-              <button key={store.id} type="button" onClick={() => setWarehouseStoreId(store.id)}
-                className="rounded-lg bg-accent/10 px-3 py-2 font-semibold text-accent">
-                Seleccionar · {store.name} ({warehousePurchases.filter(purchase => purchase.storeId === store.id).length})
-              </button>
-            ))}
+        <section className="rounded-2xl border-2 border-accent/30 bg-accent/5 p-4 space-y-3">
+          <div>
+            <h2 className="font-black text-accent flex items-center gap-2">
+              <SwapIcon className="w-5 h-5" /> Compras recién guardadas listas para enviar a bodega
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Puedes enviar todo el lote de una vez o elegir qué productos y unidades pasar a bodega.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dispatchStores.filter(store => store.warehouseSendEnabled !== false).map(store => {
+              const storeRows = warehousePurchases.filter(purchase => purchase.storeId === store.id);
+              const totalUnits = storeRows.reduce((sum, p) => sum + p.quantity, 0);
+              return (
+                <div key={store.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white dark:bg-slate-900 border border-accent/20 p-2 shadow-sm">
+                  <span className="text-xs font-black px-2">{store.name} · {storeRows.length} compras ({totalUnits} uds)</span>
+                  <button
+                    type="button"
+                    onClick={() => setWarehouseModal({ storeId: store.id, purchases: storeRows, initialSelectedIds: storeRows.slice(0, 25).map(p => p.id) })}
+                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-black text-white shadow-sm hover:opacity-90"
+                  >
+                    Enviar todo a bodega
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWarehouseModal({ storeId: store.id, purchases: storeRows })}
+                    className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-bold text-accent hover:bg-accent/20"
+                  >
+                    Elegir productos
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
-      {dispatchStore && warehouseAccess && (
+      {dispatchStore && warehouseAccess && warehouseModal && (
         <Suspense fallback={<p role="status">Cargando selección de bodega…</p>}>
-          <WarehousePanel key={dispatchStore.id} mode="purchase" userId={warehouseAccess.userId}
-            companyId={warehouseAccess.companyId} store={dispatchStore} inventory={inventory} categories={categories}
-            isAdmin={false} purchases={warehousePurchases.filter(purchase => purchase.storeId === dispatchStore.id)}
-            onClose={() => setWarehouseStoreId(null)} onPurchasesMoved={ids => {
+          <WarehousePanel
+            key={`${dispatchStore.id}:${warehouseModal.purchases.map(p => p.id).join(',')}:${(warehouseModal.initialSelectedIds || []).join(',')}`}
+            mode="purchase"
+            userId={warehouseAccess.userId}
+            companyId={warehouseAccess.companyId}
+            store={dispatchStore}
+            inventory={warehouseInventoryForModal}
+            categories={categories}
+            isAdmin={false}
+            purchases={warehouseModal.purchases}
+            initialSelectedIds={warehouseModal.initialSelectedIds}
+            onClose={() => setWarehouseModal(null)}
+            onPurchasesMoved={ids => {
               setWarehousePurchases(previous => previous.filter(purchase => !ids.includes(purchase.id)));
-              setWarehouseStoreId(null);
+              setDispatchedPurchaseIds(previous => {
+                const next = new Set(previous);
+                ids.forEach(id => next.add(id));
+                return next;
+              });
+              setSelectedHistoryIds(previous => {
+                const next = new Set(previous);
+                ids.forEach(id => next.delete(id));
+                return next;
+              });
+              setWarehouseModal(null);
               setSuccessMessage('Envío a bodega confirmado.');
-            }} />
+            }}
+          />
         </Suspense>
       )}
       {/* SECTOR DE CONFIGURACIÓN Y BÚSQUEDA */}
@@ -867,10 +982,68 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
             </div>
           )}
 
+          {/* Panel de Envío a Bodega desde el Historial */}
+          {hasWarehouseSendAccess && eligibleHistoryPurchases.length > 0 && (
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/20 p-4 rounded-xl border border-indigo-200/70 dark:border-indigo-800/40 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-100 dark:bg-indigo-900/50 p-2.5 rounded-xl flex-shrink-0">
+                  <SwapIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-gray-800 dark:text-gray-200 uppercase tracking-wide">Enviar Compras a Bodega</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Marca productos en la tabla de abajo y envía todo junto, o elige un día completo (máx. 25 compras por envío).
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="Enviar compras de un día a bodega"
+                  className="bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-700 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-accent min-w-[190px] shadow-sm cursor-pointer"
+                  onChange={e => {
+                    if (e.target.value) {
+                      openWarehouseForDay(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                >
+                  <option value="">-- Enviar un día a bodega --</option>
+                  {uniquePurchaseDates.map(dStr => {
+                    const count = eligibleHistoryPurchases.filter(p => new Date(p.createdAt).toLocaleDateString() === dStr).length;
+                    if (!count) return null;
+                    return (
+                      <option key={dStr} value={dStr}>
+                        {dStr} ({count} {count === 1 ? 'compra' : 'compras'})
+                      </option>
+                    );
+                  })}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => selectedHistoryPurchases.length > 0 ? setSelectedHistoryIds(new Set()) : selectVisibleForWarehouse()}
+                  className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all shadow-md"
+                >
+                  {selectedHistoryPurchases.length > 0 ? 'Limpiar selección' : `Seleccionar visibles (${Math.min(eligibleHistoryPurchases.length, 25)})`}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto rounded-xl border dark:border-gray-700">
               <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                       <tr>
+                          {hasWarehouseSendAccess && (
+                            <th className="p-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                aria-label="Seleccionar compras visibles para bodega"
+                                checked={eligibleHistoryPurchases.length > 0 && selectedHistoryPurchases.length > 0 && eligibleHistoryPurchases.slice(0, 25).every(p => selectedHistoryIds.has(p.id))}
+                                onChange={selectVisibleForWarehouse}
+                                className="h-4 w-4 rounded text-accent cursor-pointer"
+                              />
+                            </th>
+                          )}
                           <th className="p-3 text-[10px] font-black uppercase text-gray-400">Imagen</th>
                           <SortHeader k="createdAt" label="Fecha" />
                           <SortHeader k="productName" label="Producto" />
@@ -878,14 +1051,32 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                           <SortHeader k="storeId" label="Tienda" />
                           <SortHeader k="quantity" label="Cant." />
                           <SortHeader k="totalCost" label="Costo Total" />
-                          <th className="p-3 text-center w-20">Acciones</th>
+                          <th className="p-3 text-center w-28">Acciones</th>
                       </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-gray-800">
                       {filteredPurchases.map(p => {
-                          const product = inventory.find(inv => inv.id === p.productId);
+                          const product = searchSource.find(inv => inv.id === p.productId) || inventory.find(inv => inv.id === p.productId);
+                          const eligible = canSendPurchaseToWarehouse(p);
+                          const isSelected = selectedHistoryIds.has(p.id);
+                          const isDispatched = dispatchedPurchaseIds.has(p.id);
                           return (
-                          <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 group">
+                          <tr key={p.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800 group ${isSelected ? 'bg-indigo-50/60 dark:bg-indigo-950/20' : ''}`}>
+                              {hasWarehouseSendAccess && (
+                                <td className="p-3 text-center">
+                                  {eligible ? (
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Seleccionar compra ${p.productName} para bodega`}
+                                      checked={isSelected}
+                                      onChange={() => toggleHistorySelection(p.id)}
+                                      className="h-4 w-4 rounded text-accent cursor-pointer"
+                                    />
+                                  ) : isDispatched ? (
+                                    <span title="Enviada a bodega" className="text-emerald-600 font-black text-xs">✓</span>
+                                  ) : null}
+                                </td>
+                              )}
                               <td className="p-3">
                                   <div 
                                       className="relative w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-900 border dark:border-gray-700 overflow-hidden cursor-zoom-in"
@@ -903,7 +1094,14 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                               </td>
                               <td className="p-3 text-xs text-gray-500">{new Date(p.createdAt).toLocaleDateString()}</td>
                               <td className="p-3">
-                                  <p className="font-black text-sm uppercase">{p.productName}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="font-black text-sm uppercase">{p.productName}</p>
+                                    {isDispatched && (
+                                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] font-black uppercase">
+                                        En bodega
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
                                           onClick={() => product && setEditingProductImage(product)} 
@@ -918,7 +1116,17 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                               <td className="p-3 text-center font-black">{p.quantity}</td>
                               <td className="p-3 text-right font-black text-accent">{formatCOP(p.totalCost)}</td>
                               <td className="p-3 text-center">
-                                  <div className="flex justify-center items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                  <div className="flex justify-center items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                      {eligible && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setWarehouseModal({ storeId: p.storeId, purchases: [p], initialSelectedIds: [p.id] })}
+                                          className="p-1.5 text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg transition-colors"
+                                          title="Enviar esta compra a bodega"
+                                        >
+                                          <SwapIcon className="w-4 h-4" />
+                                        </button>
+                                      )}
                                       <button 
                                           onClick={() => handlePrintDayLabels(p.createdAt)} 
                                           className="p-1.5 text-gray-400 hover:text-indigo-500 transition-colors" 
@@ -937,7 +1145,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                   {filteredPurchases.length > 0 && (
                     <tfoot className="bg-gray-50/80 dark:bg-gray-800/80 font-black border-t-2 border-gray-200 dark:border-gray-700">
                         <tr>
-                            <td className="p-4" colSpan={2}></td>
+                            <td className="p-4" colSpan={hasWarehouseSendAccess ? 3 : 2}></td>
                             <td className="p-4 text-xs uppercase text-gray-500 tracking-widest">TOTAL FILTRADO</td>
                             <td className="p-4" colSpan={2}></td>
                             <td className="p-4 text-center text-lg">{totalHistoryQuantity}</td>
@@ -954,6 +1162,44 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
               )}
           </div>
       </div>
+
+      {/* BARRA FLOTANTE DE ENVÍO MASIVO A BODEGA */}
+      {selectedByStore.length > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[100] bg-white dark:bg-slate-900 border-2 border-indigo-600 rounded-2xl sm:rounded-full px-5 py-3 shadow-2xl flex flex-wrap items-center justify-center gap-3 max-w-[95vw]">
+          <div className="flex items-center gap-2">
+            <span className="bg-indigo-600 text-white font-black rounded-full h-7 w-7 flex items-center justify-center text-xs shadow-md">
+              {selectedHistoryPurchases.length}
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
+              {selectedHistoryPurchases.length === 1 ? 'compra seleccionada' : 'compras seleccionadas'} ({selectedHistoryPurchases.reduce((s, p) => s + p.quantity, 0)} uds)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedByStore.map(group => (
+              <button
+                key={group.storeId}
+                type="button"
+                onClick={() => setWarehouseModal({
+                  storeId: group.storeId,
+                  purchases: group.purchases,
+                  initialSelectedIds: group.purchases.slice(0, 25).map(p => p.id),
+                })}
+                className="bg-indigo-600 text-white font-black py-2 px-4 rounded-full hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg text-xs uppercase"
+              >
+                <SwapIcon className="w-4 h-4" />
+                Enviar todo a bodega{selectedByStore.length > 1 ? ` · ${group.store!.name} (${group.purchases.length})` : ''}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSelectedHistoryIds(new Set())}
+              className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-bold text-xs uppercase px-2"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {editingPurchase && (
         <EditPurchaseModal
