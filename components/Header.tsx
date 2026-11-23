@@ -11,6 +11,7 @@ import {
   ChevronLeftIcon, ChevronRightIcon, TagIcon
 } from './Icons';
 import { APP_VERSIONS } from '../constants';
+import { warehouseEnabled } from '../services/warehouse';
 
 interface HeaderProps {
   currentView: View;
@@ -93,6 +94,7 @@ const Header: React.FC<HeaderProps> = ({
     ] },
     { id: 'inv', label: 'Inventario', icon: BoxNavIcon, color: 'text-accent', items: [
       { view: View.INVENTORY, label: 'Stock', shortLabel: 'Stock', description: 'Existencias y productos', icon: BoxNavIcon },
+      { view: View.WAREHOUSE, label: 'Bodega', shortLabel: 'Bodega', description: 'Existencias y movimientos de bodega', icon: PackageIcon },
       { view: View.PURCHASES, label: 'Compras', shortLabel: 'Compras', description: 'Ingreso de mercancía', icon: TruckIcon },
       { view: View.INVENTORY_TRANSFER, label: 'Traslados', shortLabel: 'Traslados', description: 'Movimientos entre sedes', icon: SwapIcon },
       { view: View.STOCK_TAKE_HISTORY, label: 'Conteos', shortLabel: 'Conteos', description: 'Auditorías físicas', icon: CheckNavIcon },
@@ -130,6 +132,14 @@ const Header: React.FC<HeaderProps> = ({
     return groups.map(group => ({
         ...group,
         items: group.items.filter(item => {
+            if (item.view === View.WAREHOUSE) {
+                if (!warehouseEnabled) return false;
+                if (!isDeveloper && companyAllowed && !companyAllowed.has(View.WAREHOUSE) && !companyAllowed.has(View.INVENTORY)) {
+                    return false;
+                }
+                if (isDeveloper) return true;
+                return userPermissions.includes(View.WAREHOUSE) || userPermissions.includes(View.INVENTORY);
+            }
             if (isDeveloper) return true;
             if (item.view === View.DEVELOPER_CENTER) return false;
             

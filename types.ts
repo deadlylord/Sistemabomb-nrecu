@@ -409,6 +409,7 @@ export enum View {
   GIFT_VOUCHERS = 'gift_vouchers',
   CEO_CENTER = 'ceo_center',
   TAG_SCANNING = 'tag_scanning',
+  WAREHOUSE = 'warehouse',
   DEVELOPER_CENTER = 'developer_center',
 }
 
@@ -432,6 +433,7 @@ export const VIEW_LABELS: Record<View, string> = {
     [View.GIFT_VOUCHERS]: 'Bonos de Regalo',
     [View.CEO_CENTER]: 'CEO Center 💎',
     [View.TAG_SCANNING]: 'Revisión de Etiquetas',
+    [View.WAREHOUSE]: 'Bodega',
     [View.DEVELOPER_CENTER]: 'Developer Center ⚙️',
 };
 

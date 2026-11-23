@@ -17,7 +17,7 @@ globalThis.sessionStorage = {
 const dir = await mkdtemp(process.cwd() + '/tests/.warehouse-consolidated-');
 const built = await build({
   stdin: {
-    contents: "export { default as WarehousePanel } from './components/WarehousePanel'; export { default as InventoryWarehouseSection } from './components/InventoryWarehouseSection';",
+    contents: "export { default as WarehousePanel } from './components/WarehousePanel'; export { default as InventoryWarehouseSection } from './components/InventoryWarehouseSection'; export { default as Header } from './components/Header'; export { View } from './types';",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -30,13 +30,13 @@ const built = await build({
     setup(plugin) {
       plugin.onResolve({ filter: /services\/warehouse$/ }, () => ({ path: 'warehouse-api', namespace: 'stub' }));
       plugin.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-        contents: 'export const callWarehouse = (...args) => globalThis.__warehouseTestApi(...args);',
+        contents: 'export const callWarehouse = (...args) => globalThis.__warehouseTestApi(...args); export const warehouseEnabled = globalThis.__warehouseEnabledTest !== false;',
       }));
     },
   }],
 });
 await writeFile(dir + '/bundle.mjs', built.outputFiles[0].text);
-const { WarehousePanel, InventoryWarehouseSection } = await import(pathToFileURL(dir + '/bundle.mjs').href);
+const { WarehousePanel, InventoryWarehouseSection, Header, View } = await import(pathToFileURL(dir + '/bundle.mjs').href);
 
 const textOf = node => {
   if (node == null || typeof node === 'boolean') return '';
@@ -153,6 +153,55 @@ test('InventoryWarehouseSection consolidates stock with zero reads and loads his
   } finally {
     delete globalThis.__warehouseTestApi;
     await act(async () => renderer.unmount());
+  }
+});
+
+test('Header includes Bodega in Inventario menu for users with Stock permission and navigates to View.WAREHOUSE', async () => {
+  const prevDoc = globalThis.document;
+  const prevWin = globalThis.window;
+  const prevLocal = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  globalThis.document = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    documentElement: { style: { setProperty: () => {}, removeProperty: () => {} } },
+  };
+  globalThis.window = { innerWidth: 390 };
+
+  let navigatedView = null;
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(Header, {
+      currentView: View.INVENTORY,
+      setCurrentView: v => { navigatedView = v; },
+      theme: 'dark',
+      toggleTheme: () => {},
+      currentUser: { id: 'u1', name: 'Vendedor', roleId: 'r1', storeId: 'st', companyId: 'co', userType: 'seller' },
+      currentStore: { id: 'st', name: 'Metro', companyId: 'co' },
+      currentCompany: { id: 'co', name: 'Empresa' },
+      userPermissions: [View.POS, View.INVENTORY, View.PURCHASES],
+      onLogout: () => {},
+      stores: [{ id: 'st', name: 'Metro', companyId: 'co' }],
+      onSwitchStore: () => {},
+      roles: [{ id: 'r1', name: 'Vendedor', companyId: 'co', permissions: [View.POS, View.INVENTORY] }],
+      isGlobalMode: false,
+      onToggleGlobalMode: () => {},
+      incidents: [],
+      onOpenBriefing: () => {},
+      isDeveloper: false,
+    }));
+  });
+
+  try {
+    const bodegaButtons = renderer.root.findAllByType('button').filter(b => textOf(b).includes('Bodega'));
+    assert.ok(bodegaButtons.length >= 1, 'Expected Bodega option in Inventario menu');
+    await act(async () => bodegaButtons[0].props.onClick());
+    assert.equal(navigatedView, View.WAREHOUSE);
+  } finally {
+    await act(async () => renderer.unmount());
+    globalThis.document = prevDoc;
+    globalThis.window = prevWin;
+    globalThis.localStorage = prevLocal;
   }
 });
 
