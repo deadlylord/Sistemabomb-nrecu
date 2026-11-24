@@ -137,8 +137,8 @@ const Header: React.FC<HeaderProps> = ({
                 if (!isDeveloper && companyAllowed && !companyAllowed.has(View.WAREHOUSE) && !companyAllowed.has(View.INVENTORY)) {
                     return false;
                 }
-                if (isDeveloper) return true;
-                return userPermissions.includes(View.WAREHOUSE) || userPermissions.includes(View.INVENTORY);
+                if (isDeveloper || isAdmin) return true;
+                return userPermissions.includes(View.WAREHOUSE);
             }
             if (isDeveloper) return true;
             if (item.view === View.DEVELOPER_CENTER) return false;

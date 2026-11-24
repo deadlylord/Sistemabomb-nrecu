@@ -215,13 +215,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             aria-label={`${warehouseAction}: ${product.name}`}
-            className="mt-2 w-full rounded-md bg-accent/10 px-2 py-1.5 text-xs font-bold text-accent hover:bg-accent/20"
+            className="mt-1.5 inline-flex items-center justify-center self-end rounded-md border border-indigo-200 dark:border-indigo-700/60 bg-indigo-50/90 dark:bg-indigo-950/50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
             onClick={event => {
               event.stopPropagation();
               onMoveWarehouse(product, warehouseView ? 'toStore' : 'toWarehouse');
             }}
           >
-            {warehouseAction}
+            {warehouseView ? '→ Tienda' : '→ Bodega'}
           </button>
         )}
       </div>

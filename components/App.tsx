@@ -496,7 +496,7 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
     && currentUser.companyId === operationalCompanyId
     && (warehouseAdmin || currentUser.storeId === currentStore.id)
     && !currentStore.isDisabled && currentStore.status !== 'inactive';
-  const warehouseAvailable = warehouseInScope && (operationPermissions.includes(View.POS) || operationPermissions.includes(View.INVENTORY));
+  const warehouseAvailable = warehouseInScope && (warehouseAdmin || operationPermissions.includes(View.WAREHOUSE));
   const verificationCutoff = currentStore?.inventoryVerificationCutoffMinutes;
   const [verificationClock, setVerificationClock] = useState(() => Math.floor(Date.now() / 60000));
   const storeVerificationClosed = verificationCutoff != null && inventoryVerificationClosed(verificationCutoff, new Date(verificationClock * 60000));

@@ -22,7 +22,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
 
   const availableViews = React.useMemo(() => {
     return Object.values(View).filter(v => {
-      if (v === View.DEVELOPER_CENTER || v === View.WAREHOUSE) {
+      if (v === View.DEVELOPER_CENTER) {
         return false;
       }
       return true;

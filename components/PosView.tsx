@@ -84,10 +84,12 @@ const PosView: React.FC<PosViewProps> = (props) => {
   };
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [showWarehouseSendAction, setShowWarehouseSendAction] = useState(false);
   const warehouseStore = props.onMoveWarehouse && !preOrderSelection ? props.currentStore : undefined;
   const warehouseCategoryVisible = !!warehouseStore && warehouseStore.warehouseCategoryVisible !== false;
   const warehouseSelected = warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID;
 
+  useEffect(() => { setShowWarehouseSendAction(false); }, [props.currentStore?.id]);
   useEffect(() => {
     if (!warehouseCategoryVisible && selectedCategoryId === WAREHOUSE_CATEGORY_ID) setSelectedCategoryId(null);
   }, [warehouseCategoryVisible, selectedCategoryId]);
@@ -938,6 +940,24 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 >
                                     🔤 Alfabético
                                 </button>
+                                {warehouseStore && warehouseStore.warehouseSendEnabled !== false && !warehouseSelected && (
+                                    <label
+                                        className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full cursor-pointer select-none transition-all ${
+                                            showWarehouseSendAction
+                                                ? 'bg-indigo-600 text-white ring-2 ring-indigo-500/30'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                        }`}
+                                        title="Activa esta casilla cuando necesites enviar productos a bodega"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={showWarehouseSendAction}
+                                            onChange={e => setShowWarehouseSendAction(e.target.checked)}
+                                            className="h-3.5 w-3.5 rounded accent-indigo-600 cursor-pointer"
+                                        />
+                                        <span>Enviar a bodega</span>
+                                    </label>
+                                )}
                             </div>
                         )}
                     </div>
@@ -949,7 +969,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                     <ProductGrid
                         warehouseView={warehouseSelected}
                         warehouseStore={warehouseStore}
-                        onMoveWarehouse={warehouseSelected || warehouseStore?.warehouseSendEnabled !== false ? props.onMoveWarehouse : undefined}
+                        onMoveWarehouse={warehouseSelected ? props.onMoveWarehouse : (warehouseStore?.warehouseSendEnabled !== false && showWarehouseSendAction ? props.onMoveWarehouse : undefined)}
                         preOrderSelection={preOrderSelection}
                         products={filteredInventory} 
                         performanceTrends={performanceTrends}
