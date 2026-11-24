@@ -82,7 +82,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
   const [warehousePurchases, setWarehousePurchases] = useState<Purchase[]>([]);
   const [warehouseModal, setWarehouseModal] = useState<{ storeId: string; purchases: Purchase[]; initialSelectedIds?: string[] } | null>(null);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
-  const [dispatchedPurchaseIds, setDispatchedPurchaseIds] = useState<Set<string>>(new Set());
+  const [dispatchedPurchaseUnits, setDispatchedPurchaseUnits] = useState<Record<string, number>>({});
+  const getWarehouseSentUnits = (purchase: Purchase) => {
+    const persisted = typeof purchase.warehouseUnitsSent === 'number' && purchase.warehouseUnitsSent > 0 ? purchase.warehouseUnitsSent : 0;
+    const local = dispatchedPurchaseUnits[purchase.id] || 0;
+    return Math.max(persisted, local);
+  };
   const dispatchStores = stores.filter(store => warehouseAccess?.storeIds.has(store.id) && warehousePurchases.some(purchase => purchase.storeId === store.id));
   const dispatchStore = warehouseModal ? stores.find(store => store.id === warehouseModal.storeId) : undefined;
   const hasWarehouseSendAccess = !!warehouseAccess && stores.some(store => warehouseAccess.storeIds.has(store.id) && store.warehouseSendEnabled !== false);
@@ -90,7 +95,7 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
     !!warehouseAccess
     && warehouseAccess.storeIds.has(purchase.storeId)
     && stores.find(s => s.id === purchase.storeId)?.warehouseSendEnabled !== false
-    && !dispatchedPurchaseIds.has(purchase.id);
+    && getWarehouseSentUnits(purchase) === 0;
 
 
   useEffect(() => {
@@ -487,12 +492,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
 
   const eligibleHistoryPurchases = useMemo(
     () => filteredPurchases.filter(canSendPurchaseToWarehouse),
-    [filteredPurchases, warehouseAccess, stores, dispatchedPurchaseIds],
+    [filteredPurchases, warehouseAccess, stores, dispatchedPurchaseUnits],
   );
 
   const selectedHistoryPurchases = useMemo(
     () => purchases.filter(p => selectedHistoryIds.has(p.id) && canSendPurchaseToWarehouse(p)),
-    [purchases, selectedHistoryIds, warehouseAccess, stores, dispatchedPurchaseIds],
+    [purchases, selectedHistoryIds, warehouseAccess, stores, dispatchedPurchaseUnits],
   );
 
   const selectedByStore = useMemo(() => {
@@ -601,11 +606,20 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
             purchases={warehouseModal.purchases}
             initialSelectedIds={warehouseModal.initialSelectedIds}
             onClose={() => setWarehouseModal(null)}
-            onPurchasesMoved={ids => {
+            onPurchasesMoved={(ids, dispatched) => {
               setWarehousePurchases(previous => previous.filter(purchase => !ids.includes(purchase.id)));
-              setDispatchedPurchaseIds(previous => {
-                const next = new Set(previous);
-                ids.forEach(id => next.add(id));
+              setDispatchedPurchaseUnits(previous => {
+                const next = { ...previous };
+                if (dispatched?.length) {
+                  dispatched.forEach(entry => {
+                    next[entry.purchaseId] = entry.quantity;
+                  });
+                } else {
+                  ids.forEach(id => {
+                    const row = purchases.find(item => item.id === id) || warehouseModal.purchases.find(item => item.id === id);
+                    next[id] = row?.quantity || 1;
+                  });
+                }
                 return next;
               });
               setSelectedHistoryIds(previous => {
@@ -1059,7 +1073,10 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                           const product = searchSource.find(inv => inv.id === p.productId) || inventory.find(inv => inv.id === p.productId);
                           const eligible = canSendPurchaseToWarehouse(p);
                           const isSelected = selectedHistoryIds.has(p.id);
-                          const isDispatched = dispatchedPurchaseIds.has(p.id);
+                          const warehouseSentUnits = getWarehouseSentUnits(p);
+                          const isDispatched = warehouseSentUnits > 0;
+                          const isFullyInWarehouse = isDispatched && warehouseSentUnits >= p.quantity;
+                          const storeRemainingUnits = Math.max(0, p.quantity - warehouseSentUnits);
                           return (
                           <tr key={p.id} className={`hover:bg-gray-50 dark:hover:bg-gray-800 group ${isSelected ? 'bg-indigo-50/60 dark:bg-indigo-950/20' : ''}`}>
                               {hasWarehouseSendAccess && (
@@ -1073,7 +1090,12 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                                       className="h-4 w-4 rounded text-accent cursor-pointer"
                                     />
                                   ) : isDispatched ? (
-                                    <span title="Enviada a bodega" className="text-emerald-600 font-black text-xs">✓</span>
+                                    <span
+                                      title={isFullyInWarehouse ? 'Enviada a bodega (no a tienda)' : `${warehouseSentUnits} de ${p.quantity} unidades enviadas a bodega`}
+                                      className="text-emerald-600 font-black text-xs"
+                                    >
+                                      ✓
+                                    </span>
                                   ) : null}
                                 </td>
                               )}
@@ -1096,9 +1118,26 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                               <td className="p-3">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <p className="font-black text-sm uppercase">{p.productName}</p>
-                                    {isDispatched && (
-                                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] font-black uppercase">
-                                        En bodega
+                                    {isFullyInWarehouse ? (
+                                      <span
+                                        title={`Las ${p.quantity} unidades fueron enviadas a Bodega (no quedaron en Tienda)`}
+                                        className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-700 text-[10px] font-black uppercase"
+                                      >
+                                        Enviado a Bodega
+                                      </span>
+                                    ) : isDispatched ? (
+                                      <span
+                                        title={`${warehouseSentUnits} unidades fueron enviadas a Bodega y ${storeRemainingUnits} quedaron en Tienda`}
+                                        className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border border-amber-200 dark:border-amber-700 text-[10px] font-black uppercase"
+                                      >
+                                        {warehouseSentUnits} Bodega · {storeRemainingUnits} Tienda
+                                      </span>
+                                    ) : (
+                                      <span
+                                        title="Unidades ingresadas a Tienda"
+                                        className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 text-[10px] font-bold uppercase"
+                                      >
+                                        En Tienda
                                       </span>
                                     )}
                                   </div>
@@ -1113,7 +1152,14 @@ const PurchasesView: React.FC<PurchasesViewProps> = ({ warehouseAccess, purchase
                               </td>
                               <td className="p-3 text-xs text-gray-500 font-bold uppercase">{p.supplier || 'N/A'}</td>
                               <td className="p-3"><span className="px-2 py-1 bg-accent/10 text-accent rounded text-[10px] font-black uppercase">{stores.find(s => s.id === p.storeId)?.name}</span></td>
-                              <td className="p-3 text-center font-black">{p.quantity}</td>
+                              <td className="p-3 text-center font-black">
+                                <div>{p.quantity}</div>
+                                {isFullyInWarehouse ? (
+                                  <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-300">A bodega</div>
+                                ) : isDispatched ? (
+                                  <div className="text-[10px] font-bold text-amber-700 dark:text-amber-300">{warehouseSentUnits} bod. · {storeRemainingUnits} tda.</div>
+                                ) : null}
+                              </td>
                               <td className="p-3 text-right font-black text-accent">{formatCOP(p.totalCost)}</td>
                               <td className="p-3 text-center">
                                   <div className="flex justify-center items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">

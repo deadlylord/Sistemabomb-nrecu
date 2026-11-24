@@ -3018,7 +3018,8 @@ const App: React.FC<{ initialSession?: VerifiedSession }> = ({ initialSession })
       if (qtyDiff < 0 && product.data().stock + qtyDiff < 0) {
         throw new Error('La tienda no tiene unidades suficientes para reducir esta compra. Revisa las existencias y las unidades enviadas a bodega.');
       }
-      transaction.update(purchaseRef, { ...updatedPurchase });
+      const { warehouseUnitsSent: _ignoredWarehouseSent, warehouseSentAt: _ignoredWarehouseSentAt, ...editablePurchase } = updatedPurchase;
+      transaction.update(purchaseRef, editablePurchase);
       transaction.update(productRef, { stock: increment(qtyDiff), cost: updatedPurchase.cost, price: newProductPrice, supplier: updatedPurchase.supplier });
       transaction.set(logRef, {
         id: logRef.id,

@@ -16,7 +16,7 @@ type Props = {
   embedded?: boolean;
   purchases?: Purchase[];
   initialSelectedIds?: string[];
-  onPurchasesMoved?: (ids: string[]) => void;
+  onPurchasesMoved?: (ids: string[], dispatched?: Array<{ purchaseId: string; quantity: number }>) => void;
   movement?: { productId: string; direction: WarehouseDirection };
   api?: typeof callWarehouse;
 };
@@ -171,7 +171,14 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
       )}
       {pending.current && <button type="button" disabled={busy} className="mb-2 p-2.5 rounded-lg bg-amber-100 text-amber-900 font-bold text-sm" onClick={() => run(async () => { const payload = JSON.parse(pending.current!.signature);
         const result = await write(payload);
-        if (payload.action === 'purchaseMove' && Array.isArray(result.purchaseIds) && alive.current) onPurchasesMoved?.(result.purchaseIds);
+        if (payload.action === 'purchaseMove' && Array.isArray(result.purchaseIds) && alive.current) {
+          const dispatched = Array.isArray(result.dispatched)
+            ? result.dispatched
+            : Array.isArray(payload.entries)
+              ? payload.entries.map((item: any) => ({ purchaseId: item.purchaseId, quantity: Number(item.quantity) }))
+              : undefined;
+          onPurchasesMoved?.(result.purchaseIds, dispatched);
+        }
         await refresh(); setCounts({}); setProductCounts({}); setUnits(''); setMessage('Operación pendiente confirmada. No se volvió a duplicar el movimiento.'); })}>Resolver operación pendiente</button>}
       {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-2">{error}</p>}
       {message && <p role="status" className="text-green-600 text-sm font-semibold mb-2">{message}</p>}
@@ -219,7 +226,12 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
                 action: 'purchaseMove',
                 entries: entries.map(({ purchaseId, quantity }) => ({ purchaseId, quantity })),
               });
-              if (alive.current) onPurchasesMoved?.(result.purchaseIds);
+              if (alive.current) {
+                const dispatched = Array.isArray(result.dispatched)
+                  ? result.dispatched
+                  : entries.map(({ purchaseId, quantity }) => ({ purchaseId, quantity }));
+                onPurchasesMoved?.(result.purchaseIds, dispatched);
+              }
             });
           }}>
             <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">

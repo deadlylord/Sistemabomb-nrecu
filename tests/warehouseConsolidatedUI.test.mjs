@@ -17,7 +17,7 @@ globalThis.sessionStorage = {
 const dir = await mkdtemp(process.cwd() + '/tests/.warehouse-consolidated-');
 const built = await build({
   stdin: {
-    contents: "export { default as WarehousePanel } from './components/WarehousePanel'; export { default as InventoryWarehouseSection } from './components/InventoryWarehouseSection'; export { default as Header } from './components/Header'; export { View } from './types';",
+    contents: "export { default as WarehousePanel } from './components/WarehousePanel'; export { default as InventoryWarehouseSection } from './components/InventoryWarehouseSection'; export { default as Header } from './components/Header'; export { default as PurchasesView } from './components/PurchasesView'; export { View } from './types';",
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -36,7 +36,7 @@ const built = await build({
   }],
 });
 await writeFile(dir + '/bundle.mjs', built.outputFiles[0].text);
-const { WarehousePanel, InventoryWarehouseSection, Header, View } = await import(pathToFileURL(dir + '/bundle.mjs').href);
+const { WarehousePanel, InventoryWarehouseSection, Header, PurchasesView, View } = await import(pathToFileURL(dir + '/bundle.mjs').href);
 
 const textOf = node => {
   if (node == null || typeof node === 'boolean') return '';
@@ -226,6 +226,90 @@ test('Header requires View.WAREHOUSE (or admin) for Bodega in Inventario menu an
     if (renderer) await act(async () => renderer.unmount());
     globalThis.document = prevDoc;
     globalThis.window = prevWin;
+    globalThis.localStorage = prevLocal;
+  }
+});
+
+test('PurchasesView history shows persistent Bodega, Parcial and En Tienda indicators and disables resend', async () => {
+  const prevLocal = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  const todayIso = new Date().toISOString();
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(React.createElement(PurchasesView, {
+        warehouseAccess: { userId: 'u1', companyId: 'co', storeIds: new Set(['st']) },
+        purchases: [
+          {
+            id: 'pur-full',
+            companyId: 'co',
+            productId: 'p1',
+            productName: 'Chaqueta Bodega',
+            quantity: 4,
+            cost: 50000,
+            totalCost: 200000,
+            supplier: 'Marca A',
+            createdAt: todayIso,
+            storeId: 'st',
+            warehouseUnitsSent: 4,
+            warehouseSentAt: todayIso,
+          },
+          {
+            id: 'pur-partial',
+            companyId: 'co',
+            productId: 'p2',
+            productName: 'Jean Mixto',
+            quantity: 5,
+            cost: 40000,
+            totalCost: 200000,
+            supplier: 'Marca B',
+            createdAt: todayIso,
+            storeId: 'st',
+            warehouseUnitsSent: 2,
+            warehouseSentAt: todayIso,
+          },
+          {
+            id: 'pur-store',
+            companyId: 'co',
+            productId: 'p3',
+            productName: 'Camisa Tienda',
+            quantity: 3,
+            cost: 30000,
+            totalCost: 90000,
+            supplier: 'Marca C',
+            createdAt: todayIso,
+            storeId: 'st',
+          },
+        ],
+        inventory: [
+          { id: 'p1', sku: 'S1', companyId: 'co', storeId: 'st', categoryId: 'c1', name: 'Chaqueta Bodega', supplier: 'Marca A', stock: 0, warehouseUnits: 4, cost: 50000, price: 90000 },
+          { id: 'p2', sku: 'S2', companyId: 'co', storeId: 'st', categoryId: 'c1', name: 'Jean Mixto', supplier: 'Marca B', stock: 3, warehouseUnits: 2, cost: 40000, price: 80000 },
+          { id: 'p3', sku: 'S3', companyId: 'co', storeId: 'st', categoryId: 'c1', name: 'Camisa Tienda', supplier: 'Marca C', stock: 3, warehouseUnits: 0, cost: 30000, price: 60000 },
+        ],
+        categories: [{ id: 'c1', name: 'Ropa' }],
+        stores: [{ id: 'st', companyId: 'co', name: 'Sede Norte', warehouseSendEnabled: true }],
+        currentStoreId: 'st',
+        onMultiStorePurchase: async () => [],
+        onUpdatePurchase: async () => {},
+        onDeletePurchase: () => {},
+        onUpdateProduct: async () => {},
+      }));
+    });
+    const rendered = textOf(renderer.toJSON());
+    assert.match(rendered, /Enviado a Bodega/);
+    assert.match(rendered, /A bodega/);
+    assert.match(rendered, /2 Bodega · 3 Tienda/);
+    assert.match(rendered, /2 bod\. · 3 tda\./);
+    assert.match(rendered, /En Tienda/);
+
+    // Only the store-only purchase should have an individual selection checkbox in the history table
+    const rowCheckboxes = renderer.root.findAllByProps({ type: 'checkbox' }).filter(cb =>
+      typeof cb.props['aria-label'] === 'string' && cb.props['aria-label'].startsWith('Seleccionar compra '),
+    );
+    assert.equal(rowCheckboxes.length, 1);
+    assert.equal(rowCheckboxes[0].props['aria-label'], 'Seleccionar compra Camisa Tienda para bodega');
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
     globalThis.localStorage = prevLocal;
   }
 });

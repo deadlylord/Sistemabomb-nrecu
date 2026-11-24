@@ -113,8 +113,9 @@ export async function warehouseOperation(db, auth, input) {
           entries.some(entry => !key(entry?.purchaseId) || !quantity(entry.quantity) || entry.quantity < 1) ||
           new Set(entries.map(entry => entry.purchaseId)).size !== entries.length) fail('invalid-argument', 'Selecciona entre 1 y 25 compras distintas y cantidades válidas.');
         for (const { purchaseId, quantity: units } of entries) {
+          const purchaseRef = db.collection('purchases').doc(purchaseId);
           const dispatchRef = root.collection('purchaseDispatches').doc(purchaseId);
-          const [purchase, dispatch] = await Promise.all([tx.get(db.collection('purchases').doc(purchaseId)), tx.get(dispatchRef)]);
+          const [purchase, dispatch] = await Promise.all([tx.get(purchaseRef), tx.get(dispatchRef)]);
           const row = purchase.data();
           if (!ownsLegacy(row, companyId, storeId) || !key(row.productId)) fail('permission-denied', 'La compra no pertenece a esta sede.');
           if (dispatch.exists) fail('already-exists', 'La compra ya fue enviada a bodega.');
@@ -123,7 +124,7 @@ export async function warehouseOperation(db, auth, input) {
           item.units += units;
           item.purchaseIds.push(purchaseId);
           items.set(row.productId, item);
-          dispatchRefs.push({ ref: dispatchRef, quantity: units });
+          dispatchRefs.push({ ref: dispatchRef, purchaseRef, quantity: units });
         }
       } else {
         items.set(movement.productId, { units: movement.quantity });
@@ -174,9 +175,18 @@ export async function warehouseOperation(db, auth, input) {
           stockDelta: -delta, details: 'Actualización de existencias disponibles.'
         });
       }
-      for (const { ref, quantity } of dispatchRefs) tx.create(ref, { operationId: input.operationId, quantity, createdAt: now });
+      for (const { ref, purchaseRef, quantity } of dispatchRefs) {
+        tx.create(ref, { operationId: input.operationId, quantity, createdAt: now });
+        tx.update(purchaseRef, { warehouseUnitsSent: quantity, warehouseSentAt: now });
+      }
       if (original) tx.update(originalRef, { reversedBy: recordId });
-      if (action === 'purchaseMove') result = { id: recordId, purchaseIds: input.entries.map(entry => entry.purchaseId) };
+      if (action === 'purchaseMove') {
+        result = {
+          id: recordId,
+          purchaseIds: input.entries.map(entry => entry.purchaseId),
+          dispatched: input.entries.map(({ purchaseId, quantity: units }) => ({ purchaseId, quantity: units })),
+        };
+      }
     } else if (action === 'count' || action === 'draftSave' || action === 'adjust') {
       const entries = input.entries;
       if (!Array.isArray(entries) || !entries.length || entries.length > 100 || new Set(entries.map(e => e.categoryId)).size !== entries.length) fail('invalid-argument', 'Ingresa entre 1 y 100 categorías distintas.');

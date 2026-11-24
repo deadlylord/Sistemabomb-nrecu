@@ -547,6 +547,8 @@ export interface Purchase {
   supplier: string;
   createdAt: string;
   storeId: string;
+  warehouseUnitsSent?: number;
+  warehouseSentAt?: string;
 }
 
 export interface DailyNote {
