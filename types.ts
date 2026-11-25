@@ -454,6 +454,7 @@ export const ALL_CLIENT_MODULES: CompanyModuleInfo[] = [
 
   // Inventario y Logística
   { id: View.INVENTORY, label: 'Stock de Productos', category: 'Inventario y Logística', description: 'Catálogo de referencias, precios, código de barras y kardex' },
+  { id: View.WAREHOUSE, label: 'Bodega', category: 'Inventario y Logística', description: 'Control de mercancía en bodega por sede, envíos, devoluciones y conteos' },
   { id: View.PURCHASES, label: 'Registro de Compras', category: 'Inventario y Logística', description: 'Ingreso de mercancía por proveedores y costos' },
   { id: View.INVENTORY_TRANSFER, label: 'Traslados Internos', category: 'Inventario y Logística', description: 'Movimientos y despachos de stock entre sedes' },
   { id: View.STOCK_TAKE_HISTORY, label: 'Auditorías / Conteos', category: 'Inventario y Logística', description: 'Conteos físicos, auditorías y cruces de inventario' },

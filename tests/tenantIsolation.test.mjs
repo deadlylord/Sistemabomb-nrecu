@@ -375,3 +375,20 @@ test('failed shared reads write nothing and never poison subsequent attempts or 
  readStats.failDocument=null;await writer.runTransaction({},async tx=>assert.equal((await tx.get(ref('inventory/p'))).data().stock,5));
  records.set('inventory/p',{companyId:'foreign',storeId:'other',stock:5});await assert.rejects(writer.runTransaction({},async tx=>{await Promise.all([tx.get(ref('inventory/p')),tx.get(ref('inventory/p'))]);tx.update(ref('inventory/p'),{stock:0});}));assert.equal(writes.length,0);
 }, {yieldReads:true}));
+
+test('seller with View.WAREHOUSE keeps warehouse permission when company allowedViews includes View.INVENTORY', () => withWriter(async ({ tenantOperationPermissions, tenantPermissions, View }) => {
+ const stores = [{ id: 'st', companyId: 'co' }];
+ const roles = [
+  { id: 'r-with', companyId: 'co', name: 'Vendedor', userType: 'seller', permissions: [View.POS, View.INVENTORY, View.WAREHOUSE] },
+  { id: 'r-without', companyId: 'co', name: 'Vendedor', userType: 'seller', permissions: [View.POS, View.INVENTORY] },
+ ];
+ const sellerWith = { id: 'u1', companyId: 'co', storeId: 'st', roleId: 'r-with' };
+ const sellerWithout = { id: 'u2', companyId: 'co', storeId: 'st', roleId: 'r-without' };
+ // Existing company whose allowedViews predates View.WAREHOUSE
+ const legacyAllowed = [View.POS, View.INVENTORY];
+ assert.ok(tenantOperationPermissions(sellerWith, roles, stores, legacyAllowed).includes(View.WAREHOUSE));
+ assert.ok(tenantPermissions(sellerWith, roles, stores, legacyAllowed).includes(View.WAREHOUSE));
+ assert.equal(tenantOperationPermissions(sellerWithout, roles, stores, legacyAllowed).includes(View.WAREHOUSE), false);
+ // Company without inventory or warehouse in allowedViews still blocks it
+ assert.equal(tenantOperationPermissions(sellerWith, roles, stores, [View.POS]).includes(View.WAREHOUSE), false);
+}));

@@ -239,6 +239,11 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
                               Permite abrir la auditoría y el verificador de etiquetas desde el POS.
                             </span>
                           )}
+                          {view === View.WAREHOUSE && (
+                            <span className="text-[9px] block font-normal whitespace-normal">
+                              Habilita la pestaña Bodega, la casilla "Enviar a bodega" en el POS y el módulo Bodega.
+                            </span>
+                          )}
                           {isDevCenter && (
                             <span className="text-[9px] text-indigo-600 dark:text-indigo-400 block font-normal">
                               🛠️ Panel Global Multi-Empresa

@@ -20,7 +20,11 @@ export function isTenantAdministrator(role: Role | undefined): boolean {
 export function tenantOperationPermissions(user: Seller | null | undefined, roles: Role[], stores: Store[], allowedViews?: View[]): View[] {
   const role = resolveTenantRole(user, roles, stores);
   const permissions = role?.permissions || [];
-  return permissions.filter(view => view !== View.DEVELOPER_CENTER && (view !== View.INVENTORY_TRANSFER || isTenantAdministrator(role)) && (!allowedViews?.length || allowedViews.includes(view)));
+  return permissions.filter(view =>
+    view !== View.DEVELOPER_CENTER
+    && (view !== View.INVENTORY_TRANSFER || isTenantAdministrator(role))
+    && (!allowedViews?.length || allowedViews.includes(view) || (view === View.WAREHOUSE && allowedViews.includes(View.INVENTORY)))
+  );
 }
 export function tenantPermissions(user: Seller | null | undefined, roles: Role[], stores: Store[], allowedViews?: View[]): View[] {
   const role = resolveTenantRole(user, roles, stores);
