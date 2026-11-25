@@ -891,56 +891,60 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                 </button>
                             ))}
                         </div>
-                        {isAdmin && !warehouseSelected && (
+                        {!warehouseSelected && (isAdmin || (warehouseStore && warehouseStore.warehouseSendEnabled !== false)) && (
                             <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200/30 dark:border-slate-800/30">
-                                <span className="text-xs font-black text-slate-500 dark:text-slate-400 mr-2 uppercase tracking-wider flex items-center gap-1">
-                                  📊 Orden de Negocio (30 días):
-                                </span>
-                                <button
-                                    onClick={() => setBusinessSortMode('inteligente')}
-                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
-                                        businessSortMode === 'inteligente'
-                                            ? 'bg-accent text-white ring-2 ring-accent/30'
-                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                    }`}
-                                    title="Híbrido de ventas recientes y bajas existencias"
-                                >
-                                    🔥 Inteligente
-                                </button>
-                                <button
-                                    onClick={() => setBusinessSortMode('tendencias')}
-                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
-                                        businessSortMode === 'tendencias'
-                                            ? 'bg-accent text-white ring-2 ring-accent/30'
-                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                    }`}
-                                    title="Más vendidos en los últimos 30 días"
-                                >
-                                    📈 Tendencias
-                                </button>
-                                <button
-                                    onClick={() => setBusinessSortMode('recompra')}
-                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
-                                        businessSortMode === 'recompra'
-                                            ? 'bg-accent text-white ring-2 ring-accent/30'
-                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                    }`}
-                                    title="Productos en demanda con stock crítico"
-                                >
-                                    🚨 Recompra Urgente
-                                </button>
-                                <button
-                                    onClick={() => setBusinessSortMode('alfabetico')}
-                                    className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
-                                        businessSortMode === 'alfabetico'
-                                            ? 'bg-accent text-white ring-2 ring-accent/30'
-                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                    }`}
-                                    title="Orden alfabético de la A a la Z"
-                                >
-                                    🔤 Alfabético
-                                </button>
-                                {warehouseStore && warehouseStore.warehouseSendEnabled !== false && !warehouseSelected && (
+                                {isAdmin && (
+                                    <>
+                                        <span className="text-xs font-black text-slate-500 dark:text-slate-400 mr-2 uppercase tracking-wider flex items-center gap-1">
+                                          📊 Orden de Negocio (30 días):
+                                        </span>
+                                        <button
+                                            onClick={() => setBusinessSortMode('inteligente')}
+                                            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                                businessSortMode === 'inteligente'
+                                                    ? 'bg-accent text-white ring-2 ring-accent/30'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                            }`}
+                                            title="Híbrido de ventas recientes y bajas existencias"
+                                        >
+                                            🔥 Inteligente
+                                        </button>
+                                        <button
+                                            onClick={() => setBusinessSortMode('tendencias')}
+                                            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                                businessSortMode === 'tendencias'
+                                                    ? 'bg-accent text-white ring-2 ring-accent/30'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                            }`}
+                                            title="Más vendidos en los últimos 30 días"
+                                        >
+                                            📈 Tendencias
+                                        </button>
+                                        <button
+                                            onClick={() => setBusinessSortMode('recompra')}
+                                            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                                businessSortMode === 'recompra'
+                                                    ? 'bg-accent text-white ring-2 ring-accent/30'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                            }`}
+                                            title="Productos en demanda con stock crítico"
+                                        >
+                                            🚨 Recompra Urgente
+                                        </button>
+                                        <button
+                                            onClick={() => setBusinessSortMode('alfabetico')}
+                                            className={`px-3 py-1 text-xs font-bold rounded-full transition-all ${
+                                                businessSortMode === 'alfabetico'
+                                                    ? 'bg-accent text-white ring-2 ring-accent/30'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                            }`}
+                                            title="Orden alfabético de la A a la Z"
+                                        >
+                                            🔤 Alfabético
+                                        </button>
+                                    </>
+                                )}
+                                {warehouseStore && warehouseStore.warehouseSendEnabled !== false && (
                                     <label
                                         className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full cursor-pointer select-none transition-all ${
                                             showWarehouseSendAction
@@ -951,6 +955,7 @@ const PosView: React.FC<PosViewProps> = (props) => {
                                     >
                                         <input
                                             type="checkbox"
+                                            aria-label="Activar envío a bodega en tarjetas"
                                             checked={showWarehouseSendAction}
                                             onChange={e => setShowWarehouseSendAction(e.target.checked)}
                                             className="h-3.5 w-3.5 rounded accent-indigo-600 cursor-pointer"

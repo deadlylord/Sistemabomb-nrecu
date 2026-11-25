@@ -46,6 +46,10 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     const screen = (updates = {}) => React.createElement(ViewFiltersProvider, null, React.createElement(Pos, { ...props, ...updates }));
     await act(async () => { renderer = create(screen(), { createNodeMock: node => node.type === 'input' ? input : null }); });
     const button = label => renderer.root.findAllByType('button').find(node => node.children.join('') === label);
+    assert.equal(renderer.root.findAllByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).length, 0);
+    const sendToggle = renderer.root.findByProps({ 'aria-label': 'Activar envío a bodega en tarjetas' });
+    assert.equal(sendToggle.props.checked, false);
+    await act(async () => sendToggle.props.onChange({ target: { checked: true } }));
     await act(async () => renderer.root.findByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).props.onClick({ stopPropagation() {} }));
     assert.deepEqual(moved, [['p', 'toWarehouse']]);
     assert.equal(added.length, 0);
