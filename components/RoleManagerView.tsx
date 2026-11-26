@@ -8,7 +8,7 @@ import { PlusCircleIcon, ShieldCheckIcon, SparklesIcon, CheckIcon } from './Icon
 interface RoleManagerViewProps {
   roles: Role[];
   onAddRole: (name: string, userType?: UserLicenseType) => void;
-  onUpdateRole: (updatedRole: Role) => void;
+  onUpdateRole: (updatedRole: Role) => void | Promise<void>;
   isDeveloper?: boolean;
 }
 
@@ -17,6 +17,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(roles[0]?.id || null);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleUserType, setNewRoleUserType] = useState<UserLicenseType>('seller');
+  const [saveError, setSaveError] = useState('');
 
   const selectedRole = roles.find(r => r.id === selectedRoleId);
 
@@ -28,6 +29,15 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
       return true;
     });
   }, []);
+
+  const applyRoleUpdate = async (updatedRole: Role) => {
+    setSaveError('');
+    try {
+      await onUpdateRole(updatedRole);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo actualizar el rol.');
+    }
+  };
 
   const handleAddRole = () => {
     const trimmed = newRoleName.trim();
@@ -57,13 +67,13 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
       newPermissions = currentPermissions.filter(p => p !== view);
     }
     const requiresAdminLicense = newPermissions.includes(View.ROLE_MANAGER) || newPermissions.includes(View.CEO_CENTER);
-    onUpdateRole({ ...selectedRole, permissions: newPermissions, userType: requiresAdminLicense ? 'admin' : selectedRole.userType });
+    void applyRoleUpdate({ ...selectedRole, permissions: newPermissions, userType: requiresAdminLicense ? 'admin' : selectedRole.userType });
   };
 
   const handleSelectAll = (selectAll: boolean) => {
     if (!selectedRole) return;
     const newPermissions = selectAll ? availableViews : [];
-    onUpdateRole({ ...selectedRole, permissions: newPermissions });
+    void applyRoleUpdate({ ...selectedRole, permissions: newPermissions });
   };
 
   return (
@@ -193,12 +203,18 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
                 </div>
               </div>
 
+              {saveError && (
+                <div role="alert" className="mb-4 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs font-bold text-red-700 dark:text-red-300">
+                  {saveError}
+                </div>
+              )}
+
               <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 p-3">
                 <label className="text-xs font-bold text-slate-600 dark:text-slate-300">Tipo de licencia:</label>
                 <select
                   value={selectedRole.userType || ((selectedRole.name.toLowerCase() === 'administrator' || selectedRole.name.toLowerCase() === 'administrador') ? 'admin' : ((selectedRole.name.toLowerCase() === 'developer' || selectedRole.name.toLowerCase() === 'desarrollador' || selectedRole.permissions?.includes(View.DEVELOPER_CENTER)) ? 'developer' : 'seller'))}
                   disabled={selectedRole.name.toLowerCase() === 'administrator' || selectedRole.name.toLowerCase() === 'administrador' || selectedRole.name.toLowerCase() === 'developer' || selectedRole.name.toLowerCase() === 'desarrollador' || selectedRole.permissions?.includes(View.DEVELOPER_CENTER)}
-                  onChange={(e) => onUpdateRole({ ...selectedRole, userType: e.target.value as UserLicenseType })}
+                  onChange={(e) => void applyRoleUpdate({ ...selectedRole, userType: e.target.value as UserLicenseType })}
                   className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs disabled:opacity-60"
                 >
                   <option value="seller">Vendedor</option>

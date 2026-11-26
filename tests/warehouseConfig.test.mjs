@@ -183,3 +183,65 @@ test('legacy default_company purchases without companyId can dispatch in default
     /sede/,
   );
 });
+
+test('manageStagingRole allows granting warehouse permission to seller when company allows inventory or warehouse', async () => {
+  const { manageStagingRole } = await import('../functions/src/stagingRoles.mjs');
+  const { identityUid } = await import('../functions/src/stagingUsers.mjs');
+  const rows = new Map(Object.entries({
+    'sellers/admin-u': { name: 'Admin', companyId: 'co', storeId: 'st', roleId: 'r-admin', authVersion: 1 },
+    'sellers/seller-u': { name: 'Vend', companyId: 'co', storeId: 'st', roleId: 'r-seller', authVersion: 1 },
+    'roles/r-admin': { companyId: 'co', name: 'Admin', userType: 'admin', permissions: ['role_manager', 'pos', 'inventory'] },
+    'roles/r-seller': { companyId: 'co', name: 'Vendedor', userType: 'seller', permissions: ['pos', 'inventory'] },
+    'companies/co': { status: 'active', allowedViews: ['pos', 'inventory'], maxAdmins: 5, maxSellers: 5 },
+    'stores/st': { companyId: 'co' },
+  }));
+  const snapshot = path => ({ id: path.split('/').at(-1), exists: rows.has(path), data: () => rows.get(path) });
+  class Ref { constructor(path) { this.path = path; this.id = path.split('/').at(-1); } }
+  class Query {
+    constructor(path, filter) { this.path = path; this.filter = filter; }
+    doc(id) { return new Ref(this.path + '/' + id); }
+    where(field, _op, value) { return new Query(this.path, { field, value }); }
+  }
+  const db = {
+    collection: n => new Query(n),
+    runTransaction: async fn => {
+      const writes = [];
+      const tx = {
+        get: async target => {
+          if (target instanceof Ref) return snapshot(target.path);
+          const docs = [...rows.entries()]
+            .filter(([k, v]) => k.startsWith(target.path + '/') && (!target.filter || v[target.filter.field] === target.filter.value))
+            .map(([k]) => snapshot(k));
+          return { docs };
+        },
+        set: (ref, data) => writes.push(['set', ref.path, data]),
+        update: (ref, data) => writes.push(['update', ref.path, data]),
+      };
+      const res = await fn(tx);
+      for (const [op, path, data] of writes) rows.set(path, op === 'update' ? { ...rows.get(path), ...data } : data);
+      return res;
+    },
+  };
+  const auth = { uid: identityUid('admin-u'), token: { identityVersion: 1, sellerId: 'admin-u', companyId: 'co', storeId: 'st', roleId: 'r-admin', authVersion: 1 } };
+  await manageStagingRole(db, auth, {
+    action: 'update',
+    id: 'r-seller',
+    name: 'Vendedor',
+    userType: 'seller',
+    permissions: ['pos', 'inventory', 'warehouse'],
+  });
+  assert.ok(rows.get('roles/r-seller').permissions.includes('warehouse'));
+
+  // Company without inventory or warehouse in allowedViews still rejects warehouse
+  rows.set('companies/co', { status: 'active', allowedViews: ['pos'], maxAdmins: 5, maxSellers: 5 });
+  await assert.rejects(
+    manageStagingRole(db, auth, {
+      action: 'update',
+      id: 'r-seller',
+      name: 'Vendedor',
+      userType: 'seller',
+      permissions: ['pos', 'warehouse'],
+    }),
+    /módulos de la empresa/,
+  );
+});

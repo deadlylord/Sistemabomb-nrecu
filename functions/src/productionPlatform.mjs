@@ -3,7 +3,7 @@ import {verifiedActor,aliases,publicSeller,roleType} from './stagingUsers.mjs';
 import {businessRoot,emptyBusinessRoot} from './businessSummary.mjs';
 const fail=message=>{throw new IdentityError('permission-denied',message||'No tienes permiso para esta operación.');};
 const text=(value,max=200)=>typeof value==='string'&&value.trim()&&value.length<=max;
-const views=['dashboard','pos','inventory','inventory_transfer','layaway','purchases','sellers','stores','customers','stock_take_history','payroll','settings','incidents','role_manager','accounting','financial_reconciliation','gift_vouchers','ceo_center','tag_scanning'];
+const views=['dashboard','pos','inventory','warehouse','inventory_transfer','layaway','purchases','sellers','stores','customers','stock_take_history','payroll','settings','incidents','role_manager','accounting','financial_reconciliation','gift_vouchers','ceo_center','tag_scanning'];
 const cleanCompany=input=>{
  if(!text(input?.name))throw new IdentityError('invalid-argument','Completa el nombre de la empresa.');
  const value={name:input.name.trim(),status:'active',createdAt:new Date().toISOString(),maxStores:Math.max(1,Number(input.maxStores)||2),maxAdmins:Math.max(1,Number(input.maxAdmins)||1),maxSellers:Math.max(0,Number(input.maxSellers)||0),allowedViews:input.allowedViews?.length?input.allowedViews:views};

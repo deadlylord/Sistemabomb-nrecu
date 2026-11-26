@@ -1,6 +1,6 @@
 import { IdentityError, OWNER_ID } from './identity.mjs';
 import { verifiedActor, identityUid, roleType } from './stagingUsers.mjs';
-const views = new Set(['dashboard','pos','inventory','inventory_transfer','layaway','purchases','sellers','stores','customers','stock_take_history','payroll','settings','incidents','role_manager','accounting','financial_reconciliation','gift_vouchers','ceo_center','tag_scanning']);
+const views = new Set(['dashboard','pos','inventory','warehouse','inventory_transfer','layaway','purchases','sellers','stores','customers','stock_take_history','payroll','settings','incidents','role_manager','accounting','financial_reconciliation','gift_vouchers','ceo_center','tag_scanning']);
 export async function manageStagingRole(db, auth, input, options = {}) {
   if (auth?.token?.identityVersion !== 1 || auth.uid !== identityUid(auth.token.sellerId || '')) throw new IdentityError('permission-denied');
   if (!input || !['create','update'].includes(input.action) || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 160 || !['admin','seller'].includes(input.userType) || ['developer','desarrollador'].includes(input.name.trim().toLowerCase()) || !Array.isArray(input.permissions) || input.permissions.length > views.size || input.permissions.some(p => !views.has(p))) throw new IdentityError('invalid-argument', 'Revisa el nombre, tipo y permisos del rol.');
@@ -16,7 +16,8 @@ export async function manageStagingRole(db, auth, input, options = {}) {
     if (!actor.developer && companyId !== actor.seller.companyId) throw new IdentityError('permission-denied');
     if (id === actor.seller.roleId && !(options.allowOwnerUpdate && actor.owner)) throw new IdentityError('permission-denied', 'Otro administrador debe cambiar los permisos de tu propio rol.');
     const company = await read('companies', companyId);
-    if (!company || company.allowedViews?.length && input.permissions.some(p => !company.allowedViews.includes(p))) throw new IdentityError('permission-denied', 'Los permisos exceden los módulos de la empresa.');
+    const companyAllows = p => !company?.allowedViews?.length || company.allowedViews.includes(p) || (p === 'warehouse' && company.allowedViews.includes('inventory'));
+    if (!company || input.permissions.some(p => !companyAllows(p))) throw new IdentityError('permission-denied', 'Los permisos exceden los módulos de la empresa.');
     const users = await tx.get(db.collection('sellers').where('companyId','==',companyId));
     const roleIds = [...new Set(users.docs.filter(d=>!d.data().isDisabled).map(d=>d.data().roleId))];
     const roles = new Map(); for (const key of roleIds) roles.set(key, key===id ? input : await read('roles',key));
