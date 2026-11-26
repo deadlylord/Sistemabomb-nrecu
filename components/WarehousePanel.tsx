@@ -29,7 +29,15 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
   const [historySearch, setHistorySearch] = useState(''), [historyDirection, setHistoryDirection] = useState<'all' | 'toWarehouse' | 'toStore'>('all');
   const direction = movement?.direction || 'toWarehouse';
   const productId = movement?.productId || '';
-  const [units, setUnits] = useState(''), [note, setNote] = useState('');
+  const [units, setUnits] = useState('');
+  const [note, setNote] = useState(() => (
+    mode === 'move' ? (inventory.find(p => p.id === (movement?.productId || ''))?.warehouseNote || '') : ''
+  ));
+  useEffect(() => {
+    if (mode === 'move') {
+      setNote(inventory.find(p => p.id === productId)?.warehouseNote || '');
+    }
+  }, [mode, productId]);
   const [selectedPurchases, setSelectedPurchases] = useState<Record<string, string>>(() => {
     if (!initialSelectedIds?.length) return {};
     const wanted = new Set(initialSelectedIds);
@@ -207,11 +215,18 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
           {products.filter(product => product.id === productId).map(product => (
             <div key={product.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
               {product.imageUrl && <img src={product.imageUrl} alt={product.name} className="h-20 w-16 object-cover rounded-lg" />}
-              <div><p className="font-bold">{product.name}</p><p className="text-xs text-slate-500">{product.supplier}</p><p className="text-sm font-semibold mt-1">Tienda: {product.stock} · Bodega: {product.warehouseUnits ?? 0}</p></div>
+              <div>
+                <p className="font-bold">{product.name}</p>
+                <p className="text-xs text-slate-500">{product.supplier}</p>
+                <p className="text-sm font-semibold mt-1">Tienda: {product.stock} · Bodega: {product.warehouseUnits ?? 0}</p>
+                {product.warehouseNote && (
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mt-0.5">📝 {product.warehouseNote}</p>
+                )}
+              </div>
             </div>
           ))}
           <label className="block text-sm font-bold">Unidades<input className={inputClass} disabled={busy || !!pending.current} required type="number" min="1" step="1" value={units} onChange={e => setUnits(e.target.value)}/></label>
-          <label className="block text-sm font-bold">Nota opcional<input className={inputClass} disabled={busy || !!pending.current} maxLength={500} value={note} onChange={e => setNote(e.target.value)}/></label><button disabled={busy} className="p-3 bg-accent text-white font-bold rounded-xl">Confirmar movimiento físico</button>
+          <label className="block text-sm font-bold">Colores / tallas en bodega (nota opcional)<input className={inputClass} disabled={busy || !!pending.current} maxLength={500} placeholder="Ej: 2 negras M, 1 blanca S" value={note} onChange={e => setNote(e.target.value)}/></label><button disabled={busy} className="p-3 bg-accent text-white font-bold rounded-xl">Confirmar movimiento físico</button>
         </form>}
         {tab === 'purchase' && (
           <form className="space-y-3" onSubmit={event => {
@@ -222,9 +237,11 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
               if (!entries.length || entries.length > 25 || entries.some(entry => !Number.isSafeInteger(entry.quantity) || entry.quantity < 1 || entry.quantity > entry.maximum)) {
                 throw new Error('Selecciona entre 1 y 25 compras y revisa las unidades de cada una.');
               }
+              const trimmedNote = note.trim();
               const result = await write({
                 action: 'purchaseMove',
                 entries: entries.map(({ purchaseId, quantity }) => ({ purchaseId, quantity })),
+                ...(trimmedNote ? { note: trimmedNote } : {}),
               });
               if (alive.current) {
                 const dispatched = Array.isArray(result.dispatched)
@@ -247,6 +264,17 @@ export default function WarehousePanel({ userId, companyId, store, inventory, ca
                 {selectedPurchaseList.length} seleccionadas · {selectedPurchaseUnits} uds → Bodega
               </span>
             </div>
+            <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+              Colores / tallas en bodega (nota opcional)
+              <input
+                className={inputClass + ' mt-1 text-sm font-normal'}
+                disabled={busy || !!pending.current}
+                maxLength={500}
+                placeholder="Ej: 2 negras M, 1 blanca S"
+                value={note}
+                onChange={e => setNote(e.target.value)}
+              />
+            </label>
             {purchases.length > 25 && (
               <p className="text-xs text-amber-700 dark:text-amber-300">
                 Hay {purchases.length} compras disponibles; cada envío admite hasta 25 compras por lote. Puedes enviar las primeras 25 y luego el resto.

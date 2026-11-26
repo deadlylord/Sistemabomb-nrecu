@@ -117,3 +117,15 @@ test('purchase transfer is atomic, scoped, aggregated by category and idempotent
 test('only explicit administrator detailed adjustment updates warehouse products; store counts stay untouched',async()=>{const f=fixture();await f.call(f.input());const request={action:'adjust',operationId:'adjust',entries:[{categoryId:'cat',revision:1,physicalCount:3}],productCounts:{p:3}};await assert.rejects(f.call(request));f.rows.get('roles/seller').userType='admin';await f.call(request);assert.equal(f.rows.get(f.root+'/products/p').stock,3);assert.equal(f.rows.get('inventory/p').stock,6);const saved=(await f.call({action:'counts'})).rows[0];assert.equal(saved.isApplied,true);assert.deepEqual(saved.productAdjustments,[{productId:'p',categoryId:'cat',before:4,after:3}]);});
 test('warehouse mirror preserves owned units, permits reclassification only after emptying warehouse',async()=>{const f=fixture();await f.call(f.input());assert.equal(f.rows.get('inventory/p').warehouseUnits,4);f.rows.get('inventory/p').categoryId='new';await assert.rejects(f.call(f.input('blocked',1)),/categoría/);f.rows.get('inventory/p').categoryId='cat';await f.call({...f.input('return',4),direction:'toStore'});assert.equal(f.rows.get('inventory/p').warehouseUnits,0);f.rows.get('inventory/p').categoryId='new';await f.call(f.input('new',2));assert.equal(f.rows.get(f.root+'/categories/new').stock,2);assert.equal(f.rows.get(f.root+'/categories/cat').stock,0);assert.equal(f.rows.get('inventory/p').stock+f.rows.get('inventory/p').warehouseUnits,10);});
 test('inconsistent warehouse mirror cannot be spent or adjusted silently',async()=>{const f=fixture();await f.call(f.input());f.rows.get('inventory/p').warehouseUnits=1;await assert.rejects(f.call(f.input('broken',1)),/enlazadas/);});
+test('warehouseNote persists on product during moves and clears automatically when warehouse stock reaches 0', async () => {
+  const f = fixture();
+  await f.call({ ...f.input('m1', 3), note: '2 negras M, 1 blanca S' });
+  assert.equal(f.rows.get('inventory/p').warehouseNote, '2 negras M, 1 blanca S');
+  assert.equal(f.rows.get(f.root + '/products/p').warehouseNote, '2 negras M, 1 blanca S');
+  await f.call({ ...f.input('m2', 1), direction: 'toStore', note: '1 negra M, 1 blanca S' });
+  assert.equal(f.rows.get('inventory/p').warehouseNote, '1 negra M, 1 blanca S');
+  await f.call({ ...f.input('m3', 2), direction: 'toStore', note: '1 negra M, 1 blanca S' });
+  assert.equal(f.rows.get('inventory/p').warehouseUnits, 0);
+  assert.equal(f.rows.get('inventory/p').warehouseNote, '');
+  assert.equal(f.rows.get(f.root + '/products/p').warehouseNote, '');
+});

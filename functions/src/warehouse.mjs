@@ -156,17 +156,23 @@ export async function warehouseOperation(db, auth, input) {
         category.stock += delta;
         const suffix = action === 'purchaseMove' ? `_${moves.length}` : '';
         const id = recordId + suffix;
+        const trimmedNote = typeof input.note === 'string' ? input.note.trim() : '';
+        const nextWarehouseNote = warehouseAfter === 0
+          ? ''
+          : action === 'purchaseMove'
+            ? (trimmedNote || p.warehouseNote || '')
+            : (typeof input.note === 'string' ? trimmedNote : (p.warehouseNote || ''));
         const record = { companyId, storeId, productId, productName: p.name, categoryId: p.categoryId, supplier: p.supplier || '', direction, quantity: units, localBefore, localAfter, warehouseBefore, warehouseAfter, createdAt: now, actorId: actor.id, actorName: actor.seller.name, note: input.note || '', ...(original ? { reversalOf: input.movementId } : {}), ...(purchaseIds ? { purchaseIds } : {}) };
-        moves.push({ id, suffix, localRef, warehouseRef, record, delta });
+        moves.push({ id, suffix, localRef, warehouseRef, record, delta, nextWarehouseNote });
       }
 
       for (const { ref, stock, revision } of categories.values()) {
         tx.set(ref, { companyId, storeId, stock, revision: revision + 1, updatedAt: now });
       }
-      for (const { id, suffix, localRef, warehouseRef, record, delta } of moves) {
+      for (const { id, suffix, localRef, warehouseRef, record, delta, nextWarehouseNote } of moves) {
         const { productId, productName, categoryId, supplier, warehouseAfter, localAfter } = record;
-        tx.update(localRef, { companyId, stock: localAfter, warehouseUnits: warehouseAfter });
-        tx.set(warehouseRef, { companyId, storeId, productId, name: productName, supplier, categoryId, stock: warehouseAfter, updatedAt: now });
+        tx.update(localRef, { companyId, stock: localAfter, warehouseUnits: warehouseAfter, warehouseNote: nextWarehouseNote });
+        tx.set(warehouseRef, { companyId, storeId, productId, name: productName, supplier, categoryId, stock: warehouseAfter, warehouseNote: nextWarehouseNote, updatedAt: now });
         tx.create(root.collection('movements').doc(id), record);
         // Preserve stock balances while keeping the audit private.
         tx.create(db.collection('productHistory').doc(`warehouse_${input.operationId}${suffix}`), {
@@ -218,8 +224,8 @@ export async function warehouseOperation(db, auth, input) {
           if (category.systemStock + delta !== category.physicalCount) fail('failed-precondition', 'El detalle contado no coincide con el total de la categoría.');
         }
         for (const p of adjustments) {
-          tx.update(root.collection('products').doc(p.productId), { stock: p.after, updatedAt: now });
-          tx.update(db.collection('inventory').doc(p.productId), { warehouseUnits: p.after });
+          tx.update(root.collection('products').doc(p.productId), { stock: p.after, ...(p.after === 0 ? { warehouseNote: '' } : {}), updatedAt: now });
+          tx.update(db.collection('inventory').doc(p.productId), { warehouseUnits: p.after, ...(p.after === 0 ? { warehouseNote: '' } : {}) });
         }
         for (const category of verified) tx.update(root.collection('categories').doc(category.categoryId), { stock: category.physicalCount, revision: category.revision + 1, updatedAt: now });
       }

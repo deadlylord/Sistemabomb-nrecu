@@ -211,6 +211,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
             </div>
           </div>
         </div>
+        {warehouseView && product.warehouseNote && (
+          <p
+            title={product.warehouseNote}
+            className="mt-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 rounded px-1.5 py-0.5 line-clamp-2"
+          >
+            📝 {product.warehouseNote}
+          </p>
+        )}
         {onMoveWarehouse && !product.isDisabled && stock > 0 && (
           <button
             type="button"

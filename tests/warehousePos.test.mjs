@@ -33,9 +33,9 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     const file = dir + '/pos.mjs';
     await writeFile(file, bundle.outputFiles[0].text);
     const { default: Pos, ViewFiltersProvider } = await import(pathToFileURL(file).href);
-    const product = { id: 'p', sku: 'SKU-1', companyId: 'co', storeId: 'st', categoryId: 'cat', name: 'Blusa', supplier: 'Marca', price: 20000, stock: 3, warehouseUnits: 2, imageUrl: 'https://example.com/blusa.jpg' };
+    const product = { id: 'p', sku: 'SKU-1', companyId: 'co', storeId: 'st', categoryId: 'cat', name: 'Blusa', supplier: 'Marca', price: 20000, stock: 3, warehouseUnits: 2, warehouseNote: '2 negras M', imageUrl: 'https://example.com/blusa.jpg' };
     const inventory = [product,
-      { ...product, id: 'warehouse-only', name: 'Vestido', sku: 'SKU-2', stock: 0 },
+      { ...product, id: 'warehouse-only', name: 'Vestido', sku: 'SKU-2', stock: 0, warehouseNote: '1 rojo S' },
       { ...product, id: 'foreign-company', name: 'Otra empresa', companyId: 'other' },
       { ...product, id: 'foreign-store', name: 'Otra sede', storeId: 'other' },
       { ...product, id: 'empty', name: 'Sin bodega', warehouseUnits: 0 },
@@ -48,6 +48,7 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     const button = label => renderer.root.findAllByType('button').find(node => node.children.join('') === label);
     assert.equal(renderer.root.findAllByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).length, 0);
     const textOf = n => (n == null || typeof n === 'boolean') ? '' : (typeof n === 'string' || typeof n === 'number') ? String(n) : Array.isArray(n) ? n.map(textOf).join('') : textOf(n.children);
+    assert.equal(textOf(renderer.toJSON()).includes('2 negras M'), false);
     const controlPanelToggle = renderer.root.findAllByType('button').find(node => textOf(node).includes('Panel de Control POS'));
     await act(async () => controlPanelToggle.props.onClick());
     const sendToggle = renderer.root.findByProps({ 'aria-label': 'Activar envío a bodega en tarjetas' });
@@ -57,6 +58,8 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     assert.deepEqual(moved, [['p', 'toWarehouse']]);
     assert.equal(added.length, 0);
     await act(async () => button('Bodega').props.onClick());
+    assert.equal(textOf(renderer.toJSON()).includes('2 negras M'), true);
+    assert.equal(textOf(renderer.toJSON()).includes('1 rojo S'), true);
     const grid = renderer.root.findAll(node => node.props.products && node.props.warehouseView === true)[0];
     assert.deepEqual(grid.props.products.map(p => p.id), ['p', 'warehouse-only']);
     assert.equal(renderer.root.findByProps({ alt: 'Vestido' }).props.src, product.imageUrl);
