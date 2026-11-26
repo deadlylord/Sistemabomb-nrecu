@@ -257,7 +257,7 @@ const RoleManagerView: React.FC<RoleManagerViewProps> = ({ roles: providedRoles,
                           )}
                           {view === View.WAREHOUSE && (
                             <span className="text-[9px] block font-normal whitespace-normal">
-                              Habilita la pestaña Bodega, la casilla "Enviar a bodega" en el POS y el módulo Bodega.
+                              Permite al vendedor enviar a bodega y devolver a tienda desde el POS (y conteo en Verificar).
                             </span>
                           )}
                           {isDevCenter && (

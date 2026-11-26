@@ -156,7 +156,7 @@ test('InventoryWarehouseSection consolidates stock with zero reads and loads his
   }
 });
 
-test('Header requires View.WAREHOUSE (or admin) for Bodega in Inventario menu and navigates to View.WAREHOUSE', async () => {
+test('Header hides Bodega in Inventario menu from sellers even with View.WAREHOUSE, and shows it to admins', async () => {
   const prevDoc = globalThis.document;
   const prevWin = globalThis.window;
   const prevLocal = globalThis.localStorage;
@@ -171,32 +171,7 @@ test('Header requires View.WAREHOUSE (or admin) for Bodega in Inventario menu an
   let navigatedView = null;
   let renderer;
   try {
-    // 1. Seller without View.WAREHOUSE must not see Bodega
-    await act(async () => {
-      renderer = create(React.createElement(Header, {
-        currentView: View.INVENTORY,
-        setCurrentView: v => { navigatedView = v; },
-        theme: 'dark',
-        toggleTheme: () => {},
-        currentUser: { id: 'u1', name: 'Vendedor', roleId: 'r1', storeId: 'st', companyId: 'co', userType: 'seller' },
-        currentStore: { id: 'st', name: 'Metro', companyId: 'co' },
-        currentCompany: { id: 'co', name: 'Empresa' },
-        userPermissions: [View.POS, View.INVENTORY, View.PURCHASES],
-        onLogout: () => {},
-        stores: [{ id: 'st', name: 'Metro', companyId: 'co' }],
-        onSwitchStore: () => {},
-        roles: [{ id: 'r1', name: 'Vendedor', companyId: 'co', permissions: [View.POS, View.INVENTORY] }],
-        isGlobalMode: false,
-        onToggleGlobalMode: () => {},
-        incidents: [],
-        onOpenBriefing: () => {},
-        isDeveloper: false,
-      }));
-    });
-    assert.equal(renderer.root.findAllByType('button').filter(b => textOf(b).includes('Bodega')).length, 0);
-    await act(async () => renderer.unmount());
-
-    // 2. Seller with View.WAREHOUSE sees Bodega and navigates to View.WAREHOUSE
+    // 1. Seller even WITH View.WAREHOUSE must NOT see Bodega in Inventario menu
     await act(async () => {
       renderer = create(React.createElement(Header, {
         currentView: View.INVENTORY,
@@ -210,7 +185,7 @@ test('Header requires View.WAREHOUSE (or admin) for Bodega in Inventario menu an
         onLogout: () => {},
         stores: [{ id: 'st', name: 'Metro', companyId: 'co' }],
         onSwitchStore: () => {},
-        roles: [{ id: 'r1', name: 'Vendedor', companyId: 'co', permissions: [View.POS, View.INVENTORY, View.WAREHOUSE] }],
+        roles: [{ id: 'r1', name: 'Vendedor', companyId: 'co', userType: 'seller', permissions: [View.POS, View.INVENTORY, View.WAREHOUSE] }],
         isGlobalMode: false,
         onToggleGlobalMode: () => {},
         incidents: [],
@@ -218,8 +193,34 @@ test('Header requires View.WAREHOUSE (or admin) for Bodega in Inventario menu an
         isDeveloper: false,
       }));
     });
+    assert.equal(renderer.root.findAllByType('button').filter(b => textOf(b).includes('Bodega')).length, 0);
+    await act(async () => renderer.unmount());
+
+    // 2. Admin sees Bodega in Inventario menu and navigates to View.WAREHOUSE
+    await act(async () => {
+      renderer = create(React.createElement(Header, {
+        currentView: View.INVENTORY,
+        setCurrentView: v => { navigatedView = v; },
+        theme: 'dark',
+        toggleTheme: () => {},
+        currentUser: { id: 'u2', name: 'Admin', roleId: 'r2', storeId: 'st', companyId: 'co', userType: 'admin' },
+        currentStore: { id: 'st', name: 'Metro', companyId: 'co' },
+        currentCompany: { id: 'co', name: 'Empresa' },
+        userPermissions: [View.POS, View.INVENTORY, View.PURCHASES, View.WAREHOUSE],
+        onLogout: () => {},
+        stores: [{ id: 'st', name: 'Metro', companyId: 'co' }],
+        onSwitchStore: () => {},
+        roles: [{ id: 'r2', name: 'Administrador', companyId: 'co', userType: 'admin', permissions: [View.POS, View.INVENTORY, View.WAREHOUSE] }],
+        isGlobalMode: false,
+        onToggleGlobalMode: () => {},
+        incidents: [],
+        onOpenBriefing: () => {},
+        isDeveloper: false,
+        isAdmin: true,
+      }));
+    });
     const bodegaButtons = renderer.root.findAllByType('button').filter(b => textOf(b).includes('Bodega'));
-    assert.ok(bodegaButtons.length >= 1, 'Expected Bodega option in Inventario menu');
+    assert.ok(bodegaButtons.length >= 1, 'Expected Bodega option in Inventario menu for admin');
     await act(async () => bodegaButtons[0].props.onClick());
     assert.equal(navigatedView, View.WAREHOUSE);
   } finally {
