@@ -47,9 +47,12 @@ test('POS warehouse uses existing store products, preserves photos, moves units 
     await act(async () => { renderer = create(screen(), { createNodeMock: node => node.type === 'input' ? input : null }); });
     const button = label => renderer.root.findAllByType('button').find(node => node.children.join('') === label);
     assert.equal(renderer.root.findAllByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).length, 0);
+    const textOf = n => (n == null || typeof n === 'boolean') ? '' : (typeof n === 'string' || typeof n === 'number') ? String(n) : Array.isArray(n) ? n.map(textOf).join('') : textOf(n.children);
+    const controlPanelToggle = renderer.root.findAllByType('button').find(node => textOf(node).includes('Panel de Control POS'));
+    await act(async () => controlPanelToggle.props.onClick());
     const sendToggle = renderer.root.findByProps({ 'aria-label': 'Activar envío a bodega en tarjetas' });
-    assert.equal(sendToggle.props.checked, false);
-    await act(async () => sendToggle.props.onChange({ target: { checked: true } }));
+    assert.equal(sendToggle.props['aria-pressed'], false);
+    await act(async () => sendToggle.props.onClick());
     await act(async () => renderer.root.findByProps({ 'aria-label': 'Enviar a bodega: Blusa' }).props.onClick({ stopPropagation() {} }));
     assert.deepEqual(moved, [['p', 'toWarehouse']]);
     assert.equal(added.length, 0);
