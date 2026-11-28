@@ -1,3 +1,6 @@
+import { buildInventoryBreakdown } from '../services/inventoryBreakdown';
+import { collection as fsCollection, getDocs as fsGetDocs, query as fsQuery, where as fsWhere } from '../services/measuredFirestore';
+import { db } from '../firebase';
 import { ownedInventoryUnits } from '../services/inventoryOwnership';
 import type { DashboardInventoryRequest } from '../services/useDashboardInventory';
 import { dashboardSalesRanges, type SalesRange } from '../services/dashboardSalesRange';
@@ -25,6 +28,7 @@ interface DashboardViewProps {
   activityMonths?: string[];
   activityLoading?: boolean;
   onResolveLayaway?: (id:string)=>Promise<Layaway>;
+  onLoadInventoryBreakdown?: () => Promise<Product[]>;
   inventorySummary?: { value: number | null };
   onInventoryRequest?: (request: DashboardInventoryRequest) => void;
   inventoryStatus?: { loading: boolean; error: string; editReady: boolean };
@@ -142,6 +146,64 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
   const [isPriceAnalysisVisible, setIsPriceAnalysisVisible] = useState(props.initialSection === 'price-analysis');
   const [isCashBreakdownVisible, setIsCashBreakdownVisible] = useState(false);
   const [isUnitsSoldExpanded, setIsUnitsSoldExpanded] = useState(false);
+  const [isInventoryBreakdownExpanded, setIsInventoryBreakdownExpanded] = useState(false);
+  const [inventoryBreakdownRows, setInventoryBreakdownRows] = useState<Product[] | null>(null);
+  const [inventoryBreakdownLoading, setInventoryBreakdownLoading] = useState(false);
+  const [inventoryBreakdownError, setInventoryBreakdownError] = useState('');
+  const inventoryBreakdownCache = useRef<Record<string, Product[]>>({});
+  const inventoryBreakdownRequest = useRef(0);
+  const breakdownScopeKey = `${props.companyId}:${props.currentStore?.id || ''}`;
+  useEffect(() => {
+    inventoryBreakdownRequest.current++;
+    setIsInventoryBreakdownExpanded(false);
+    setInventoryBreakdownRows(inventoryBreakdownCache.current[breakdownScopeKey] || null);
+    setInventoryBreakdownLoading(false);
+    setInventoryBreakdownError('');
+  }, [breakdownScopeKey]);
+  const loadInventoryBreakdown = async () => {
+    const storeId = props.currentStore?.id;
+    if (!storeId) return;
+    if (!props.onInventoryRequest || props.inventoryStatus?.editReady) {
+      setInventoryBreakdownRows(props.inventory);
+      return;
+    }
+    const cached = inventoryBreakdownCache.current[breakdownScopeKey];
+    if (cached) {
+      setInventoryBreakdownRows(cached);
+      return;
+    }
+    const requestId = ++inventoryBreakdownRequest.current;
+    setInventoryBreakdownLoading(true);
+    setInventoryBreakdownError('');
+    try {
+      const rows = props.onLoadInventoryBreakdown
+        ? await props.onLoadInventoryBreakdown()
+        : (await fsGetDocs(fsQuery(fsCollection(db, 'inventory'), fsWhere('storeId', '==', storeId)))).docs
+            .map(d => ({ ...d.data(), id: d.id } as Product))
+            .filter(p => p.storeId === storeId && (!p.companyId || p.companyId === props.companyId));
+      if (inventoryBreakdownRequest.current !== requestId) return;
+      inventoryBreakdownCache.current[breakdownScopeKey] = rows;
+      setInventoryBreakdownRows(rows);
+    } catch {
+      if (inventoryBreakdownRequest.current === requestId) {
+        setInventoryBreakdownError('No se pudo cargar el desglose por categoría. Intenta nuevamente.');
+      }
+    } finally {
+      if (inventoryBreakdownRequest.current === requestId) setInventoryBreakdownLoading(false);
+    }
+  };
+  const handleToggleInventoryBreakdown = () => {
+    const next = !isInventoryBreakdownExpanded;
+    setIsInventoryBreakdownExpanded(next);
+    if (next) void loadInventoryBreakdown();
+  };
+  const inventoryBreakdown = useMemo(() => {
+    if (!isInventoryBreakdownExpanded) return null;
+    const source = !props.onInventoryRequest || props.inventoryStatus?.editReady
+      ? props.inventory
+      : inventoryBreakdownRows;
+    return source ? buildInventoryBreakdown(source, props.categories) : null;
+  }, [isInventoryBreakdownExpanded, props.onInventoryRequest, props.inventoryStatus?.editReady, props.inventory, inventoryBreakdownRows, props.categories]);
   const [isSalesHistoryVisible, setIsSalesHistoryVisible] = useState(true);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const [isCategoryChartVisible, setIsCategoryChartVisible] = useState(false);
@@ -1272,9 +1334,76 @@ const DashboardView: React.FC<DashboardViewProps> = (props) => {
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ticket promedio</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricMoney(metricsForCurrentStore.averageTicketSize)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Prendas por venta</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{props.activityLoading ? '—' : metricsForCurrentStore.unitsPerTransaction.toFixed(2)}</p></div>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Margen bruto estimado</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{props.activityLoading ? '—' : metricsForCurrentStore.grossMarginPercent.toFixed(1)+'%'}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Según costos asociados a los pagos</p></div>
-                    <div className="min-w-0 rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Valor del inventario</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight break-words">{props.inventorySummary ? props.inventorySummary.value === null ? '—' : formatCOP(props.inventorySummary.value) : formatCOP(metricsForCurrentStore.totalInventoryValue)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Actual · a costo</p></div>
+                    <button type="button" onClick={handleToggleInventoryBreakdown} aria-expanded={isInventoryBreakdownExpanded} className="min-w-0 text-left rounded-xl border border-accent/20 bg-gradient-to-br from-accent/10 to-white dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-accent">Valor del inventario</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight break-words">{props.inventorySummary ? props.inventorySummary.value === null ? '—' : formatCOP(props.inventorySummary.value) : formatCOP(metricsForCurrentStore.totalInventoryValue)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Actual · a costo · {isInventoryBreakdownExpanded ? 'Ocultar detalle' : 'Ver por categoría'}</p></button>
                     <div className="min-w-0 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 px-3 py-3 shadow-sm hover:shadow-md transition-shadow"><p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilidad estimada</p><p className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 break-words">{metricMoney(metricsForCurrentStore.netProfit)}</p><p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">Después de gastos operativos</p></div>
                  </div>
+                {isInventoryBreakdownExpanded && (
+                  <div className="bg-white dark:bg-slate-800/70 p-4 rounded-xl border border-accent/25 shadow-sm animate-fade-in mb-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                      <div>
+                        <h4 className="font-bold text-sm text-accent">Desglose de Inventario por Categoría (a costo)</h4>
+                        {inventoryBreakdown && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Total: {formatCOP(inventoryBreakdown.totalValue)} · {inventoryBreakdown.totalUnits} uds
+                            {inventoryBreakdown.totalWarehouseUnits > 0 ? ` (${inventoryBreakdown.totalStoreUnits} tienda · ${inventoryBreakdown.totalWarehouseUnits} bodega)` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <button type="button" onClick={() => setIsInventoryBreakdownExpanded(false)} className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white">Cerrar</button>
+                    </div>
+                    {inventoryBreakdownLoading ? (
+                      <p role="status" className="text-xs text-slate-500 py-2">Cargando desglose por categoría…</p>
+                    ) : inventoryBreakdownError ? (
+                      <div role="alert" className="text-xs text-red-500 flex items-center gap-2 py-2">
+                        <span>{inventoryBreakdownError}</span>
+                        <button type="button" onClick={() => void loadInventoryBreakdown()} className="underline font-bold">Reintentar</button>
+                      </div>
+                    ) : inventoryBreakdown && inventoryBreakdown.categories.length > 0 ? (
+                      <>
+                        {inventoryBreakdown.hasMenCategories && inventoryBreakdown.segments && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50/70 dark:bg-sky-950/30 p-3">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-sky-700 dark:text-sky-300">Categorías Hombre</p>
+                              <p className="text-lg font-extrabold text-sky-900 dark:text-sky-100 mt-0.5">{formatCOP(inventoryBreakdown.segments.men.value)}</p>
+                              <p className="text-xs text-sky-700/80 dark:text-sky-300/80">
+                                {inventoryBreakdown.segments.men.units} uds · {inventoryBreakdown.segments.men.categoriesCount} {inventoryBreakdown.segments.men.categoriesCount === 1 ? 'categoría' : 'categorías'} · {inventoryBreakdown.segments.men.percent.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-pink-200 dark:border-pink-800/60 bg-pink-50/70 dark:bg-pink-950/30 p-3">
+                              <p className="text-[10px] font-black uppercase tracking-wider text-pink-700 dark:text-pink-300">Categorías Mujer</p>
+                              <p className="text-lg font-extrabold text-pink-900 dark:text-pink-100 mt-0.5">{formatCOP(inventoryBreakdown.segments.women.value)}</p>
+                              <p className="text-xs text-pink-700/80 dark:text-pink-300/80">
+                                {inventoryBreakdown.segments.women.units} uds · {inventoryBreakdown.segments.women.categoriesCount} {inventoryBreakdown.segments.women.categoriesCount === 1 ? 'categoría' : 'categorías'} · {inventoryBreakdown.segments.women.percent.toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {inventoryBreakdown.categories.map(cat => (
+                            <div key={cat.categoryId} className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/70 p-2.5 rounded-lg">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-bold truncate">{cat.name}</p>
+                                  {inventoryBreakdown.hasMenCategories && (
+                                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${cat.segment === 'men' ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300' : 'bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300'}`}>
+                                      {cat.segment === 'men' ? 'Hombre' : 'Mujer'}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  {cat.units} uds{cat.warehouseUnits > 0 ? ` (${cat.storeUnits} tda · ${cat.warehouseUnits} bod)` : ''} · {cat.percent.toFixed(1)}%
+                                </p>
+                              </div>
+                              <span className="text-xs font-extrabold text-accent shrink-0">{formatCOP(cat.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-500 py-2">No hay existencias valorizadas en esta sede.</p>
+                    )}
+                  </div>
+                )}
                 {isUnitsSoldExpanded && (<div className="bg-white dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 animate-fade-in mb-6"><h4 className="font-bold text-sm mb-2 text-gray-700 dark:text-gray-200">Desglose por Vendedor</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{metricsForCurrentStore.unitsBySeller.map((item) => (<div key={item.sellerName} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded"><span className="text-xs font-medium">{item.sellerName}</span><span className="text-xs font-bold text-accent">{item.units}</span></div>))}</div></div>)}
                 <div className="mb-6"><h3 className="text-lg font-semibold text-gray-800 dark:text-text-light mb-2">Medios de pago</h3><div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3"><div className={`min-w-0 border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 cursor-pointer hover:shadow-md ${paymentMethodFilter.includes('Efectivo') ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`} onClick={(e) => { e.stopPropagation(); togglePaymentMethodFilter('Efectivo'); if (!paymentMethodFilter.includes('Efectivo')) setIsCashBreakdownVisible(true); }}><div className="flex justify-between items-center"><p className="font-bold text-gray-800 dark:text-text-light">Efectivo (Neto)</p><button onClick={(e) => { e.stopPropagation(); setIsCashBreakdownVisible(!isCashBreakdownVisible); }} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"><ChevronDownIcon className={`w-4 h-4 transition-transform ${isCashBreakdownVisible ? 'rotate-180' : ''}`} /></button></div><p className="text-2xl font-extrabold text-accent">{metricMoney(cashBreakdown?.netTotal || 0)}</p>{isCashBreakdownVisible && cashBreakdown && (<div className="mt-2 pt-2 border-t border-dashed text-xs space-y-1 animate-fade-in" onClick={e => e.stopPropagation()}><div className="flex justify-between"><span>Ventas:</span><span>{formatCOP(cashBreakdown.salesCash)}</span></div><div className="flex justify-between"><span>Abonos:</span><span>{formatCOP(cashBreakdown.layawaysCash)}</span></div>{cashBreakdown.totalSistecreditoCollections > 0 && (<div className="flex justify-between text-purple-600 font-semibold"><span>Recaudos Sistec.:</span><span>+{formatCOP(cashBreakdown.totalSistecreditoCollections)}</span></div>)}{cashBreakdown.totalExchangeSurplusesCash > 0 && (<div className="flex justify-between text-green-600 font-semibold"><span>Excedentes Cambios:</span><span>+{formatCOP(cashBreakdown.totalExchangeSurplusesCash)}</span></div>)}{cashBreakdown.incomeAdjustments.length > 0 && (<div className="flex justify-between text-green-600"><span>Ingresos Extra:</span><span>+{formatCOP(cashBreakdown.incomeAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}{cashBreakdown.expenseAdjustments.length > 0 && (<div className="flex justify-between text-red-500"><span>Gastos/Salidas:</span><span>-{formatCOP(cashBreakdown.expenseAdjustments.reduce((sum, i) => sum + (i.adjustmentAmount || 0), 0))}</span></div>)}</div>)}</div><button onClick={() => togglePaymentMethodFilter('Recaudo Sistecredito')} className={`min-w-0 border border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/40 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 hover:shadow-md ${paymentMethodFilter.includes('Recaudo Sistecredito') ? 'ring-2 ring-purple-500 shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-purple-800 dark:text-purple-300">Recaudos Sistec.</p><p className="text-xl font-extrabold text-purple-600 dark:text-purple-400">{metricMoney(totalRecaudos)}</p></button>{Object.entries(detailedReportData.totalsByMethod).filter(([method]) => method !== 'Efectivo' && method !== 'Recaudo Sistecredito').map(([method, total]) => { return (<button key={method} onClick={() => togglePaymentMethodFilter(method)} className={`min-w-0 border border-slate-200/80 dark:border-slate-700/80 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 p-3 rounded-xl text-left shadow-sm transition-all duration-200 hover:shadow-md ${paymentMethodFilter.includes(method) ? 'ring-2 ring-accent shadow-lg' : 'hover:shadow-md'}`}><p className="font-bold text-gray-800 dark:text-text-light">{method}</p><p className="text-xl font-extrabold text-accent">{formatCOP(Number(total) || 0)}</p>{(COMMISSION_RATES[method as PaymentMethod] || 0) > 0 && <p className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">Descuento {(COMMISSION_RATES[method as PaymentMethod] * 100).toLocaleString('es-CO', { maximumFractionDigits: 2 })}%: -{formatCOP(detailedReportData.commissionsByMethod[method] || 0)}</p>}</button>)})}</div>{paymentMethodFilter.length > 0 && detailedReportData.sortedGroups.length > 0 && (<div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 animate-fade-in"><div className="flex justify-between items-center mb-4"><h4 className="font-bold text-lg text-accent">Detalle por Días: {paymentMethodFilter.join('+')}</h4><button onClick={(e) => { e.stopPropagation(); setPaymentMethodFilter([]); }} className="text-xs text-red-500 hover:underline">Limpiar Filtros</button></div><div className="max-h-96 overflow-y-auto space-y-4">{detailedReportData.sortedGroups.map(([date, group]) => { const dayTotal = getDayTotalForFilteredMethods(group.items); if (dayTotal === 0 && paymentMethodFilter.length > 0 && !group.items.some(i => paymentMethodFilter.includes(String(i.paymentMethod)))) return null; return (<div key={date} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"><div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex justify-between items-center border-b dark:border-gray-700"><span className="font-bold text-sm text-gray-700 dark:text-gray-200">{date}</span><span className="font-black text-sm text-accent">Total Seleccionado: {formatCOP(dayTotal)}</span></div><table className="w-full text-xs text-left"><thead className="bg-gray-50 dark:bg-gray-900/50 text-gray-500"><tr><th className="p-3">Hora</th><th className="p-3">Tipo / Factura</th><th className="p-3">Cliente</th><th className="p-3 text-right">Monto</th></tr></thead><tbody>{group.items.filter(i => paymentMethodFilter.length === 0 || paymentMethodFilter.includes(String(i.paymentMethod))).map(t => (<tr key={t.id} className="border-b dark:border-gray-800 last:border-0 hover:bg-accent/5 transition-colors"><td className="p-3 whitespace-nowrap text-gray-400 font-mono">{new Date(t.date).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</td><td className="p-3"><p className="font-bold text-gray-600 dark:text-gray-300">{t.type}</p><p className="text-[10px] text-gray-400">{t.invoiceNumber !== '-' ? `Ref: #${t.invoiceNumber}` : ''}</p></td><td className="p-3"><p className="font-semibold">{t.customer}</p><p className="text-[10px] text-gray-400">{t.seller}</p></td><td className="p-3 text-right font-black text-accent">{formatCOP(t.amount)}</td></tr>))}</tbody></table></div>); })}</div></div>)}</div>
             </div>
